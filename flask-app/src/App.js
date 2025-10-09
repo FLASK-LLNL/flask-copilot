@@ -618,6 +618,20 @@ const ChemistryTool = () => {
     setContextMenu(null);
     setCustomQueryModal(null);
     setMetricsHistory([]);
+    if (websocket && websocket.readyState === WebSocket.OPEN) {
+      websocket.send(JSON.stringify({ action: 'reset' }));
+    }
+  };
+
+  const stop = () => {
+    if (!websocket || websocket.readyState !== WebSocket.OPEN) {
+      // alert('WebSocket not connected');
+      return;
+    }
+
+    console.log('Sending stop command to server');
+    setIsComputing(false);
+    websocket.send(JSON.stringify({ action: 'stop' }));
   };
 
   // TODO: Improve saveTree and saveFullContext by handing the information to/from the backend
@@ -1104,6 +1118,9 @@ const ChemistryTool = () => {
               </button>
               <button onClick={reset} disabled={isComputing} className="px-6 py-3 bg-white/20 text-white rounded-lg font-semibold hover:bg-white/30 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2">
                 <RotateCcw className="w-5 h-5" />Reset
+              </button>
+              <button onClick={stop} disabled={!isComputing} className="px-6 py-3 bg-white/20 text-white rounded-lg font-semibold hover:bg-white/30 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2">
+                <RotateCcw className="w-5 h-5" />Stop
               </button>
             </div>
           </div>
