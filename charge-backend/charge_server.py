@@ -28,16 +28,6 @@ import sys
 parser = argparse.ArgumentParser()
 
 parser.add_argument(
-    "--client", type=str, default="autogen", choices=["autogen", "gemini"]
-)
-
-parser.add_argument(
-    "--server-path",
-    type=str,
-    default=None,
-    help="Path to an existing MCP server script",
-)
-parser.add_argument(
     "--json_file",
     type=str,
     default="known_molecules.json",
@@ -84,7 +74,7 @@ experiment = LeadMoleculeOptimization(lead_molecule="CCO")
 
 
 (model, backend, API_KEY, kwargs) = AutoGenClient.configure(args.model, args.backend)
-server_path = args.server_path
+
 server_urls = args.server_urls
 assert server_urls is not None, "Server URLs must be provided"
 for url in server_urls:
@@ -95,7 +85,6 @@ runner = AutoGenClient(
     backend=backend,
     api_key=API_KEY,
     model_kwargs=kwargs,
-    server_path=server_path,
     server_url=server_urls,
 )
 
