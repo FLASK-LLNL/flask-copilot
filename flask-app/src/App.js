@@ -31,7 +31,7 @@ const MoleculeSVG = ({ smiles, height = 80, rdkitModule = null }) => {
 
           // Use this to change bond colors to "dark mode" (maybe not a good idea)
           const modifiedSvg = molSvg
-              //.replace(/fill:"#FFFFFF"/g, "fill='transparent'")
+              //.replace(/fill:"  #FFFFFF"/g, "fill='transparent'")
               //.replace(/stroke:#000000/g, "stroke:#E5E7EB")
               //.replace(/fill:#000000/g, "fill:#E5E7EB");
           setSvg(modifiedSvg);
@@ -726,7 +726,7 @@ const ChemistryTool = () => {
     density: { 
       label: 'Molecular Density (g/cm³)', 
       color: '#F59E0B',
-      calculate: (nodes) => nodes.reduce((sum, node) => sum + (node.density || Math.random() * 500 + 100), 0)
+      calculate: (nodes) => nodes[nodes.length-1].density || 0
     },
     yield: { 
       label: 'Yield (%)', 
@@ -1120,7 +1120,7 @@ const ChemistryTool = () => {
                 <RotateCcw className="w-5 h-5" />Reset
               </button>
               <button onClick={stop} disabled={!isComputing} className="px-6 py-3 bg-white/20 text-white rounded-lg font-semibold hover:bg-white/30 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2">
-                <RotateCcw className="w-5 h-5" />Stop
+                <X className="w-5 h-5" />Stop
               </button>
             </div>
           </div>
