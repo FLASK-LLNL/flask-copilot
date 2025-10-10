@@ -69,9 +69,6 @@ app.add_middleware(
 BUILD_PATH = os.path.join(os.path.dirname(__file__), "flask-app", "build")
 STATIC_PATH = os.path.join(BUILD_PATH, "static")
 
-# Initialize Charge experiment with a dummy lead molecule
-experiment = None
-lmo_runner = None
 
 (model, backend, API_KEY, kwargs) = AutoGenClient.configure(args.model, args.backend)
 
@@ -249,7 +246,13 @@ async def generate_molecules(
     await websocket.send_json({"type": "complete"})
 
 
-async def lead_molecule(start_smiles: str, depth: int = 3, websocket: WebSocket = None):
+async def lead_molecule(
+    start_smiles: str,
+    experiment,
+    lmo_runner,
+    depth: int = 3,
+    websocket: WebSocket = None,
+):
     """Stream positioned nodes and edges"""
 
     mol_file_path = args.json_file
@@ -314,20 +317,6 @@ async def lead_molecule(start_smiles: str, depth: int = 3, websocket: WebSocket 
 
     mol_data = [lead_molecule_data]
     max_iterations = args.max_iterations
-
-    experiment = LeadMoleculeOptimization(lead_molecule=lead_molecule_smiles)
-    global lmo_runner
-    if lmo_runner is None:
-        lmo_runner = AutoGenClient(
-            experiment_type=experiment,
-            model=model,
-            backend=backend,
-            api_key=API_KEY,
-            model_kwargs=kwargs,
-            server_url=server_urls,
-        )
-    else:
-        lmo_runner.experiment_type = experiment
 
     for i in range(depth):
         if i > 0:
@@ -447,6 +436,9 @@ async def websocket_endpoint(websocket: WebSocket):
     global CURRENT_TASK
     await websocket.accept()
 
+    # Initialize Charge experiment with a dummy lead molecule
+    lmo_experiment = None
+    lmo_runner = None
     try:
         while True:
             data = await websocket.receive_json()
@@ -462,10 +454,28 @@ async def websocket_endpoint(websocket: WebSocket):
                     except asyncio.CancelledError:
                         logger.info("Previous compute task cancelled.")
 
+                lmo_experiment = LeadMoleculeOptimization(lead_molecule=data["smiles"])
+
+                if lmo_runner is None:
+                    lmo_runner = AutoGenClient(
+                        experiment_type=lmo_experiment,
+                        model=model,
+                        backend=backend,
+                        api_key=API_KEY,
+                        model_kwargs=kwargs,
+                        server_url=server_urls,
+                    )
+                else:
+                    lmo_runner.experiment_type = experiment
+
                 async def run_task():
                     if data["problemType"] == "optimization":
                         await lead_molecule(
-                            data["smiles"], data.get("depth", 3), websocket
+                            data["smiles"],
+                            experiment,
+                            lmo_runner,
+                            data.get("depth", 3),
+                            websocket,
                         )
                     else:
                         await generate_molecules(
@@ -486,7 +496,6 @@ async def websocket_endpoint(websocket: WebSocket):
                 await websocket.send_json({"type": "complete"})
 
             elif action == "reset":
-                global lmo_runner
                 if lmo_runner:
                     lmo_runner.reset()
                 logger.info("Experiment state has been reset.")

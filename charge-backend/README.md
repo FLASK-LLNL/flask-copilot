@@ -10,7 +10,7 @@
       ```bash
       python lmo_tool_server.py
       ```
-    - Run the `Reaction Prediction + FlaskV2` server (coming soon):
+    - Run the `Reaction Prediction + FlaskV2` server:
       ```bash
       python flaskv2_server.py --port 6000
       ```
