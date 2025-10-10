@@ -31,7 +31,7 @@ const MoleculeSVG = ({ smiles, height = 80, rdkitModule = null }) => {
 
           // Use this to change bond colors to "dark mode" (maybe not a good idea)
           const modifiedSvg = molSvg
-              //.replace(/fill:"  #FFFFFF"/g, "fill='transparent'")
+              //.replace(/fill:"#FFFFFF"/g, "fill='transparent'")
               //.replace(/stroke:#000000/g, "stroke:#E5E7EB")
               //.replace(/fill:#000000/g, "fill:#E5E7EB");
           setSvg(modifiedSvg);
