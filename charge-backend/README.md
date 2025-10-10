@@ -18,6 +18,6 @@
 3. **Run the Charge Backend**
     - Start the ChARGe backend server:
       ```bash
-      python charge_server.py  --json_file known_molecules.json
+      python charge_server.py  --json_file known_molecules.json --server-urls <LMO_TOOL_SERVER_URL> <FLASKV2_SERVER_URL> 
       ```
       
