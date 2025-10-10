@@ -466,13 +466,13 @@ async def websocket_endpoint(websocket: WebSocket):
                         server_url=server_urls,
                     )
                 else:
-                    lmo_runner.experiment_type = experiment
+                    lmo_runner.experiment_type = lmo_experiment
 
                 async def run_task():
                     if data["problemType"] == "optimization":
                         await lead_molecule(
                             data["smiles"],
-                            experiment,
+                            lmo_experiment,
                             lmo_runner,
                             data.get("depth", 3),
                             websocket,
