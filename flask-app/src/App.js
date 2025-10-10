@@ -996,7 +996,7 @@ const ChemistryTool = () => {
 
             {/* WebSocket Status Indicator */}
             <div 
-              className="absolute right-20 top-100 group cursor-pointer"
+              className="absolute right-10 top-10 group cursor-pointer"
               onClick={reconnectWS}
               title="Click to reconnect"
             >
