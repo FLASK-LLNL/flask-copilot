@@ -70,8 +70,8 @@ BUILD_PATH = os.path.join(os.path.dirname(__file__), "flask-app", "build")
 STATIC_PATH = os.path.join(BUILD_PATH, "static")
 
 # Initialize Charge experiment with a dummy lead molecule
-experiment = LeadMoleculeOptimization(lead_molecule="CCO")
-
+experiment = None
+lmo_runner = None
 
 (model, backend, API_KEY, kwargs) = AutoGenClient.configure(args.model, args.backend)
 
@@ -79,14 +79,7 @@ server_urls = args.server_urls
 assert server_urls is not None, "Server URLs must be provided"
 for url in server_urls:
     assert url.endswith("/sse"), f"Server URL {url} must end with /sse"
-runner = AutoGenClient(
-    experiment_type=experiment,
-    model=model,
-    backend=backend,
-    api_key=API_KEY,
-    model_kwargs=kwargs,
-    server_url=server_urls,
-)
+
 
 if os.path.exists(STATIC_PATH):
     # Serve the frontend
@@ -321,6 +314,21 @@ async def lead_molecule(start_smiles: str, depth: int = 3, websocket: WebSocket 
 
     mol_data = [lead_molecule_data]
     max_iterations = args.max_iterations
+
+    experiment = LeadMoleculeOptimization(lead_molecule=lead_molecule_smiles)
+    global lmo_runner
+    if lmo_runner is None:
+        lmo_runner = AutoGenClient(
+            experiment_type=experiment,
+            model=model,
+            backend=backend,
+            api_key=API_KEY,
+            model_kwargs=kwargs,
+            server_url=server_urls,
+        )
+    else:
+        lmo_runner.experiment_type = experiment
+
     for i in range(depth):
         if i > 0:
             edge_data = {
@@ -339,7 +347,7 @@ async def lead_molecule(start_smiles: str, depth: int = 3, websocket: WebSocket 
 
             try:
                 iteration += 1
-                results = await runner.run()
+                results = await lmo_runner.run()
                 results = results.as_list()  # Convert to list of strings
                 logger.info(f"New molecules generated: {results}")
                 processed_mol = helper_funcs.post_process_smiles(
@@ -393,7 +401,7 @@ async def lead_molecule(start_smiles: str, depth: int = 3, websocket: WebSocket 
                     experiment = LeadMoleculeOptimization(
                         lead_molecule=canonical_smiles
                     )
-                    runner.experiment_type = experiment
+                    lmo_runner.experiment_type = experiment
                     parent_id = node_id
 
                     break  # Exit while loop to proceed to next node
@@ -478,7 +486,9 @@ async def websocket_endpoint(websocket: WebSocket):
                 await websocket.send_json({"type": "complete"})
 
             elif action == "reset":
-                runner.reset()
+                global lmo_runner
+                if lmo_runner:
+                    lmo_runner.reset()
                 logger.info("Experiment state has been reset.")
 
             elif action == "stop":
