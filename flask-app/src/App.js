@@ -1026,49 +1026,6 @@ const ChemistryTool = () => {
           <div className="flex items-center justify-center gap-3 mb-2">
             <Beaker className="w-10 h-10 text-purple-400" />
             <h1 className="text-4xl font-bold text-white">FLASK Copilot</h1>
-
-            {/* WebSocket Status Indicator */}
-            <div 
-              className="absolute right-10 top-10 group cursor-pointer"
-              onClick={reconnectWS}
-              title="Click to reconnect"
-            >
-              <div className="relative">
-                <div className={`w-4 h-4 rounded-full absolute ${
-                  wsReconnecting ? 'bg-yellow-400 animate-ping' :
-                  wsConnected ? 'bg-green-400' : 
-                  'bg-red-400 animate-pulse'
-                }`} />
-                <div className={`w-4 h-4 rounded-full ${
-                  wsReconnecting ? 'bg-yellow-400' :
-                  wsConnected ? 'bg-green-400' : 
-                  'bg-red-400 animate-ping'
-                }`} />
-              </div>
-              
-              <div className="absolute right-0 top-8 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-50">
-                <div className="bg-slate-800 border-2 border-purple-400 rounded-lg px-3 py-2 text-sm whitespace-nowrap shadow-xl">
-                  <div className={`font-semibold ${
-                    wsReconnecting ? 'text-yellow-400' :
-                    wsConnected ? 'text-green-400' : 
-                    'text-red-400'
-                  }`}>
-                    {wsReconnecting ? '● Reconnecting...' :
-                     wsConnected ? '● Connected' : 
-                     '● Disconnected'}
-                  </div>
-                  <div className="text-purple-200 text-xs mt-1">
-                    {WS_SERVER}
-                    {wsError}
-                  </div>
-                  {!wsConnected && !wsReconnecting && (
-                    <div className="text-purple-300 text-xs mt-1 italic">
-                      Click to reconnect
-                    </div>
-                  )}
-                </div>
-              </div>
-            </div>
           </div>
           <p className="text-purple-300">Real-time molecular assistant</p>
         </div>
@@ -1107,6 +1064,53 @@ const ChemistryTool = () => {
               <span className="bg-pink-500 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center font-bold">{sidebarMessages.length}</span>
             ) */}
           </button>
+
+          {/* WebSocket Status Indicator */}
+            <div 
+              className="absolute top-10 group cursor-pointer"
+              onClick={reconnectWS}
+              title="Click to reconnect"
+            >
+              <div className="relative">
+                <div className={`w-4 h-4 rounded-full absolute ${
+                  wsReconnecting ? 'bg-yellow-400 animate-ping' :
+                  wsConnected ? 'bg-green-400' : 
+                  'bg-red-400 animate-pulse'
+                }`} />
+                <div className={`w-4 h-4 rounded-full ${
+                  wsReconnecting ? 'bg-yellow-400' :
+                  wsConnected ? 'bg-green-400' : 
+                  'bg-red-400 animate-ping'
+                }`} />
+              </div>
+              
+              <div className="absolute right-0 top-8 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-50">
+                <div className="bg-slate-800 border-2 border-purple-400 rounded-lg px-3 py-2 text-sm whitespace-nowrap shadow-xl">
+                  <div className={`font-semibold ${
+                    wsReconnecting ? 'text-yellow-400' :
+                    wsConnected ? 'text-green-400' : 
+                    'text-red-400'
+                  }`}>
+                    {wsReconnecting ? '● Reconnecting...' :
+                     wsConnected ? '● Connected' : 
+                     '● Disconnected'}
+                  </div>
+                  <div className="text-purple-200 text-xs mt-1">
+                    {WS_SERVER}
+                    {wsError && (
+                      <div className="text-purple-300 text-xs mt-1">
+                        {wsError}
+                      </div>
+                    )}
+                  </div>
+                  {!wsConnected && !wsReconnecting && (
+                    <div className="text-purple-300 text-xs mt-1 italic">
+                      Click to reconnect
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
         </div>
 
         <div className="bg-white/10 backdrop-blur-lg rounded-2xl shadow-2xl p-6 mb-6 border border-white/20">
