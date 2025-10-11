@@ -262,9 +262,14 @@ async def websocket_endpoint(websocket: WebSocket):
                         {"type": "error", "message": f"Unsupported problem type {data['problemType']}"}
                     )
             if data["action"] == "custom_query":
-                await websocket.send_json(
-                    {"type": "response", "message": f"Processing query: {data['query']} for node {data['nodeId']}"}
-                )
+                if "water" in data['query'].lower():
+                    await websocket.send_json(
+                        {"type": "response", "message": f"Processing query: {data['query']} for node {data['nodeId']}", "smiles": "O"}
+                    )
+                else:
+                    await websocket.send_json(
+                        {"type": "response", "message": f"Processing query: {data['query']} for node {data['nodeId']}"}
+                    )
                 await asyncio.sleep(3)  # Random wait
                 await websocket.send_json({"type": "complete"})
     except WebSocketDisconnect:

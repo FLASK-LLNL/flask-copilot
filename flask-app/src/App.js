@@ -167,8 +167,12 @@ const ChemistryTool = () => {
     yield: false,
   });
   const [rdkitModule, setRdkitModule] = useState(null);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [sidebarMessages, setSidebarMessages] = useState([]);
+
   const containerRef = useRef(null);
   const wsRef = useRef(null);
+  const sidebarRef = useRef(null);
   
   // Load RDKit.js on mount
   useEffect(() => {
@@ -572,6 +576,7 @@ const ChemistryTool = () => {
       } else if (data.type === 'complete') {
         setIsComputing(false);
       } else if (data.type === 'response') {
+        addSidebarMessage(data.message, data.smiles || null);
         console.log('Server response:', data.message);
       } else if (data.type === 'error') {
         console.error(data.message);
@@ -618,6 +623,7 @@ const ChemistryTool = () => {
     setContextMenu(null);
     setCustomQueryModal(null);
     setMetricsHistory([]);
+    setSidebarMessages([]);
     if (websocket && websocket.readyState === WebSocket.OPEN) {
       websocket.send(JSON.stringify({ action: 'reset' }));
     }
@@ -648,7 +654,7 @@ const ChemistryTool = () => {
   };
 
   const saveFullContext = () => {
-    const data = { version: '1.0', type: 'full-context', timestamp: new Date().toISOString(), smiles, problemType, systemPrompt, problemPrompt, nodes: treeNodes, edges, metricsHistory, visibleMetrics, zoom, offset };
+    const data = { version: '1.0', type: 'full-context', timestamp: new Date().toISOString(), smiles, problemType, systemPrompt, problemPrompt, nodes: treeNodes, edges, metricsHistory, visibleMetrics, zoom, offset, sidebarMessages };
     const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -683,6 +689,7 @@ const ChemistryTool = () => {
               setVisibleMetrics(data.visibleMetrics || { cost: true, density: false, yield: false });
               setZoom(data.zoom || 1);
               setOffset(data.offset || { x: 50, y: 50 });
+              setSidebarMessages(data.sidebarMessages || []);
             }
           } else {
             alert('Invalid file format');
@@ -754,6 +761,21 @@ const ChemistryTool = () => {
       }]);
     }
   }, [treeNodes.length]);
+
+  // Auto-scroll sidebar to bottom when new messages arrive
+  useEffect(() => {
+    if (sidebarRef.current && sidebarMessages.length > 0) {
+      // Delay scroll to allow molecules to render
+      setTimeout(() => {
+        if (sidebarRef.current) {
+          sidebarRef.current.scrollTo({
+            top: sidebarRef.current.scrollHeight,
+            behavior: 'smooth'
+          });
+        }
+      }, 100);
+    }
+  }, [sidebarMessages]);
 
   // Relayouts the molecule graph for better visibility (assumes tree)
   const relayoutTree = () => {
@@ -931,6 +953,17 @@ const ChemistryTool = () => {
     setIsComputing(true); // If expecting new nodes
   };
 
+  const addSidebarMessage = (content, moleculeSmiles = null) => {
+    const message = {
+      id: Date.now(),
+      timestamp: new Date().toISOString(),
+      content,
+      moleculeSmiles
+    };
+    setSidebarMessages(prev => [...prev, message]);
+    setSidebarOpen(true);
+  };
+
   // Memoize the metrics charts to prevent re-render on mouse move
   const metricsCharts = useMemo(() => {
     if (metricsHistory.length === 0) return null;
@@ -1064,6 +1097,16 @@ const ChemistryTool = () => {
               </div>
             )}
           </div>
+          <button onClick={() => setSidebarOpen(!sidebarOpen)} className="px-4 py-2 bg-purple-500/30 text-white rounded-lg text-sm font-semibold hover:bg-purple-500/50 transition-all flex items-center gap-2">
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" />
+            </svg>
+            Reasoning
+            {/* Badges for number of messages
+            sidebarMessages.length > 0 && (
+              <span className="bg-pink-500 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center font-bold">{sidebarMessages.length}</span>
+            ) */}
+          </button>
         </div>
 
         <div className="bg-white/10 backdrop-blur-lg rounded-2xl shadow-2xl p-6 mb-6 border border-white/20">
@@ -1253,8 +1296,6 @@ const ChemistryTool = () => {
         {!isComputing && treeNodes.length > 0 && (
           <div className="mt-6 bg-green-500/20 backdrop-blur-lg rounded-xl p-4 border border-green-400/50">
             <div className="flex items-center gap-3 text-green-200">
-              <div className="w-5 h-5 rounded-full bg-green-400 animate-ping absolute" />
-              <div className="w-5 h-5 rounded-full bg-green-400" />
               <span className="font-medium">
                 Computation complete! Generated {treeNodes.length} molecules
               </span>
@@ -1325,7 +1366,7 @@ const ChemistryTool = () => {
       {hoveredNode && !contextMenu && (
         <div className="fixed z-50 pointer-events-none" style={{ left: `${mousePos.x + 20}px`, top: `${mousePos.y + 20}px`, maxWidth: '400px' }}>
           <div className="bg-gradient-to-br from-slate-800 to-purple-900 border-2 border-purple-400 rounded-xl shadow-2xl p-4 max-h-96 overflow-y-auto">
-            <div className="text-xs text-purple-400 mb-2">Debug: x={mousePos.x}, y={mousePos.y}</div>
+            { /* <div className="text-xs text-purple-400 mb-2">Debug: x={mousePos.x}, y={mousePos.y}</div> */ }
             <MarkdownText text={hoveredNode.hoverInfo} />
           </div>
         </div>
@@ -1342,7 +1383,15 @@ const ChemistryTool = () => {
             <RefreshCw className="w-4 h-4" />
             Re-randomize Children
           </button>
-          
+
+          <button onClick={() => {
+            const mockMessage = `## Structure Optimization Complete\n\n**Molecule:** ${contextMenu.node.label}\n\nOptimization converged in **24 iterations**\n\n- Energy reduced by **15.3 kJ/mol**\n- RMSD: *0.08 Å*\n- Final gradient: \`0.001\`\n\nThe optimized structure shows improved stability.`;
+            addSidebarMessage(mockMessage, contextMenu.node.smiles);
+            setContextMenu(null);
+          }} className="w-full px-4 py-2 text-left text-sm text-white hover:bg-purple-600/50 transition-colors flex items-center gap-2">
+            <Sparkles className="w-4 h-4" />Mock message from server
+          </button>
+
           <button onClick={() => handleCustomQuery(contextMenu.node)} className="w-full px-4 py-2 text-left text-sm text-white hover:bg-purple-600/50 transition-colors flex items-center gap-2 border-t border-purple-400/30">
             <Send className="w-4 h-4" />
             Custom Query...
@@ -1362,7 +1411,7 @@ const ChemistryTool = () => {
                 <X className="w-6 h-6" />
               </button>
             </div>
-            
+
             <textarea
               value={customQueryText}
               onChange={(e) => setCustomQueryText(e.target.value)}
@@ -1425,13 +1474,62 @@ const ChemistryTool = () => {
         </div>
       )}
 
+      {/* Sidebar */}
+      <div className={`fixed top-0 right-0 h-full w-96 bg-slate-900 border-l-2 border-purple-400 shadow-2xl transform transition-transform duration-300 z-50 ${sidebarOpen ? 'translate-x-0' : 'translate-x-full'}`}>
+        <div className="flex flex-col h-full">
+          <div className="flex items-center justify-between p-4 border-b border-purple-400/30">
+            <h3 className="text-lg font-semibold text-white">Reasoning</h3>
+            <button onClick={() => setSidebarOpen(false)} className="text-purple-300 hover:text-white transition-colors">
+              <X className="w-5 h-5" />
+            </button>
+          </div>
+
+          <div className="flex-1 overflow-y-auto p-4 space-y-3" ref={sidebarRef} style={{ overflowX: 'hidden' }}>
+            {sidebarMessages.length === 0 ? (
+              <div className="text-center text-purple-400 mt-8">
+                <svg className="w-12 h-12 mx-auto mb-2 opacity-50" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" />
+                </svg>
+                <p className="text-sm">No messages yet</p>
+              </div>
+            ) : (
+              sidebarMessages.map((msg, idx) => (
+                <div key={msg.id} className="bg-white/5 rounded-lg p-4 border border-purple-400/30 animate-slideIn opacity-0" style={{ animationDelay: `${idx * 50}ms`, animationFillMode: 'forwards' }}>
+                  <div className="text-xs text-purple-400 mb-2">
+                    {new Date(msg.timestamp).toLocaleTimeString()}
+                  </div>
+                  <div className="text-sm text-purple-100">
+                    <MarkdownText text={msg.content} />
+                  </div>
+                  {msg.moleculeSmiles && (
+                    <div className="mt-3 bg-white/50 rounded-lg p-2 flex justify-center">
+                      <MoleculeSVG smiles={msg.moleculeSmiles} size={120} rdkitModule={rdkitModule} />
+                    </div>
+                  )}
+                </div>
+              ))
+            )}
+          </div>
+
+          { /* Optional for clearing messages
+          <div className="p-4 border-t border-purple-400/30">
+            <button onClick={() => setSidebarMessages([])} disabled={sidebarMessages.length === 0} className="w-full px-4 py-2 bg-white/10 text-purple-200 rounded-lg text-sm font-medium hover:bg-white/20 transition-all disabled:opacity-50 disabled:cursor-not-allowed">
+              Clear All Messages
+            </button>
+          </div>
+          */ }
+        </div>
+      </div>
+
       <style>{`
         @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
         @keyframes fadeInScale { from { opacity: 0; transform: scale(0.5); } to { opacity: 1; transform: scale(1); } }
         @keyframes dash { to { stroke-dashoffset: -10; } }
+        @keyframes slideIn { from { opacity: 0; transform: translateX(20px); } to { opacity: 1; transform: translateX(0); } }
         .animate-fadeIn { animation: fadeIn 0.5s ease-out forwards; }
         .animate-fadeInScale { animation: fadeInScale 0.6s cubic-bezier(0.34, 1.56, 0.64, 1) forwards; opacity: 0; }
         .animate-dash { animation: dash 1s linear infinite; }
+        .animate-slideIn { animation: slideIn 0.4s ease-out; }
       `}</style>
     </div>
   );
