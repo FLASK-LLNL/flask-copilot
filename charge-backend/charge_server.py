@@ -8,6 +8,7 @@ import os
 import random
 import argparse
 import sys
+from typing import Dict
 
 cur_dir = os.path.dirname(os.path.abspath(__file__))
 sys.path.append(os.path.join(cur_dir, "ChARGe", "experiments", "Molecule_Generation"))
@@ -86,6 +87,46 @@ if os.path.exists(STATIC_PATH):
     @app.get("/")
     async def root():
         return FileResponse(os.path.join(BUILD_PATH, "index.html"))
+
+
+def generate_tree_structure(reaction_path_dict: Dict[int, aizynth_funcs.Node]):
+    """Generate nodes and edges from reaction path dict"""
+    nodes = []
+    edges = []
+
+    root_id = 0
+    node_queue = [(reaction_path_dict[root_id], 0)]  # (node, level)
+
+    while node_queue:
+        current_node, level = node_queue.pop(0)
+        node_id = current_node.node_id
+        smiles = current_node.smiles
+        purchasable = current_node.purchasable
+        node = {
+            "id": node_id,
+            "label": smiles,
+            "smiles": smiles,
+            "level": level,
+            "purchasable": purchasable,
+            "energy": random.uniform(0, 1),  # Placeholder for energy
+            "cost": random.uniform(0, 1),  # Placeholder for cost
+            "parent_id": current_node.parent_id,
+            "hoverInfo": f"Purchasable: {purchasable}\n",  # Placeholder for hover info
+        }
+        nodes.append(node)
+        if current_node.parent_id is not None:
+            edge = {
+                "id": f"edge_{current_node.parent_id}_{node_id}",
+                "from": current_node.parent_id,
+                "to": node_id,
+                "reactionType": "N/A",
+            }
+            edges.append(edge)
+        for child_id in current_node.children:
+            child_node = reaction_path_dict[child_id]
+            node_queue.append((child_node, level + 1))
+
+    return nodes, edges
 
 
 def calculate_positions(nodes):
