@@ -404,6 +404,10 @@ async def lead_molecule(
     await websocket.send_json({"type": "complete"})
 
 
+async def optimize_molecule_retro(smiles, experiment, planner, websocket: WebSocket):
+    pass
+
+
 @app.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket):
     global CURRENT_TASK
@@ -412,6 +416,9 @@ async def websocket_endpoint(websocket: WebSocket):
     # Initialize Charge experiment with a dummy lead molecule
     lmo_experiment = None
     lmo_runner = None
+
+    retro_experiment = None
+    retro_planner = None
     try:
         while True:
             data = await websocket.receive_json()
@@ -427,19 +434,27 @@ async def websocket_endpoint(websocket: WebSocket):
                     except asyncio.CancelledError:
                         logger.info("Previous compute task cancelled.")
 
-                lmo_experiment = LeadMoleculeOptimization(lead_molecule=data["smiles"])
-
-                if lmo_runner is None:
-                    lmo_runner = AutoGenClient(
-                        experiment_type=lmo_experiment,
-                        model=model,
-                        backend=backend,
-                        api_key=API_KEY,
-                        model_kwargs=kwargs,
-                        server_url=server_urls,
+                if data["problemType"] == "optimization":
+                    lmo_experiment = LeadMoleculeOptimization(
+                        lead_molecule=data["smiles"]
                     )
+                    if lmo_runner is None:
+                        lmo_runner = AutoGenClient(
+                            experiment_type=lmo_experiment,
+                            model=model,
+                            backend=backend,
+                            api_key=API_KEY,
+                            model_kwargs=kwargs,
+                            server_url=server_urls,
+                        )
+                    else:
+                        lmo_runner.experiment_type = lmo_experiment
+                elif data["problemType"] == "product_optimization_retro":
+                    pass
+                elif data["problemType"] == "reactant_optimization_retro":
+                    pass
                 else:
-                    lmo_runner.experiment_type = lmo_experiment
+                    planner = aizynth_funcs.RetroPlanner()
 
                 async def run_task():
                     if data["problemType"] == "optimization":
@@ -450,8 +465,14 @@ async def websocket_endpoint(websocket: WebSocket):
                             data.get("depth", 3),
                             websocket,
                         )
+                    elif data["problemType"] in [
+                        "product_optimization_retro",
+                        "reactant_optimization_retro",
+                    ]:
+                        await optimize_molecule_retro(
+                            data["smiles"], retro_experiment, retro_planner, websocket
+                        )
                     else:
-                        planner = aizynth_funcs.RetroPlanner()
                         await generate_molecules(data["smiles"], planner, websocket)
 
                 # start a new task
