@@ -15,7 +15,12 @@ sys.path.append(os.path.join(cur_dir, "ChARGe", "experiments", "Molecule_Generat
 from ChARGe.experiments.Molecule_Generation.LMOExperiment import (
     LMOExperiment as LeadMoleculeOptimization,
 )
-import ChARGe.experiments.Molecule_Generation.helper_funcs as helper_funcs
+from ChARGe.experiments.Retrosynthesis.RetrosynthesisExperiment import (
+    TemplateFreeRetrosynthesisExperiment as RetrosynthesisExperiment,
+)
+
+import ChARGe.experiments.Molecule_Generation.helper_funcs as lmo_helper_funcs
+import ChARGe.experiments.Retrosynthesis.helper_funcs as retro_helper_funcs
 import os
 from charge.clients.Client import Client
 from charge.clients.autogen import AutoGenClient
@@ -23,6 +28,7 @@ import charge.servers.AiZynthTools as aizynth_funcs
 
 from loguru import logger
 import sys
+from backend_helper_funcs import CallbackHandler
 
 # sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 # from ChARGe.experiments.LMOExperiment import LMOExperiment
@@ -445,14 +451,33 @@ async def websocket_endpoint(websocket: WebSocket):
                             backend=backend,
                             api_key=API_KEY,
                             model_kwargs=kwargs,
-                            server_url=server_urls,
+                            server_url=server_urls,  # TODO: Change this to LMFO specific server
+                            callback=CallbackHandler(websocket),
                         )
                     else:
                         lmo_runner.experiment_type = lmo_experiment
-                elif data["problemType"] == "product_optimization_retro":
-                    pass
-                elif data["problemType"] == "reactant_optimization_retro":
-                    pass
+                elif data["problemType"] in [
+                    "product_optimization_retro",
+                    "reactant_optimization_retro",
+                ]:
+                    if data["problemType"] == "product_optimization_retro":
+                        pass
+                    else:
+                        pass
+
+                    if retro_runner is None:
+                        retro_runner = AutoGenClient(
+                            experiment_type=retro_experiment,
+                            model=model,
+                            backend=backend,
+                            api_key=API_KEY,
+                            model_kwargs=kwargs,
+                            server_url=server_urls,  # TODO: Change this to a retrosynthesis specific server
+                            callback=CallbackHandler(websocket),
+                        )
+                    else:
+                        retro_runner.experiment_type = retro_experiment
+
                 else:
                     planner = aizynth_funcs.RetroPlanner()
 
