@@ -18,6 +18,7 @@ import ChARGe.experiments.Molecule_Generation.helper_funcs as helper_funcs
 import os
 from charge.clients.Client import Client
 from charge.clients.autogen import AutoGenClient
+import charge.servers.AiZynthTools as aizynth_funcs
 
 from loguru import logger
 import sys
@@ -87,80 +88,9 @@ if os.path.exists(STATIC_PATH):
         return FileResponse(os.path.join(BUILD_PATH, "index.html"))
 
 
-def generate_tree_structure(start_smiles: str, depth: int = 3):
-    """Generate entire tree structure upfront (like the mock)"""
-    nodes = []
-    edges = []
-    node_counter = 0
-
-    ATOMS = ["C", "N", "O", "Br"]
-
-    def build_subtree(parent_smiles, parent_id, level):
-        nonlocal node_counter
-        if level > depth:
-            return
-
-        num_children = random.choice([1, 2])
-
-        for i in range(num_children):
-            node_id = f"node_{node_counter}"
-            node_counter += 1
-            child_smiles = f"{parent_smiles}{ATOMS[i]}"
-
-            node = {
-                "id": node_id,
-                "smiles": child_smiles,
-                "label": f"Molecule-{level}{i}",
-                "cost": random.uniform(10, 110),
-                "energy": random.uniform(100, 600),
-                "yield": 2.0,
-                "level": level,
-                "parentId": parent_id,
-                "hoverInfo": f"# Molecule {level}-{i}\n**SMILES:** `{child_smiles}`\n**Level:** {level}",
-            }
-            nodes.append(node)
-
-            edge = {
-                "id": f"edge_{parent_id}_{node_id}",
-                "from": parent_id,
-                "to": node_id,
-                "reactionType": random.choice(
-                    [
-                        "Hydrogenation",
-                        "Oxidation",
-                        "Methylation",
-                        "Reduction",
-                        "Cyclization",
-                    ]
-                ),
-            }
-            edges.append(edge)
-
-            build_subtree(child_smiles, node_id, level + 1)
-
-    # Root node
-    root_id = "root"
-    root = {
-        "id": root_id,
-        "smiles": start_smiles,
-        "label": "Root Molecule",
-        "cost": random.uniform(10, 110),
-        "energy": random.uniform(100, 600),
-        "yield": 2.0,
-        "level": 0,
-        "parentId": None,
-        "hoverInfo": f"# Root Molecule\n**SMILES:** `{start_smiles}`",
-    }
-    nodes.insert(0, root)
-
-    build_subtree(start_smiles, root_id, 1)
-
-    return nodes, edges
-
-
 def calculate_positions(nodes):
     """Calculate positions for all nodes (matching frontend logic)"""
-    BOX_WIDTH = 220  # Must match with javascript!
+    BOX_WIDTH = 270  # Must match with javascript!
     BOX_GAP = 160  # Must match with javascript!
     level_gap = BOX_WIDTH + BOX_GAP
     node_spacing = 150
@@ -189,13 +119,15 @@ def calculate_positions(nodes):
     return positioned
 
 
-async def generate_molecules(
-    start_smiles: str, depth: int = 3, websocket: WebSocket = None
-):
+async def generate_molecules(start_smiles: str, planner, websocket: WebSocket = None):
     """Stream positioned nodes and edges"""
+    logger.info(f"Planning retrosynthesis for: {start_smiles}")
 
     # Generate and position entire tree upfront
-    nodes, edges = generate_tree_structure(start_smiles, depth)
+    tree, stats, routes = planner.plan(start_smiles)
+    reaction_path = aizynth_funcs.ReactionPath(route=routes[0])
+    nodes, edges = generate_tree_structure(reaction_path.nodes)
+
     positioned_nodes = calculate_positions(nodes)
 
     # Create node map
@@ -478,9 +410,8 @@ async def websocket_endpoint(websocket: WebSocket):
                             websocket,
                         )
                     else:
-                        await generate_molecules(
-                            data["smiles"], data.get("depth", 3), websocket
-                        )
+                        planner = aizynth_funcs.RetroPlanner()
+                        await generate_molecules(data["smiles"], planner, websocket)
 
                 # start a new task
                 CURRENT_TASK = asyncio.create_task(run_task())
