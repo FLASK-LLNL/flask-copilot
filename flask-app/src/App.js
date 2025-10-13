@@ -1228,10 +1228,12 @@ const ChemistryTool = () => {
                       </svg>
                       
                       <div className="absolute pointer-events-auto" style={{ left: `${midpoint.x}px`, top: `${midpoint.y}px`, transform: 'translate(-50%, -50%)' }}>
-                        <div className={`px-3 py-1.5 rounded-lg text-xs font-semibold shadow-lg ${edge.status === 'computing' ? 'bg-amber-500 text-white animate-pulse' : 'bg-purple-500 text-white'}`}>
-                          {edge.status === 'computing' && <Loader2 className="w-3 h-3 inline mr-1 animate-spin" />}
-                          {edge.label}
-                        </div>
+                        {edge.label && (
+                          <div className={`px-3 py-1.5 rounded-lg text-xs font-semibold shadow-lg ${edge.status === 'computing' ? 'bg-amber-500 text-white animate-pulse' : 'bg-purple-500 text-white'}`}>
+                            {edge.status === 'computing' && <Loader2 className="w-3 h-3 inline mr-1 animate-spin" />}
+                            {edge.label}
+                          </div>
+                        )}
                       </div>
                     </div>
                   );
