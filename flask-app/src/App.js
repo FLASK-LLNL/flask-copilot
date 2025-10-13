@@ -205,11 +205,11 @@ const ChemistryTool = () => {
     };
   }, []);
 
-  const findAllDescendants = (nodeId) => {
+  const findAllDescendants = (nodeId, nodes) => {
     // Find all descendants recursively
     const descendants = new Set();
     const findDescendants = (id) => {
-      treeNodes.forEach(n => {
+      nodes.forEach(n => {
         if (n.parentId === id && !descendants.has(n.id)) {
           descendants.add(n.id);
           findDescendants(n.id);
@@ -305,7 +305,7 @@ const ChemistryTool = () => {
     const node = getNode(nodeId);
     if (!node) return;
 
-    const descendants = findAllDescendants(nodeId);
+    const descendants = findAllDescendants(nodeId, treeNodes);
 
     // Remove descendants from nodes and edges
     const filteredNodes = treeNodes.filter(n => !descendants.has(n.id));
@@ -583,43 +583,40 @@ const ChemistryTool = () => {
           n.id === data.id ? { ...n, ...restData } : n
         ));
       } else if (data.type === 'node_delete') {
-        // Remove subtree, then remove node
-        const descendants = findAllDescendants(data.id);
-        // Remove nodes
-        setTreeNodes(prev => prev.filter(n => !descendants.has(n.id)));
-        // Remove edges
+        setTreeNodes(prev => {
+          const descendants = findAllDescendants(data.id, prev);
+          return prev.filter(n => !descendants.has(n.id) && n.id !== data.id);
+        });
         setEdges(prev => prev.filter(e => 
-          !descendants.has(e.fromNode) && !descendants.has(e.toNode)
+          e.fromNode !== data.id && e.toNode !== data.id
         ));
-        
-        setTreeNodes(prev => prev.filter(n => n.id !== data.id));
-        // Remove neighboring edges
-        setEdges(prev => prev.filter(e => 
-            e.fromNode !== data.id && e.toNode !== data.id
-        ));
-
+      } else if (data.type === 'subtree_update') {
+        const withNode = data.withNode || false;
+        const { id, type, ...restData } = data;
+        setTreeNodes(prev => {
+          const descendants = findAllDescendants(data.id, prev);
+          return prev.map(n => 
+            (descendants.has(n.id) || (withNode && n.id === data.id)) 
+              ? { ...n, ...restData } 
+              : n
+          );
+        });
       } else if (data.type === 'edge') {
         setEdges(prev => [...prev, data]);
       } else if (data.type === 'edge_update') {
         const { id, type, ...restData } = data;
         setEdges(prev => prev.map(e => 
           e.id === data.id ? { ...e, ...restData } : e
-        ));
-      } else if (data.type === 'subtree_update') {
-        const withNode = data.withNode || false
-        const descendants = findAllDescendants(data.id);
-        const { id, type, ...restData } = data;
-        setTreeNodes(prev => prev.map(n => 
-          (descendants.has(n.id) || (withNode && n.id === data.id)) ? { ...n, ...restData } : n
-        )); 
+         ));
       } else if (data.type === 'subtree_delete') {
-          const descendants = findAllDescendants(data.id);
-          // Remove nodes
-          setTreeNodes(prev => prev.filter(n => !descendants.has(n.id)));
-          // Remove edges
-          setEdges(prev => prev.filter(e => 
-            !descendants.has(e.fromNode) && !descendants.has(e.toNode)
-          ));
+        let descendantsSet;
+        setTreeNodes(prev => {
+          descendantsSet = findAllDescendants(data.id, prev);
+          return prev.filter(n => !descendantsSet.has(n.id));
+        });
+        setEdges(prev => prev.filter(e => 
+          !descendantsSet.has(e.fromNode) && !descendantsSet.has(e.toNode)
+        ));
       } else if (data.type === 'complete') {
         setIsComputing(false);
       } else if (data.type === 'response') {
