@@ -137,7 +137,7 @@ const MarkdownText = ({ text }) => {
 };
 
 const ChemistryTool = () => {
-  const [smiles, setSmiles] = useState('CCO');
+  const [smiles, setSmiles] = useState('O=C\\C1=C(\\C=C/CC1(C)C)C');
   const [problemType, setProblemType] = useState('retrosynthesis');
   const [systemPrompt, setSystemPrompt] = useState('');
   const [problemPrompt, setProblemPrompt] = useState('');
@@ -164,7 +164,7 @@ const ChemistryTool = () => {
   const [wsReconnecting, setWsReconnecting] = useState(false);
   const [visibleMetrics, setVisibleMetrics] = useState({
     cost: true,
-    density: false,
+    bandgap: false,
     yield: false,
   });
   const [rdkitModule, setRdkitModule] = useState(null);
@@ -204,6 +204,21 @@ const ChemistryTool = () => {
       }
     };
   }, []);
+
+  const findAllDescendants = (nodeId, nodes) => {
+    // Find all descendants recursively
+    const descendants = new Set();
+    const findDescendants = (id) => {
+      nodes.forEach(n => {
+        if (n.parentId === id && !descendants.has(n.id)) {
+          descendants.add(n.id);
+          findDescendants(n.id);
+        }
+      });
+    };
+    findDescendants(nodeId);
+    return descendants;
+  };
 
   /* Mock "re-randomize children" button behavior */
   const reactionTypes = ['Hydrogenation', 'Oxidation', 'Methylation', 'Reduction', 'Cyclization', 'Halogenation'];
@@ -255,8 +270,8 @@ const ChemistryTool = () => {
         if (parentIdx !== null) {
           edgesList.push({
             id: `edge_${parentIdx}_${nodeId}`,
-            from: parentIdx,
-            to: nodeId,
+            fromNode: parentIdx,
+            toNode: nodeId,
             reactionType: getRandomReaction()
           });
         }
@@ -282,21 +297,15 @@ const ChemistryTool = () => {
     return { nodes, edges: edgesList };
   };
 
+  const getNode = (nodeId) => {
+    return treeNodes.find(n => n.id === nodeId);
+  };
+  
   const rerandomizeChildren = (nodeId) => {
-    const node = treeNodes.find(n => n.id === nodeId);
+    const node = getNode(nodeId);
     if (!node) return;
 
-    // Find all descendants recursively
-    const descendants = new Set();
-    const findDescendants = (id) => {
-      treeNodes.forEach(n => {
-        if (n.parentId === id && !descendants.has(n.id)) {
-          descendants.add(n.id);
-          findDescendants(n.id);
-        }
-      });
-    };
-    findDescendants(nodeId);
+    const descendants = findAllDescendants(nodeId, treeNodes);
 
     // Remove descendants from nodes and edges
     const filteredNodes = treeNodes.filter(n => !descendants.has(n.id));
@@ -320,7 +329,7 @@ const ChemistryTool = () => {
     // Update edges to point from actual parent node, not 'root'
     const edgesWithCorrectParent = newEdges.map(e => ({
       ...e,
-      from: e.from === 'root' ? nodeId : e.from
+      fromNode: e.fromNode === 'root' ? nodeId : e.fromNode
     }));
     
     // Position new children, finding available space at each level
@@ -380,8 +389,6 @@ const ChemistryTool = () => {
     // Only add new edges with positions
     const newEdgesWithNodes = edgesWithCorrectParent.map(e => ({
       ...e,
-      fromNode: nodeMap[e.from],
-      toNode: nodeMap[e.to],
       status: 'complete',
       label: e.reactionType
     }));
@@ -569,11 +576,46 @@ const ChemistryTool = () => {
       
       if (data.type === 'node') {
         setTreeNodes(prev => [...prev, data]);
+      } else if (data.type === 'node_update') {
+        const { id, type, ...restData } = data;
+
+        setTreeNodes(prev => prev.map(n => 
+          n.id === data.id ? { ...n, ...restData } : n
+        ));
+      } else if (data.type === 'node_delete') {
+        setTreeNodes(prev => {
+          const descendants = findAllDescendants(data.id, prev);
+          return prev.filter(n => !descendants.has(n.id) && n.id !== data.id);
+        });
+        setEdges(prev => prev.filter(e => 
+          e.fromNode !== data.id && e.toNode !== data.id
+        ));
+      } else if (data.type === 'subtree_update') {
+        const withNode = data.withNode || false;
+        const { id, type, ...restData } = data;
+        setTreeNodes(prev => {
+          const descendants = findAllDescendants(data.id, prev);
+          return prev.map(n => 
+            (descendants.has(n.id) || (withNode && n.id === data.id)) 
+              ? { ...n, ...restData } 
+              : n
+          );
+        });
       } else if (data.type === 'edge') {
         setEdges(prev => [...prev, data]);
       } else if (data.type === 'edge_update') {
+        const { id, type, ...restData } = data;
         setEdges(prev => prev.map(e => 
-          e.id === data.id ? { ...e, ...data } : e
+          e.id === data.id ? { ...e, ...restData } : e
+         ));
+      } else if (data.type === 'subtree_delete') {
+        let descendantsSet;
+        setTreeNodes(prev => {
+          descendantsSet = findAllDescendants(data.id, prev);
+          return prev.filter(n => !descendantsSet.has(n.id));
+        });
+        setEdges(prev => prev.filter(e => 
+          !descendantsSet.has(e.fromNode) && !descendantsSet.has(e.toNode)
         ));
       } else if (data.type === 'complete') {
         setIsComputing(false);
@@ -686,7 +728,7 @@ const ChemistryTool = () => {
             setEdges(data.edges || []);
             if (data.type === 'full-context') {
               setMetricsHistory(data.metricsHistory || []);
-              setVisibleMetrics(data.visibleMetrics || { cost: true, density: false, yield: false });
+              setVisibleMetrics(data.visibleMetrics || { cost: true, bandgap: false, yield: false });
               setZoom(data.zoom || 1);
               setOffset(data.offset || { x: 50, y: 50 });
               setSidebarMessages(data.sidebarMessages || []);
@@ -716,9 +758,11 @@ const ChemistryTool = () => {
     setProblemPrompt('');
     setPromptsModified(false);
     if (problemType === 'retrosynthesis') {
-      setVisibleMetrics({cost: true, density: false, yield: false});
+      setVisibleMetrics({cost: false, bandgap: false, yield: false});
     } else if (problemType === 'optimization') {
-      setVisibleMetrics({cost: false, density: true, yield: false});
+      setVisibleMetrics({cost: false, bandgap: true, yield: false});
+    } else if (problemType === 'test') {
+      setVisibleMetrics({cost: false, bandgap: true, yield: false});
     }
   };
 
@@ -730,10 +774,10 @@ const ChemistryTool = () => {
       color: '#EC4899',
       calculate: (nodes) => nodes.reduce((sum, node) => sum + (node.cost || 0), 0)
     },
-    density: { 
-      label: 'Molecular Density (g/cm³)', 
+    bandgap: { 
+      label: 'Band Gap (eV)', 
       color: '#F59E0B',
-      calculate: (nodes) => nodes[nodes.length-1].density || 0
+      calculate: (nodes) => nodes[nodes.length-1].bandgap || 0
     },
     yield: { 
       label: 'Yield (%)', 
@@ -872,8 +916,6 @@ const ChemistryTool = () => {
     // Update all edges with new positions
     const updatedEdges = edges.map(e => ({
       ...e,
-      fromNode: nodeMap[e.from],
-      toNode: nodeMap[e.to]
     }));
     
     setTreeNodes(updatedNodes);
@@ -951,6 +993,17 @@ const ChemistryTool = () => {
     setCustomQueryText('');
     setIsComputing(true); // If expecting new nodes
   };
+
+  const highlightSubtree = (nodeId) => {
+    if (!websocket || websocket.readyState !== WebSocket.OPEN) {
+      alert('WebSocket not connected');
+      return;
+    }
+    websocket.send(JSON.stringify({
+      action: 'delete_my_node',
+      nodeId: nodeId
+    }));
+  }
 
   const addSidebarMessage = (content, moleculeSmiles = null) => {
     const message = {
@@ -1138,6 +1191,7 @@ const ChemistryTool = () => {
                 <select value={problemType} onChange={(e) => resetProblemType(e.target.value)} disabled={isComputing} className="w-full px-4 py-2.5 bg-white/20 border-2 border-purple-400/50 rounded-lg focus:border-purple-400 focus:outline-none transition-colors text-white disabled:opacity-50 cursor-pointer text-sm">
                   <option value="retrosynthesis" className="bg-slate-800">Retrosynthesis</option>
                   <option value="optimization" className="bg-slate-800">Molecule Optimization</option>
+                  <option value="test" className="bg-slate-800">Test Molecular Property</option>
                   <option value="custom" className="bg-slate-800">Custom</option>
                 </select>
               </div>
@@ -1202,14 +1256,14 @@ const ChemistryTool = () => {
                   height: '2000px'
                 }}
               >
-                {edges.filter(edge => edge.fromNode && edge.toNode).map((edge, idx) => {
-                  const midpoint = getCurveMidpoint(edge.fromNode, edge.toNode);
+                {edges.filter(edge => getNode(edge.fromNode) && getNode(edge.toNode)).map((edge, idx) => {
+                  const midpoint = getCurveMidpoint(getNode(edge.fromNode), getNode(edge.toNode));
                   return (
                     <div key={edge.id} className="absolute pointer-events-none">
                       <svg className="absolute" style={{ width: '3000px', height: '2000px', top: 0, left: 0 }}>
                         <g className="animate-fadeIn" style={{ animationDelay: `${idx * 50}ms` }}>
                           <path
-                            d={getCurvedPath(edge.fromNode, edge.toNode)}
+                            d={getCurvedPath(getNode(edge.fromNode), getNode(edge.toNode))}
                             stroke={edge.status === 'computing' ? '#F59E0B' : '#8B5CF6'}
                             strokeWidth="3"
                             fill="none"
@@ -1217,15 +1271,17 @@ const ChemistryTool = () => {
                             className={edge.status === 'computing' ? 'animate-dash' : ''}
                             opacity="0.8"
                           />
-                          <circle cx={edge.toNode.x + 10} cy={edge.toNode.y + 50} r="5" fill={edge.status === 'computing' ? '#F59E0B' : '#EC4899'} />
+                          <circle cx={getNode(edge.toNode).x + 10} cy={getNode(edge.toNode).y + 50} r="5" fill={edge.status === 'computing' ? '#F59E0B' : '#EC4899'} />
                         </g>
                       </svg>
                       
                       <div className="absolute pointer-events-auto" style={{ left: `${midpoint.x}px`, top: `${midpoint.y}px`, transform: 'translate(-50%, -50%)' }}>
-                        <div className={`px-3 py-1.5 rounded-lg text-xs font-semibold shadow-lg ${edge.status === 'computing' ? 'bg-amber-500 text-white animate-pulse' : 'bg-purple-500 text-white'}`}>
-                          {edge.status === 'computing' && <Loader2 className="w-3 h-3 inline mr-1 animate-spin" />}
-                          {edge.label}
-                        </div>
+                        {edge.label && (
+                          <div className={`px-3 py-1.5 rounded-lg text-xs font-semibold shadow-lg ${edge.status === 'computing' ? 'bg-amber-500 text-white animate-pulse' : 'bg-purple-500 text-white'}`}>
+                            {edge.status === 'computing' && <Loader2 className="w-3 h-3 inline mr-1 animate-spin" />}
+                            {edge.label}
+                          </div>
+                        )}
                       </div>
                     </div>
                   );
@@ -1255,7 +1311,7 @@ const ChemistryTool = () => {
                     onMouseLeave={() => setHoveredNode(null)}
                     onClick={(e) => handleNodeClick(e, node)}
                   >
-                    <div className="bg-gradient-to-br from-purple-50/80 to-pink-300/80 backdrop-blur-sm rounded-xl p-3 border-2 border-purple-400/50 shadow-lg hover:shadow-2xl hover:scale-105 transition-all pointer-events-auto cursor-pointer hover:border-purple-300">
+                    <div className={`bg-gradient-to-br backdrop-blur-sm rounded-xl p-3 border-2 shadow-lg hover:shadow-2xl hover:scale-105 transition-all pointer-events-auto cursor-pointer ${node.highlight ? 'from-amber-500/40 to-yellow-500/40 border-amber-400 ring-4 ring-amber-400/50 animate-pulse' : 'from-purple-50/80 to-pink-300/80 border-purple-400/50 hover:border-purple-300'}`} style={{ textAlign: 'center' }}>
                       <MoleculeSVG smiles={node.smiles} height={80} rdkitModule={rdkitModule} />
                       <div className="mt-2 text-center">
                         <div className="text-xs font-semibold text-purple-200 bg-black/30 rounded px-2 py-1 whitespace-pre-line">{node.label}</div>
@@ -1440,6 +1496,13 @@ const ChemistryTool = () => {
             setContextMenu(null);
           }} className="w-full px-4 py-2 text-left text-sm text-white hover:bg-purple-600/50 transition-colors flex items-center gap-2">
             <Sparkles className="w-4 h-4" />Mock message from server
+          </button>
+
+          <button onClick={() => {
+            highlightSubtree(contextMenu.node.id);
+            setContextMenu(null);
+          }} className="w-full px-4 py-2 text-left text-sm text-white hover:bg-purple-600/50 transition-colors flex items-center gap-2">
+            <X className="w-4 h-4" />Delete this node
           </button>
 
           <button onClick={() => handleCustomQuery(contextMenu.node)} className="w-full px-4 py-2 text-left text-sm text-white hover:bg-purple-600/50 transition-colors flex items-center gap-2 border-t border-purple-400/30">
