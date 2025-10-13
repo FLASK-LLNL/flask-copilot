@@ -1020,7 +1020,9 @@ const ChemistryTool = () => {
   }, [metricsHistory, visibleMetrics]);
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900 p-8">
+    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900">
+     <div className="flex min-h-screen">
+     <div className={`p-8 ${sidebarOpen ? 'flex-1' : 'w-full'}`}>
       <div className="max-w-7xl mx-auto">
         <div className="text-center mb-8">
           <div className="flex items-center justify-center gap-3 mb-2">
@@ -1121,7 +1123,7 @@ const ChemistryTool = () => {
             </div>
             <div>
               <label className="flex items-center gap-2 text-sm text-purple-200 mb-3 cursor-pointer">
-                <input type="checkbox" checked={autoZoom} onChange={(e) => setAutoZoom(e.target.checked)} disabled={isComputing} className="w-4 h-4 rounded border-purple-400/50 bg-white/20 text-purple-600 focus:ring-purple-500 focus:ring-offset-0 disabled:opacity-50" />
+                <input type="checkbox" checked={autoZoom} onChange={(e) => setAutoZoom(e.target.checked)} className="w-4 h-4 rounded border-purple-400/50 bg-white/20 text-purple-600 focus:ring-purple-500 focus:ring-offset-0 disabled:opacity-50" />
                 Auto-zoom to fit
               </label>
             </div>
@@ -1350,7 +1352,6 @@ const ChemistryTool = () => {
             )}
           </div>
         )}
-      </div>
 
       <div className="absolute top-10 left-10 text-white">
         <svg version="1.1" id="Layer_1" height="60px" viewBox="0 0 40 40">
@@ -1367,9 +1368,13 @@ const ChemistryTool = () => {
         by Lawrence Livermore National Laboratory (LLNL) under Contract DE-AC52-07NA27344
         (LLNL-CODE-2006345).</p>
       </div>
+      </div>
+    </div>
 
-      {/* Sidebar */}
-      <div className={`fixed top-0 right-0 h-full w-96 bg-slate-900 border-l-2 border-purple-400 shadow-2xl transform transition-transform duration-300 z-50 ${sidebarOpen ? 'translate-x-0' : 'translate-x-full'}`}>
+
+      {/* Sidebar */
+      sidebarOpen && (
+      <div className="w-96 bg-slate-900 border-l-2 border-purple-400 shadow-2xl flex-shrink-0 sticky top-0 h-screen overflow-hidden animate-slideInSidebar">
         <div className="flex flex-col h-full">
           <div className="flex items-center justify-between p-4 border-b border-purple-400/30">
             <h3 className="text-lg font-semibold text-white">Reasoning</h3>
@@ -1404,15 +1409,9 @@ const ChemistryTool = () => {
               ))
             )}
           </div>
-
-          { /* Optional for clearing messages
-          <div className="p-4 border-t border-purple-400/30">
-            <button onClick={() => setSidebarMessages([])} disabled={sidebarMessages.length === 0} className="w-full px-4 py-2 bg-white/10 text-purple-200 rounded-lg text-sm font-medium hover:bg-white/20 transition-all disabled:opacity-50 disabled:cursor-not-allowed">
-              Clear All Messages
-            </button>
-          </div>
-          */ }
         </div>
+      </div>
+      )}
       </div>
 
       {hoveredNode && !contextMenu && (
@@ -1531,10 +1530,12 @@ const ChemistryTool = () => {
         @keyframes fadeInScale { from { opacity: 0; transform: scale(0.5); } to { opacity: 1; transform: scale(1); } }
         @keyframes dash { to { stroke-dashoffset: -10; } }
         @keyframes slideIn { from { opacity: 0; transform: translateX(20px); } to { opacity: 1; transform: translateX(0); } }
+        @keyframes slideInSidebar { from { transform: translateX(100%); } to { transform: translateX(0); } }
         .animate-fadeIn { animation: fadeIn 0.5s ease-out forwards; }
         .animate-fadeInScale { animation: fadeInScale 0.6s cubic-bezier(0.34, 1.56, 0.64, 1) forwards; opacity: 0; }
         .animate-dash { animation: dash 1s linear infinite; }
         .animate-slideIn { animation: slideIn 0.4s ease-out; }
+        .animate-slideInSidebar { animation: slideInSidebar 0.3s ease-out; }
       `}</style>
     </div>
   );
