@@ -63,6 +63,7 @@ class Node:
     cost: Optional[float] = None
     energy: Optional[float] = None
     yield_: Optional[float] = None
+    highlight: Optional[bool] = False
 
     def json(self):
         ret = asdict(self)
@@ -303,7 +304,7 @@ async def websocket_endpoint(websocket: WebSocket):
                     )
             elif data["action"] == "delete_my_node":
                 await websocket.send_json(
-                    {"type": "node_delete", "id": data['nodeId']}
+                    {"type": "subtree_update", "id": data['nodeId'], "highlight": True}
                 )
             elif data["action"] == "custom_query":
                 if "water" in data["query"].lower():
