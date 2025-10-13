@@ -73,7 +73,7 @@ class Node:
     y: Optional[int] = None
     # Properties
     cost: Optional[float] = None
-    energy: Optional[float] = None
+    bandgap: Optional[float] = None
     yield_: Optional[float] = None
     highlight: Optional[bool] = False
 
@@ -133,7 +133,7 @@ def generate_tree_structure(start_smiles: str, depth: int = 3):
                 smiles=child_smiles,
                 label=child_smiles,#smiles_to_iupac(child_smiles),
                 cost=random.uniform(10, 110),
-                energy=random.uniform(100, 600),
+                bandgap=random.uniform(100, 600),
                 yield_=random.uniform(0, 100),
                 level=level,
                 parentId=parent_id,
@@ -159,7 +159,7 @@ def generate_tree_structure(start_smiles: str, depth: int = 3):
         smiles=start_smiles,
         label=smiles_to_iupac(start_smiles),
         cost=random.uniform(10, 110),
-        energy=random.uniform(100, 600),
+        bandgap=random.uniform(100, 600),
         yield_=2.0,
         level=0,
         parentId=None,
@@ -176,7 +176,7 @@ def calculate_positions(nodes: list[Node]):
     """
     Calculate positions for all nodes (matching frontend logic).
     """
-    BOX_WIDTH = 220  # Must match with javascript!
+    BOX_WIDTH = 270  # Must match with javascript!
     BOX_GAP = 160  # Must match with javascript!
     level_gap = BOX_WIDTH + BOX_GAP
     node_spacing = 150
@@ -274,7 +274,7 @@ async def lead_molecule(start_smiles: str, depth: int = 3, websocket: WebSocket 
             id=f"node_{i}",
             smiles=start_smiles + "C" * i,
             label="Water",
-            energy=i * random.uniform(0, 16),
+            bandgap=i * random.uniform(0, 16),
             level=0,
             hoverInfo="This is some markdown\n# Hej",
             x=0,
