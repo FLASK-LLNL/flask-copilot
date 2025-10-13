@@ -229,8 +229,6 @@ async def generate_molecules(
             }
             await websocket.send_json(edge_data)
 
-            await asyncio.sleep(0.6)
-
             # Send node
             await websocket.send_json({"type": "node", **node})
 
@@ -244,8 +242,6 @@ async def generate_molecules(
                 "toNode": node,
             }
             await websocket.send_json(edge_complete)
-
-            await asyncio.sleep(0.2)
 
     # Check if all leaf nodes are purchasable
     leaf_nodes = reaction_path.leaf_nodes
@@ -265,7 +261,7 @@ async def generate_molecules(
             retro_experiment = RetrosynthesisExperiment(user_prompt=user_prompt)
             charge_retro_planner.experiment_type = retro_experiment
             logger.info(
-                f"Leaf molecule {leaf_node.smiles} is not purchasable. "
+                f"{leaf_node.smiles} is not purchasable. "
                 "Switching to template-free retrosynthesis."
             )
             await websocket.send_json(

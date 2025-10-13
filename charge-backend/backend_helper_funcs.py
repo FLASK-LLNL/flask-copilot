@@ -10,6 +10,8 @@ RETROSYNTH_UNCONSTRAINED_USER_PROMPT_TEMPLATE = (
     + "Use tools to verify the SMILES strings and diagnose any issues that arise."
     + "Do the evaluation step-by-step. Propose a retrosynthetic step, then evaluate it. "
     + "If the evaluation fails, propose a new retrosynthetic step and evaluate it again. "
+    + "Find the best possible retrosynthetic step, and use tools to see if the "
+    + "proposed reactants are synthesizable. "
 )
 
 RETROSYNTH_CONSTRAINED_USER_PROMPT_TEMPLATE = (
