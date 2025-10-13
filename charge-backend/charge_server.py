@@ -137,6 +137,8 @@ def generate_tree_structure(reaction_path_dict: Dict[int, aizynth_funcs.Node]):
             "parent_id": current_node.parent_id,
             "hoverInfo": f"Purchasable: {purchasable}\n",  # Placeholder for hover info
         }
+        RetroSynthesisontext.node_ids[node_id] = current_node
+        RetroSynthesisontext.node_by_smiles[smiles] = current_node
         nodes.append(node)
         if current_node.parent_id is not None:
             edge = {
@@ -679,6 +681,9 @@ async def websocket_endpoint(websocket: WebSocket):
             elif action == "reset":
                 if lmo_runner:
                     lmo_runner.reset()
+                if retro_runner:
+                    retro_runner.reset()
+                RetroSynthesisontext.reset()
                 logger.info("Experiment state has been reset.")
 
             elif action == "stop":
