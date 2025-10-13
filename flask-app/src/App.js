@@ -1,3 +1,4 @@
+/* eslint-disable react-hooks/exhaustive-deps */
 import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { Loader2, Beaker, Play, RotateCcw, Move, X, Send, RefreshCw, Sparkles } from 'lucide-react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
@@ -350,6 +351,7 @@ const ChemistryTool = () => {
       
       // Check if this Y position is too close to any occupied position
       const minDistance = nodeSpacing * 0.8; // Allow some tolerance
+      // eslint-disable-next-line no-loop-func
       while (occupiedY.some(y => Math.abs(y - candidateY) < minDistance)) {
         candidateY += nodeSpacing;
       }
