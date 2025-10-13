@@ -1,6 +1,7 @@
+/* eslint-disable react-hooks/exhaustive-deps */
 import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { Loader2, Beaker, Play, RotateCcw, Move, X, Send, RefreshCw, Sparkles } from 'lucide-react';
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 
 const MOLECULE_WIDTH = 250;
 const BOX_WIDTH = 10 + MOLECULE_WIDTH + 10;
@@ -350,6 +351,7 @@ const ChemistryTool = () => {
       
       // Check if this Y position is too close to any occupied position
       const minDistance = nodeSpacing * 0.8; // Allow some tolerance
+      // eslint-disable-next-line no-loop-func
       while (occupiedY.some(y => Math.abs(y - candidateY) < minDistance)) {
         candidateY += nodeSpacing;
       }
@@ -602,12 +604,10 @@ const ChemistryTool = () => {
   // Connect WebSocket on mount
   useEffect(() => {
     let socket = null;
-    let mounted = true;
 
     reconnectWS();
     
     return () => {
-      mounted = false;
       if (socket && socket.readyState === WebSocket.OPEN) {
         socket.close();
       }
@@ -715,9 +715,9 @@ const ChemistryTool = () => {
     setSystemPrompt('');
     setProblemPrompt('');
     setPromptsModified(false);
-    if (problemType == 'retrosynthesis') {
+    if (problemType === 'retrosynthesis') {
       setVisibleMetrics({cost: true, density: false, yield: false});
-    } else if (problemType == 'optimization') {
+    } else if (problemType === 'optimization') {
       setVisibleMetrics({cost: false, density: true, yield: false});
     }
   };
@@ -835,7 +835,6 @@ const ChemistryTool = () => {
       const childPositions = [];
       
       children.forEach(child => {
-        const childStartY = currentY;
         currentY = assignPositions(child.id, level + 1, currentY);
         childPositions.push(newPositions.get(child.id).y);
       });
@@ -1020,7 +1019,9 @@ const ChemistryTool = () => {
   }, [metricsHistory, visibleMetrics]);
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900 p-8">
+    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900">
+     <div className="flex min-h-screen">
+     <div className={`p-8 ${sidebarOpen ? 'flex-1' : 'w-full'}`}>
       <div className="max-w-7xl mx-auto">
         <div className="text-center mb-8">
           <div className="flex items-center justify-center gap-3 mb-2">
@@ -1121,7 +1122,7 @@ const ChemistryTool = () => {
             </div>
             <div>
               <label className="flex items-center gap-2 text-sm text-purple-200 mb-3 cursor-pointer">
-                <input type="checkbox" checked={autoZoom} onChange={(e) => setAutoZoom(e.target.checked)} disabled={isComputing} className="w-4 h-4 rounded border-purple-400/50 bg-white/20 text-purple-600 focus:ring-purple-500 focus:ring-offset-0 disabled:opacity-50" />
+                <input type="checkbox" checked={autoZoom} onChange={(e) => setAutoZoom(e.target.checked)} className="w-4 h-4 rounded border-purple-400/50 bg-white/20 text-purple-600 focus:ring-purple-500 focus:ring-offset-0 disabled:opacity-50" />
                 Auto-zoom to fit
               </label>
             </div>
@@ -1350,7 +1351,6 @@ const ChemistryTool = () => {
             )}
           </div>
         )}
-      </div>
 
       <div className="absolute top-10 left-10 text-white">
         <svg version="1.1" id="Layer_1" height="60px" viewBox="0 0 40 40">
@@ -1362,10 +1362,56 @@ const ChemistryTool = () => {
           </g>
         </svg>
       </div>
-      <footer className="text-white"><br /><center>
-      This work was performed under the auspices of the U.S. Department of Energy
-      by Lawrence Livermore National Laboratory (LLNL) under Contract DE-AC52-07NA27344
-      (LLNL-CODE-2006345).</center></footer>
+      <div className="mt-8 pt-6 border-t border-purple-400/30 text-center text-purple-300 text-sm">
+        <p>This work was performed under the auspices of the U.S. Department of Energy
+        by Lawrence Livermore National Laboratory (LLNL) under Contract DE-AC52-07NA27344
+        (LLNL-CODE-2006345).</p>
+      </div>
+      </div>
+    </div>
+
+
+      {/* Sidebar */
+      sidebarOpen && (
+      <div className="w-96 bg-slate-900 border-l-2 border-purple-400 shadow-2xl flex-shrink-0 sticky top-0 h-screen overflow-hidden animate-slideInSidebar">
+        <div className="flex flex-col h-full">
+          <div className="flex items-center justify-between p-4 border-b border-purple-400/30">
+            <h3 className="text-lg font-semibold text-white">Reasoning</h3>
+            <button onClick={() => setSidebarOpen(false)} className="text-purple-300 hover:text-white transition-colors">
+              <X className="w-5 h-5" />
+            </button>
+          </div>
+
+          <div className="flex-1 overflow-y-auto p-4 space-y-3" ref={sidebarRef} style={{ overflowX: 'hidden' }}>
+            {sidebarMessages.length === 0 ? (
+              <div className="text-center text-purple-400 mt-8">
+                <svg className="w-12 h-12 mx-auto mb-2 opacity-50" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" />
+                </svg>
+                <p className="text-sm">No messages yet</p>
+              </div>
+            ) : (
+              sidebarMessages.map((msg, idx) => (
+                <div key={msg.id} className="bg-white/5 rounded-lg p-4 border border-purple-400/30 animate-slideIn opacity-0" style={{ animationDelay: `${idx * 50}ms`, animationFillMode: 'forwards' }}>
+                  <div className="text-xs text-purple-400 mb-2">
+                    {new Date(msg.timestamp).toLocaleTimeString()}
+                  </div>
+                  <div className="text-sm text-purple-100">
+                    <MarkdownText text={msg.content} />
+                  </div>
+                  {msg.moleculeSmiles && (
+                    <div className="mt-3 bg-white/50 rounded-lg p-2 flex justify-center">
+                      <MoleculeSVG smiles={msg.moleculeSmiles} size={120} rdkitModule={rdkitModule} />
+                    </div>
+                  )}
+                </div>
+              ))
+            )}
+          </div>
+        </div>
+      </div>
+      )}
+      </div>
 
       {hoveredNode && !contextMenu && (
         <div className="fixed z-50 pointer-events-none" style={{ left: `${mousePos.x + 20}px`, top: `${mousePos.y + 20}px`, maxWidth: '400px' }}>
@@ -1478,62 +1524,17 @@ const ChemistryTool = () => {
         </div>
       )}
 
-      {/* Sidebar */}
-      <div className={`fixed top-0 right-0 h-full w-96 bg-slate-900 border-l-2 border-purple-400 shadow-2xl transform transition-transform duration-300 z-50 ${sidebarOpen ? 'translate-x-0' : 'translate-x-full'}`}>
-        <div className="flex flex-col h-full">
-          <div className="flex items-center justify-between p-4 border-b border-purple-400/30">
-            <h3 className="text-lg font-semibold text-white">Reasoning</h3>
-            <button onClick={() => setSidebarOpen(false)} className="text-purple-300 hover:text-white transition-colors">
-              <X className="w-5 h-5" />
-            </button>
-          </div>
-
-          <div className="flex-1 overflow-y-auto p-4 space-y-3" ref={sidebarRef} style={{ overflowX: 'hidden' }}>
-            {sidebarMessages.length === 0 ? (
-              <div className="text-center text-purple-400 mt-8">
-                <svg className="w-12 h-12 mx-auto mb-2 opacity-50" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" />
-                </svg>
-                <p className="text-sm">No messages yet</p>
-              </div>
-            ) : (
-              sidebarMessages.map((msg, idx) => (
-                <div key={msg.id} className="bg-white/5 rounded-lg p-4 border border-purple-400/30 animate-slideIn opacity-0" style={{ animationDelay: `${idx * 50}ms`, animationFillMode: 'forwards' }}>
-                  <div className="text-xs text-purple-400 mb-2">
-                    {new Date(msg.timestamp).toLocaleTimeString()}
-                  </div>
-                  <div className="text-sm text-purple-100">
-                    <MarkdownText text={msg.content} />
-                  </div>
-                  {msg.moleculeSmiles && (
-                    <div className="mt-3 bg-white/50 rounded-lg p-2 flex justify-center">
-                      <MoleculeSVG smiles={msg.moleculeSmiles} size={120} rdkitModule={rdkitModule} />
-                    </div>
-                  )}
-                </div>
-              ))
-            )}
-          </div>
-
-          { /* Optional for clearing messages
-          <div className="p-4 border-t border-purple-400/30">
-            <button onClick={() => setSidebarMessages([])} disabled={sidebarMessages.length === 0} className="w-full px-4 py-2 bg-white/10 text-purple-200 rounded-lg text-sm font-medium hover:bg-white/20 transition-all disabled:opacity-50 disabled:cursor-not-allowed">
-              Clear All Messages
-            </button>
-          </div>
-          */ }
-        </div>
-      </div>
-
       <style>{`
         @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
         @keyframes fadeInScale { from { opacity: 0; transform: scale(0.5); } to { opacity: 1; transform: scale(1); } }
         @keyframes dash { to { stroke-dashoffset: -10; } }
         @keyframes slideIn { from { opacity: 0; transform: translateX(20px); } to { opacity: 1; transform: translateX(0); } }
+        @keyframes slideInSidebar { from { transform: translateX(100%); } to { transform: translateX(0); } }
         .animate-fadeIn { animation: fadeIn 0.5s ease-out forwards; }
         .animate-fadeInScale { animation: fadeInScale 0.6s cubic-bezier(0.34, 1.56, 0.64, 1) forwards; opacity: 0; }
         .animate-dash { animation: dash 1s linear infinite; }
         .animate-slideIn { animation: slideIn 0.4s ease-out; }
+        .animate-slideInSidebar { animation: slideInSidebar 0.3s ease-out; }
       `}</style>
     </div>
   );
