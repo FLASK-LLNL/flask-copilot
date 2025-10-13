@@ -12,17 +12,19 @@ from typing import Dict
 
 import httpx
 
-cur_dir = os.path.dirname(os.path.abspath(__file__))
-sys.path.append(os.path.join(cur_dir, "ChARGe", "experiments", "Molecule_Generation"))
-from ChARGe.experiments.Molecule_Generation.LMOExperiment import (
+# cur_dir = os.path.dirname(os.path.abspath(__file__))
+# sys.path.append(os.path.join(cur_dir, "ChARGe", "experiments", "Molecule_Generation"))
+from charge.experiments.LMOExperiment import (
     LMOExperiment as LeadMoleculeOptimization,
 )
-from ChARGe.experiments.Retrosynthesis.RetrosynthesisExperiment import (
+from charge.experiments.RetrosynthesisExperiment import (
     TemplateFreeRetrosynthesisExperiment as RetrosynthesisExperiment,
 )
 
-import ChARGe.experiments.Molecule_Generation.helper_funcs as lmo_helper_funcs
-from ChARGe.charge.servers.server_utils import try_get_public_hostname
+# import ChARGe.experiments.Molecule_Generation.helper_funcs as lmo_helper_funcs
+# from ChARGe.charge.servers.server_utils import try_get_public_hostname
+import charge.utils.helper_funcs as lmo_helper_funcs
+from charge.servers.server_utils import try_get_public_hostname
 
 import os
 from charge.clients.Client import Client
