@@ -1362,10 +1362,11 @@ const ChemistryTool = () => {
           </g>
         </svg>
       </div>
-      <footer className="text-white"><br /><center>
-      This work was performed under the auspices of the U.S. Department of Energy
-      by Lawrence Livermore National Laboratory (LLNL) under Contract DE-AC52-07NA27344
-      (LLNL-CODE-2006345).</center></footer>
+      <div className="mt-8 pt-6 border-t border-purple-400/30 text-center text-purple-300 text-sm">
+        <p>This work was performed under the auspices of the U.S. Department of Energy
+        by Lawrence Livermore National Laboratory (LLNL) under Contract DE-AC52-07NA27344
+        (LLNL-CODE-2006345).</p>
+      </div>
 
       {/* Sidebar */}
       <div className={`fixed top-0 right-0 h-full w-96 bg-slate-900 border-l-2 border-purple-400 shadow-2xl transform transition-transform duration-300 z-50 ${sidebarOpen ? 'translate-x-0' : 'translate-x-full'}`}>
