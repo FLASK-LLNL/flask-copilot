@@ -32,7 +32,7 @@ from backend_helper_funcs import (
     CallbackHandler,
     RETROSYNTH_UNCONSTRAINED_USER_PROMPT_TEMPLATE,
     RETROSYNTH_CONSTRAINED_USER_PROMPT_TEMPLATE,
-    RetroSynthesisontext,
+    RetroSynthesisContext,
 )
 
 # sys.path.append(os.path.dirname(os.path.abspath(__file__)))
@@ -137,8 +137,8 @@ def generate_tree_structure(reaction_path_dict: Dict[int, aizynth_funcs.Node]):
             "parent_id": current_node.parent_id,
             "hoverInfo": f"Purchasable: {purchasable}\n",  # Placeholder for hover info
         }
-        RetroSynthesisontext.node_ids[node_id] = current_node
-        RetroSynthesisontext.node_by_smiles[smiles] = current_node
+        RetroSynthesisContext.node_ids[node_id] = current_node
+        RetroSynthesisContext.node_by_smiles[smiles] = current_node
         nodes.append(node)
         if current_node.parent_id is not None:
             edge = {
@@ -543,7 +543,7 @@ async def optimize_molecule_retro(
     node_id, opt_type, experiment, planner, websocket: WebSocket
 ):
     """Optimize a molecule using retrosynthesis by node ID"""
-    current_node = RetroSynthesisontext.node_ids.get(node_id)
+    current_node = RetroSynthesisContext.node_ids.get(node_id)
 
     assert current_node is not None, f"Node ID {node_id} not found"
 
@@ -552,7 +552,7 @@ async def optimize_molecule_retro(
         starting_node = current_node
     else:
         parent_id = current_node.parent_id
-        parent_node = RetroSynthesisontext.node_by_smiles.get(parent_id)
+        parent_node = RetroSynthesisContext.node_by_smiles.get(parent_id)
         assert parent_node is not None, f"Parent node {parent_id} not found"
         result = await constrained_opt(
             parent_node.smiles, current_node.smiles, planner, websocket
@@ -685,7 +685,7 @@ async def websocket_endpoint(websocket: WebSocket):
                     lmo_runner.reset()
                 if retro_runner:
                     retro_runner.reset()
-                RetroSynthesisontext.reset()
+                RetroSynthesisContext.reset()
                 logger.info("Experiment state has been reset.")
 
             elif action == "stop":

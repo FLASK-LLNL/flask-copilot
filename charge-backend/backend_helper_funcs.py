@@ -103,12 +103,14 @@ class CallbackHandler:
         asyncio.create_task(self.send(assistant_message))
 
 
-class RetroSynthesisontext:
+class RetroSynthesisContext:
+    node_ids = {}
+    node_by_smiles = {}
+
     def __init__(self):
-        RetroSynthesisontext.node_by_smiles = {}
-        RetroSynthesisontext.node_ids = {}
+        pass
 
     @staticmethod
     def reset():
-        RetroSynthesisontext.node_by_smiles = {}
-        RetroSynthesisontext.node_ids = {}
+        RetroSynthesisContext.node_by_smiles = {}
+        RetroSynthesisContext.node_ids = {}
