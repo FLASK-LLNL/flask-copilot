@@ -20,7 +20,7 @@ from ChARGe.experiments.Retrosynthesis.RetrosynthesisExperiment import (
 )
 
 import ChARGe.experiments.Molecule_Generation.helper_funcs as lmo_helper_funcs
-import ChARGe.experiments.Retrosynthesis.helper_funcs as retro_helper_funcs
+
 import os
 from charge.clients.Client import Client
 from charge.clients.autogen import AutoGenClient
@@ -28,7 +28,10 @@ import charge.servers.AiZynthTools as aizynth_funcs
 
 from loguru import logger
 import sys
-from backend_helper_funcs import CallbackHandler
+from backend_helper_funcs import (
+    CallbackHandler,
+    RETROSYNTH_UNCONSTRAINED_USER_PROMPT_TEMPLATE,
+)
 
 # sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 # from ChARGe.experiments.LMOExperiment import LMOExperiment
@@ -46,6 +49,13 @@ parser.add_argument(
     "--max_iterations",
     type=int,
     default=5,
+)
+
+parser.add_argument(
+    "--config-file",
+    type=str,
+    default="config.yml",
+    help="Path to the configuration file for AiZynthFinder.",
 )
 
 # Add standard CLI arguments
@@ -166,14 +176,29 @@ def calculate_positions(nodes):
     return positioned
 
 
-async def generate_molecules(start_smiles: str, planner, websocket: WebSocket = None):
+async def generate_molecules(
+    start_smiles: str, planner, charge_retro_planner, websocket: WebSocket = None
+):
     """Stream positioned nodes and edges"""
     logger.info(f"Planning retrosynthesis for: {start_smiles}")
 
     # Generate and position entire tree upfront
     tree, stats, routes = planner.plan(start_smiles)
+    if not routes:
+        await websocket.send_json(
+            {
+                "type": "response",
+                "message": f"No synthesis routes found for {start_smiles}.",
+                "smiles": start_smiles,
+            }
+        )
+        await websocket.send_json({"type": "complete"})
+        return
+    logger.info(f"Found {len(routes)} routes for {start_smiles}.")
+
     reaction_path = aizynth_funcs.ReactionPath(route=routes[0])
     nodes, edges = generate_tree_structure(reaction_path.nodes)
+    logger.info(f"Generated {len(nodes)} nodes and {len(edges)} edges.")
 
     positioned_nodes = calculate_positions(nodes)
 
@@ -222,6 +247,33 @@ async def generate_molecules(start_smiles: str, planner, websocket: WebSocket = 
 
             await asyncio.sleep(0.2)
 
+    # Check if all leaf nodes are purchasable
+    leaf_nodes = reaction_path.leaf_nodes
+    for leaf_node_id in leaf_nodes:
+        leaf_node = reaction_path.nodes[leaf_node_id]
+        if not leaf_node.purchasable:
+            await websocket.send_json(
+                {
+                    "type": "response",
+                    "message": f"Leaf molecule {leaf_node.smiles} is not purchasable.",
+                    "smiles": leaf_node.smiles,
+                }
+            )
+            user_prompt = RETROSYNTH_UNCONSTRAINED_USER_PROMPT_TEMPLATE.format(
+                target_molecule=start_smiles
+            )
+            retro_experiment = RetrosynthesisExperiment(user_prompt=user_prompt)
+            charge_retro_planner.experiment_type = retro_experiment
+            logger.info(
+                f"Leaf molecule {leaf_node.smiles} is not purchasable. "
+                "Switching to template-free retrosynthesis."
+            )
+            await websocket.send_json(
+                {"type": "response", "message": "Searching for alternatives..."}
+            )
+
+            await charge_retro_planner.run()
+
     await websocket.send_json({"type": "complete"})
 
 
@@ -240,23 +292,23 @@ async def lead_molecule(
     logger.info(f"Starting experiment with lead molecule: {lead_molecule_smiles}")
     parent_id = 0
     node_id = 0
-    lead_molecule_data = helper_funcs.post_process_smiles(
+    lead_molecule_data = lmo_helper_funcs.post_process_smiles(
         smiles=lead_molecule_smiles, parent_id=parent_id - 1, node_id=node_id
     )
 
     # Start the db with the lead molecule
-    helper_funcs.save_list_to_json_file(
+    lmo_helper_funcs.save_list_to_json_file(
         data=[lead_molecule_data], file_path=mol_file_path
     )
 
     # Start the db with the lead molecule
-    helper_funcs.save_list_to_json_file(
+    lmo_helper_funcs.save_list_to_json_file(
         data=[lead_molecule_data], file_path=mol_file_path
     )
     logger.info(f"Storing found molecules in {mol_file_path}")
 
     # Run the experiment in a loop
-    new_molecules = helper_funcs.get_list_from_json_file(
+    new_molecules = lmo_helper_funcs.get_list_from_json_file(
         file_path=mol_file_path
     )  # Start with known molecules
 
@@ -318,7 +370,7 @@ async def lead_molecule(
                 results = await lmo_runner.run()
                 results = results.as_list()  # Convert to list of strings
                 logger.info(f"New molecules generated: {results}")
-                processed_mol = helper_funcs.post_process_smiles(
+                processed_mol = lmo_helper_funcs.post_process_smiles(
                     smiles=results[0], parent_id=parent_id, node_id=node_id
                 )
                 canonical_smiles = processed_mol["smiles"]
@@ -328,7 +380,7 @@ async def lead_molecule(
                 ):
                     new_molecules.append(canonical_smiles)
                     mol_data.append(processed_mol)
-                    helper_funcs.save_list_to_json_file(
+                    lmo_helper_funcs.save_list_to_json_file(
                         data=mol_data, file_path=mol_file_path
                     )
                     logger.info(f"New molecule added: {canonical_smiles}")
@@ -424,7 +476,9 @@ async def websocket_endpoint(websocket: WebSocket):
     lmo_runner = None
 
     retro_experiment = None
-    retro_planner = None
+    retro_runner = None
+
+    aizynthfinder_planner = aizynth_funcs.RetroPlanner(configfile=args.config_file)
     try:
         while True:
             data = await websocket.receive_json()
@@ -452,17 +506,26 @@ async def websocket_endpoint(websocket: WebSocket):
                             api_key=API_KEY,
                             model_kwargs=kwargs,
                             server_url=server_urls,  # TODO: Change this to LMFO specific server
-                            callback=CallbackHandler(websocket),
+                            thoughts_callback=CallbackHandler(websocket),
                         )
                     else:
                         lmo_runner.experiment_type = lmo_experiment
                 elif data["problemType"] in [
                     "product_optimization_retro",
                     "reactant_optimization_retro",
+                    "retrosynthesis",
                 ]:
                     if data["problemType"] == "product_optimization_retro":
+                        # Set up retrosynthesis experiment to optimize product
                         pass
                     else:
+                        # Set up retrosynthesis experiment to retrosynthesis
+                        # to ensure the reactant is not used in the synthesis
+                        retro_experiment = RetrosynthesisExperiment(
+                            user_prompt=RETROSYNTH_UNCONSTRAINED_USER_PROMPT_TEMPLATE.format(
+                                target_molecule=data["smiles"]
+                            )
+                        )
                         pass
 
                     if retro_runner is None:
@@ -473,13 +536,10 @@ async def websocket_endpoint(websocket: WebSocket):
                             api_key=API_KEY,
                             model_kwargs=kwargs,
                             server_url=server_urls,  # TODO: Change this to a retrosynthesis specific server
-                            callback=CallbackHandler(websocket),
+                            thoughts_callback=CallbackHandler(websocket),
                         )
                     else:
                         retro_runner.experiment_type = retro_experiment
-
-                else:
-                    planner = aizynth_funcs.RetroPlanner()
 
                 async def run_task():
                     if data["problemType"] == "optimization":
@@ -495,10 +555,15 @@ async def websocket_endpoint(websocket: WebSocket):
                         "reactant_optimization_retro",
                     ]:
                         await optimize_molecule_retro(
-                            data["smiles"], retro_experiment, retro_planner, websocket
+                            data["smiles"], retro_experiment, retro_runner, websocket
                         )
                     else:
-                        await generate_molecules(data["smiles"], planner, websocket)
+                        await generate_molecules(
+                            data["smiles"],
+                            aizynthfinder_planner,
+                            retro_runner,
+                            websocket,
+                        )
 
                 # start a new task
                 CURRENT_TASK = asyncio.create_task(run_task())

@@ -2,6 +2,13 @@ from loguru import logger
 from fastapi import WebSocket
 import asyncio
 
+RETROSYNTH_UNCONSTRAINED_USER_PROMPT_TEMPLATE = (
+    "Provide a retrosynthetic pathway for the target molecule {target_molecule}. "
+    + "The pathway should be provided as a tuple of reactants as SMILES and the product as SMILES. "
+    + "Perform only single step retrosynthesis. Make sure the SMILES strings are valid. "
+    + "Use tools to verify the SMILES strings and diagnose any issues that arise."
+)
+
 
 class CallbackHandler:
     def __init__(self, websocket: WebSocket):
