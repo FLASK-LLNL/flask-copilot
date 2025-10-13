@@ -19,10 +19,12 @@ from fastapi import FastAPI, Request, WebSocket, WebSocketDisconnect
 from fastapi.responses import StreamingResponse, FileResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
+from dataclasses import dataclass, asdict
 import asyncio
+import copy
 import os
 import random
-from typing import Any
+from typing import Any, Optional, Literal
 
 app = FastAPI()
 
@@ -47,12 +49,56 @@ if os.path.exists(STATIC_PATH):
         return FileResponse(os.path.join(BUILD_PATH, "index.html"))
 
 
+@dataclass
+class Node:
+    id: str
+    smiles: str
+    label: str
+    hoverInfo: str
+    level: int
+    parentId: Optional[str] = None
+    x: Optional[int] = None
+    y: Optional[int] = None
+    # Properties
+    cost: Optional[float] = None
+    energy: Optional[float] = None
+    yield_: Optional[float] = None
+
+    def json(self):
+        ret = asdict(self)
+        ret["yield"] = ret["yield_"]
+        del ret["yield_"]
+        return ret
+
+
+@dataclass
+class Edge:
+    id: str
+    fromNode: str
+    toNode: str
+    status: Literal["computing", "complete"]
+    label: Optional[str] = None
+
+    def json(self):
+        return asdict(self)
+
+
+@dataclass
+class SidebarMessage:
+    content: str
+    smiles: str
+
+    def json(self):
+        return asdict(self)
+
+
 def generate_tree_structure(start_smiles: str, depth: int = 3):
     """
     Generate entire tree structure upfront.
     """
-    nodes = []
-    edges = []
+
+    nodes: list[Node] = []
+    edges: list[Edge] = []
     node_counter = 0
 
     ATOMS = ["C", "N", "O", "Br"]
@@ -69,44 +115,43 @@ def generate_tree_structure(start_smiles: str, depth: int = 3):
             node_counter += 1
             child_smiles = f"{parent_smiles}{ATOMS[i]}"
 
-            node = {
-                "id": node_id,
-                "smiles": child_smiles,
-                "label": f"Molecule-{level}{i}",
-                "cost": random.uniform(10, 110),
-                "energy": random.uniform(100, 600),
-                "yield": random.uniform(0, 100),
-                "level": level,
-                "parentId": parent_id,
-                "hoverInfo": f"# Molecule {level}-{i}\n**SMILES:** `{child_smiles}`\n**Level:** {level}",
-            }
+            node = Node(
+                id=node_id,
+                smiles=child_smiles,
+                label=f"Molecule-{level}{i}",
+                cost=random.uniform(10, 110),
+                energy=random.uniform(100, 600),
+                yield_=random.uniform(0, 100),
+                level=level,
+                parentId=parent_id,
+                hoverInfo=f"# Molecule {level}-{i}\n**SMILES:** `{child_smiles}`\n**Level:** {level}",
+            )
             nodes.append(node)
 
-            edge = {
-                "id": f"edge_{parent_id}_{node_id}",
-                "from": parent_id,
-                "to": node_id,
-                "reactionType": random.choice(
-                    ["Hydrogenation", "Oxidation", "Methylation", "Reduction", "Cyclization"]
-                ),
-            }
+            edge = Edge(
+                id=f"edge_{parent_id}_{node_id}",
+                fromNode=parent_id,
+                toNode=node_id,
+                status="computing",
+                label=random.choice(["Hydrogenation", "Oxidation", "Methylation", "Reduction", "Cyclization"]),
+            )
             edges.append(edge)
 
             build_subtree(child_smiles, node_id, level + 1)
 
     # Root node
     root_id = "root"
-    root = {
-        "id": root_id,
-        "smiles": start_smiles,
-        "label": "Root Molecule",
-        "cost": random.uniform(10, 110),
-        "energy": random.uniform(100, 600),
-        "yield": 2.0,
-        "level": 0,
-        "parentId": None,
-        "hoverInfo": f"# Root Molecule\n**SMILES:** `{start_smiles}`",
-    }
+    root = Node(
+        id=root_id,
+        smiles=start_smiles,
+        label="Root Molecule",
+        cost=random.uniform(10, 110),
+        energy=random.uniform(100, 600),
+        yield_=2.0,
+        level=0,
+        parentId=None,
+        hoverInfo=f"# Root Molecule\n**SMILES:** `{start_smiles}`",
+    )
     nodes.insert(0, root)
 
     build_subtree(start_smiles, root_id, 1)
@@ -114,7 +159,7 @@ def generate_tree_structure(start_smiles: str, depth: int = 3):
     return nodes, edges
 
 
-def calculate_positions(nodes: list[dict[str, Any]]):
+def calculate_positions(nodes: list[Node]):
     """
     Calculate positions for all nodes (matching frontend logic).
     """
@@ -126,18 +171,20 @@ def calculate_positions(nodes: list[dict[str, Any]]):
     # Group by level
     levels = {}
     for node in nodes:
-        level = node["level"]
+        level = node.level
         if level not in levels:
             levels[level] = []
         levels[level].append(node)
 
     # Position nodes
-    positioned = []
+    positioned: list[Node] = []
     for node in nodes:
-        level_nodes = levels[node["level"]]
+        level_nodes = levels[node.level]
         index_in_level = level_nodes.index(node)
 
-        positioned_node = {**node, "x": 100 + node["level"] * level_gap, "y": 100 + index_in_level * node_spacing}
+        positioned_node = copy.deepcopy(node)
+        positioned_node.x = 100 + node.level * level_gap
+        positioned_node.y = 100 + index_in_level * node_spacing
         positioned.append(positioned_node)
 
     return positioned
@@ -152,12 +199,9 @@ async def generate_molecules(start_smiles: str, depth: int = 3, websocket: WebSo
     nodes, edges = generate_tree_structure(start_smiles, depth)
     positioned_nodes = calculate_positions(nodes)
 
-    # Create node map
-    node_map = {node["id"]: node for node in positioned_nodes}
-
     # Stream root first
     root = positioned_nodes[0]
-    await websocket.send_json({"type": "node", **root})
+    await websocket.send_json({"type": "node", **root.json()})
     await asyncio.sleep(0.8)
 
     # Stream remaining nodes with edges
@@ -165,33 +209,29 @@ async def generate_molecules(start_smiles: str, depth: int = 3, websocket: WebSo
         node = positioned_nodes[i]
 
         # Find edge for this node
-        edge = next((e for e in edges if e["to"] == node["id"]), None)
+        edge = next((e for e in edges if e.toNode == node.id), None)
 
         if edge:
             # Send edge with computing status
             edge_data = {
                 "type": "edge",
-                **edge,
-                "status": "computing",
-                "label": f"Computing: {edge['reactionType']}",
-                "fromNode": node_map[edge["from"]],
-                "toNode": node,
+                **edge.json(),
             }
+            edge_data["label"] = f"Computing: {edge.label}"
+            edge_data["toNode"] = node.id
             await websocket.send_json(edge_data)
 
             await asyncio.sleep(0.6)
 
             # Send node
-            await websocket.send_json({"type": "node", **node})
+            await websocket.send_json({"type": "node", **node.json()})
 
             # Update edge to complete
             edge_complete = {
                 "type": "edge_update",
-                "id": edge["id"],
+                "id": edge.id,
                 "status": "complete",
-                "label": edge["reactionType"],
-                "fromNode": node_map[edge["from"]],
-                "toNode": node,
+                "label": edge.label,
             }
             await websocket.send_json(edge_complete)
 
@@ -261,10 +301,18 @@ async def websocket_endpoint(websocket: WebSocket):
                     await websocket.send_json(
                         {"type": "error", "message": f"Unsupported problem type {data['problemType']}"}
                     )
-            if data["action"] == "custom_query":
-                if "water" in data['query'].lower():
+            elif data["action"] == "delete_my_node":
+                await websocket.send_json(
+                    {"type": "node_delete", "id": data['nodeId']}
+                )
+            elif data["action"] == "custom_query":
+                if "water" in data["query"].lower():
                     await websocket.send_json(
-                        {"type": "response", "message": f"Processing query: {data['query']} for node {data['nodeId']}", "smiles": "O"}
+                        {
+                            "type": "response",
+                            "message": f"Processing query: {data['query']} for node {data['nodeId']}",
+                            "smiles": "O",
+                        }
                     )
                 else:
                     await websocket.send_json(

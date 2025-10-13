@@ -270,8 +270,8 @@ const ChemistryTool = () => {
         if (parentIdx !== null) {
           edgesList.push({
             id: `edge_${parentIdx}_${nodeId}`,
-            from: parentIdx,
-            to: nodeId,
+            fromNode: parentIdx,
+            toNode: nodeId,
             reactionType: getRandomReaction()
           });
         }
@@ -297,9 +297,12 @@ const ChemistryTool = () => {
     return { nodes, edges: edgesList };
   };
 
+  const getNode = (nodeId) => {
+    return treeNodes.find(n => n.id === nodeId);
+  };
   
   const rerandomizeChildren = (nodeId) => {
-    const node = treeNodes.find(n => n.id === nodeId);
+    const node = getNode(nodeId);
     if (!node) return;
 
     const descendants = findAllDescendants(nodeId);
@@ -326,7 +329,7 @@ const ChemistryTool = () => {
     // Update edges to point from actual parent node, not 'root'
     const edgesWithCorrectParent = newEdges.map(e => ({
       ...e,
-      from: e.from === 'root' ? nodeId : e.from
+      fromNode: e.fromNode === 'root' ? nodeId : e.fromNode
     }));
     
     // Position new children, finding available space at each level
@@ -386,8 +389,6 @@ const ChemistryTool = () => {
     // Only add new edges with positions
     const newEdgesWithNodes = edgesWithCorrectParent.map(e => ({
       ...e,
-      fromNode: nodeMap[e.from],
-      toNode: nodeMap[e.to],
       status: 'complete',
       label: e.reactionType
     }));
@@ -575,12 +576,40 @@ const ChemistryTool = () => {
       
       if (data.type === 'node') {
         setTreeNodes(prev => [...prev, data]);
+      } else if (data.type === 'node_update') {
+        setTreeNodes(prev => prev.map(n => 
+          n.id === data.id ? { ...n, ...data } : n
+        ));
+      } else if (data.type === 'node_delete') {
+        // Remove subtree, then remove node
+        const descendants = findAllDescendants(data.id);
+        // Remove nodes
+        setTreeNodes(prev => prev.filter(n => !descendants.has(n.id)));
+        // Remove edges
+        setEdges(prev => prev.filter(e => 
+          !descendants.has(e.fromNode) && !descendants.has(e.toNode)
+        ));
+        
+        setTreeNodes(prev => prev.filter(n => n.id !== data.id));
+        // Remove neighboring edges
+        setEdges(prev => prev.filter(e => 
+            e.fromNode !== data.id && e.toNode !== data.id
+        ));
+
       } else if (data.type === 'edge') {
         setEdges(prev => [...prev, data]);
       } else if (data.type === 'edge_update') {
         setEdges(prev => prev.map(e => 
           e.id === data.id ? { ...e, ...data } : e
         ));
+      } else if (data.type === 'subtree_delete') {
+          const descendants = findAllDescendants(data.id);
+          // Remove nodes
+          setTreeNodes(prev => prev.filter(n => !descendants.has(n.id)));
+          // Remove edges
+          setEdges(prev => prev.filter(e => 
+            !descendants.has(e.fromNode) && !descendants.has(e.toNode)
+          ));
       } else if (data.type === 'complete') {
         setIsComputing(false);
       } else if (data.type === 'response') {
@@ -878,8 +907,6 @@ const ChemistryTool = () => {
     // Update all edges with new positions
     const updatedEdges = edges.map(e => ({
       ...e,
-      fromNode: nodeMap[e.from],
-      toNode: nodeMap[e.to]
     }));
     
     setTreeNodes(updatedNodes);
@@ -1208,14 +1235,14 @@ const ChemistryTool = () => {
                   height: '2000px'
                 }}
               >
-                {edges.filter(edge => edge.fromNode && edge.toNode).map((edge, idx) => {
-                  const midpoint = getCurveMidpoint(edge.fromNode, edge.toNode);
+                {edges.filter(edge => getNode(edge.fromNode) && getNode(edge.toNode)).map((edge, idx) => {
+                  const midpoint = getCurveMidpoint(getNode(edge.fromNode), getNode(edge.toNode));
                   return (
                     <div key={edge.id} className="absolute pointer-events-none">
                       <svg className="absolute" style={{ width: '3000px', height: '2000px', top: 0, left: 0 }}>
                         <g className="animate-fadeIn" style={{ animationDelay: `${idx * 50}ms` }}>
                           <path
-                            d={getCurvedPath(edge.fromNode, edge.toNode)}
+                            d={getCurvedPath(getNode(edge.fromNode), getNode(edge.toNode))}
                             stroke={edge.status === 'computing' ? '#F59E0B' : '#8B5CF6'}
                             strokeWidth="3"
                             fill="none"
@@ -1223,7 +1250,7 @@ const ChemistryTool = () => {
                             className={edge.status === 'computing' ? 'animate-dash' : ''}
                             opacity="0.8"
                           />
-                          <circle cx={edge.toNode.x + 10} cy={edge.toNode.y + 50} r="5" fill={edge.status === 'computing' ? '#F59E0B' : '#EC4899'} />
+                          <circle cx={getNode(edge.toNode).x + 10} cy={getNode(edge.toNode).y + 50} r="5" fill={edge.status === 'computing' ? '#F59E0B' : '#EC4899'} />
                         </g>
                       </svg>
                       
@@ -1448,6 +1475,16 @@ const ChemistryTool = () => {
             setContextMenu(null);
           }} className="w-full px-4 py-2 text-left text-sm text-white hover:bg-purple-600/50 transition-colors flex items-center gap-2">
             <Sparkles className="w-4 h-4" />Mock message from server
+          </button>
+
+          <button onClick={() => {
+            websocket.send(JSON.stringify({
+              action: 'delete_my_node',
+              nodeId: contextMenu.node.id
+            }));
+            setContextMenu(null);
+          }} className="w-full px-4 py-2 text-left text-sm text-white hover:bg-purple-600/50 transition-colors flex items-center gap-2">
+            <X className="w-4 h-4" />Delete this node
           </button>
 
           <button onClick={() => handleCustomQuery(contextMenu.node)} className="w-full px-4 py-2 text-left text-sm text-white hover:bg-purple-600/50 transition-colors flex items-center gap-2 border-t border-purple-400/30">
