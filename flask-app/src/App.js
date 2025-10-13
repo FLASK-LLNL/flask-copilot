@@ -1367,6 +1367,53 @@ const ChemistryTool = () => {
       by Lawrence Livermore National Laboratory (LLNL) under Contract DE-AC52-07NA27344
       (LLNL-CODE-2006345).</center></footer>
 
+      {/* Sidebar */}
+      <div className={`fixed top-0 right-0 h-full w-96 bg-slate-900 border-l-2 border-purple-400 shadow-2xl transform transition-transform duration-300 z-50 ${sidebarOpen ? 'translate-x-0' : 'translate-x-full'}`}>
+        <div className="flex flex-col h-full">
+          <div className="flex items-center justify-between p-4 border-b border-purple-400/30">
+            <h3 className="text-lg font-semibold text-white">Reasoning</h3>
+            <button onClick={() => setSidebarOpen(false)} className="text-purple-300 hover:text-white transition-colors">
+              <X className="w-5 h-5" />
+            </button>
+          </div>
+
+          <div className="flex-1 overflow-y-auto p-4 space-y-3" ref={sidebarRef} style={{ overflowX: 'hidden' }}>
+            {sidebarMessages.length === 0 ? (
+              <div className="text-center text-purple-400 mt-8">
+                <svg className="w-12 h-12 mx-auto mb-2 opacity-50" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" />
+                </svg>
+                <p className="text-sm">No messages yet</p>
+              </div>
+            ) : (
+              sidebarMessages.map((msg, idx) => (
+                <div key={msg.id} className="bg-white/5 rounded-lg p-4 border border-purple-400/30 animate-slideIn opacity-0" style={{ animationDelay: `${idx * 50}ms`, animationFillMode: 'forwards' }}>
+                  <div className="text-xs text-purple-400 mb-2">
+                    {new Date(msg.timestamp).toLocaleTimeString()}
+                  </div>
+                  <div className="text-sm text-purple-100">
+                    <MarkdownText text={msg.content} />
+                  </div>
+                  {msg.moleculeSmiles && (
+                    <div className="mt-3 bg-white/50 rounded-lg p-2 flex justify-center">
+                      <MoleculeSVG smiles={msg.moleculeSmiles} size={120} rdkitModule={rdkitModule} />
+                    </div>
+                  )}
+                </div>
+              ))
+            )}
+          </div>
+
+          { /* Optional for clearing messages
+          <div className="p-4 border-t border-purple-400/30">
+            <button onClick={() => setSidebarMessages([])} disabled={sidebarMessages.length === 0} className="w-full px-4 py-2 bg-white/10 text-purple-200 rounded-lg text-sm font-medium hover:bg-white/20 transition-all disabled:opacity-50 disabled:cursor-not-allowed">
+              Clear All Messages
+            </button>
+          </div>
+          */ }
+        </div>
+      </div>
+
       {hoveredNode && !contextMenu && (
         <div className="fixed z-50 pointer-events-none" style={{ left: `${mousePos.x + 20}px`, top: `${mousePos.y + 20}px`, maxWidth: '400px' }}>
           <div className="bg-gradient-to-br from-slate-800 to-purple-900 border-2 border-purple-400 rounded-xl shadow-2xl p-4 max-h-96 overflow-y-auto">
@@ -1477,53 +1524,6 @@ const ChemistryTool = () => {
           </div>
         </div>
       )}
-
-      {/* Sidebar */}
-      <div className={`fixed top-0 right-0 h-full w-96 bg-slate-900 border-l-2 border-purple-400 shadow-2xl transform transition-transform duration-300 z-50 ${sidebarOpen ? 'translate-x-0' : 'translate-x-full'}`}>
-        <div className="flex flex-col h-full">
-          <div className="flex items-center justify-between p-4 border-b border-purple-400/30">
-            <h3 className="text-lg font-semibold text-white">Reasoning</h3>
-            <button onClick={() => setSidebarOpen(false)} className="text-purple-300 hover:text-white transition-colors">
-              <X className="w-5 h-5" />
-            </button>
-          </div>
-
-          <div className="flex-1 overflow-y-auto p-4 space-y-3" ref={sidebarRef} style={{ overflowX: 'hidden' }}>
-            {sidebarMessages.length === 0 ? (
-              <div className="text-center text-purple-400 mt-8">
-                <svg className="w-12 h-12 mx-auto mb-2 opacity-50" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" />
-                </svg>
-                <p className="text-sm">No messages yet</p>
-              </div>
-            ) : (
-              sidebarMessages.map((msg, idx) => (
-                <div key={msg.id} className="bg-white/5 rounded-lg p-4 border border-purple-400/30 animate-slideIn opacity-0" style={{ animationDelay: `${idx * 50}ms`, animationFillMode: 'forwards' }}>
-                  <div className="text-xs text-purple-400 mb-2">
-                    {new Date(msg.timestamp).toLocaleTimeString()}
-                  </div>
-                  <div className="text-sm text-purple-100">
-                    <MarkdownText text={msg.content} />
-                  </div>
-                  {msg.moleculeSmiles && (
-                    <div className="mt-3 bg-white/50 rounded-lg p-2 flex justify-center">
-                      <MoleculeSVG smiles={msg.moleculeSmiles} size={120} rdkitModule={rdkitModule} />
-                    </div>
-                  )}
-                </div>
-              ))
-            )}
-          </div>
-
-          { /* Optional for clearing messages
-          <div className="p-4 border-t border-purple-400/30">
-            <button onClick={() => setSidebarMessages([])} disabled={sidebarMessages.length === 0} className="w-full px-4 py-2 bg-white/10 text-purple-200 rounded-lg text-sm font-medium hover:bg-white/20 transition-all disabled:opacity-50 disabled:cursor-not-allowed">
-              Clear All Messages
-            </button>
-          </div>
-          */ }
-        </div>
-      </div>
 
       <style>{`
         @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
