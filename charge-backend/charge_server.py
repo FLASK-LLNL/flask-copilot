@@ -276,7 +276,19 @@ async def generate_molecules(
                 {"type": "response", "message": "Searching for alternatives..."}
             )
 
-            await charge_retro_planner.run()
+            results = await charge_retro_planner.run()
+
+            results = results.as_list()  # Convert to list of strings
+            logger.info(f"New retrosynthetic step found: {results}")
+            for res in results:
+                await websocket.send_json(
+                    {
+                        "type": "response",
+                        "message": f"Proposed step: {res}",
+                        "smiles": res,
+                    }
+                )
+            ## TODO: Call AiZynthFinder again with the new reactants
 
     await websocket.send_json({"type": "complete"})
 
@@ -466,19 +478,6 @@ async def lead_molecule(
     await websocket.send_json({"type": "complete"})
 
 
-async def optimize_molecule_retro(smiles, experiment, planner, websocket: WebSocket):
-    """Optimize a molecule using retrosynthesis"""
-
-    pass
-
-
-async def optimize_molecule_retro_by_id(
-    node_id, experiment, planner, websocket: WebSocket
-):
-    """Optimize a molecule using retrosynthesis by node ID"""
-    pass
-
-
 async def unconstrained_opt(parent_smiles, planner, websocket: WebSocket):
     """Unconstrained optimization using retrosynthesis"""
 
@@ -496,6 +495,8 @@ async def unconstrained_opt(parent_smiles, planner, websocket: WebSocket):
     retro_experiment = RetrosynthesisExperiment(user_prompt=user_prompt)
     planner.experiment_type = retro_experiment
     logger.info(f"Optimizing {parent_smiles} using retrosynthesis.")
+    result = await planner.run()
+    return result
 
 
 async def constrained_opt(
@@ -526,6 +527,35 @@ async def constrained_opt(
     logger.info(
         f"Optimizing {parent_smiles} without using {constraint_smiles} in the synthesis."
     )
+    result = await planner.run()
+    return result
+
+
+async def regenerate_sub_tree(result, starting_node, planner, websocket: WebSocket):
+    pass
+
+
+async def optimize_molecule_retro(
+    node_id, opt_type, experiment, planner, websocket: WebSocket
+):
+    """Optimize a molecule using retrosynthesis by node ID"""
+    current_node = RetroSynthesisontext.node_ids.get(node_id)
+
+    assert current_node is not None, f"Node ID {node_id} not found"
+
+    if opt_type == "product_optimization_retro":
+        result = await unconstrained_opt(current_node.smiles, planner, websocket)
+        starting_node = current_node
+    else:
+        parent_id = current_node.parent_id
+        parent_node = RetroSynthesisontext.node_by_smiles.get(parent_id)
+        assert parent_node is not None, f"Parent node {parent_id} not found"
+        result = await constrained_opt(
+            parent_node.smiles, current_node.smiles, planner, websocket
+        )
+        starting_node = parent_node
+
+    await regenerate_sub_tree(result, starting_node, planner, websocket)
 
 
 @app.websocket("/ws")
@@ -578,11 +608,11 @@ async def websocket_endpoint(websocket: WebSocket):
                     "retrosynthesis",
                 ]:
                     if data["problemType"] == "product_optimization_retro":
-                        # Set up retrosynthesis experiment to optimize product
-                        pass
+                        # We will set this up in the optimize_molecule_retro function
+                        retro_experiment = None
                     elif data["problemType"] == "reactant_optimization_retro":
-                        # Set up retrosynthesis experiment to optimize reactant
-                        pass
+                        # We will set this up in the optimize_molecule_retro function
+                        retro_experiment = None
                     else:
                         # Set up retrosynthesis experiment to retrosynthesis
                         # to ensure the reactant is not used in the synthesis
@@ -619,7 +649,11 @@ async def websocket_endpoint(websocket: WebSocket):
                         "reactant_optimization_retro",
                     ]:
                         await optimize_molecule_retro(
-                            data["smiles"], retro_experiment, retro_runner, websocket
+                            data["id"],
+                            data["problemType"],
+                            retro_experiment,
+                            retro_runner,
+                            websocket,
                         )
                     else:
                         await generate_molecules(
