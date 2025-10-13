@@ -108,6 +108,7 @@ class RetroSynthesisontext:
         RetroSynthesisontext.node_by_smiles = {}
         RetroSynthesisontext.node_ids = {}
 
-    def reset(self):
+    @staticmethod
+    def reset():
         RetroSynthesisontext.node_by_smiles = {}
         RetroSynthesisontext.node_ids = {}

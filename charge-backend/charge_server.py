@@ -534,6 +534,8 @@ async def constrained_opt(
 
 
 async def regenerate_sub_tree(result, starting_node, planner, websocket: WebSocket):
+    """Regenerate sub-tree from a given node"""
+
     pass
 
 
