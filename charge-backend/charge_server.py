@@ -31,6 +31,8 @@ import sys
 from backend_helper_funcs import (
     CallbackHandler,
     RETROSYNTH_UNCONSTRAINED_USER_PROMPT_TEMPLATE,
+    RETROSYNTH_CONSTRAINED_USER_PROMPT_TEMPLATE,
+    RetroSynthesisontext,
 )
 
 # sys.path.append(os.path.dirname(os.path.abspath(__file__)))
@@ -122,6 +124,8 @@ def generate_tree_structure(reaction_path_dict: Dict[int, aizynth_funcs.Node]):
         node_id = current_node.node_id
         smiles = current_node.smiles
         purchasable = current_node.purchasable
+        intermediate = not (current_node.is_root or current_node.is_leaf)
+        leaf = current_node.is_leaf
         node = {
             "id": node_id,
             "label": smiles,
@@ -139,7 +143,7 @@ def generate_tree_structure(reaction_path_dict: Dict[int, aizynth_funcs.Node]):
                 "id": f"edge_{current_node.parent_id}_{node_id}",
                 "from": current_node.parent_id,
                 "to": node_id,
-                "reactionType": "N/A",
+                "reactionType": " ",
             }
             edges.append(edge)
         for child_id in current_node.children:
@@ -463,7 +467,65 @@ async def lead_molecule(
 
 
 async def optimize_molecule_retro(smiles, experiment, planner, websocket: WebSocket):
+    """Optimize a molecule using retrosynthesis"""
+
     pass
+
+
+async def optimize_molecule_retro_by_id(
+    node_id, experiment, planner, websocket: WebSocket
+):
+    """Optimize a molecule using retrosynthesis by node ID"""
+    pass
+
+
+async def unconstrained_opt(parent_smiles, planner, websocket: WebSocket):
+    """Unconstrained optimization using retrosynthesis"""
+
+    await websocket.send_json(
+        {
+            "type": "response",
+            "message": f"Optimizing {parent_smiles}...",
+            "smiles": parent_smiles,
+        }
+    )
+
+    user_prompt = RETROSYNTH_UNCONSTRAINED_USER_PROMPT_TEMPLATE.format(
+        target_molecule=parent_smiles
+    )
+    retro_experiment = RetrosynthesisExperiment(user_prompt=user_prompt)
+    planner.experiment_type = retro_experiment
+    logger.info(f"Optimizing {parent_smiles} using retrosynthesis.")
+
+
+async def constrained_opt(
+    parent_smiles, constraint_smiles, planner, websocket: WebSocket
+):
+    """Constrained optimization using retrosynthesis"""
+
+    await websocket.send_json(
+        {
+            "type": "response",
+            "message": f"Optimizing {parent_smiles}...",
+            "smiles": parent_smiles,
+        }
+    )
+    await websocket.send_json(
+        {
+            "type": "response",
+            "message": f"Searching for alternatives without {constraint_smiles}",
+            "smiles": constraint_smiles,
+        }
+    )
+
+    user_prompt = RETROSYNTH_CONSTRAINED_USER_PROMPT_TEMPLATE.format(
+        target_molecule=parent_smiles, constrained_reactant=constraint_smiles
+    )
+    retro_experiment = RetrosynthesisExperiment(user_prompt=user_prompt)
+    planner.experiment_type = retro_experiment
+    logger.info(
+        f"Optimizing {parent_smiles} without using {constraint_smiles} in the synthesis."
+    )
 
 
 @app.websocket("/ws")
