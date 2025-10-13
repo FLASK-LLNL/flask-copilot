@@ -25,6 +25,7 @@ import copy
 import os
 import random
 from typing import Any, Optional, Literal
+import requests
 
 app = FastAPI()
 
@@ -48,6 +49,17 @@ if os.path.exists(STATIC_PATH):
     async def root():
         return FileResponse(os.path.join(BUILD_PATH, "index.html"))
 
+CACTUS = "https://cactus.nci.nih.gov/chemical/structure/{0}/{1}"
+
+def smiles_to_iupac(smiles):
+    try:
+        rep = "iupac_name"
+        url = CACTUS.format(smiles, rep)
+        response = requests.get(url)
+        response.raise_for_status()
+        return response.text
+    except requests.exceptions.HTTPError:
+        return smiles
 
 @dataclass
 class Node:
@@ -119,7 +131,7 @@ def generate_tree_structure(start_smiles: str, depth: int = 3):
             node = Node(
                 id=node_id,
                 smiles=child_smiles,
-                label=f"Molecule-{level}{i}",
+                label=child_smiles,#smiles_to_iupac(child_smiles),
                 cost=random.uniform(10, 110),
                 energy=random.uniform(100, 600),
                 yield_=random.uniform(0, 100),
@@ -145,7 +157,7 @@ def generate_tree_structure(start_smiles: str, depth: int = 3):
     root = Node(
         id=root_id,
         smiles=start_smiles,
-        label="Root Molecule",
+        label=smiles_to_iupac(start_smiles),
         cost=random.uniform(10, 110),
         energy=random.uniform(100, 600),
         yield_=2.0,
@@ -304,7 +316,7 @@ async def websocket_endpoint(websocket: WebSocket):
                     )
             elif data["action"] == "delete_my_node":
                 await websocket.send_json(
-                    {"type": "subtree_update", "id": data['nodeId'], "highlight": True}
+                    {"type": "subtree_update", "id": data['nodeId'], "withNode": True, "highlight": True}
                 )
             elif data["action"] == "custom_query":
                 if "water" in data["query"].lower():

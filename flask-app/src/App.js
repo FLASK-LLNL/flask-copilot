@@ -137,7 +137,7 @@ const MarkdownText = ({ text }) => {
 };
 
 const ChemistryTool = () => {
-  const [smiles, setSmiles] = useState('CCO');
+  const [smiles, setSmiles] = useState('O=C\\C1=C(\\C=C/CC1(C)C)C');
   const [problemType, setProblemType] = useState('retrosynthesis');
   const [systemPrompt, setSystemPrompt] = useState('');
   const [problemPrompt, setProblemPrompt] = useState('');
@@ -164,7 +164,7 @@ const ChemistryTool = () => {
   const [wsReconnecting, setWsReconnecting] = useState(false);
   const [visibleMetrics, setVisibleMetrics] = useState({
     cost: true,
-    density: false,
+    bandgap: false,
     yield: false,
   });
   const [rdkitModule, setRdkitModule] = useState(null);
@@ -606,10 +606,11 @@ const ChemistryTool = () => {
           e.id === data.id ? { ...e, ...restData } : e
         ));
       } else if (data.type === 'subtree_update') {
+        const withNode = data.withNode || false
         const descendants = findAllDescendants(data.id);
         const { id, type, ...restData } = data;
         setTreeNodes(prev => prev.map(n => 
-          descendants.has(n.id) ? { ...n, ...restData } : n
+          (descendants.has(n.id) || (withNode && n.id === data.id)) ? { ...n, ...restData } : n
         )); 
       } else if (data.type === 'subtree_delete') {
           const descendants = findAllDescendants(data.id);
@@ -730,7 +731,7 @@ const ChemistryTool = () => {
             setEdges(data.edges || []);
             if (data.type === 'full-context') {
               setMetricsHistory(data.metricsHistory || []);
-              setVisibleMetrics(data.visibleMetrics || { cost: true, density: false, yield: false });
+              setVisibleMetrics(data.visibleMetrics || { cost: true, bandgap: false, yield: false });
               setZoom(data.zoom || 1);
               setOffset(data.offset || { x: 50, y: 50 });
               setSidebarMessages(data.sidebarMessages || []);
@@ -760,9 +761,11 @@ const ChemistryTool = () => {
     setProblemPrompt('');
     setPromptsModified(false);
     if (problemType === 'retrosynthesis') {
-      setVisibleMetrics({cost: true, density: false, yield: false});
+      setVisibleMetrics({cost: false, bandgap: false, yield: false});
     } else if (problemType === 'optimization') {
-      setVisibleMetrics({cost: false, density: true, yield: false});
+      setVisibleMetrics({cost: false, bandgap: true, yield: false});
+    } else if (problemType === 'test') {
+      setVisibleMetrics({cost: false, bandgap: true, yield: false});
     }
   };
 
@@ -774,10 +777,10 @@ const ChemistryTool = () => {
       color: '#EC4899',
       calculate: (nodes) => nodes.reduce((sum, node) => sum + (node.cost || 0), 0)
     },
-    density: { 
-      label: 'Molecular Density (g/cm³)', 
+    bandgap: { 
+      label: 'Band Gap (eV)', 
       color: '#F59E0B',
-      calculate: (nodes) => nodes[nodes.length-1].density || 0
+      calculate: (nodes) => nodes[nodes.length-1].bandgap || 0
     },
     yield: { 
       label: 'Yield (%)', 
@@ -1191,6 +1194,7 @@ const ChemistryTool = () => {
                 <select value={problemType} onChange={(e) => resetProblemType(e.target.value)} disabled={isComputing} className="w-full px-4 py-2.5 bg-white/20 border-2 border-purple-400/50 rounded-lg focus:border-purple-400 focus:outline-none transition-colors text-white disabled:opacity-50 cursor-pointer text-sm">
                   <option value="retrosynthesis" className="bg-slate-800">Retrosynthesis</option>
                   <option value="optimization" className="bg-slate-800">Molecule Optimization</option>
+                  <option value="test" className="bg-slate-800">Test Molecular Property</option>
                   <option value="custom" className="bg-slate-800">Custom</option>
                 </select>
               </div>
