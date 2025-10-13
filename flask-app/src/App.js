@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { Loader2, Beaker, Play, RotateCcw, Move, X, Send, RefreshCw, Sparkles } from 'lucide-react';
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 
 const MOLECULE_WIDTH = 250;
 const BOX_WIDTH = 10 + MOLECULE_WIDTH + 10;
@@ -602,12 +602,10 @@ const ChemistryTool = () => {
   // Connect WebSocket on mount
   useEffect(() => {
     let socket = null;
-    let mounted = true;
 
     reconnectWS();
     
     return () => {
-      mounted = false;
       if (socket && socket.readyState === WebSocket.OPEN) {
         socket.close();
       }
@@ -715,9 +713,9 @@ const ChemistryTool = () => {
     setSystemPrompt('');
     setProblemPrompt('');
     setPromptsModified(false);
-    if (problemType == 'retrosynthesis') {
+    if (problemType === 'retrosynthesis') {
       setVisibleMetrics({cost: true, density: false, yield: false});
-    } else if (problemType == 'optimization') {
+    } else if (problemType === 'optimization') {
       setVisibleMetrics({cost: false, density: true, yield: false});
     }
   };
@@ -835,7 +833,6 @@ const ChemistryTool = () => {
       const childPositions = [];
       
       children.forEach(child => {
-        const childStartY = currentY;
         currentY = assignPositions(child.id, level + 1, currentY);
         childPositions.push(newPositions.get(child.id).y);
       });
