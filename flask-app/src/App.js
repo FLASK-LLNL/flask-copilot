@@ -577,8 +577,10 @@ const ChemistryTool = () => {
       if (data.type === 'node') {
         setTreeNodes(prev => [...prev, data]);
       } else if (data.type === 'node_update') {
+        const { id, type, ...restData } = data;
+
         setTreeNodes(prev => prev.map(n => 
-          n.id === data.id ? { ...n, ...data } : n
+          n.id === data.id ? { ...n, ...restData } : n
         ));
       } else if (data.type === 'node_delete') {
         // Remove subtree, then remove node
@@ -599,9 +601,16 @@ const ChemistryTool = () => {
       } else if (data.type === 'edge') {
         setEdges(prev => [...prev, data]);
       } else if (data.type === 'edge_update') {
+        const { id, type, ...restData } = data;
         setEdges(prev => prev.map(e => 
-          e.id === data.id ? { ...e, ...data } : e
+          e.id === data.id ? { ...e, ...restData } : e
         ));
+      } else if (data.type === 'subtree_update') {
+        const descendants = findAllDescendants(data.id);
+        const { id, type, ...restData } = data;
+        setTreeNodes(prev => prev.map(n => 
+          descendants.has(n.id) ? { ...n, ...restData } : n
+        )); 
       } else if (data.type === 'subtree_delete') {
           const descendants = findAllDescendants(data.id);
           // Remove nodes
@@ -985,6 +994,17 @@ const ChemistryTool = () => {
     setIsComputing(true); // If expecting new nodes
   };
 
+  const highlightSubtree = (nodeId) => {
+    if (!websocket || websocket.readyState !== WebSocket.OPEN) {
+      alert('WebSocket not connected');
+      return;
+    }
+    websocket.send(JSON.stringify({
+      action: 'delete_my_node',
+      nodeId: nodeId
+    }));
+  }
+
   const addSidebarMessage = (content, moleculeSmiles = null) => {
     const message = {
       id: Date.now(),
@@ -1290,7 +1310,7 @@ const ChemistryTool = () => {
                     onMouseLeave={() => setHoveredNode(null)}
                     onClick={(e) => handleNodeClick(e, node)}
                   >
-                    <div className="bg-gradient-to-br from-purple-50/80 to-pink-300/80 backdrop-blur-sm rounded-xl p-3 border-2 border-purple-400/50 shadow-lg hover:shadow-2xl hover:scale-105 transition-all pointer-events-auto cursor-pointer hover:border-purple-300">
+                    <div className={`bg-gradient-to-br backdrop-blur-sm rounded-xl p-3 border-2 shadow-lg hover:shadow-2xl hover:scale-105 transition-all pointer-events-auto cursor-pointer ${node.highlight ? 'from-amber-500/40 to-yellow-500/40 border-amber-400 ring-4 ring-amber-400/50 animate-pulse' : 'from-purple-50/80 to-pink-300/80 border-purple-400/50 hover:border-purple-300'}`} style={{ textAlign: 'center' }}>
                       <MoleculeSVG smiles={node.smiles} height={80} rdkitModule={rdkitModule} />
                       <div className="mt-2 text-center">
                         <div className="text-xs font-semibold text-purple-200 bg-black/30 rounded px-2 py-1 whitespace-pre-line">{node.label}</div>
@@ -1478,10 +1498,7 @@ const ChemistryTool = () => {
           </button>
 
           <button onClick={() => {
-            websocket.send(JSON.stringify({
-              action: 'delete_my_node',
-              nodeId: contextMenu.node.id
-            }));
+            highlightSubtree(contextMenu.node.id);
             setContextMenu(null);
           }} className="w-full px-4 py-2 text-left text-sm text-white hover:bg-purple-600/50 transition-colors flex items-center gap-2">
             <X className="w-4 h-4" />Delete this node
