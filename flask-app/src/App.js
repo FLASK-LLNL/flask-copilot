@@ -139,6 +139,7 @@ const MarkdownText = ({ text }) => {
 const ChemistryTool = () => {
   const [smiles, setSmiles] = useState('O=C\\C1=C(\\C=C/CC1(C)C)C');
   const [problemType, setProblemType] = useState('retrosynthesis');
+  const [problemName, setProblemName] = useState('retro-safranal');
   const [systemPrompt, setSystemPrompt] = useState('');
   const [problemPrompt, setProblemPrompt] = useState('');
   const [promptsModified, setPromptsModified] = useState(false);
@@ -165,6 +166,7 @@ const ChemistryTool = () => {
   const [visibleMetrics, setVisibleMetrics] = useState({
     cost: true,
     bandgap: false,
+    density: false,
     yield: false,
   });
   const [rdkitModule, setRdkitModule] = useState(null);
@@ -220,7 +222,12 @@ const ChemistryTool = () => {
     return descendants;
   };
 
-  /* Mock "re-randomize children" button behavior */
+  const getNode = (nodeId) => {
+    return treeNodes.find(n => n.id === nodeId);
+  };
+  
+
+  /* Mock "re-randomize children" button behavior 
   const reactionTypes = ['Hydrogenation', 'Oxidation', 'Methylation', 'Reduction', 'Cyclization', 'Halogenation'];
   const commonNames = ['Ethanol', 'Acetone', 'Benzene', 'Toluene', 'Aspirin', 'Caffeine', 'Glucose', 'Fructose'];
 
@@ -297,10 +304,6 @@ const ChemistryTool = () => {
     return { nodes, edges: edgesList };
   };
 
-  const getNode = (nodeId) => {
-    return treeNodes.find(n => n.id === nodeId);
-  };
-  
   const rerandomizeChildren = (nodeId) => {
     const node = getNode(nodeId);
     if (!node) return;
@@ -397,7 +400,7 @@ const ChemistryTool = () => {
     setEdges([...filteredEdges, ...newEdgesWithNodes]);
     setContextMenu(null);
   };
-  /* End of mock code */
+   End of mock code */
 
   const handleMouseDown = (e) => {
     if (e.button !== 0) return;
@@ -540,6 +543,7 @@ const ChemistryTool = () => {
   }, [contextMenu]);
   
   const runComputation = async () => {
+    setSidebarOpen(true);
     setIsComputing(true);
     setTreeNodes([]);
     setEdges([]);
@@ -728,7 +732,7 @@ const ChemistryTool = () => {
             setEdges(data.edges || []);
             if (data.type === 'full-context') {
               setMetricsHistory(data.metricsHistory || []);
-              setVisibleMetrics(data.visibleMetrics || { cost: true, bandgap: false, yield: false });
+              setVisibleMetrics(data.visibleMetrics || { cost: true, bandgap: false, yield: false, density: false });
               setZoom(data.zoom || 1);
               setOffset(data.offset || { x: 50, y: 50 });
               setSidebarMessages(data.sidebarMessages || []);
@@ -752,17 +756,27 @@ const ChemistryTool = () => {
     setEditPromptsModal(false);
   };
 
-  const resetProblemType = (problemType) => {
-    setProblemType(problemType);
+  const resetProblemType = (problem_name) => {
     setSystemPrompt('');
     setProblemPrompt('');
     setPromptsModified(false);
-    if (problemType === 'retrosynthesis') {
-      setVisibleMetrics({cost: false, bandgap: false, yield: false});
-    } else if (problemType === 'optimization') {
-      setVisibleMetrics({cost: false, bandgap: true, yield: false});
-    } else if (problemType === 'test') {
-      setVisibleMetrics({cost: false, bandgap: true, yield: false});
+    setProblemName(problem_name);
+    if (problem_name === 'retro-safranal') {
+      setSmiles('O=C\\C1=C(\\C=C/CC1(C)C)C')
+      setVisibleMetrics({cost: false, bandgap: false, yield: false, density: false});
+      setProblemType('retrosynthesis');
+    } else if (problem_name === 'retro-nirmatrelvir') {
+      setSmiles('CC1([C@@H]2[C@H]1[C@H](N(C2)C(=O)[C@H](C(C)(C)C)NC(=O)C(F)(F)F)C(=O)N[C@@H](C[C@@H]3CCNC3=O)C#N)C')
+      setVisibleMetrics({cost: false, bandgap: false, yield: false, density: false});
+      setProblemType('retrosynthesis');
+    } else if (problem_name === 'optimization-bandgap') {
+      setSmiles('C1(N2C3=CC=CC=C3N(C4=CC=CC=C4)C5=C2C=CC=C5)=CC=CC=C1');
+      setVisibleMetrics({cost: false, bandgap: true, yield: false, density: false});
+      setProblemType('optimization');
+    } else if (problem_name === 'optimization-density') {
+      setSmiles('CCC(=O)CCc1cccc(CCC(=O)CC)c1ONC(C)=O');
+      setVisibleMetrics({cost: false, bandgap: false, yield: false, density: true});
+      setProblemType('optimization');
     }
   };
 
@@ -779,11 +793,16 @@ const ChemistryTool = () => {
       color: '#F59E0B',
       calculate: (nodes) => nodes[nodes.length-1].bandgap || 0
     },
-    yield: { 
+    density: { 
+      label: 'Molecular Density (g/cm³)', 
+      color: '#10B981',
+      calculate: (nodes) => nodes[nodes.length-1].density || 0
+    },
+    /*yield: { 
       label: 'Yield (%)', 
       color: '#10B981',
       calculate: (nodes) => nodes.length > 0 ? (nodes.reduce((sum, node) => sum + (node.yield || Math.random() * 100), 0) / nodes.length) : 0
-    },
+    },*/
   };
 
   // Calculate all metrics
@@ -1183,19 +1202,20 @@ const ChemistryTool = () => {
           
           <div className="flex items-center gap-4">
             <div className="flex items-end gap-2">
-              <div className="w-56">
+              <div className="w-100">
                 <label className="block text-sm font-medium text-purple-200 mb-2">
                   Problem Type
                   {promptsModified && <span className="ml-2 text-xs text-amber-400">●</span>}
                 </label>
-                <select value={problemType} onChange={(e) => resetProblemType(e.target.value)} disabled={isComputing} className="w-full px-4 py-2.5 bg-white/20 border-2 border-purple-400/50 rounded-lg focus:border-purple-400 focus:outline-none transition-colors text-white disabled:opacity-50 cursor-pointer text-sm">
-                  <option value="retrosynthesis" className="bg-slate-800">Retrosynthesis</option>
-                  <option value="optimization" className="bg-slate-800">Molecule Optimization</option>
-                  <option value="test" className="bg-slate-800">Test Molecular Property</option>
-                  <option value="custom" className="bg-slate-800">Custom</option>
+                <select value={problemName} onChange={(e) => resetProblemType(e.target.value)} disabled={isComputing} className="w-full px-4 py-2.5 bg-white/20 border-2 border-purple-400/50 rounded-lg focus:border-purple-400 focus:outline-none transition-colors text-white disabled:opacity-50 cursor-pointer text-sm">
+                  <option value="retro-safranal" className="bg-slate-800">Synthesizing Safranal</option>
+                  <option value="retro-nirmatrelvir" className="bg-slate-800">Synthesizing Nirmatrelvir</option>
+                  <option value="optimization-bandgap" className="bg-slate-800">Optimizing OLED Molecule for Band Gap</option>
+                  <option value="optimization-density" className="bg-slate-800">Molecular Discovery for Crystalline Density</option>
+                  {/*<option value="custom" className="bg-slate-800">Custom</option>*/}
                 </select>
               </div>
-              <button onClick={() => setEditPromptsModal(true)} disabled={isComputing} className="px-3 py-2.5 bg-white/10 text-purple-200 rounded-lg text-sm font-medium hover:bg-white/20 transition-all disabled:opacity-50 disabled:cursor-not-allowed">
+              <button onClick={() => setEditPromptsModal(true)} disabled={true} className="px-3 py-2.5 bg-white/10 text-purple-200 rounded-lg text-sm font-medium hover:bg-white/20 transition-all disabled:opacity-50 disabled:cursor-not-allowed">
                 Edit
               </button>
             </div>
@@ -1484,25 +1504,27 @@ const ChemistryTool = () => {
             <div className="text-xs text-purple-300">Actions for</div>
             <div className="text-sm font-semibold text-white">{contextMenu.node.label}</div>
           </div>
-          
-          <button onClick={() => rerandomizeChildren(contextMenu.node.id)} className="w-full px-4 py-2 text-left text-sm text-white hover:bg-purple-600/50 transition-colors flex items-center gap-2">
-            <RefreshCw className="w-4 h-4" />
-            Re-randomize Children
+
+          { !findAllDescendants(contextMenu.node.id, treeNodes).size && (
+          <button onClick={() => {}} className="w-full px-4 py-2 text-left text-sm text-white hover:bg-purple-600/50 transition-colors flex items-center gap-2">
+            <Sparkles className="w-4 h-4" />
+            How do I make this?
           </button>
+          ) }
 
           <button onClick={() => {
             const mockMessage = `## Structure Optimization Complete\n\n**Molecule:** ${contextMenu.node.label}\n\nOptimization converged in **24 iterations**\n\n- Energy reduced by **15.3 kJ/mol**\n- RMSD: *0.08 Å*\n- Final gradient: \`0.001\`\n\nThe optimized structure shows improved stability.`;
             addSidebarMessage(mockMessage, contextMenu.node.smiles);
             setContextMenu(null);
           }} className="w-full px-4 py-2 text-left text-sm text-white hover:bg-purple-600/50 transition-colors flex items-center gap-2">
-            <Sparkles className="w-4 h-4" />Mock message from server
+            <RefreshCw className="w-4 h-4" />Mock message from server (DEBUG)
           </button>
 
           <button onClick={() => {
             highlightSubtree(contextMenu.node.id);
             setContextMenu(null);
           }} className="w-full px-4 py-2 text-left text-sm text-white hover:bg-purple-600/50 transition-colors flex items-center gap-2">
-            <X className="w-4 h-4" />Delete this node
+            <X className="w-4 h-4" />Highlight this node (DEBUG)
           </button>
 
           <button onClick={() => handleCustomQuery(contextMenu.node)} className="w-full px-4 py-2 text-left text-sm text-white hover:bg-purple-600/50 transition-colors flex items-center gap-2 border-t border-purple-400/30">
