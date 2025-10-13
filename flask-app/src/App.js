@@ -205,6 +205,21 @@ const ChemistryTool = () => {
     };
   }, []);
 
+  const findAllDescendants = (nodeId) => {
+    // Find all descendants recursively
+    const descendants = new Set();
+    const findDescendants = (id) => {
+      treeNodes.forEach(n => {
+        if (n.parentId === id && !descendants.has(n.id)) {
+          descendants.add(n.id);
+          findDescendants(n.id);
+        }
+      });
+    };
+    findDescendants(nodeId);
+    return descendants;
+  };
+
   /* Mock "re-randomize children" button behavior */
   const reactionTypes = ['Hydrogenation', 'Oxidation', 'Methylation', 'Reduction', 'Cyclization', 'Halogenation'];
   const commonNames = ['Ethanol', 'Acetone', 'Benzene', 'Toluene', 'Aspirin', 'Caffeine', 'Glucose', 'Fructose'];
@@ -282,21 +297,12 @@ const ChemistryTool = () => {
     return { nodes, edges: edgesList };
   };
 
+  
   const rerandomizeChildren = (nodeId) => {
     const node = treeNodes.find(n => n.id === nodeId);
     if (!node) return;
 
-    // Find all descendants recursively
-    const descendants = new Set();
-    const findDescendants = (id) => {
-      treeNodes.forEach(n => {
-        if (n.parentId === id && !descendants.has(n.id)) {
-          descendants.add(n.id);
-          findDescendants(n.id);
-        }
-      });
-    };
-    findDescendants(nodeId);
+    const descendants = findAllDescendants(nodeId);
 
     // Remove descendants from nodes and edges
     const filteredNodes = treeNodes.filter(n => !descendants.has(n.id));
