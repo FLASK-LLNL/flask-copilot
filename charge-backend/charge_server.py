@@ -518,6 +518,9 @@ async def websocket_endpoint(websocket: WebSocket):
                     if data["problemType"] == "product_optimization_retro":
                         # Set up retrosynthesis experiment to optimize product
                         pass
+                    elif data["problemType"] == "reactant_optimization_retro":
+                        # Set up retrosynthesis experiment to optimize reactant
+                        pass
                     else:
                         # Set up retrosynthesis experiment to retrosynthesis
                         # to ensure the reactant is not used in the synthesis
@@ -526,7 +529,6 @@ async def websocket_endpoint(websocket: WebSocket):
                                 target_molecule=data["smiles"]
                             )
                         )
-                        pass
 
                     if retro_runner is None:
                         retro_runner = AutoGenClient(

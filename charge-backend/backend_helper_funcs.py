@@ -1,6 +1,7 @@
 from loguru import logger
 from fastapi import WebSocket
 import asyncio
+import json
 
 RETROSYNTH_UNCONSTRAINED_USER_PROMPT_TEMPLATE = (
     "Provide a retrosynthetic pathway for the target molecule {target_molecule}. "
@@ -38,7 +39,9 @@ class CallbackHandler:
                         logger.info(_str)
                         msg = {"type": "response", "message": _str}
                         if "smiles" in item.arguments:
-                            msg["smiles"] = item.arguments["smiles"]
+                            str_to_dict = json.loads(item.arguments)
+                            if "smiles" in str_to_dict:
+                                msg["smiles"] = str_to_dict["smiles"]
                         await send(msg)
 
                     else:
