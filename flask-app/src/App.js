@@ -1241,7 +1241,7 @@ const ChemistryTool = () => {
                   Problem Type
                   {promptsModified && <span className="ml-2 text-xs text-amber-400">●</span>}
                 </label>
-                <select value={problemName} onChange={(e) => resetProblemType(e.target.value)} disabled={isComputing} className="w-full px-4 py-2.5 bg-white/20 border-2 border-purple-400/50 rounded-lg focus:border-purple-400 focus:outline-none transition-colors text-white disabled:opacity-50 cursor-pointer text-sm">
+                <select value={problemName} onChange={(e) => {reset(); resetProblemType(e.target.value)}} disabled={isComputing} className="w-full px-4 py-2.5 bg-white/20 border-2 border-purple-400/50 rounded-lg focus:border-purple-400 focus:outline-none transition-colors text-white disabled:opacity-50 cursor-pointer text-sm">
                   <option value="retro-safranal" className="bg-slate-800">Synthesizing Safranal</option>
                   <option value="retro-nirmatrelvir" className="bg-slate-800">Synthesizing Nirmatrelvir</option>
                   <option value="optimization-bandgap" className="bg-slate-800">Optimizing OLED Molecule for Band Gap</option>
@@ -1286,7 +1286,7 @@ const ChemistryTool = () => {
           {treeNodes.length === 0 && !isComputing ? (
             <div className="flex flex-col items-center justify-center h-full text-purple-300">
               <FlaskConical className="w-16 h-16 mb-4 opacity-50" />
-              <p className="text-center text-lg">Click "Run" to start the molecular computation tree</p>
+              <p className="text-center text-lg">Click "Run" to start {problemType == "optimization" ? <>molecular discovery</> : <>the molecular computation tree</>}</p>
               <p className="text-sm text-purple-400 mt-2">
                 {autoZoom ? 'Auto-zoom will fit all molecules' : 'Drag to pan • Scroll to zoom'}
               </p>
