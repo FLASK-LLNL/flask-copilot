@@ -1,6 +1,6 @@
 /* eslint-disable react-hooks/exhaustive-deps */
 import React, { useState, useRef, useEffect, useMemo } from 'react';
-import { Loader2, Beaker, Play, RotateCcw, Move, X, Send, RefreshCw, Sparkles } from 'lucide-react';
+import { Loader2, FlaskConical, TestTubeDiagonal, Network, Play, RotateCcw, Move, X, Send, RefreshCw, Sparkles } from 'lucide-react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 
 const MOLECULE_WIDTH = 250;
@@ -172,6 +172,8 @@ const ChemistryTool = () => {
   const [rdkitModule, setRdkitModule] = useState(null);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [sidebarMessages, setSidebarMessages] = useState([]);
+  const [copiedField, setCopiedField] = useState(null);
+
 
   const containerRef = useRef(null);
   const wsRef = useRef(null);
@@ -222,10 +224,24 @@ const ChemistryTool = () => {
     return descendants;
   };
 
+  const hasDescendants = (nodeId, nodes) => {
+    return nodes.some(n => n.parentId === nodeId);
+  };
+
   const getNode = (nodeId) => {
     return treeNodes.find(n => n.id === nodeId);
   };
   
+
+  const copyToClipboard = async (text, fieldName) => {
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopiedField(fieldName);
+      setTimeout(() => setCopiedField(null), 2000);
+    } catch (err) {
+      console.error('Failed to copy:', err);
+    }
+  };
 
   /* Mock "re-randomize children" button behavior 
   const reactionTypes = ['Hydrogenation', 'Oxidation', 'Methylation', 'Reduction', 'Cyclization', 'Halogenation'];
@@ -1097,7 +1113,7 @@ const ChemistryTool = () => {
       <div className="max-w-7xl mx-auto">
         <div className="text-center mb-8">
           <div className="flex items-center justify-center gap-3 mb-2">
-            <Beaker className="w-10 h-10 text-purple-400" />
+            <FlaskConical className="w-10 h-10 text-purple-400" />
             <h1 className="text-4xl font-bold text-white">FLASK Copilot</h1>
           </div>
           <p className="text-purple-300">Real-time molecular assistant</p>
@@ -1251,7 +1267,7 @@ const ChemistryTool = () => {
         <div className="bg-white/10 backdrop-blur-lg rounded-2xl shadow-2xl border border-white/20 overflow-hidden relative" style={{ height: '600px' }}>
           {treeNodes.length === 0 && !isComputing ? (
             <div className="flex flex-col items-center justify-center h-full text-purple-300">
-              <Beaker className="w-16 h-16 mb-4 opacity-50" />
+              <FlaskConical className="w-16 h-16 mb-4 opacity-50" />
               <p className="text-center text-lg">Click "Run" to start the molecular computation tree</p>
               <p className="text-sm text-purple-400 mt-2">
                 {autoZoom ? 'Auto-zoom will fit all molecules' : 'Drag to pan • Scroll to zoom'}
@@ -1505,31 +1521,53 @@ const ChemistryTool = () => {
             <div className="text-sm font-semibold text-white">{contextMenu.node.label}</div>
           </div>
 
-          { !findAllDescendants(contextMenu.node.id, treeNodes).size && (
-          <button onClick={() => {}} className="w-full px-4 py-2 text-left text-sm text-white hover:bg-purple-600/50 transition-colors flex items-center gap-2">
-            <Sparkles className="w-4 h-4" />
-            How do I make this?
-          </button>
-          ) }
+          { (problemType === "optimization") && (
+            <>
+            <button onClick={() => {
 
-          <button onClick={() => {
-            const mockMessage = `## Structure Optimization Complete\n\n**Molecule:** ${contextMenu.node.label}\n\nOptimization converged in **24 iterations**\n\n- Energy reduced by **15.3 kJ/mol**\n- RMSD: *0.08 Å*\n- Final gradient: \`0.001\`\n\nThe optimized structure shows improved stability.`;
-            addSidebarMessage(mockMessage, contextMenu.node.smiles);
-            setContextMenu(null);
-          }} className="w-full px-4 py-2 text-left text-sm text-white hover:bg-purple-600/50 transition-colors flex items-center gap-2">
-            <RefreshCw className="w-4 h-4" />Mock message from server (DEBUG)
-          </button>
+            }}  className="w-full px-4 py-2 text-left text-sm text-white hover:bg-purple-600/50 transition-colors flex items-center gap-2">
+            <RotateCcw className="w-4 h-4" />
+            Restart from here
+            </button>
+            <button 
+              onClick={() => copyToClipboard(contextMenu.node.smiles, 'smiles')} 
+              className="w-full px-4 py-2 text-left text-sm text-white hover:bg-purple-600/50 transition-colors flex items-center gap-2"
+            >
+              {copiedField === 'smiles' ? (
+                <>✓ Copied!</>
+              ) : (
+                <>
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                  </svg>
+                  Copy SMILES
+                </>
+              )}
+            </button>
+            </>
+          )}
 
-          <button onClick={() => {
-            highlightSubtree(contextMenu.node.id);
-            setContextMenu(null);
-          }} className="w-full px-4 py-2 text-left text-sm text-white hover:bg-purple-600/50 transition-colors flex items-center gap-2">
-            <X className="w-4 h-4" />Highlight this node (DEBUG)
-          </button>
+          { (problemType === "retrosynthesis" && !hasDescendants(contextMenu.node.id, treeNodes)) && (
+            <button onClick={() => {}} className="w-full px-4 py-2 text-left text-sm text-white hover:bg-purple-600/50 transition-colors flex items-center gap-2">
+              <TestTubeDiagonal className="w-4 h-4" />
+              How do I make this?
+            </button>
+            ) }
+
+          { (problemType === "retrosynthesis" && hasDescendants(contextMenu.node.id, treeNodes)) && (
+            <>
+            <button onClick={() => {}} className="w-full px-4 py-2 text-left text-sm text-white hover:bg-purple-600/50 transition-colors flex items-center gap-2">
+              <RefreshCw className="w-4 h-4" />Find Another Reaction
+            </button>
+            <button onClick={() => {}} className="w-full px-4 py-2 text-left text-sm text-white hover:bg-purple-600/50 transition-colors flex items-center gap-2">
+              <Network className="w-4 h-4" />Substitute Molecule
+            </button>
+            </>
+          )}
 
           <button onClick={() => handleCustomQuery(contextMenu.node)} className="w-full px-4 py-2 text-left text-sm text-white hover:bg-purple-600/50 transition-colors flex items-center gap-2 border-t border-purple-400/30">
             <Send className="w-4 h-4" />
-            Custom Query...
+            { (problemType === "retrosynthesis" && hasDescendants(contextMenu.node.id, treeNodes)) ? (<>Substitute with Custom Prompt...</>) : (<>Custom Query...</>) }
           </button>
         </div>
       )}

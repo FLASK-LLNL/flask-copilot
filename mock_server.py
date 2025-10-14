@@ -57,6 +57,8 @@ def smiles_to_iupac(smiles):
         url = CACTUS.format(smiles, rep)
         response = requests.get(url)
         response.raise_for_status()
+        if response.text.startswith("<"):  # HTML
+            return smiles
         return response.text
     except requests.exceptions.HTTPError:
         return smiles
