@@ -492,7 +492,7 @@ async def unconstrained_opt(parent_smiles, planner, websocket: WebSocket):
     await websocket.send_json(
         {
             "type": "response",
-            "message": f"Optimizing {parent_smiles}...",
+            "message": f"Finding synthesis pathway to {parent_smiles}...",
             "smiles": parent_smiles,
         }
     )
@@ -515,7 +515,7 @@ async def constrained_opt(
     await websocket.send_json(
         {
             "type": "response",
-            "message": f"Optimizing {parent_smiles}...",
+            "message": f"Finding synthesis pathway for {parent_smiles}...",
             "smiles": parent_smiles,
         }
     )
