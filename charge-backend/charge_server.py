@@ -129,13 +129,23 @@ def generate_tree_structure(reaction_path_dict: Dict[int, aizynth_funcs.Node]):
         node_id = current_node.node_id
         smiles = current_node.smiles
         purchasable = current_node.purchasable
-
+        intermediate = not (current_node.is_root or current_node.is_leaf)
         leaf = current_node.is_leaf
+        node_id_str = f"node_{node_id}"
+        hover_info = f"# Molecule \n **SMILES:** {smiles}\n - Level: {level}\n"
+        if leaf:
+            if purchasable:
+                hover_info += " - This molecule is purchasable.\n"
+            else:
+                hover_info += " - This molecule is NOT purchasable.\n"
+
+        if intermediate:
+            hover_info += " - Reaction intermediate\n"
         node = Node(
-            id=f"node_{node_id}",
+            id=node_id_str,
             smiles=smiles,
             label=smiles,
-            hoverInfo="",
+            hoverInfo=hover_info,
             level=level,
             parentId=(
                 f"node_{current_node.parent_id}"
@@ -148,15 +158,18 @@ def generate_tree_structure(reaction_path_dict: Dict[int, aizynth_funcs.Node]):
             highlight=leaf and not purchasable,
         )
 
-        RetroSynthesisContext.node_ids[node_id] = current_node
-        RetroSynthesisContext.node_by_smiles[smiles] = current_node
+        RetroSynthesisContext.node_ids[node_id_str] = (current_node, node)
+
+        # Map by smiles in case ever needed
+        RetroSynthesisContext.node_by_smiles[smiles] = (current_node, node)
+
         nodes.append(node)
         if current_node.parent_id is not None:
 
             edge = Edge(
                 id=f"edge_{current_node.parent_id}_{node_id}",
                 fromNode=f"node_{current_node.parent_id}",
-                toNode=f"node_{node_id}",
+                toNode=node_id_str,
                 status="complete",
                 label=None,
             )
@@ -200,9 +213,7 @@ def calculate_positions(nodes: list[Node]):
     return positioned
 
 
-async def generate_molecules(
-    start_smiles: str, planner, charge_retro_planner, websocket: WebSocket = None
-):
+async def generate_molecules(start_smiles: str, planner, websocket: WebSocket = None):
     """Stream positioned nodes and edges"""
     logger.info(f"Planning retrosynthesis for: {start_smiles}")
 
@@ -212,13 +223,13 @@ async def generate_molecules(
         id="node_0",
         smiles=start_smiles,
         label=start_smiles,
-        hoverInfo="",
+        hoverInfo=f"# Root molecule \n **SMILES:** {start_smiles}",
         level=0,
         parentId=None,
         cost=None,
         bandgap=None,
         yield_=None,
-        highlight=False,
+        highlight=True,
         x=100,
         y=100,
     )
@@ -279,6 +290,8 @@ async def generate_molecules(
             await websocket.send_json(edge_complete)
 
             await asyncio.sleep(0.2)
+    root.highlight = False
+    await websocket.send_json({"type": "node", **root.json()})
 
     await websocket.send_json({"type": "complete"})
 
@@ -568,7 +581,12 @@ async def websocket_endpoint(websocket: WebSocket):
             data = await websocket.receive_json()
             action = data.get("action")
 
-            if action == "compute":
+            if action in [
+                "compute",
+                "compute-from",
+                "recompute-reaction",
+                "recompute-parent-reaction",
+            ]:
                 # cancel any running task first
                 if CURRENT_TASK and not CURRENT_TASK.done():
                     logger.info("Cancelling existing compute task...")
@@ -577,6 +595,8 @@ async def websocket_endpoint(websocket: WebSocket):
                         await CURRENT_TASK
                     except asyncio.CancelledError:
                         logger.info("Previous compute task cancelled.")
+
+            if action == "compute":
 
                 if data["problemType"] == "optimization":
                     lmo_experiment = LeadMoleculeOptimization(
@@ -597,24 +617,8 @@ async def websocket_endpoint(websocket: WebSocket):
                 elif data["problemType"] == "retrosynthesis":
                     # Set up retrosynthesis experiment to retrosynthesis
                     # to ensure the reactant is not used in the synthesis
-                    retro_experiment = RetrosynthesisExperiment(
-                        user_prompt=RETROSYNTH_UNCONSTRAINED_USER_PROMPT_TEMPLATE.format(
-                            target_molecule=data["smiles"]
-                        )
-                    )
+                    logger.info("Setting up retrosynthesis experiment...")
 
-                    if retro_runner is None:
-                        retro_runner = AutoGenClient(
-                            experiment_type=retro_experiment,
-                            model=model,
-                            backend=backend,
-                            api_key=API_KEY,
-                            model_kwargs=kwargs,
-                            server_url=server_urls,  # TODO: Change this to a retrosynthesis specific server
-                            thoughts_callback=CallbackHandler(websocket),
-                        )
-                    else:
-                        retro_runner.experiment_type = retro_experiment
                 else:
                     logger.error(f"Unknown problem type: {data['problemType']}")
 
@@ -630,7 +634,6 @@ async def websocket_endpoint(websocket: WebSocket):
                     elif data["problemType"] == "retrosynthesis":
                         await generate_molecules(
                             data["smiles"],
-                            retro_experiment,
                             aizynthfinder_planner,
                             websocket,
                         )
@@ -639,6 +642,7 @@ async def websocket_endpoint(websocket: WebSocket):
 
                 # start a new task
                 CURRENT_TASK = asyncio.create_task(run_task())
+
             elif action == "compute-from":
                 # Leaf node optimization
                 logger.info("Compute from action received")
