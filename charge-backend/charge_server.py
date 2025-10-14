@@ -295,8 +295,7 @@ async def generate_molecules(
             await websocket.send_json(edge_complete)
 
             await asyncio.sleep(0.2)
-    root.highlight = False
-    await websocket.send_json({"type": "node", **root.json()})
+    await websocket.send_json({"type": "node_update", "id": root.id, "highlight": False})
 
     await websocket.send_json({"type": "complete"})
 
