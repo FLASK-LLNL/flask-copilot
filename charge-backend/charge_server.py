@@ -57,7 +57,7 @@ parser.add_argument(
     default="config.yml",
     help="Path to the configuration file for AiZynthFinder.",
 )
-parser.add_argument("--port", type=int, default=8000, help="Port to run the server on")
+parser.add_argument("--port", type=int, default=8001, help="Port to run the server on")
 parser.add_argument(
     "--host", type=str, default="127.0.0.1", help="Host to run the server on"
 )
