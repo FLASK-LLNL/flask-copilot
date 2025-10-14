@@ -1,14 +1,12 @@
-from fastapi import FastAPI, Request, WebSocket, WebSocketDisconnect
-from fastapi.responses import StreamingResponse, FileResponse
+from functools import partial
+from fastapi import FastAPI,  WebSocket, WebSocketDisconnect
+from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 import asyncio
-import json
 import os
-import random
 import argparse
 import sys
-from typing import Dict
 
 import httpx
 
@@ -21,7 +19,7 @@ from ChARGe.experiments.Retrosynthesis.RetrosynthesisExperiment import (
     TemplateFreeRetrosynthesisExperiment as RetrosynthesisExperiment,
 )
 
-import ChARGe.experiments.Molecule_Generation.helper_funcs as lmo_helper_funcs
+
 from ChARGe.charge.servers.server_utils import try_get_public_hostname
 
 import os
@@ -30,22 +28,26 @@ from charge.clients.autogen import AutoGenClient
 import charge.servers.AiZynthTools as aizynth_funcs
 import logging
 from aizynthfinder.utils.logging import setup_logger
+
 setup_logger(console_level=logging.INFO)
 
 from loguru import logger
 import sys
 from backend_helper_funcs import (
     CallbackHandler,
-    RETROSYNTH_UNCONSTRAINED_USER_PROMPT_TEMPLATE,
-    RETROSYNTH_CONSTRAINED_USER_PROMPT_TEMPLATE,
     RetroSynthesisContext,
-    Node,
-    Edge,
 )
 import copy
+from lmo_charge_backend_funcs import lead_molecule
+from aizynth_backend_funcs import aizynth_retro
+from retro_charge_backend_funcs import (
+    unconstrained_retro,
+    constrained_retro,
+    get_constrained_prompt,
+    get_unconstrained_prompt,
+)
 
-# sys.path.append(os.path.dirname(os.path.abspath(__file__)))
-# from ChARGe.experiments.LMOExperiment import LMOExperiment
+
 
 parser = argparse.ArgumentParser()
 
@@ -69,23 +71,17 @@ parser.add_argument(
     help="Path to the configuration file for AiZynthFinder.",
 )
 parser.add_argument("--port", type=int, default=8001, help="Port to run the server on")
-parser.add_argument(
-    "--host", type=str, default=None, help="Host to run the server on"
-)
+parser.add_argument("--host", type=str, default=None, help="Host to run the server on")
 
 # Add standard CLI arguments
 Client.add_std_parser_arguments(parser)
 
 args = parser.parse_args()
+<<<<<<< HEAD
 
+=======
+>>>>>>> bfb777c (Streamlined implementation of the Charge backend server)
 
-# TODO: Convert this to a dataclass
-MOLECULE_HOVER_TEMPLATE = """**SMILES:** `{}`\n
-## Properties
- - Molecule Weight: {:.3f}
- - **Cost:** {:.2f}
- - **Density:** {:.3f}
- - **SA Score:** {:.3f}"""
 
 app = FastAPI()
 
@@ -119,50 +115,18 @@ if os.path.exists(STATIC_PATH):
         return FileResponse(os.path.join(BUILD_PATH, "index.html"))
 
 
-def generate_tree_structure(
-    reaction_path_dict: Dict[int, aizynth_funcs.Node],
-    retro_synth_context: RetroSynthesisContext,
-):
-    """Generate nodes and edges from reaction path dict"""
-    nodes = []
-    edges = []
-
-    root_id = 0
-    node_queue = [(reaction_path_dict[root_id], 0)]  # (node, level)
-
-    while node_queue:
-        current_node, level = node_queue.pop(0)
-        node_id = current_node.node_id
-        smiles = current_node.smiles
-        purchasable = current_node.purchasable
-        intermediate = not (current_node.is_root or current_node.is_leaf)
-        leaf = current_node.is_leaf
-        node_id_str = f"node_{node_id}"
-        hover_info = f"# Molecule \n **SMILES:** {smiles}\n - Level: {level}\n"
-        if leaf:
-            if purchasable:
-                hover_info += " - This molecule is purchasable.\n"
-            else:
-                hover_info += " - This molecule is NOT purchasable.\n"
-
-        if intermediate:
-            hover_info += " - Reaction intermediate\n"
-        node = Node(
-            id=node_id_str,
-            smiles=smiles,
-            label=smiles,
-            hoverInfo=hover_info,
-            level=level,
-            parentId=(
-                f"node_{current_node.parent_id}"
-                if current_node.parent_id is not None
-                else None
-            ),
-            cost=None,
-            bandgap=None,
-            yield_=None,
-            highlight=leaf and not purchasable,
+def make_client(client, experiment, server_urls, websocket):
+    if client is None:
+        return AutoGenClient(
+            experiment_type=experiment,
+            model=model,
+            backend=backend,
+            api_key=API_KEY,
+            model_kwargs=kwargs,
+            server_url=server_urls,
+            thoughts_callback=CallbackHandler(websocket),
         )
+<<<<<<< HEAD
 
         retro_synth_context.node_ids[node_id_str] = (current_node, node)
 
@@ -556,20 +520,20 @@ async def optimize_molecule_retro(
     if opt_type == "product_optimization_retro":
         result = await unconstrained_opt(current_node.smiles, planner, websocket)
         starting_node = current_node
+=======
+>>>>>>> bfb777c (Streamlined implementation of the Charge backend server)
     else:
-        parent_id = current_node.parent_id
-        parent_node = retro_synth_context.node_by_smiles.get(parent_id)
-        assert parent_node is not None, f"Parent node {parent_id} not found"
-        result = await constrained_opt(
-            parent_node.smiles, current_node.smiles, planner, websocket
-        )
-        starting_node = parent_node
-
-    await regenerate_sub_tree(result, starting_node, planner, websocket)
+        client.experiment_type = experiment
+        return client
 
 
 @app.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket):
+<<<<<<< HEAD
+=======
+    # Keep track of currently running task
+    CURRENT_TASK: asyncio.Task | None = None
+>>>>>>> bfb777c (Streamlined implementation of the Charge backend server)
     await websocket.accept()
 
     # Keep track of currently running task
@@ -589,6 +553,7 @@ async def websocket_endpoint(websocket: WebSocket):
             data = await websocket.receive_json()
             action = data.get("action")
 
+
             if action in [
                 "compute",
                 "compute-from",
@@ -603,13 +568,17 @@ async def websocket_endpoint(websocket: WebSocket):
                         await CURRENT_TASK
                     except asyncio.CancelledError:
                         logger.info("Previous compute task cancelled.")
+                
+                assert data["problemType"] in [
+                    "optimization",
+                    "retrosynthesis",
+                ], f"Unknown problem type: {data['problemType']}"
 
-            if action == "compute":
-
-                if data["problemType"] == "optimization":
+                if action == "compute" and data["problemType"] == "optimization":
                     lmo_experiment = LeadMoleculeOptimization(
                         lead_molecule=data["smiles"]
                     )
+<<<<<<< HEAD
                     if lmo_runner is None:
                         lmo_runner = AutoGenClient(
                             experiment_type=lmo_experiment,
@@ -627,31 +596,107 @@ async def websocket_endpoint(websocket: WebSocket):
                     # to ensure the reactant is not used in the synthesis
                     logger.info("Setting up retrosynthesis experiment...")
                     retro_synth_context = RetroSynthesisContext()
-                else:
-                    logger.error(f"Unknown problem type: {data['problemType']}")
+=======
 
-                async def run_task():
-                    if data["problemType"] == "optimization":
-                        await lead_molecule(
-                            data["smiles"],
-                            lmo_experiment,
-                            lmo_runner,
-                            data.get("depth", 3),
-                            websocket,
+                    lmo_runner = make_client(
+                        lmo_runner, lmo_experiment, server_urls, websocket
+                    )
+
+                    # Task to optimize lead molecule using LMO
+                    run_func = partial(
+                        lead_molecule,
+                        data["smiles"],
+                        lmo_experiment,
+                        lmo_runner,
+                        args.json_file,
+                        args.max_iterations,
+                        data.get("depth", 3),
+                        websocket,
+                    )
+
+                elif action == "compute" and data["problemType"] == "retrosynthesis":
+                    # Task to generate retrosynthesis tree using AiZynthFinder
+                    run_func = partial(
+                        aizynth_retro,
+                        data["smiles"],
+                        aizynthfinder_planner,
+                        retro_synth_context,
+                        websocket,
+                    )
+>>>>>>> bfb777c (Streamlined implementation of the Charge backend server)
+                else:
+
+                    if action == "compute-from" or action == "recompute-reaction":
+                        logger.info("Compute from action received")
+                        logger.info(f"Data: {data}")
+
+                        smiles = data["smiles"]
+                        node_id = data["nodeId"]
+
+                        user_prompt = get_unconstrained_prompt(smiles)
+                        retro_experiment = RetrosynthesisExperiment(
+                            user_prompt=user_prompt
                         )
-                    elif data["problemType"] == "retrosynthesis":
-                        await generate_molecules(
-                            data["smiles"],
-                            aizynthfinder_planner,
+                        retro_runner = make_client(
+                            retro_runner, retro_experiment, server_urls, websocket
+                        )
+                        run_func = partial(unconstrained_retro,
+                                            node_id,
+                                            smiles,
+                                            retro_runner,
+                                            aizynthfinder_planner,
+                                            retro_synth_context,
+                                            websocket
+                                            )
+                    elif action == "recompute-parent-reaction":
+                        logger.info("Recompute parent reaction action received")
+                        logger.info(f"Data: {data}")
+
+                        smiles = data["smiles"]
+                        node_id = data["nodeId"]
+                        parent_node = retro_synth_context.get_parent(node_id)
+
+                        assert (
+                            parent_node is not None
+                        ), f"Parent node for {node_id} not found"
+
+                        parent_id = parent_node.id
+                        parent_smiles = parent_node.smiles
+                        constraint_id = node_id
+                        constraint_smiles = smiles
+
+                        user_prompt = get_constrained_prompt(
+                            parent_smiles, constraint_smiles
+                        )
+
+                        retro_experiment = RetrosynthesisExperiment(
+                            user_prompt=user_prompt
+                        )
+                        retro_runner = make_client(
+                            retro_runner, retro_experiment, server_urls, websocket
+                        )
+
+                        run_func = partial(
+                            constrained_retro,
+                            parent_id,
+                            parent_smiles,
+                            constraint_id,
+                            constraint_smiles,
+                            retro_runner,
+                            aizynthfinder_planner
                             retro_synth_context,
                             websocket,
                         )
                     else:
-                        logger.error(f"Unknown problem type: {data['problemType']}")
+                        raise ValueError(f"Unknown action: {action}")
+
+                async def run_task():
+                    await run_func()
 
                 # start a new task
                 CURRENT_TASK = asyncio.create_task(run_task())
 
+<<<<<<< HEAD
             elif action == "compute-reaction-from":
                 # Leaf node optimization
                 logger.info("Synthesize tree leaf action received")
@@ -689,6 +734,17 @@ async def websocket_endpoint(websocket: WebSocket):
                 logger.info("Recompute parent reaction action received")
                 logger.info(f"Data: {data}")
                 pass
+=======
+            elif action == "custom_query":
+                await websocket.send_json(
+                    {
+                        "type": "response",
+                        "message": f"Processing query: {data['query']} for node {data['nodeId']}",
+                    }
+                )
+                await asyncio.sleep(3)
+                await websocket.send_json({"type": "complete"})
+>>>>>>> bfb777c (Streamlined implementation of the Charge backend server)
 
             elif action == "reset":
                 if lmo_runner:
