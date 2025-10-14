@@ -1,6 +1,6 @@
 /* eslint-disable react-hooks/exhaustive-deps */
 import React, { useState, useRef, useEffect, useMemo } from 'react';
-import { Loader2, Beaker, Play, RotateCcw, Move, X, Send, RefreshCw, Sparkles } from 'lucide-react';
+import { Loader2, FlaskConical, TestTubeDiagonal, Network, Play, RotateCcw, Move, X, Send, RefreshCw, Sparkles } from 'lucide-react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 
 const MOLECULE_WIDTH = 250;
@@ -139,6 +139,7 @@ const MarkdownText = ({ text }) => {
 const ChemistryTool = () => {
   const [smiles, setSmiles] = useState('O=C\\C1=C(\\C=C/CC1(C)C)C');
   const [problemType, setProblemType] = useState('retrosynthesis');
+  const [problemName, setProblemName] = useState('retro-safranal');
   const [systemPrompt, setSystemPrompt] = useState('');
   const [problemPrompt, setProblemPrompt] = useState('');
   const [promptsModified, setPromptsModified] = useState(false);
@@ -165,11 +166,14 @@ const ChemistryTool = () => {
   const [visibleMetrics, setVisibleMetrics] = useState({
     cost: true,
     bandgap: false,
+    density: false,
     yield: false,
   });
   const [rdkitModule, setRdkitModule] = useState(null);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [sidebarMessages, setSidebarMessages] = useState([]);
+  const [copiedField, setCopiedField] = useState(null);
+
 
   const containerRef = useRef(null);
   const wsRef = useRef(null);
@@ -220,7 +224,26 @@ const ChemistryTool = () => {
     return descendants;
   };
 
-  /* Mock "re-randomize children" button behavior */
+  const hasDescendants = (nodeId, nodes) => {
+    return nodes.some(n => n.parentId === nodeId);
+  };
+
+  const getNode = (nodeId) => {
+    return treeNodes.find(n => n.id === nodeId);
+  };
+  
+
+  const copyToClipboard = async (text, fieldName) => {
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopiedField(fieldName);
+      setTimeout(() => setCopiedField(null), 2000);
+    } catch (err) {
+      console.error('Failed to copy:', err);
+    }
+  };
+
+  /* Mock "re-randomize children" button behavior 
   const reactionTypes = ['Hydrogenation', 'Oxidation', 'Methylation', 'Reduction', 'Cyclization', 'Halogenation'];
   const commonNames = ['Ethanol', 'Acetone', 'Benzene', 'Toluene', 'Aspirin', 'Caffeine', 'Glucose', 'Fructose'];
 
@@ -297,10 +320,6 @@ const ChemistryTool = () => {
     return { nodes, edges: edgesList };
   };
 
-  const getNode = (nodeId) => {
-    return treeNodes.find(n => n.id === nodeId);
-  };
-  
   const rerandomizeChildren = (nodeId) => {
     const node = getNode(nodeId);
     if (!node) return;
@@ -397,7 +416,7 @@ const ChemistryTool = () => {
     setEdges([...filteredEdges, ...newEdgesWithNodes]);
     setContextMenu(null);
   };
-  /* End of mock code */
+   End of mock code */
 
   const handleMouseDown = (e) => {
     if (e.button !== 0) return;
@@ -540,6 +559,7 @@ const ChemistryTool = () => {
   }, [contextMenu]);
   
   const runComputation = async () => {
+    setSidebarOpen(true);
     setIsComputing(true);
     setTreeNodes([]);
     setEdges([]);
@@ -728,7 +748,7 @@ const ChemistryTool = () => {
             setEdges(data.edges || []);
             if (data.type === 'full-context') {
               setMetricsHistory(data.metricsHistory || []);
-              setVisibleMetrics(data.visibleMetrics || { cost: true, bandgap: false, yield: false });
+              setVisibleMetrics(data.visibleMetrics || { cost: true, bandgap: false, yield: false, density: false });
               setZoom(data.zoom || 1);
               setOffset(data.offset || { x: 50, y: 50 });
               setSidebarMessages(data.sidebarMessages || []);
@@ -752,17 +772,27 @@ const ChemistryTool = () => {
     setEditPromptsModal(false);
   };
 
-  const resetProblemType = (problemType) => {
-    setProblemType(problemType);
+  const resetProblemType = (problem_name) => {
     setSystemPrompt('');
     setProblemPrompt('');
     setPromptsModified(false);
-    if (problemType === 'retrosynthesis') {
-      setVisibleMetrics({cost: false, bandgap: false, yield: false});
-    } else if (problemType === 'optimization') {
-      setVisibleMetrics({cost: false, bandgap: true, yield: false});
-    } else if (problemType === 'test') {
-      setVisibleMetrics({cost: false, bandgap: true, yield: false});
+    setProblemName(problem_name);
+    if (problem_name === 'retro-safranal') {
+      setSmiles('O=C\\C1=C(\\C=C/CC1(C)C)C')
+      setVisibleMetrics({cost: false, bandgap: false, yield: false, density: false});
+      setProblemType('retrosynthesis');
+    } else if (problem_name === 'retro-nirmatrelvir') {
+      setSmiles('CC1([C@@H]2[C@H]1[C@H](N(C2)C(=O)[C@H](C(C)(C)C)NC(=O)C(F)(F)F)C(=O)N[C@@H](C[C@@H]3CCNC3=O)C#N)C')
+      setVisibleMetrics({cost: false, bandgap: false, yield: false, density: false});
+      setProblemType('retrosynthesis');
+    } else if (problem_name === 'optimization-bandgap') {
+      setSmiles('C1(N2C3=CC=CC=C3N(C4=CC=CC=C4)C5=C2C=CC=C5)=CC=CC=C1');
+      setVisibleMetrics({cost: false, bandgap: true, yield: false, density: false});
+      setProblemType('optimization');
+    } else if (problem_name === 'optimization-density') {
+      setSmiles('CCC(=O)CCc1cccc(CCC(=O)CC)c1ONC(C)=O');
+      setVisibleMetrics({cost: false, bandgap: false, yield: false, density: true});
+      setProblemType('optimization');
     }
   };
 
@@ -779,11 +809,16 @@ const ChemistryTool = () => {
       color: '#F59E0B',
       calculate: (nodes) => nodes[nodes.length-1].bandgap || 0
     },
-    yield: { 
+    density: { 
+      label: 'Molecular Density (g/cm³)', 
+      color: '#10B981',
+      calculate: (nodes) => nodes[nodes.length-1].density || 0
+    },
+    /*yield: { 
       label: 'Yield (%)', 
       color: '#10B981',
       calculate: (nodes) => nodes.length > 0 ? (nodes.reduce((sum, node) => sum + (node.yield || Math.random() * 100), 0) / nodes.length) : 0
-    },
+    },*/
   };
 
   // Calculate all metrics
@@ -970,7 +1005,25 @@ const ChemistryTool = () => {
     });
   };
 
+  const sendMessageToServer = (message, nodeId) => {
+    if (!websocket || websocket.readyState !== WebSocket.OPEN) {
+      alert('WebSocket not connected');
+      return;
+    }
+    websocket.send(JSON.stringify({
+      action: message,
+      nodeId: nodeId
+    }));
+    setContextMenu(null);
+  };
+
   const handleCustomQuery = (node) => {
+    if (problemType == "optimization") {
+      // Invalidate all nodes below this one
+      setTreeNodes(prev => {
+        return prev.filter(n => n.y <= node.y);
+      });
+    }
     setCustomQueryModal(node);
     setCustomQueryText('');
     setContextMenu(null);
@@ -1078,7 +1131,7 @@ const ChemistryTool = () => {
       <div className="max-w-7xl mx-auto">
         <div className="text-center mb-8">
           <div className="flex items-center justify-center gap-3 mb-2">
-            <Beaker className="w-10 h-10 text-purple-400" />
+            <FlaskConical className="w-10 h-10 text-purple-400" />
             <h1 className="text-4xl font-bold text-white">FLASK Copilot</h1>
           </div>
           <p className="text-purple-300">Real-time molecular assistant</p>
@@ -1183,19 +1236,20 @@ const ChemistryTool = () => {
           
           <div className="flex items-center gap-4">
             <div className="flex items-end gap-2">
-              <div className="w-56">
+              <div className="w-100">
                 <label className="block text-sm font-medium text-purple-200 mb-2">
                   Problem Type
                   {promptsModified && <span className="ml-2 text-xs text-amber-400">●</span>}
                 </label>
-                <select value={problemType} onChange={(e) => resetProblemType(e.target.value)} disabled={isComputing} className="w-full px-4 py-2.5 bg-white/20 border-2 border-purple-400/50 rounded-lg focus:border-purple-400 focus:outline-none transition-colors text-white disabled:opacity-50 cursor-pointer text-sm">
-                  <option value="retrosynthesis" className="bg-slate-800">Retrosynthesis</option>
-                  <option value="optimization" className="bg-slate-800">Molecule Optimization</option>
-                  <option value="test" className="bg-slate-800">Test Molecular Property</option>
-                  <option value="custom" className="bg-slate-800">Custom</option>
+                <select value={problemName} onChange={(e) => resetProblemType(e.target.value)} disabled={isComputing} className="w-full px-4 py-2.5 bg-white/20 border-2 border-purple-400/50 rounded-lg focus:border-purple-400 focus:outline-none transition-colors text-white disabled:opacity-50 cursor-pointer text-sm">
+                  <option value="retro-safranal" className="bg-slate-800">Synthesizing Safranal</option>
+                  <option value="retro-nirmatrelvir" className="bg-slate-800">Synthesizing Nirmatrelvir</option>
+                  <option value="optimization-bandgap" className="bg-slate-800">Optimizing OLED Molecule for Band Gap</option>
+                  <option value="optimization-density" className="bg-slate-800">Molecular Discovery for Crystalline Density</option>
+                  {/*<option value="custom" className="bg-slate-800">Custom</option>*/}
                 </select>
               </div>
-              <button onClick={() => setEditPromptsModal(true)} disabled={isComputing} className="px-3 py-2.5 bg-white/10 text-purple-200 rounded-lg text-sm font-medium hover:bg-white/20 transition-all disabled:opacity-50 disabled:cursor-not-allowed">
+              <button onClick={() => setEditPromptsModal(true)} disabled={true} className="px-3 py-2.5 bg-white/10 text-purple-200 rounded-lg text-sm font-medium hover:bg-white/20 transition-all disabled:opacity-50 disabled:cursor-not-allowed">
                 Edit
               </button>
             </div>
@@ -1231,7 +1285,7 @@ const ChemistryTool = () => {
         <div className="bg-white/10 backdrop-blur-lg rounded-2xl shadow-2xl border border-white/20 overflow-hidden relative" style={{ height: '600px' }}>
           {treeNodes.length === 0 && !isComputing ? (
             <div className="flex flex-col items-center justify-center h-full text-purple-300">
-              <Beaker className="w-16 h-16 mb-4 opacity-50" />
+              <FlaskConical className="w-16 h-16 mb-4 opacity-50" />
               <p className="text-center text-lg">Click "Run" to start the molecular computation tree</p>
               <p className="text-sm text-purple-400 mt-2">
                 {autoZoom ? 'Auto-zoom will fit all molecules' : 'Drag to pan • Scroll to zoom'}
@@ -1484,30 +1538,61 @@ const ChemistryTool = () => {
             <div className="text-xs text-purple-300">Actions for</div>
             <div className="text-sm font-semibold text-white">{contextMenu.node.label}</div>
           </div>
-          
-          <button onClick={() => rerandomizeChildren(contextMenu.node.id)} className="w-full px-4 py-2 text-left text-sm text-white hover:bg-purple-600/50 transition-colors flex items-center gap-2">
-            <RefreshCw className="w-4 h-4" />
-            Re-randomize Children
-          </button>
 
-          <button onClick={() => {
-            const mockMessage = `## Structure Optimization Complete\n\n**Molecule:** ${contextMenu.node.label}\n\nOptimization converged in **24 iterations**\n\n- Energy reduced by **15.3 kJ/mol**\n- RMSD: *0.08 Å*\n- Final gradient: \`0.001\`\n\nThe optimized structure shows improved stability.`;
-            addSidebarMessage(mockMessage, contextMenu.node.smiles);
-            setContextMenu(null);
-          }} className="w-full px-4 py-2 text-left text-sm text-white hover:bg-purple-600/50 transition-colors flex items-center gap-2">
-            <Sparkles className="w-4 h-4" />Mock message from server
-          </button>
+          { (problemType === "optimization") && (
+            <>
+            <button onClick={() => {
+              const nodeId = contextMenu.node.id;
+              // Delete all nodes from this point on
+              setTreeNodes(prev => {
+                return prev.filter(n => n.y <= contextMenu.node.y);
+              });
+              sendMessageToServer("compute-from", nodeId);
+            }}  className="w-full px-4 py-2 text-left text-sm text-white hover:bg-purple-600/50 transition-colors flex items-center gap-2">
+            <RotateCcw className="w-4 h-4" />
+            Restart from here
+            </button>
+            <button 
+              onClick={() => copyToClipboard(contextMenu.node.smiles, 'smiles')} 
+              className="w-full px-4 py-2 text-left text-sm text-white hover:bg-purple-600/50 transition-colors flex items-center gap-2"
+            >
+              {copiedField === 'smiles' ? (
+                <>✓ Copied!</>
+              ) : (
+                <>
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                  </svg>
+                  Copy SMILES
+                </>
+              )}
+            </button>
+            </>
+          )}
 
-          <button onClick={() => {
-            highlightSubtree(contextMenu.node.id);
-            setContextMenu(null);
-          }} className="w-full px-4 py-2 text-left text-sm text-white hover:bg-purple-600/50 transition-colors flex items-center gap-2">
-            <X className="w-4 h-4" />Delete this node
-          </button>
+          { (problemType === "retrosynthesis" && !hasDescendants(contextMenu.node.id, treeNodes)) && (
+            <button onClick={() => {
+              sendMessageToServer("compute-from", contextMenu.node.id);
+            }} className="w-full px-4 py-2 text-left text-sm text-white hover:bg-purple-600/50 transition-colors flex items-center gap-2">
+              <TestTubeDiagonal className="w-4 h-4" />
+              How do I make this?
+            </button>
+            ) }
+
+          { (problemType === "retrosynthesis" && hasDescendants(contextMenu.node.id, treeNodes)) && (
+            <>
+            <button onClick={() => {sendMessageToServer("recompute-reaction", contextMenu.node.id);}} className="w-full px-4 py-2 text-left text-sm text-white hover:bg-purple-600/50 transition-colors flex items-center gap-2">
+              <RefreshCw className="w-4 h-4" />Find Another Reaction
+            </button>
+            <button onClick={() => {sendMessageToServer("recompute-parent-reaction", contextMenu.node.id);}} className="w-full px-4 py-2 text-left text-sm text-white hover:bg-purple-600/50 transition-colors flex items-center gap-2">
+              <Network className="w-4 h-4" />Substitute Molecule
+            </button>
+            </>
+          )}
 
           <button onClick={() => handleCustomQuery(contextMenu.node)} className="w-full px-4 py-2 text-left text-sm text-white hover:bg-purple-600/50 transition-colors flex items-center gap-2 border-t border-purple-400/30">
             <Send className="w-4 h-4" />
-            Custom Query...
+            { (problemType === "retrosynthesis" && hasDescendants(contextMenu.node.id, treeNodes)) ? (<>Find Another Reaction with Custom Prompt...</>) : (<>Custom Query...</>) }
           </button>
         </div>
       )}
