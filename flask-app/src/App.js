@@ -228,6 +228,11 @@ const ChemistryTool = () => {
     return nodes.some(n => n.parentId === nodeId);
   };
 
+  const isRootNode = (nodeId, nodes) => {
+    const node = nodes.find(n => n.id === nodeId);
+    return !node.parentId;
+  };
+
   const getNode = (nodeId) => {
     return treeNodes.find(n => n.id === nodeId);
   };
@@ -651,6 +656,7 @@ const ChemistryTool = () => {
     socket.onerror = (error) => {
       console.error('WebSocket error:', error);
       setWsReconnecting(false);
+      setIsComputing(false);
       setWsError(error.message || 'Connection failed');
     };
 
@@ -659,6 +665,7 @@ const ChemistryTool = () => {
       wsRef.current = null;
       setWebsocket(null);
       setWsConnected(false);
+      setIsComputing(false);
       setWsReconnecting(false);
     };
   };
@@ -1018,7 +1025,7 @@ const ChemistryTool = () => {
   };
 
   const handleCustomQuery = (node) => {
-    if (problemType == "optimization") {
+    if (problemType === "optimization") {
       // Invalidate all nodes below this one
       setTreeNodes(prev => {
         return prev.filter(n => n.y <= node.y);
@@ -1037,7 +1044,7 @@ const ChemistryTool = () => {
     console.log(`Custom query for ${customQueryModal.label}: ${customQueryText}`);
     
     websocket.send(JSON.stringify({
-      action: 'custom_query',
+      action: problemType === "optimization" ? "optimize-from" : "recompute-reaction",
       nodeId: customQueryModal.id,
       query: customQueryText
     }));
@@ -1046,17 +1053,6 @@ const ChemistryTool = () => {
     setCustomQueryText('');
     setIsComputing(true); // If expecting new nodes
   };
-
-  const highlightSubtree = (nodeId) => {
-    if (!websocket || websocket.readyState !== WebSocket.OPEN) {
-      alert('WebSocket not connected');
-      return;
-    }
-    websocket.send(JSON.stringify({
-      action: 'delete_my_node',
-      nodeId: nodeId
-    }));
-  }
 
   const addSidebarMessage = (content, moleculeSmiles = null) => {
     const message = {
@@ -1286,7 +1282,7 @@ const ChemistryTool = () => {
           {treeNodes.length === 0 && !isComputing ? (
             <div className="flex flex-col items-center justify-center h-full text-purple-300">
               <FlaskConical className="w-16 h-16 mb-4 opacity-50" />
-              <p className="text-center text-lg">Click "Run" to start {problemType == "optimization" ? <>molecular discovery</> : <>the molecular computation tree</>}</p>
+              <p className="text-center text-lg">Click "Run" to start {problemType === "optimization" ? <>molecular discovery</> : <>the molecular computation tree</>}</p>
               <p className="text-sm text-purple-400 mt-2">
                 {autoZoom ? 'Auto-zoom will fit all molecules' : 'Drag to pan • Scroll to zoom'}
               </p>
@@ -1547,7 +1543,7 @@ const ChemistryTool = () => {
               setTreeNodes(prev => {
                 return prev.filter(n => n.y <= contextMenu.node.y);
               });
-              sendMessageToServer("compute-from", nodeId);
+              sendMessageToServer("optimize-from", nodeId);
             }}  className="w-full px-4 py-2 text-left text-sm text-white hover:bg-purple-600/50 transition-colors flex items-center gap-2">
             <RotateCcw className="w-4 h-4" />
             Restart from here
@@ -1572,7 +1568,7 @@ const ChemistryTool = () => {
 
           { (problemType === "retrosynthesis" && !hasDescendants(contextMenu.node.id, treeNodes)) && (
             <button onClick={() => {
-              sendMessageToServer("compute-from", contextMenu.node.id);
+              sendMessageToServer("compute-reaction-from", contextMenu.node.id);
             }} className="w-full px-4 py-2 text-left text-sm text-white hover:bg-purple-600/50 transition-colors flex items-center gap-2">
               <TestTubeDiagonal className="w-4 h-4" />
               How do I make this?
@@ -1584,6 +1580,10 @@ const ChemistryTool = () => {
             <button onClick={() => {sendMessageToServer("recompute-reaction", contextMenu.node.id);}} className="w-full px-4 py-2 text-left text-sm text-white hover:bg-purple-600/50 transition-colors flex items-center gap-2">
               <RefreshCw className="w-4 h-4" />Find Another Reaction
             </button>
+            </>
+          )}
+          { (problemType === "retrosynthesis" && !isRootNode(contextMenu.node.id, treeNodes)) && (
+            <>
             <button onClick={() => {sendMessageToServer("recompute-parent-reaction", contextMenu.node.id);}} className="w-full px-4 py-2 text-left text-sm text-white hover:bg-purple-600/50 transition-colors flex items-center gap-2">
               <Network className="w-4 h-4" />Substitute Molecule
             </button>
