@@ -9,6 +9,7 @@ from collections import defaultdict
 from charge.clients.autogen import AutoGenClient
 import charge.servers.AiZynthTools as aizynth_funcs
 
+
 # TODO: Put this on the top level package and make it reusable
 @dataclass
 class Node:
@@ -76,6 +77,15 @@ def get_yield(parent, child_smiles_list):
     return round(random.uniform(50.0, 100.0), 2)
 
 
+def get_bandgap(smiles: str) -> float:
+    """Mock function to get bandgap of a molecule given its SMILES string."""
+    # In a real implementation, this would query a database or an API.
+    # Here, we return a random bandgap for demonstration purposes.
+    import random
+
+    return round(random.uniform(1.0, 5.0), 2)
+
+
 class CallbackHandler:
     def __init__(self, websocket: WebSocket):
         self.websocket = websocket
@@ -102,7 +112,7 @@ class CallbackHandler:
                             str_to_dict = json.loads(item.arguments)
                             if "log_msg" in str_to_dict:
                                 _str = str_to_dict["log_msg"]
-                        
+
                         msg = {"type": "response", "message": _str}
                         if "smiles" in item.arguments:
                             str_to_dict = json.loads(item.arguments)
@@ -182,4 +192,10 @@ def calculate_positions(nodes: list[Node], y_offset: int = 0):
 
 
 async def highlight_node(node: Node, websocket: WebSocket, highlight: bool):
-    await websocket.send_json({"type": "node_update", "id": node.id, "highlight": "yellow" if highlight else "normal"})
+    await websocket.send_json(
+        {
+            "type": "node_update",
+            "id": node.id,
+            "highlight": "yellow" if highlight else "normal",
+        }
+    )
