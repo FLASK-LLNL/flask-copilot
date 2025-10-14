@@ -2,6 +2,8 @@ from loguru import logger
 from fastapi import WebSocket
 import asyncio
 import json
+from typing import Optional, Literal
+from dataclasses import dataclass, asdict
 
 RETROSYNTH_UNCONSTRAINED_USER_PROMPT_TEMPLATE = (
     "Provide a retrosynthetic pathway for the target molecule {target_molecule}. "
@@ -23,6 +25,55 @@ RETROSYNTH_CONSTRAINED_USER_PROMPT_TEMPLATE = (
     + "Do the evaluation step-by-step. Propose a retrosynthetic step, then evaluate it. "
     + "If the evaluation fails, propose a new retrosynthetic step and evaluate it again. "
 )
+
+
+# TODO: Put this on the top level package and make it reusable
+@dataclass
+class Node:
+    id: str
+    smiles: str
+    label: str
+    hoverInfo: str
+    level: int
+    parentId: Optional[str] = None
+    x: Optional[int] = None
+    y: Optional[int] = None
+    # Properties
+    cost: Optional[float] = None
+    bandgap: Optional[float] = None
+    yield_: Optional[float] = None
+    highlight: Optional[bool] = False
+
+    def json(self):
+        ret = asdict(self)
+        ret["yield"] = ret["yield_"]
+        del ret["yield_"]
+        return ret
+
+
+@dataclass
+class Edge:
+    id: str
+    fromNode: str
+    toNode: str
+    status: Literal["computing", "complete"]
+    label: Optional[str] = None
+
+    def json(self):
+        return asdict(self)
+
+
+@dataclass
+class ModelMessage:
+    message: str
+    smiles: Optional[str]
+
+    def json(self):
+        ret = asdict(self)
+        if self.smiles is None:
+            if "smiles" in ret:
+                del ret["smiles"]
+        return ret
 
 
 def get_price(smiles: str) -> float:
@@ -57,13 +108,9 @@ class CallbackHandler:
 
             if assistant_message.thought is not None:
                 _str = f"Model thought: {assistant_message.thought}"
+                output = ModelMessage(message=_str, smiles=None)
                 logger.info(_str)
-                await send(
-                    {
-                        "type": "response",
-                        "message": _str,
-                    }
-                )
+                await send({"type": "response", **output.json()})
             if isinstance(assistant_message.content, list):
                 for item in assistant_message.content:
                     if hasattr(item, "name") and hasattr(item, "arguments"):
