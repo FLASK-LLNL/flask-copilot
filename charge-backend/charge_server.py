@@ -22,6 +22,7 @@ from ChARGe.experiments.Retrosynthesis.RetrosynthesisExperiment import (
 )
 
 import ChARGe.experiments.Molecule_Generation.helper_funcs as lmo_helper_funcs
+from ChARGe.charge.servers.server_utils import try_get_public_hostname
 
 import os
 from charge.clients.Client import Client
@@ -69,7 +70,7 @@ parser.add_argument(
 )
 parser.add_argument("--port", type=int, default=8001, help="Port to run the server on")
 parser.add_argument(
-    "--host", type=str, default="127.0.0.1", help="Host to run the server on"
+    "--host", type=str, default=None, help="Host to run the server on"
 )
 
 # Add standard CLI arguments
@@ -713,4 +714,8 @@ async def websocket_endpoint(websocket: WebSocket):
 if __name__ == "__main__":
     import uvicorn
 
-    uvicorn.run(app, host=args.host, port=args.port)
+    host = args.host
+    if host is None:
+        _, host = try_get_public_hostname()
+
+    uvicorn.run(app, host=host, port=args.port)
