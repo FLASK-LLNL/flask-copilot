@@ -57,6 +57,8 @@ def smiles_to_iupac(smiles):
         url = CACTUS.format(smiles, rep)
         response = requests.get(url)
         response.raise_for_status()
+        if response.text.startswith("<"):  # HTML
+            return smiles
         return response.text
     except requests.exceptions.HTTPError:
         return smiles
@@ -333,6 +335,8 @@ async def websocket_endpoint(websocket: WebSocket):
                     )
                 await asyncio.sleep(3)  # Random wait
                 await websocket.send_json({"type": "complete"})
+            else:
+                print("WARN: Unhandled message:", data)
     except WebSocketDisconnect:
         pass
 
