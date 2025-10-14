@@ -76,6 +76,7 @@ class Node:
     # Properties
     cost: Optional[float] = None
     bandgap: Optional[float] = None
+    density: Optional[float] = None
     yield_: Optional[float] = None
     highlight: Optional[bool] = False
 

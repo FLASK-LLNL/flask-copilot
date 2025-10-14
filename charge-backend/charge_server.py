@@ -77,8 +77,7 @@ parser.add_argument(
 Client.add_std_parser_arguments(parser)
 
 args = parser.parse_args()
-# Keep track of currently running task
-CURRENT_TASK: asyncio.Task | None = None
+
 
 # TODO: Convert this to a dataclass
 MOLECULE_HOVER_TEMPLATE = """**SMILES:** `{}`\n
@@ -264,8 +263,6 @@ async def generate_molecules(
 
     # Create node map
     # Stream root first
-
-    await asyncio.sleep(0.8)
 
     # Stream remaining nodes with edges
     for i in range(1, len(positioned_nodes)):
@@ -573,8 +570,10 @@ async def optimize_molecule_retro(
 
 @app.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket):
-    global CURRENT_TASK
     await websocket.accept()
+
+    # Keep track of currently running task
+    CURRENT_TASK: asyncio.Task | None = None
 
     # Initialize Charge experiment with a dummy lead molecule
     lmo_experiment = None
@@ -584,7 +583,7 @@ async def websocket_endpoint(websocket: WebSocket):
     retro_runner = None
 
     aizynthfinder_planner = aizynth_funcs.RetroPlanner(configfile=args.config_file)
-    retro_synth_context = RetroSynthesisContext()
+    retro_synth_context = None
     try:
         while True:
             data = await websocket.receive_json()
@@ -627,7 +626,7 @@ async def websocket_endpoint(websocket: WebSocket):
                     # Set up retrosynthesis experiment to retrosynthesis
                     # to ensure the reactant is not used in the synthesis
                     logger.info("Setting up retrosynthesis experiment...")
-
+                    retro_synth_context = RetroSynthesisContext()
                 else:
                     logger.error(f"Unknown problem type: {data['problemType']}")
 
@@ -653,38 +652,51 @@ async def websocket_endpoint(websocket: WebSocket):
                 # start a new task
                 CURRENT_TASK = asyncio.create_task(run_task())
 
-            elif action == "compute-from":
+            elif action == "compute-reaction-from":
                 # Leaf node optimization
-                logger.info("Compute from action received")
+                logger.info("Synthesize tree leaf action received")
+                logger.info(f"Data: {data}")
+                pass
+            elif action == "optimize-from":
+                # Leaf node optimization
+                prompt = data.get("query", None)
+                if prompt:
+                    await websocket.send_json(
+                        {
+                            "type": "response",
+                            "message": f"Processing optimization query: {data['query']} for node {data['nodeId']}",
+                        }
+                    )
+                logger.info("Optimize from action received")
                 logger.info(f"Data: {data}")
 
                 pass
             elif action == "recompute-reaction":
-                #
+                prompt = data.get("query", None)
+                if prompt:
+                    await websocket.send_json(
+                        {
+                            "type": "response",
+                            "message": f"Processing reaction query: {data['query']} for node {data['nodeId']}",
+                        }
+                    )
+
                 logger.info("Recompute reaction action received")
                 logger.info(f"Data: {data}")
+                await websocket.send_json({"type": "complete"})
                 pass
             elif action == "recompute-parent-reaction":
                 logger.info("Recompute parent reaction action received")
                 logger.info(f"Data: {data}")
                 pass
 
-            elif action == "custom_query":
-                await websocket.send_json(
-                    {
-                        "type": "response",
-                        "message": f"Processing query: {data['query']} for node {data['nodeId']}",
-                    }
-                )
-                await asyncio.sleep(3)
-                await websocket.send_json({"type": "complete"})
-
             elif action == "reset":
                 if lmo_runner:
                     lmo_runner.reset()
                 if retro_runner:
                     retro_runner.reset()
-                retro_synth_context.reset()
+                if retro_synth_context is not None:
+                    retro_synth_context.reset()
                 logger.info("Experiment state has been reset.")
 
             elif action == "stop":
