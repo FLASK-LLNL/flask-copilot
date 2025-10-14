@@ -77,10 +77,6 @@ parser.add_argument("--host", type=str, default=None, help="Host to run the serv
 Client.add_std_parser_arguments(parser)
 
 args = parser.parse_args()
-<<<<<<< HEAD
-
-=======
->>>>>>> bfb777c (Streamlined implementation of the Charge backend server)
 
 
 app = FastAPI()
