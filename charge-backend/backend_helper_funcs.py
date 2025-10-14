@@ -26,6 +26,7 @@ class Node:
     bandgap: Optional[float] = None
     yield_: Optional[float] = None
     highlight: Optional[str] = "normal"
+    density: Optional[float] = None
 
     def json(self):
         ret = asdict(self)
