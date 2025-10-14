@@ -52,6 +52,7 @@ if os.path.exists(STATIC_PATH):
 CACTUS = "https://cactus.nci.nih.gov/chemical/structure/{0}/{1}"
 
 def smiles_to_iupac(smiles):
+    return smiles
     try:
         rep = "iupac_name"
         url = CACTUS.format(smiles, rep)
@@ -78,7 +79,7 @@ class Node:
     bandgap: Optional[float] = None
     density: Optional[float] = None
     yield_: Optional[float] = None
-    highlight: Optional[bool] = False
+    highlight: Optional[str] = "normal"
 
     def json(self):
         ret = asdict(self)
@@ -317,9 +318,9 @@ async def websocket_endpoint(websocket: WebSocket):
                     await websocket.send_json(
                         {"type": "error", "message": f"Unsupported problem type {data['problemType']}"}
                     )
-            elif data["action"] == "delete_my_node":
+            elif data["action"] == "compute-reaction-from":
                 await websocket.send_json(
-                    {"type": "subtree_update", "id": data['nodeId'], "withNode": True, "highlight": True}
+                    {"type": "subtree_update", "id": data['nodeId'], "withNode": True, "highlight": "yellow"}
                 )
             elif data["action"] == "custom_query":
                 if "water" in data["query"].lower():
