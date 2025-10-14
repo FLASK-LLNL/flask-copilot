@@ -12,8 +12,6 @@ from typing import Dict
 
 import httpx
 
-# cur_dir = os.path.dirname(os.path.abspath(__file__))
-# sys.path.append(os.path.join(cur_dir, "ChARGe", "experiments", "Molecule_Generation"))
 from charge.experiments.LMOExperiment import (
     LMOExperiment as LeadMoleculeOptimization,
 )
@@ -21,8 +19,6 @@ from charge.experiments.RetrosynthesisExperiment import (
     TemplateFreeRetrosynthesisExperiment as RetrosynthesisExperiment,
 )
 
-# import ChARGe.experiments.Molecule_Generation.helper_funcs as lmo_helper_funcs
-# from ChARGe.charge.servers.server_utils import try_get_public_hostname
 import charge.utils.helper_funcs as lmo_helper_funcs
 from charge.servers.server_utils import try_get_public_hostname
 
@@ -45,9 +41,6 @@ from backend_helper_funcs import (
     Edge,
 )
 import copy
-
-# sys.path.append(os.path.dirname(os.path.abspath(__file__)))
-# from ChARGe.experiments.LMOExperiment import LMOExperiment
 
 parser = argparse.ArgumentParser()
 

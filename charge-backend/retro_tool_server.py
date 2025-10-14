@@ -4,11 +4,8 @@ import os
 
 from charge.servers.AiZynthTools import is_molecule_synthesizable, RetroPlanner
 
-cur_dir = os.path.dirname(os.path.abspath(__file__))
-sys.path.append(os.path.join(cur_dir, "ChARGe", "experiments", "Retrosynthesis"))
-
-import ChARGe.experiments.Retrosynthesis.reaction_server as RETRO_MCP
-from ChARGe.charge.servers.server_utils import update_mcp_network, get_hostname
+import charge.experiments.Retrosynthesis.reaction_server as RETRO_MCP
+from charge.servers.server_utils import update_mcp_network, get_hostname
 
 if __name__ == "__main__":
     import argparse
