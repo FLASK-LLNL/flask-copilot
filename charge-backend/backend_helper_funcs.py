@@ -151,13 +151,11 @@ class CallbackHandler:
 
 
 class RetroSynthesisContext:
-    node_ids = {}
-    node_by_smiles = {}
 
     def __init__(self):
-        pass
+        self.node_ids = {}
+        self.node_by_smiles = {}
 
-    @staticmethod
-    def reset():
-        RetroSynthesisContext.node_by_smiles = {}
-        RetroSynthesisContext.node_ids = {}
+    def reset(self):
+        self.node_by_smiles = {}
+        self.node_ids = {}

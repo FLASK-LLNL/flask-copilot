@@ -116,7 +116,10 @@ if os.path.exists(STATIC_PATH):
         return FileResponse(os.path.join(BUILD_PATH, "index.html"))
 
 
-def generate_tree_structure(reaction_path_dict: Dict[int, aizynth_funcs.Node]):
+def generate_tree_structure(
+    reaction_path_dict: Dict[int, aizynth_funcs.Node],
+    retro_synth_context: RetroSynthesisContext,
+):
     """Generate nodes and edges from reaction path dict"""
     nodes = []
     edges = []
@@ -158,10 +161,10 @@ def generate_tree_structure(reaction_path_dict: Dict[int, aizynth_funcs.Node]):
             highlight=leaf and not purchasable,
         )
 
-        RetroSynthesisContext.node_ids[node_id_str] = (current_node, node)
+        retro_synth_context.node_ids[node_id_str] = (current_node, node)
 
         # Map by smiles in case ever needed
-        RetroSynthesisContext.node_by_smiles[smiles] = (current_node, node)
+        retro_synth_context.node_by_smiles[smiles] = (current_node, node)
 
         nodes.append(node)
         if current_node.parent_id is not None:
@@ -213,7 +216,9 @@ def calculate_positions(nodes: list[Node]):
     return positioned
 
 
-async def generate_molecules(start_smiles: str, planner, websocket: WebSocket = None):
+async def generate_molecules(
+    start_smiles: str, planner, retro_synth_context, websocket: WebSocket = None
+):
     """Stream positioned nodes and edges"""
     logger.info(f"Planning retrosynthesis for: {start_smiles}")
 
@@ -248,7 +253,7 @@ async def generate_molecules(start_smiles: str, planner, websocket: WebSocket = 
     logger.info(f"Found {len(routes)} routes for {start_smiles}.")
 
     reaction_path = aizynth_funcs.ReactionPath(route=routes[0])
-    nodes, edges = generate_tree_structure(reaction_path.nodes)
+    nodes, edges = generate_tree_structure(reaction_path.nodes, retro_synth_context)
     logger.info(f"Generated {len(nodes)} nodes and {len(edges)} edges.")
 
     positioned_nodes = calculate_positions(nodes)
@@ -541,10 +546,10 @@ async def regenerate_sub_tree(result, starting_node, planner, websocket: WebSock
 
 
 async def optimize_molecule_retro(
-    node_id, opt_type, experiment, planner, websocket: WebSocket
+    node_id, opt_type, experiment, planner, retro_synth_context, websocket: WebSocket
 ):
     """Optimize a molecule using retrosynthesis by node ID"""
-    current_node = RetroSynthesisContext.node_ids.get(node_id)
+    current_node = retro_synth_context.node_ids.get(node_id)
 
     assert current_node is not None, f"Node ID {node_id} not found"
 
@@ -553,7 +558,7 @@ async def optimize_molecule_retro(
         starting_node = current_node
     else:
         parent_id = current_node.parent_id
-        parent_node = RetroSynthesisContext.node_by_smiles.get(parent_id)
+        parent_node = retro_synth_context.node_by_smiles.get(parent_id)
         assert parent_node is not None, f"Parent node {parent_id} not found"
         result = await constrained_opt(
             parent_node.smiles, current_node.smiles, planner, websocket
@@ -576,6 +581,7 @@ async def websocket_endpoint(websocket: WebSocket):
     retro_runner = None
 
     aizynthfinder_planner = aizynth_funcs.RetroPlanner(configfile=args.config_file)
+    retro_synth_context = RetroSynthesisContext()
     try:
         while True:
             data = await websocket.receive_json()
@@ -635,6 +641,7 @@ async def websocket_endpoint(websocket: WebSocket):
                         await generate_molecules(
                             data["smiles"],
                             aizynthfinder_planner,
+                            retro_synth_context,
                             websocket,
                         )
                     else:
@@ -674,7 +681,7 @@ async def websocket_endpoint(websocket: WebSocket):
                     lmo_runner.reset()
                 if retro_runner:
                     retro_runner.reset()
-                RetroSynthesisContext.reset()
+                retro_synth_context.reset()
                 logger.info("Experiment state has been reset.")
 
             elif action == "stop":
