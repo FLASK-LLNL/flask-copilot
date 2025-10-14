@@ -25,6 +25,9 @@ import os
 from charge.clients.Client import Client
 from charge.clients.autogen import AutoGenClient
 import charge.servers.AiZynthTools as aizynth_funcs
+import logging
+from aizynthfinder.utils.logging import setup_logger
+setup_logger(console_level=logging.INFO)
 
 from loguru import logger
 import sys
