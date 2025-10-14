@@ -10,6 +10,8 @@ import argparse
 import sys
 from typing import Dict
 
+import httpx
+
 cur_dir = os.path.dirname(os.path.abspath(__file__))
 sys.path.append(os.path.join(cur_dir, "ChARGe", "experiments", "Molecule_Generation"))
 from ChARGe.experiments.Molecule_Generation.LMOExperiment import (
@@ -34,7 +36,12 @@ import sys
 from backend_helper_funcs import (
     CallbackHandler,
     RETROSYNTH_UNCONSTRAINED_USER_PROMPT_TEMPLATE,
+    RETROSYNTH_CONSTRAINED_USER_PROMPT_TEMPLATE,
+    RetroSynthesisContext,
+    Node,
+    Edge,
 )
+import copy
 
 # sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 # from ChARGe.experiments.LMOExperiment import LMOExperiment
@@ -112,7 +119,10 @@ if os.path.exists(STATIC_PATH):
         return FileResponse(os.path.join(BUILD_PATH, "index.html"))
 
 
-def generate_tree_structure(reaction_path_dict: Dict[int, aizynth_funcs.Node]):
+def generate_tree_structure(
+    reaction_path_dict: Dict[int, aizynth_funcs.Node],
+    retro_synth_context: RetroSynthesisContext,
+):
     """Generate nodes and edges from reaction path dict"""
     nodes = []
     edges = []
@@ -125,25 +135,51 @@ def generate_tree_structure(reaction_path_dict: Dict[int, aizynth_funcs.Node]):
         node_id = current_node.node_id
         smiles = current_node.smiles
         purchasable = current_node.purchasable
-        node = {
-            "id": node_id,
-            "label": smiles,
-            "smiles": smiles,
-            "level": level,
-            "purchasable": purchasable,
-            "energy": random.uniform(0, 1),  # Placeholder for energy
-            "cost": random.uniform(0, 1),  # Placeholder for cost
-            "parent_id": current_node.parent_id,
-            "hoverInfo": f"Purchasable: {purchasable}\n",  # Placeholder for hover info
-        }
+        intermediate = not (current_node.is_root or current_node.is_leaf)
+        leaf = current_node.is_leaf
+        node_id_str = f"node_{node_id}"
+        hover_info = f"# Molecule \n **SMILES:** {smiles}\n - Level: {level}\n"
+        if leaf:
+            if purchasable:
+                hover_info += " - This molecule is purchasable.\n"
+            else:
+                hover_info += " - This molecule is NOT purchasable.\n"
+
+        if intermediate:
+            hover_info += " - Reaction intermediate\n"
+        node = Node(
+            id=node_id_str,
+            smiles=smiles,
+            label=smiles,
+            hoverInfo=hover_info,
+            level=level,
+            parentId=(
+                f"node_{current_node.parent_id}"
+                if current_node.parent_id is not None
+                else None
+            ),
+            cost=None,
+            bandgap=None,
+            yield_=None,
+            highlight=leaf and not purchasable,
+        )
+
+        retro_synth_context.node_ids[node_id_str] = (current_node, node)
+
+        # Map by smiles in case ever needed
+        retro_synth_context.node_by_smiles[smiles] = (current_node, node)
+
         nodes.append(node)
         if current_node.parent_id is not None:
-            edge = {
-                "id": f"edge_{current_node.parent_id}_{node_id}",
-                "from": current_node.parent_id,
-                "to": node_id,
-                "reactionType": "N/A",
-            }
+
+            edge = Edge(
+                id=f"edge_{current_node.parent_id}_{node_id}",
+                fromNode=f"node_{current_node.parent_id}",
+                toNode=node_id_str,
+                status="complete",
+                label=None,
+            )
+
             edges.append(edge)
         for child_id in current_node.children:
             child_node = reaction_path_dict[child_id]
@@ -152,8 +188,10 @@ def generate_tree_structure(reaction_path_dict: Dict[int, aizynth_funcs.Node]):
     return nodes, edges
 
 
-def calculate_positions(nodes):
-    """Calculate positions for all nodes (matching frontend logic)"""
+def calculate_positions(nodes: list[Node]):
+    """
+    Calculate positions for all nodes (matching frontend logic).
+    """
     BOX_WIDTH = 270  # Must match with javascript!
     BOX_GAP = 160  # Must match with javascript!
     level_gap = BOX_WIDTH + BOX_GAP
@@ -162,34 +200,48 @@ def calculate_positions(nodes):
     # Group by level
     levels = {}
     for node in nodes:
-        level = node["level"]
+        level = node.level
         if level not in levels:
             levels[level] = []
         levels[level].append(node)
 
     # Position nodes
-    positioned = []
+    positioned: list[Node] = []
     for node in nodes:
-        level_nodes = levels[node["level"]]
+        level_nodes = levels[node.level]
         index_in_level = level_nodes.index(node)
 
-        positioned_node = {
-            **node,
-            "x": 100 + node["level"] * level_gap,
-            "y": 100 + index_in_level * node_spacing,
-        }
+        positioned_node = copy.deepcopy(node)
+        positioned_node.x = 100 + node.level * level_gap
+        positioned_node.y = 100 + index_in_level * node_spacing
         positioned.append(positioned_node)
 
     return positioned
 
 
 async def generate_molecules(
-    start_smiles: str, planner, charge_retro_planner, websocket: WebSocket = None
+    start_smiles: str, planner, retro_synth_context, websocket: WebSocket = None
 ):
     """Stream positioned nodes and edges"""
     logger.info(f"Planning retrosynthesis for: {start_smiles}")
 
     # Generate and position entire tree upfront
+
+    root = Node(
+        id="node_0",
+        smiles=start_smiles,
+        label=start_smiles,
+        hoverInfo=f"# Root molecule \n **SMILES:** {start_smiles}",
+        level=0,
+        parentId=None,
+        cost=None,
+        bandgap=None,
+        yield_=None,
+        highlight=True,
+        x=100,
+        y=100,
+    )
+    await websocket.send_json({"type": "node", **root.json()})
     tree, stats, routes = planner.plan(start_smiles)
     if not routes:
         await websocket.send_json(
@@ -204,17 +256,14 @@ async def generate_molecules(
     logger.info(f"Found {len(routes)} routes for {start_smiles}.")
 
     reaction_path = aizynth_funcs.ReactionPath(route=routes[0])
-    nodes, edges = generate_tree_structure(reaction_path.nodes)
+    nodes, edges = generate_tree_structure(reaction_path.nodes, retro_synth_context)
     logger.info(f"Generated {len(nodes)} nodes and {len(edges)} edges.")
 
     positioned_nodes = calculate_positions(nodes)
 
     # Create node map
-    node_map = {node["id"]: node for node in positioned_nodes}
-
     # Stream root first
-    root = positioned_nodes[0]
-    await websocket.send_json({"type": "node", **root})
+
     await asyncio.sleep(0.8)
 
     # Stream remaining nodes with edges
@@ -222,60 +271,34 @@ async def generate_molecules(
         node = positioned_nodes[i]
 
         # Find edge for this node
-        edge = next((e for e in edges if e["to"] == node["id"]), None)
+        edge = next((e for e in edges if e.toNode == node.id), None)
 
         if edge:
             # Send edge with computing status
             edge_data = {
                 "type": "edge",
-                **edge,
-                "status": "computing",
-                "label": f"Computing: {edge['reactionType']}",
-                "fromNode": node_map[edge["from"]],
-                "toNode": node,
+                **edge.json(),
             }
+            edge_data["label"] = f"Computing: {edge.label}"
+            edge_data["toNode"] = node.id
             await websocket.send_json(edge_data)
 
+            await asyncio.sleep(0.6)
+
             # Send node
-            await websocket.send_json({"type": "node", **node})
+            await websocket.send_json({"type": "node", **node.json()})
 
             # Update edge to complete
             edge_complete = {
                 "type": "edge_update",
-                "id": edge["id"],
+                "id": edge.id,
                 "status": "complete",
-                "label": edge["reactionType"],
-                "fromNode": node_map[edge["from"]],
-                "toNode": node,
+                "label": edge.label,
             }
             await websocket.send_json(edge_complete)
 
-    # Check if all leaf nodes are purchasable
-    leaf_nodes = reaction_path.leaf_nodes
-    for leaf_node_id in leaf_nodes:
-        leaf_node = reaction_path.nodes[leaf_node_id]
-        if not leaf_node.purchasable:
-            await websocket.send_json(
-                {
-                    "type": "response",
-                    "message": f"Leaf molecule {leaf_node.smiles} is not purchasable.",
-                    "smiles": leaf_node.smiles,
-                }
-            )
-            user_prompt = RETROSYNTH_UNCONSTRAINED_USER_PROMPT_TEMPLATE.format(
-                target_molecule=start_smiles
-            )
-            retro_experiment = RetrosynthesisExperiment(user_prompt=user_prompt)
-            charge_retro_planner.experiment_type = retro_experiment
-            logger.info(
-                f"{leaf_node.smiles} is not purchasable. "
-                "Switching to template-free retrosynthesis."
-            )
-            await websocket.send_json(
-                {"type": "response", "message": "Searching for alternatives..."}
-            )
-
-            await charge_retro_planner.run()
+            await asyncio.sleep(0.2)
+    await websocket.send_json({"type": "node_update", "id": root.id, "highlight": False})
 
     await websocket.send_json({"type": "complete"})
 
@@ -465,8 +488,86 @@ async def lead_molecule(
     await websocket.send_json({"type": "complete"})
 
 
-async def optimize_molecule_retro(smiles, experiment, planner, websocket: WebSocket):
+async def unconstrained_opt(parent_smiles, planner, websocket: WebSocket):
+    """Unconstrained optimization using retrosynthesis"""
+
+    await websocket.send_json(
+        {
+            "type": "response",
+            "message": f"Finding synthesis pathway to {parent_smiles}...",
+            "smiles": parent_smiles,
+        }
+    )
+
+    user_prompt = RETROSYNTH_UNCONSTRAINED_USER_PROMPT_TEMPLATE.format(
+        target_molecule=parent_smiles
+    )
+    retro_experiment = RetrosynthesisExperiment(user_prompt=user_prompt)
+    planner.experiment_type = retro_experiment
+    logger.info(f"Optimizing {parent_smiles} using retrosynthesis.")
+    result = await planner.run()
+    return result
+
+
+async def constrained_opt(
+    parent_smiles, constraint_smiles, planner, websocket: WebSocket
+):
+    """Constrained optimization using retrosynthesis"""
+
+    await websocket.send_json(
+        {
+            "type": "response",
+            "message": f"Finding synthesis pathway for {parent_smiles}...",
+            "smiles": parent_smiles,
+        }
+    )
+    await websocket.send_json(
+        {
+            "type": "response",
+            "message": f"Searching for alternatives without {constraint_smiles}",
+            "smiles": constraint_smiles,
+        }
+    )
+
+    user_prompt = RETROSYNTH_CONSTRAINED_USER_PROMPT_TEMPLATE.format(
+        target_molecule=parent_smiles, constrained_reactant=constraint_smiles
+    )
+    retro_experiment = RetrosynthesisExperiment(user_prompt=user_prompt)
+    planner.experiment_type = retro_experiment
+    logger.info(
+        f"Optimizing {parent_smiles} without using {constraint_smiles} in the synthesis."
+    )
+    result = await planner.run()
+    return result
+
+
+async def regenerate_sub_tree(result, starting_node, planner, websocket: WebSocket):
+    """Regenerate sub-tree from a given node"""
+
     pass
+
+
+async def optimize_molecule_retro(
+    node_id, opt_type, experiment, planner, retro_synth_context, websocket: WebSocket
+):
+    """Optimize a molecule using retrosynthesis by node ID"""
+    current_node = retro_synth_context.node_ids.get(node_id)
+
+    assert current_node is not None, f"Node ID {node_id} not found"
+
+    if opt_type == "product_optimization_retro":
+        result = await unconstrained_opt(current_node.smiles, planner, websocket)
+        starting_node = current_node
+    else:
+        parent_id = current_node.parent_id
+        parent_node = retro_synth_context.node_by_smiles.get(parent_id)
+        assert parent_node is not None, f"Parent node {parent_id} not found"
+        result = await constrained_opt(
+            parent_node.smiles, current_node.smiles, planner, websocket
+        )
+        starting_node = parent_node
+
+    await regenerate_sub_tree(result, starting_node, planner, websocket)
 
 
 @app.websocket("/ws")
@@ -482,12 +583,18 @@ async def websocket_endpoint(websocket: WebSocket):
     retro_runner = None
 
     aizynthfinder_planner = aizynth_funcs.RetroPlanner(configfile=args.config_file)
+    retro_synth_context = RetroSynthesisContext()
     try:
         while True:
             data = await websocket.receive_json()
             action = data.get("action")
 
-            if action == "compute":
+            if action in [
+                "compute",
+                "compute-from",
+                "recompute-reaction",
+                "recompute-parent-reaction",
+            ]:
                 # cancel any running task first
                 if CURRENT_TASK and not CURRENT_TASK.done():
                     logger.info("Cancelling existing compute task...")
@@ -496,6 +603,8 @@ async def websocket_endpoint(websocket: WebSocket):
                         await CURRENT_TASK
                     except asyncio.CancelledError:
                         logger.info("Previous compute task cancelled.")
+
+            if action == "compute":
 
                 if data["problemType"] == "optimization":
                     lmo_experiment = LeadMoleculeOptimization(
@@ -513,38 +622,13 @@ async def websocket_endpoint(websocket: WebSocket):
                         )
                     else:
                         lmo_runner.experiment_type = lmo_experiment
-                elif data["problemType"] in [
-                    "product_optimization_retro",
-                    "reactant_optimization_retro",
-                    "retrosynthesis",
-                ]:
-                    if data["problemType"] == "product_optimization_retro":
-                        # Set up retrosynthesis experiment to optimize product
-                        pass
-                    elif data["problemType"] == "reactant_optimization_retro":
-                        # Set up retrosynthesis experiment to optimize reactant
-                        pass
-                    else:
-                        # Set up retrosynthesis experiment to retrosynthesis
-                        # to ensure the reactant is not used in the synthesis
-                        retro_experiment = RetrosynthesisExperiment(
-                            user_prompt=RETROSYNTH_UNCONSTRAINED_USER_PROMPT_TEMPLATE.format(
-                                target_molecule=data["smiles"]
-                            )
-                        )
+                elif data["problemType"] == "retrosynthesis":
+                    # Set up retrosynthesis experiment to retrosynthesis
+                    # to ensure the reactant is not used in the synthesis
+                    logger.info("Setting up retrosynthesis experiment...")
 
-                    if retro_runner is None:
-                        retro_runner = AutoGenClient(
-                            experiment_type=retro_experiment,
-                            model=model,
-                            backend=backend,
-                            api_key=API_KEY,
-                            model_kwargs=kwargs,
-                            server_url=server_urls,  # TODO: Change this to a retrosynthesis specific server
-                            thoughts_callback=CallbackHandler(websocket),
-                        )
-                    else:
-                        retro_runner.experiment_type = retro_experiment
+                else:
+                    logger.error(f"Unknown problem type: {data['problemType']}")
 
                 async def run_task():
                     if data["problemType"] == "optimization":
@@ -555,23 +639,34 @@ async def websocket_endpoint(websocket: WebSocket):
                             data.get("depth", 3),
                             websocket,
                         )
-                    elif data["problemType"] in [
-                        "product_optimization_retro",
-                        "reactant_optimization_retro",
-                    ]:
-                        await optimize_molecule_retro(
-                            data["smiles"], retro_experiment, retro_runner, websocket
-                        )
-                    else:
+                    elif data["problemType"] == "retrosynthesis":
                         await generate_molecules(
                             data["smiles"],
                             aizynthfinder_planner,
-                            retro_runner,
+                            retro_synth_context,
                             websocket,
                         )
+                    else:
+                        logger.error(f"Unknown problem type: {data['problemType']}")
 
                 # start a new task
                 CURRENT_TASK = asyncio.create_task(run_task())
+
+            elif action == "compute-from":
+                # Leaf node optimization
+                logger.info("Compute from action received")
+                logger.info(f"Data: {data}")
+
+                pass
+            elif action == "recompute-reaction":
+                #
+                logger.info("Recompute reaction action received")
+                logger.info(f"Data: {data}")
+                pass
+            elif action == "recompute-parent-reaction":
+                logger.info("Recompute parent reaction action received")
+                logger.info(f"Data: {data}")
+                pass
 
             elif action == "custom_query":
                 await websocket.send_json(
@@ -586,6 +681,9 @@ async def websocket_endpoint(websocket: WebSocket):
             elif action == "reset":
                 if lmo_runner:
                     lmo_runner.reset()
+                if retro_runner:
+                    retro_runner.reset()
+                retro_synth_context.reset()
                 logger.info("Experiment state has been reset.")
 
             elif action == "stop":
@@ -601,9 +699,15 @@ async def websocket_endpoint(websocket: WebSocket):
                     logger.info(f"Is Current task done: {CURRENT_TASK}")
                     if CURRENT_TASK:
                         logger.info(f"Current Task states: {CURRENT_TASK.done()}")
+            else:
+                logger.warning(f"Unknown action received: {action}")
 
     except WebSocketDisconnect:
         pass
+    except httpx.ConnectError as e:
+        logger.error(f"Connection error: {e}")
+    except Exception as e:
+        logger.error(f"Error in WebSocket connection: {e}")
 
 
 if __name__ == "__main__":

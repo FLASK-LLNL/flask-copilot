@@ -2,6 +2,8 @@ from loguru import logger
 from fastapi import WebSocket
 import asyncio
 import json
+from typing import Optional, Literal
+from dataclasses import dataclass, asdict
 
 RETROSYNTH_UNCONSTRAINED_USER_PROMPT_TEMPLATE = (
     "Provide a retrosynthetic pathway for the target molecule {target_molecule}. "
@@ -25,6 +27,73 @@ RETROSYNTH_CONSTRAINED_USER_PROMPT_TEMPLATE = (
 )
 
 
+# TODO: Put this on the top level package and make it reusable
+@dataclass
+class Node:
+    id: str
+    smiles: str
+    label: str
+    hoverInfo: str
+    level: int
+    parentId: Optional[str] = None
+    x: Optional[int] = None
+    y: Optional[int] = None
+    # Properties
+    cost: Optional[float] = None
+    bandgap: Optional[float] = None
+    yield_: Optional[float] = None
+    highlight: Optional[bool] = False
+
+    def json(self):
+        ret = asdict(self)
+        ret["yield"] = ret["yield_"]
+        del ret["yield_"]
+        return ret
+
+
+@dataclass
+class Edge:
+    id: str
+    fromNode: str
+    toNode: str
+    status: Literal["computing", "complete"]
+    label: Optional[str] = None
+
+    def json(self):
+        return asdict(self)
+
+
+@dataclass
+class ModelMessage:
+    message: str
+    smiles: Optional[str]
+
+    def json(self):
+        ret = asdict(self)
+        if self.smiles is None:
+            if "smiles" in ret:
+                del ret["smiles"]
+        return ret
+
+
+def get_price(smiles: str) -> float:
+    """Mock function to get price of a molecule given its SMILES string."""
+    # In a real implementation, this would query a database or an API.
+    # Here, we return a random price for demonstration purposes.
+    import random
+
+    return round(random.uniform(10.0, 100.0), 2)
+
+
+def get_yield(parent, child_smiles_list):
+    """Mock function to get yield of a reaction given parent node and child SMILES strings."""
+    # In a real implementation, this would query a database or an API.
+    # Here, we return a random yield for demonstration purposes.
+    import random
+
+    return round(random.uniform(50.0, 100.0), 2)
+
+
 class CallbackHandler:
     def __init__(self, websocket: WebSocket):
         self.websocket = websocket
@@ -39,24 +108,25 @@ class CallbackHandler:
 
             if assistant_message.thought is not None:
                 _str = f"Model thought: {assistant_message.thought}"
+                output = ModelMessage(message=_str, smiles=None)
                 logger.info(_str)
-                await send(
-                    {
-                        "type": "response",
-                        "message": _str,
-                    }
-                )
+                await send({"type": "response", **output.json()})
             if isinstance(assistant_message.content, list):
                 for item in assistant_message.content:
                     if hasattr(item, "name") and hasattr(item, "arguments"):
                         _str = f"Function call: {item.name} with args {item.arguments}"
                         logger.info(_str)
-                        msg = {"type": "response", "message": _str}
-                        if "smiles" in item.arguments:
+                        if "log_msg" in item.arguments:
                             str_to_dict = json.loads(item.arguments)
-                            if "smiles" in str_to_dict:
-                                msg["smiles"] = str_to_dict["smiles"]
-                        await send(msg)
+                            if "log_msg" in str_to_dict:
+                                _str = str_to_dict["log_msg"]
+                        else:
+                            msg = {"type": "response", "message": _str}
+                            if "smiles" in item.arguments:
+                                str_to_dict = json.loads(item.arguments)
+                                if "smiles" in str_to_dict:
+                                    msg["smiles"] = str_to_dict["smiles"]
+                            await send(msg)
 
                     else:
 
@@ -78,3 +148,14 @@ class CallbackHandler:
 
     def __call__(self, assistant_message):
         asyncio.create_task(self.send(assistant_message))
+
+
+class RetroSynthesisContext:
+
+    def __init__(self):
+        self.node_ids = {}
+        self.node_by_smiles = {}
+
+    def reset(self):
+        self.node_by_smiles = {}
+        self.node_ids = {}
