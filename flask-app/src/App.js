@@ -9,6 +9,12 @@ const BOX_GAP = 160;
 const BOX_HEIGHT = 100;
 const WS_SERVER = "ws://localhost:8001/ws";
 
+const NODE_STYLES = {
+  "normal": 'from-purple-50/80 to-pink-300/80 border-purple-400/50 hover:border-purple-300',
+  "red": 'from-amber-500/40 to-red-500/100 border-red-400 ring-4 ring-red-400/50',
+  "yellow": 'from-amber-500/40 to-yellow-500/40 border-amber-400 ring-4 ring-amber-400/50 animate-pulse',
+};
+
 // Dummy molecule SVG generator (fallback if RDKit fails)
 const MoleculeSVG = ({ smiles, height = 80, rdkitModule = null }) => {
   const [svg, setSvg] = useState(null);
@@ -1361,7 +1367,7 @@ const ChemistryTool = () => {
                     onMouseLeave={() => setHoveredNode(null)}
                     onClick={(e) => handleNodeClick(e, node)}
                   >
-                    <div className={`bg-gradient-to-br backdrop-blur-sm rounded-xl p-3 border-2 shadow-lg hover:shadow-2xl hover:scale-105 transition-all pointer-events-auto cursor-pointer ${node.highlight ? 'from-amber-500/40 to-yellow-500/40 border-amber-400 ring-4 ring-amber-400/50 animate-pulse' : 'from-purple-50/80 to-pink-300/80 border-purple-400/50 hover:border-purple-300'}`} style={{ textAlign: 'center' }}>
+                    <div className={`bg-gradient-to-br backdrop-blur-sm rounded-xl p-3 border-2 shadow-lg hover:shadow-2xl hover:scale-105 transition-all pointer-events-auto cursor-pointer ${NODE_STYLES[node.highlight]}`} style={{ textAlign: 'center' }}>
                       <MoleculeSVG smiles={node.smiles} height={80} rdkitModule={rdkitModule} />
                       <div className="mt-2 text-center">
                         <div className="text-xs font-semibold text-purple-200 bg-black/30 rounded px-2 py-1 whitespace-pre-line">{node.label}</div>
