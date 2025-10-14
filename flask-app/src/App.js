@@ -1005,7 +1005,25 @@ const ChemistryTool = () => {
     });
   };
 
+  const sendMessageToServer = (message, nodeId) => {
+    if (!websocket || websocket.readyState !== WebSocket.OPEN) {
+      alert('WebSocket not connected');
+      return;
+    }
+    websocket.send(JSON.stringify({
+      action: message,
+      nodeId: nodeId
+    }));
+    setContextMenu(null);
+  };
+
   const handleCustomQuery = (node) => {
+    if (problemType == "optimization") {
+      // Invalidate all nodes below this one
+      setTreeNodes(prev => {
+        return prev.filter(n => n.y <= node.y);
+      });
+    }
     setCustomQueryModal(node);
     setCustomQueryText('');
     setContextMenu(null);
@@ -1524,7 +1542,12 @@ const ChemistryTool = () => {
           { (problemType === "optimization") && (
             <>
             <button onClick={() => {
-
+              const nodeId = contextMenu.node.id;
+              // Delete all nodes from this point on
+              setTreeNodes(prev => {
+                return prev.filter(n => n.y <= contextMenu.node.y);
+              });
+              sendMessageToServer("compute-from", nodeId);
             }}  className="w-full px-4 py-2 text-left text-sm text-white hover:bg-purple-600/50 transition-colors flex items-center gap-2">
             <RotateCcw className="w-4 h-4" />
             Restart from here
@@ -1548,7 +1571,9 @@ const ChemistryTool = () => {
           )}
 
           { (problemType === "retrosynthesis" && !hasDescendants(contextMenu.node.id, treeNodes)) && (
-            <button onClick={() => {}} className="w-full px-4 py-2 text-left text-sm text-white hover:bg-purple-600/50 transition-colors flex items-center gap-2">
+            <button onClick={() => {
+              sendMessageToServer("compute-from", contextMenu.node.id);
+            }} className="w-full px-4 py-2 text-left text-sm text-white hover:bg-purple-600/50 transition-colors flex items-center gap-2">
               <TestTubeDiagonal className="w-4 h-4" />
               How do I make this?
             </button>
@@ -1556,10 +1581,10 @@ const ChemistryTool = () => {
 
           { (problemType === "retrosynthesis" && hasDescendants(contextMenu.node.id, treeNodes)) && (
             <>
-            <button onClick={() => {}} className="w-full px-4 py-2 text-left text-sm text-white hover:bg-purple-600/50 transition-colors flex items-center gap-2">
+            <button onClick={() => {sendMessageToServer("recompute-reaction", contextMenu.node.id);}} className="w-full px-4 py-2 text-left text-sm text-white hover:bg-purple-600/50 transition-colors flex items-center gap-2">
               <RefreshCw className="w-4 h-4" />Find Another Reaction
             </button>
-            <button onClick={() => {}} className="w-full px-4 py-2 text-left text-sm text-white hover:bg-purple-600/50 transition-colors flex items-center gap-2">
+            <button onClick={() => {sendMessageToServer("recompute-parent-reaction", contextMenu.node.id);}} className="w-full px-4 py-2 text-left text-sm text-white hover:bg-purple-600/50 transition-colors flex items-center gap-2">
               <Network className="w-4 h-4" />Substitute Molecule
             </button>
             </>
@@ -1567,7 +1592,7 @@ const ChemistryTool = () => {
 
           <button onClick={() => handleCustomQuery(contextMenu.node)} className="w-full px-4 py-2 text-left text-sm text-white hover:bg-purple-600/50 transition-colors flex items-center gap-2 border-t border-purple-400/30">
             <Send className="w-4 h-4" />
-            { (problemType === "retrosynthesis" && hasDescendants(contextMenu.node.id, treeNodes)) ? (<>Substitute with Custom Prompt...</>) : (<>Custom Query...</>) }
+            { (problemType === "retrosynthesis" && hasDescendants(contextMenu.node.id, treeNodes)) ? (<>Find Another Reaction with Custom Prompt...</>) : (<>Custom Query...</>) }
           </button>
         </div>
       )}

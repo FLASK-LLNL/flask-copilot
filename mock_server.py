@@ -335,6 +335,8 @@ async def websocket_endpoint(websocket: WebSocket):
                     )
                 await asyncio.sleep(3)  # Random wait
                 await websocket.send_json({"type": "complete"})
+            else:
+                print("WARN: Unhandled message:", data)
     except WebSocketDisconnect:
         pass
 
