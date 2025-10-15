@@ -12,7 +12,7 @@ from charge.tasks.LMOTask import (
 from charge.experiments.LMOExperiment import MoleculeOutputSchema, SCHEMA_PROMPT
 
 from backend_helper_funcs import Node, Edge
-from backend_helper_funcs import get_bandgap, post_process_lmo_smiles
+from backend_helper_funcs import get_bandgap, post_process_lmo_smiles, get_price
 
 # TODO: Convert this to a dataclass
 MOLECULE_HOVER_TEMPLATE = """**SMILES:** `{smiles}`\n
@@ -181,34 +181,28 @@ async def lead_molecule(
                         node_id += 1
                         mol_hov = MOLECULE_HOVER_TEMPLATE.format(
                             canonical_smiles,
-                            0.0,  # TODO: Add molecule weight calculation
                             0.0,  # TODO: Add cost calculation
                             processed_mol["density"],
                             processed_mol["sascore"],
                         )
-                        node = dict(
+                        node = Node(
                             id=f"node_{node_id}",
                             smiles=canonical_smiles,
                             label=f"{canonical_smiles}",
                             # Add property calculations here
-                            energy=processed_mol["density"],
-                            level=0,
-                            cost=processed_mol["sascore"],
+                            density=processed_mol["density"],
+                            bandgap=get_bandgap(canonical_smiles),
+                            yield_=None,
+                            level=i + 1,
+                            cost=get_price(canonical_smiles),
                             # Not sure what to put here
                             hoverInfo=mol_hov,
-                            x=0,
-                            y=node_id * 150,
+                            x=150 + node_id * 270,
+                            y=100,
                         )
 
-                    await websocket.send_json({"type": "node", "node": node.json()})
+                        await websocket.send_json({"type": "node", **node.json()})
 
-                    task = LeadMoleculeOptimization(
-                        lead_molecule=canonical_smiles
-                    )
-                    lmo_runner.task = task
-                    parent_id = node_id
-
-                        await websocket.send_json(edge_data)
                         parent_id = node_id
                     else:
                         logger.info(f"Duplicate molecule found: {canonical_smiles}")
