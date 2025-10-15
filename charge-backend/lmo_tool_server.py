@@ -1,11 +1,13 @@
-import sys
-import os
+################################################################################
+## Copyright 2025 Lawrence Livermore National Security, LLC. and Binghamton University.
+## See the top-level LICENSE file for details.
+##
+## SPDX-License-Identifier: Apache-2.0
+################################################################################
 
-cur_dir = os.path.dirname(os.path.abspath(__file__))
-sys.path.append(os.path.join(cur_dir, "ChARGe", "experiments", "Molecule_Generation"))
 
-import ChARGe.experiments.Molecule_Generation.mol_server as LMO_MCP
-from ChARGe.charge.servers.server_utils import update_mcp_network, get_hostname
+import charge.servers.molecular_generation_server as LMO_MCP
+from charge.servers.server_utils import update_mcp_network, get_hostname
 
 
 if __name__ == "__main__":
