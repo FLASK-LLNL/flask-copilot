@@ -9,7 +9,7 @@ from collections import defaultdict
 from charge.clients.autogen import AutoGenAgent
 import charge.servers.AiZynthTools as aizynth_funcs
 from charge.servers import SMILES_utils
-from charge.servers.molecular_property_prediction import chemprop_preds_server
+from charge.servers.molecular_property_utils import chemprop_preds_server
 
 
 # TODO: Put this on the top level package and make it reusable
