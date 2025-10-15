@@ -266,6 +266,16 @@ async def websocket_endpoint(websocket: WebSocket):
                 logger.info(f"Data: {data}")
                 await websocket.send_json({"type": "complete"})
 
+            elif action == "custom_query":
+                await websocket.send_json(
+                    {
+                        "type": "response",
+                        "message": f"Processing query: {data['query']} for node {data['nodeId']}",
+                    }
+                )
+                await asyncio.sleep(3)
+                await websocket.send_json({"type": "complete"})
+
             elif action == "reset":
                 if lmo_runner:
                     lmo_runner.reset()
