@@ -5,12 +5,12 @@ import asyncio
 import copy
 from typing import Dict
 
-from backend_helper_funcs import Node, Edge, RetroSynthesisContext
-import charge.servers.AiZynthTools as AiZynthFucns
+from backend_helper_funcs import Node, Edge, RetrosynthesisContext
+import charge.servers.AiZynthTools as AiZynthFuncs
 
 
 def generate_tree_structure(
-    reaction_path_dict: Dict[int, aizynth_funcs.Node],
+    reaction_path_dict: Dict[int, Node],
     retro_synth_context: RetrosynthesisContext,
     start_level: int = 0,
 ) -> tuple[list[Node], list[Edge]]:
@@ -98,8 +98,8 @@ def calculate_positions(nodes: list[Node], y_offset: int = 0):
 
 async def aizynth_retro(
     start_smiles: str,
-    planner: AiZynthFucns.RetroPlanner,
-    retro_synth_context: RetroSynthesisContext,
+    planner: AiZynthFuncs.RetroPlanner,
+    retro_synth_context: RetrosynthesisContext,
     websocket: WebSocket,
 ):
     """Stream positioned nodes and edges"""
@@ -135,7 +135,7 @@ async def aizynth_retro(
         return
     logger.info(f"Found {len(routes)} routes for {start_smiles}.")
 
-    reaction_path = AiZynthFucns.ReactionPath(route=routes[0])
+    reaction_path = AiZynthFuncs.ReactionPath(route=routes[0])
     nodes, edges = generate_tree_structure(reaction_path.nodes, retro_synth_context)
     logger.info(f"Generated {len(nodes)} nodes and {len(edges)} edges.")
 

@@ -37,15 +37,18 @@ from loguru import logger
 import sys
 from backend_helper_funcs import (
     CallbackHandler,
-    RetroSynthesisContext,
-    RETROSYNTH_UNCONSTRAINED_USER_PROMPT_TEMPLATE,
-    RETROSYNTH_CONSTRAINED_USER_PROMPT_TEMPLATE,
+    RetrosynthesisContext,
     Node,
     Edge,
 )
+from retro_charge_backend_funcs import (
+    RETROSYNTH_UNCONSTRAINED_USER_PROMPT_TEMPLATE,
+    RETROSYNTH_CONSTRAINED_USER_PROMPT_TEMPLATE,
+    generate_molecules,
+)
 import copy
 from lmo_charge_backend_funcs import lead_molecule
-from aizynth_backend_funcs import aizynth_retro
+from aizynth_backend_funcs import aizynth_retro, calculate_positions
 from retro_charge_backend_funcs import (
     unconstrained_retro,
     constrained_retro,
@@ -126,102 +129,16 @@ def make_client(client, experiment, server_urls, websocket):
     if client is None:
         return AutoGenClient(
             experiment_type=experiment,
-            model=model,
-            backend=backend,
+            model=MODEL,
+            backend=BACKEND,
             api_key=API_KEY,
-            model_kwargs=kwargs,
+            model_kwargs=MODEL_KWARGS,
             server_url=server_urls,
             thoughts_callback=CallbackHandler(websocket),
         )
     else:
         client.experiment_type = experiment
         return client
-
-
-async def generate_molecules(start_smiles: str, context: RetrosynthesisContext, websocket: WebSocket):
-    """Stream positioned nodes and edges"""
-    logger.info(f"Planning retrosynthesis for: {start_smiles}")
-
-    # Generate and position entire tree upfront
-
-    root = Node(
-        id="node_0",
-        smiles=start_smiles,
-        label=start_smiles,
-        hoverInfo=f"# Root molecule \n **SMILES:** {start_smiles}",
-        level=0,
-        parentId=None,
-        cost=None,
-        bandgap=None,
-        yield_=None,
-        highlight="yellow",
-        x=100,
-        y=100,
-    )
-    await websocket.send_json({"type": "node", **root.json()})
-    planner = context.node_id_to_planner[root.id] = aizynth_funcs.RetroPlanner(configfile=args.config_file)
-    _, _, routes = planner.plan(start_smiles)
-    if not routes:
-        await websocket.send_json(
-            {
-                "type": "response",
-                "message": f"No synthesis routes found for {start_smiles}.",
-                "smiles": start_smiles,
-            }
-        )
-        await websocket.send_json({"type": "complete"})
-        return
-    logger.info(f"Found {len(routes)} routes for {start_smiles}.")
-
-    planner.last_route_used = 0
-    reaction_path = aizynth_funcs.ReactionPath(route=routes[0])
-    nodes, edges = generate_tree_structure(reaction_path.nodes, context)
-    logger.info(f"Generated {len(nodes)} nodes and {len(edges)} edges.")
-
-    calculate_positions(nodes)
-
-    # Stream remaining nodes with edges
-    for node in nodes[1:]:
-        # Find edge for this node
-        edge = next((e for e in edges if e.toNode == node.id), None)
-
-        # Send node
-        await websocket.send_json({"type": "node", **node.json()})
-        if edge:
-            await websocket.send_json({"type": "edge", **edge.json()})
-
-    await websocket.send_json({"type": "node_update", "id": root.id, "highlight": "normal"})
-    await websocket.send_json({"type": "complete"})
-
-
-
-
-async def constrained_opt(parent_smiles, constraint_smiles, planner, websocket: WebSocket):
-    """Constrained optimization using retrosynthesis"""
-
-    await websocket.send_json(
-        {
-            "type": "response",
-            "message": f"Finding synthesis pathway for {parent_smiles}...",
-            "smiles": parent_smiles,
-        }
-    )
-    await websocket.send_json(
-        {
-            "type": "response",
-            "message": f"Searching for alternatives without {constraint_smiles}",
-            "smiles": constraint_smiles,
-        }
-    )
-
-    user_prompt = RETROSYNTH_CONSTRAINED_USER_PROMPT_TEMPLATE.format(
-        target_molecule=parent_smiles, constrained_reactant=constraint_smiles
-    )
-    retro_experiment = RetrosynthesisExperiment(user_prompt=user_prompt)
-    planner.experiment_type = retro_experiment
-    logger.info(f"Optimizing {parent_smiles} without using {constraint_smiles} in the synthesis.")
-    result = await planner.run()
-    return result
 
 
 async def highlight_node(node: Node, websocket: WebSocket, highlight: bool):

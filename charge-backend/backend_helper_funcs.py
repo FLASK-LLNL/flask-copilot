@@ -5,6 +5,7 @@ import json
 from typing import Dict, Optional, Literal, Tuple
 from dataclasses import dataclass, asdict
 
+import charge.servers.AiZynthTools as AiZynthFuncs
 
 # TODO: Put this on the top level package and make it reusable
 @dataclass
