@@ -1,4 +1,4 @@
-import ChARGe.experiments.Molecule_Generation.helper_funcs as lmo_helper_funcs
+import charge.utils.helper_funcs as lmo_helper_funcs
 from fastapi import WebSocket, WebSocketDisconnect
 import asyncio
 from loguru import logger
@@ -6,9 +6,7 @@ import sys
 import os
 from charge.clients.autogen import AutoGenClient
 
-cur_dir = os.path.dirname(os.path.abspath(__file__))
-sys.path.append(os.path.join(cur_dir, "ChARGe", "experiments", "Molecule_Generation"))
-from ChARGe.experiments.Molecule_Generation.LMOExperiment import (
+from charge.experiments.Molecule_Generation.LMOExperiment import (
     LMOExperiment as LeadMoleculeOptimization,
 )
 
