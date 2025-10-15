@@ -129,17 +129,23 @@ class CallbackHandler:
         asyncio.create_task(self.send(assistant_message))
 
 
-class RetroSynthesisContext:
+class RetrosynthesisContext:
+    """
+    Manages a retrosynthesis experiment
+    """
 
     def __init__(self):
-        self.node_ids: Dict[str, Node] = {}
-        self.node_by_smiles: Dict[str, Node] = {}
+        self.node_ids: dict[str, Node] = {}
+        self.node_id_to_planner: dict[str, aizynth_funcs.RetroPlanner] = {}
+        self.node_id_to_charge_client: dict[str, AutoGenClient] = {}
+        self.azf_nodes: dict[str, aizynth_funcs.Node] = {}
+        self.nodes_per_level: dict[int, int] = defaultdict(int)
+        self.parents: dict[str, str] = {}
 
     def reset(self):
-        self.node_by_smiles = {}
-        self.node_ids = {}
-
-    def get_node_by_id(self, node_id: str) -> Optional[Node]:
-        if node_id in self.node_ids:
-            return self.node_ids[node_id]
-        return None
+        self.node_ids.clear()
+        self.node_id_to_planner.clear()
+        self.node_id_to_charge_client.clear()
+        self.azf_nodes.clear()
+        self.nodes_per_level.clear()
+        self.parents.clear()

@@ -10,58 +10,48 @@ import charge.servers.AiZynthTools as AiZynthFucns
 
 
 def generate_tree_structure(
-    reaction_path_dict: Dict[int, AiZynthFucns.Node],
-    retro_synth_context: RetroSynthesisContext,
-):
+    reaction_path_dict: Dict[int, aizynth_funcs.Node],
+    retro_synth_context: RetrosynthesisContext,
+    start_level: int = 0,
+) -> tuple[list[Node], list[Edge]]:
     """Generate nodes and edges from reaction path dict"""
     nodes = []
     edges = []
 
     root_id = 0
-    node_queue = [(reaction_path_dict[root_id], 0)]  # (node, level)
+    node_queue = [(reaction_path_dict[root_id], start_level)]  # (node, level)
 
     while node_queue:
         current_node, level = node_queue.pop(0)
         node_id = current_node.node_id
         smiles = current_node.smiles
         purchasable = current_node.purchasable
-        intermediate = not (current_node.is_root or current_node.is_leaf)
         leaf = current_node.is_leaf
         node_id_str = f"node_{node_id}"
-        hover_info = f"# Molecule \n **SMILES:** {smiles}\n - Level: {level}\n"
+        hover_info = f"# Molecule \n **SMILES:** {smiles}\n"
         if leaf:
             if purchasable:
                 hover_info += " - This molecule is purchasable.\n"
+                # TODO: For ... chemprice
             else:
                 hover_info += " - This molecule is NOT purchasable.\n"
 
-        if intermediate:
-            hover_info += " - Reaction intermediate\n"
         node = Node(
             id=node_id_str,
             smiles=smiles,
             label=smiles,
             hoverInfo=hover_info,
             level=level,
-            parentId=(
-                f"node_{current_node.parent_id}"
-                if current_node.parent_id is not None
-                else None
-            ),
-            cost=None,
-            bandgap=None,
-            yield_=None,
-            highlight=leaf and not purchasable,
+            parentId=(f"node_{current_node.parent_id}" if current_node.parent_id is not None else None),
+            highlight=("red" if (leaf and not purchasable) else "normal"),
         )
 
         retro_synth_context.node_ids[node_id_str] = node
-
-        # Map by smiles in case ever needed
-        retro_synth_context.node_by_smiles[smiles] = node
-
+        retro_synth_context.azf_nodes[node_id_str] = current_node
+        retro_synth_context.nodes_per_level[level] += 1
         nodes.append(node)
-        if current_node.parent_id is not None:
 
+        if current_node.parent_id is not None:
             edge = Edge(
                 id=f"edge_{current_node.parent_id}_{node_id}",
                 fromNode=f"node_{current_node.parent_id}",
@@ -69,8 +59,9 @@ def generate_tree_structure(
                 status="complete",
                 label=None,
             )
-
             edges.append(edge)
+            retro_synth_context.parents[node_id_str] = f"node_{current_node.parent_id}"
+
         for child_id in current_node.children:
             child_node = reaction_path_dict[child_id]
             node_queue.append((child_node, level + 1))
@@ -78,9 +69,10 @@ def generate_tree_structure(
     return nodes, edges
 
 
-def calculate_positions(nodes: list[Node]):
+def calculate_positions(nodes: list[Node], y_offset: int = 0):
     """
     Calculate positions for all nodes (matching frontend logic).
+    Operates in-place.
     """
     BOX_WIDTH = 270  # Must match with javascript!
     BOX_GAP = 160  # Must match with javascript!
@@ -96,17 +88,12 @@ def calculate_positions(nodes: list[Node]):
         levels[level].append(node)
 
     # Position nodes
-    positioned: list[Node] = []
     for node in nodes:
         level_nodes = levels[node.level]
-        index_in_level = level_nodes.index(node)
+        index_in_level = level_nodes.index(node) + y_offset
 
-        positioned_node = copy.deepcopy(node)
-        positioned_node.x = 100 + node.level * level_gap
-        positioned_node.y = 100 + index_in_level * node_spacing
-        positioned.append(positioned_node)
-
-    return positioned
+        node.x = 100 + node.level * level_gap
+        node.y = 100 + index_in_level * node_spacing
 
 
 async def aizynth_retro(
