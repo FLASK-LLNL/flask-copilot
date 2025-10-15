@@ -6,7 +6,7 @@ import sys
 import os
 from charge.clients.autogen import AutoGenClient
 
-from charge.experiments.Molecule_Generation.LMOExperiment import (
+from charge.experiments.LMOExperiment import (
     LMOExperiment as LeadMoleculeOptimization,
 )
 
