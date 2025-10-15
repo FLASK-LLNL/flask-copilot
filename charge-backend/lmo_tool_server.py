@@ -9,10 +9,12 @@
 from charge.servers.server_utils import update_mcp_network, get_hostname
 from charge.servers.SMILES import SMILES_mcp
 from charge.servers.molecular_property_utils import chemprop_preds_server
+from charge.servers.log_progress import log_progress
 import argparse
 
 
 SMILES_mcp.tool()(chemprop_preds_server)
+SMILES_mcp.tool()(log_progress)
 
 
 if __name__ == "__main__":
