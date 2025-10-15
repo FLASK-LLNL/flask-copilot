@@ -4,7 +4,10 @@ import asyncio
 import json
 from typing import Dict, Optional, Literal, Tuple
 from dataclasses import dataclass, asdict
+from collections import defaultdict
 
+from charge.clients.autogen import AutoGenClient
+import charge.servers.AiZynthTools as aizynth_funcs
 
 # TODO: Put this on the top level package and make it reusable
 @dataclass
@@ -21,7 +24,7 @@ class Node:
     cost: Optional[float] = None
     bandgap: Optional[float] = None
     yield_: Optional[float] = None
-    highlight: Optional[bool] = False
+    highlight: Optional[str] = "normal"
 
     def json(self):
         ret = asdict(self)
@@ -99,13 +102,13 @@ class CallbackHandler:
                             str_to_dict = json.loads(item.arguments)
                             if "log_msg" in str_to_dict:
                                 _str = str_to_dict["log_msg"]
-                        else:
-                            msg = {"type": "response", "message": _str}
-                            if "smiles" in item.arguments:
-                                str_to_dict = json.loads(item.arguments)
-                                if "smiles" in str_to_dict:
-                                    msg["smiles"] = str_to_dict["smiles"]
-                            await send(msg)
+                        
+                        msg = {"type": "response", "message": _str}
+                        if "smiles" in item.arguments:
+                            str_to_dict = json.loads(item.arguments)
+                            if "smiles" in str_to_dict:
+                                msg["smiles"] = str_to_dict["smiles"]
+                        await send(msg)
 
                     else:
 
@@ -129,17 +132,54 @@ class CallbackHandler:
         asyncio.create_task(self.send(assistant_message))
 
 
-class RetroSynthesisContext:
+class RetrosynthesisContext:
+    """
+    Manages a retrosynthesis experiment
+    """
 
     def __init__(self):
-        self.node_ids: Dict[str, Node] = {}
-        self.node_by_smiles: Dict[str, Node] = {}
+        self.node_ids: dict[str, Node] = {}
+        self.node_id_to_planner: dict[str, aizynth_funcs.RetroPlanner] = {}
+        self.node_id_to_charge_client: dict[str, AutoGenClient] = {}
+        self.azf_nodes: dict[str, aizynth_funcs.Node] = {}
+        self.nodes_per_level: dict[int, int] = defaultdict(int)
+        self.parents: dict[str, str] = {}
 
     def reset(self):
-        self.node_by_smiles = {}
-        self.node_ids = {}
+        self.node_ids.clear()
+        self.node_id_to_planner.clear()
+        self.node_id_to_charge_client.clear()
+        self.azf_nodes.clear()
+        self.nodes_per_level.clear()
+        self.parents.clear()
 
-    def get_node_by_id(self, node_id: str) -> Optional[Node]:
-        if node_id in self.node_ids:
-            return self.node_ids[node_id]
-        return None
+
+def calculate_positions(nodes: list[Node], y_offset: int = 0):
+    """
+    Calculate positions for all nodes (matching frontend logic).
+    Operates in-place.
+    """
+    BOX_WIDTH = 270  # Must match with javascript!
+    BOX_GAP = 160  # Must match with javascript!
+    level_gap = BOX_WIDTH + BOX_GAP
+    node_spacing = 150
+
+    # Group by level
+    levels = {}
+    for node in nodes:
+        level = node.level
+        if level not in levels:
+            levels[level] = []
+        levels[level].append(node)
+
+    # Position nodes
+    for node in nodes:
+        level_nodes = levels[node.level]
+        index_in_level = level_nodes.index(node) + y_offset
+
+        node.x = 100 + node.level * level_gap
+        node.y = 100 + index_in_level * node_spacing
+
+
+async def highlight_node(node: Node, websocket: WebSocket, highlight: bool):
+    await websocket.send_json({"type": "node_update", "id": node.id, "highlight": "yellow" if highlight else "normal"})

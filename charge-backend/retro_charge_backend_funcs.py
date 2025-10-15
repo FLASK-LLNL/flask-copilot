@@ -1,8 +1,24 @@
 from fastapi import WebSocket
 from charge.clients.autogen import AutoGenClient
-from backend_helper_funcs import RetroSynthesisContext
-from charge.servers.AiZynthTools import RetroPlanner
+from charge.servers.AiZynthTools import RetroPlanner, ReactionPath
+from aizynth_backend_funcs import generate_tree_structure
+from loguru import logger
+from typing import Optional, Union, Dict, cast
 
+from backend_helper_funcs import (
+    CallbackHandler,
+    RetrosynthesisContext,
+    calculate_positions,
+    highlight_node,
+    RetrosynthesisContext,
+    Node,
+    Edge,
+)
+
+from charge.experiments.RetrosynthesisExperiment import (
+    TemplateFreeRetrosynthesisExperiment as RetrosynthesisExperiment,
+    TemplateFreeReactionOutputSchema as ReactionOutputSchema,
+)
 
 RETROSYNTH_UNCONSTRAINED_USER_PROMPT_TEMPLATE = (
     "Provide a retrosynthetic pathway for the target molecule {target_molecule}. "
@@ -48,7 +64,7 @@ async def constrained_retro(
     constraint_smiles: str,
     charge_runner: AutoGenClient,
     aizynth_planner: RetroPlanner,
-    retro_synth_context: RetroSynthesisContext,
+    retro_synth_context: RetrosynthesisContext,
     websocket: WebSocket,
 ):
     """
@@ -75,7 +91,7 @@ async def constrained_retro(
                     and returns a result object with a to_dict() method. This object also wraps
                     the experiment in experiment_type, which contains the prompts
             aizynth_planner (RetroPlanner): AiZynthFinder-based planner instance
-            retro_synth_context (RetroSynthesisContext): Context/configuration object
+            retro_synth_context (RetrosynthesisContext): Context/configuration object
                     containing Node objects representing the retrosynthetic state.
             websocket (WebSocket): Open WebSocket connection used to stream JSON messages
                     back to the caller. Messages sent by this function include at minimum
@@ -128,7 +144,7 @@ async def unconstrained_retro(
     parent_smiles: str,
     charge_runner: AutoGenClient,
     aizynth_planner: RetroPlanner,
-    retro_synth_context: RetroSynthesisContext,
+    retro_synth_context: RetrosynthesisContext,
     websocket: WebSocket,
 ):
     """
@@ -155,7 +171,7 @@ async def unconstrained_retro(
                     and returns a result object with a to_dict() method. This object also wraps
                     the experiment in experiment_type, which contains the prompts
             aizynth_planner (RetroPlanner): AiZynthFinder-based planner instance
-            retro_synth_context (RetroSynthesisContext): Context/configuration object
+            retro_synth_context (RetrosynthesisContext): Context/configuration object
                     containing Node objects representing the retrosynthetic state.
             websocket (WebSocket): Open WebSocket connection used to stream JSON messages
                     back to the caller. Messages sent by this function include at minimum
@@ -195,3 +211,154 @@ async def unconstrained_retro(
     # Please implement unconstrained retrosynthesis here
 
     await websocket.send_json({"type": "complete"})
+
+
+async def generate_molecules(start_smiles: str, config_file: str, context: RetrosynthesisContext, websocket: WebSocket):
+    """Stream positioned nodes and edges"""
+    logger.info(f"Planning retrosynthesis for: {start_smiles}")
+
+    # Generate and position entire tree upfront
+
+    root = Node(
+        id="node_0",
+        smiles=start_smiles,
+        label=start_smiles,
+        hoverInfo=f"# Root molecule \n **SMILES:** {start_smiles}",
+        level=0,
+        parentId=None,
+        cost=None,
+        bandgap=None,
+        yield_=None,
+        highlight="yellow",
+        x=100,
+        y=100,
+    )
+    await websocket.send_json({"type": "node", **root.json()})
+    planner = context.node_id_to_planner[root.id] = RetroPlanner(configfile=config_file)
+    _, _, routes = planner.plan(start_smiles)
+    if not routes:
+        await websocket.send_json(
+            {
+                "type": "response",
+                "message": f"No synthesis routes found for {start_smiles}.",
+                "smiles": start_smiles,
+            }
+        )
+        await websocket.send_json({"type": "complete"})
+        return
+    logger.info(f"Found {len(routes)} routes for {start_smiles}.")
+
+    planner.last_route_used = 0
+    reaction_path = ReactionPath(route=routes[0])
+    nodes, edges = generate_tree_structure(reaction_path.nodes, context)
+    logger.info(f"Generated {len(nodes)} nodes and {len(edges)} edges.")
+
+    calculate_positions(nodes)
+
+    # Stream remaining nodes with edges
+    for node in nodes[1:]:
+        # Find edge for this node
+        edge = next((e for e in edges if e.toNode == node.id), None)
+
+        # Send node
+        await websocket.send_json({"type": "node", **node.json()})
+        if edge:
+            await websocket.send_json({"type": "edge", **edge.json()})
+
+    await websocket.send_json({"type": "node_update", "id": root.id, "highlight": "normal"})
+    await websocket.send_json({"type": "complete"})
+
+
+
+
+async def constrained_opt(parent_smiles, constraint_smiles, planner, websocket: WebSocket):
+    """Constrained optimization using retrosynthesis"""
+
+    await websocket.send_json(
+        {
+            "type": "response",
+            "message": f"Finding synthesis pathway for {parent_smiles}...",
+            "smiles": parent_smiles,
+        }
+    )
+    await websocket.send_json(
+        {
+            "type": "response",
+            "message": f"Searching for alternatives without {constraint_smiles}",
+            "smiles": constraint_smiles,
+        }
+    )
+
+    user_prompt = RETROSYNTH_CONSTRAINED_USER_PROMPT_TEMPLATE.format(
+        target_molecule=parent_smiles, constrained_reactant=constraint_smiles
+    )
+    retro_experiment = RetrosynthesisExperiment(user_prompt=user_prompt)
+    planner.experiment_type = retro_experiment
+    logger.info(f"Optimizing {parent_smiles} without using {constraint_smiles} in the synthesis.")
+    result = await planner.run()
+    return result
+
+
+async def optimize_molecule_retro(node_id: str,
+                                  context: RetrosynthesisContext,
+                                  websocket: WebSocket,
+                                  model: str,
+                                  backend: str,
+                                  api_key: str,
+                                  model_kwargs: Optional[dict] = None,
+                                  server_urls: Optional[Union[str, list[str]]] = None):
+    """Optimize a molecule using retrosynthesis by node ID"""
+    current_node = context.node_ids.get(node_id)
+    assert current_node is not None, f"Node ID {node_id} not found"
+
+    await websocket.send_json(
+        {
+            "type": "response",
+            "message": f"Finding synthesis pathway to {current_node.smiles}...",
+            "smiles": current_node.smiles,
+        }
+    )
+
+    if node_id in context.node_id_to_charge_client:
+        # Existing context
+        runner = context.node_id_to_charge_client[node_id]
+    else:
+        # New context
+        user_prompt = RETROSYNTH_UNCONSTRAINED_USER_PROMPT_TEMPLATE.format(target_molecule=current_node.smiles)
+        user_prompt += "\nDouble check the reactants with the `predict_reaction_products` tool to see if the products are equivalent to the given product. If there is any inconsistency (canonicalize both sides of the equation first), log it and try some other set of reactants."
+        retro_experiment = RetrosynthesisExperiment(user_prompt=user_prompt)
+        runner = AutoGenClient(
+            experiment_type=retro_experiment,
+            model=model,
+            backend=backend,
+            api_key=api_key,
+            model_kwargs=model_kwargs,
+            server_url=server_urls,
+            thoughts_callback=CallbackHandler(websocket),
+        )
+        context.node_id_to_charge_client[node_id] = runner
+
+    logger.info(f"Optimizing {current_node.smiles} using retrosynthesis.")
+
+    # Run experiment
+    await highlight_node(current_node, websocket, True)
+    result: ReactionOutputSchema = cast(ReactionOutputSchema, await runner.run())
+    await highlight_node(current_node, websocket, False)
+
+    level = current_node.level + 1
+    num_nodes = len(context.node_ids)
+
+    nodes: list[Node] = []
+    edges: list[Edge] = []
+    for i, smiles in enumerate(result.reactants_smiles_list):
+        node = Node(f"node_{num_nodes+i}", smiles, smiles, "Discovered", level, current_node.id)
+        nodes.append(node)
+        context.node_ids[node.id] = node
+        edges.append(Edge(f"edge_{node_id}_{node.id}", node_id, node.id, "complete"))
+
+    calculate_positions(nodes, context.nodes_per_level[level])
+    context.nodes_per_level[level] += len(nodes)
+
+    for node, edge in zip(nodes, edges):
+        await websocket.send_json({"type": "node", **node.json()})
+        await websocket.send_json({"type": "edge", **edge.json()})
