@@ -14,12 +14,11 @@ from backend_helper_funcs import Node, Edge
 from backend_helper_funcs import get_bandgap, get_price
 
 # TODO: Convert this to a dataclass
-MOLECULE_HOVER_TEMPLATE = """**SMILES:** `{}`\n
+MOLECULE_HOVER_TEMPLATE = """**SMILES:** `{smiles}`\n
 ## Properties
- - Molecule Weight: {:.3f}
- - **Cost:** {:.2f}
- - **Density:** {:.3f}
- - **Synthesizability (SA) Score:** {:.3f}"""
+ - **Band Gap:** {bandgap:.2f}
+ - **Density:** {density:.3f}
+ - **Synthesizability (SA) Score:** {sascore:.3f}"""
 
 
 async def lead_molecule(
@@ -46,10 +45,6 @@ async def lead_molecule(
         data=[lead_molecule_data], file_path=mol_file_path
     )
 
-    # Start the db with the lead molecule
-    lmo_helper_funcs.save_list_to_json_file(
-        data=[lead_molecule_data], file_path=mol_file_path
-    )
     logger.info(f"Storing found molecules in {mol_file_path}")
 
     # Run the experiment in a loop
