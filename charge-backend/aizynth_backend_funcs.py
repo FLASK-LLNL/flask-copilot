@@ -6,11 +6,11 @@ import copy
 from typing import Dict
 
 from backend_helper_funcs import Node, Edge, RetroSynthesisContext
-from charge.servers.AiZynthTools import RetroPlanner, aizynth_funcs
+import charge.servers.AiZynthTools as AiZynthFucns
 
 
 def generate_tree_structure(
-    reaction_path_dict: Dict[int, aizynth_funcs.Node],
+    reaction_path_dict: Dict[int, AiZynthFucns.Node],
     retro_synth_context: RetroSynthesisContext,
 ):
     """Generate nodes and edges from reaction path dict"""
@@ -111,7 +111,7 @@ def calculate_positions(nodes: list[Node]):
 
 async def aizynth_retro(
     start_smiles: str,
-    planner: RetroPlanner,
+    planner: AiZynthFucns.RetroPlanner,
     retro_synth_context: RetroSynthesisContext,
     websocket: WebSocket,
 ):
@@ -148,7 +148,7 @@ async def aizynth_retro(
         return
     logger.info(f"Found {len(routes)} routes for {start_smiles}.")
 
-    reaction_path = aizynth_funcs.ReactionPath(route=routes[0])
+    reaction_path = AiZynthFucns.ReactionPath(route=routes[0])
     nodes, edges = generate_tree_structure(reaction_path.nodes, retro_synth_context)
     logger.info(f"Generated {len(nodes)} nodes and {len(edges)} edges.")
 

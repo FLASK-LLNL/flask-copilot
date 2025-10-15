@@ -1,5 +1,5 @@
 from functools import partial
-from fastapi import FastAPI,  WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
@@ -46,7 +46,6 @@ from retro_charge_backend_funcs import (
     get_constrained_prompt,
     get_unconstrained_prompt,
 )
-
 
 
 parser = argparse.ArgumentParser()
@@ -147,10 +146,10 @@ async def websocket_endpoint(websocket: WebSocket):
             data = await websocket.receive_json()
             action = data.get("action")
 
-
             if action in [
                 "compute",
-                "compute-from",
+                "optimize-from",
+                "compute-reaction-from",
                 "recompute-reaction",
                 "recompute-parent-reaction",
             ]:
@@ -162,13 +161,11 @@ async def websocket_endpoint(websocket: WebSocket):
                         await CURRENT_TASK
                     except asyncio.CancelledError:
                         logger.info("Previous compute task cancelled.")
-                
-                assert data["problemType"] in [
-                    "optimization",
-                    "retrosynthesis",
-                ], f"Unknown problem type: {data['problemType']}"
 
                 if action == "compute" and data["problemType"] == "optimization":
+                    # Task to optimize lead molecule using LMO
+                    logger.info("Start Optimization action received")
+                    logger.info(f"Data: {data}")
                     lmo_experiment = LeadMoleculeOptimization(
                         lead_molecule=data["smiles"]
                     )
@@ -191,79 +188,101 @@ async def websocket_endpoint(websocket: WebSocket):
 
                 elif action == "compute" and data["problemType"] == "retrosynthesis":
                     # Task to generate retrosynthesis tree using AiZynthFinder
-                    run_func = partial(
-                        aizynth_retro,
-                        data["smiles"],
-                        aizynthfinder_planner,
-                        retro_synth_context if retro_synth_context else RetroSynthesisContext(),
-                        websocket,
-                    )
+                    logger.info("Start Retrosynthesis action received")
+                    logger.info(f"Data: {data}")
+
+                    # Sample run function
+                    # Should be written over - S.Z
+
+                    # run_func = partial(
+                    #     aizynth_retro,
+                    #     data["smiles"],
+                    #     aizynthfinder_planner,
+                    #     (
+                    #         retro_synth_context
+                    #         if retro_synth_context
+                    #         else RetroSynthesisContext()
+                    #     ),
+                    #     websocket,
+                    # )
+                elif action == "optimize-from":
+                    logger.info("Recompute reaction action received")
+                    logger.info(f"Data: {data}")
+
+                    # Leaf node optimization
+                    prompt = data.get("query", None)
+                    if prompt:
+                        await websocket.send_json(
+                            {
+                                "type": "response",
+                                "message": f"Processing optimization query: {data['query']} for node {data['nodeId']}",
+                            }
+                        )
+                    logger.info("Optimize from action received")
+                    logger.info(f"Data: {data}")
+
+                elif action == "recompute-reaction":
+                    prompt = data.get("query", None)
+                    if prompt:
+                        await websocket.send_json(
+                            {
+                                "type": "response",
+                                "message": f"Processing reaction query: {data['query']} for node {data['nodeId']}",
+                            }
+                        )
+
+                    logger.info("Recompute reaction action received")
+                    logger.info(f"Data: {data}")
+                    await websocket.send_json({"type": "complete"})
+                    pass
+                elif action == "compute-reaction-from":
+                    pass
+                elif action == "recompute-parent-reaction":
+                    logger.info("Recompute parent reaction action received")
+                    logger.info(f"Data: {data}")
+
+                    # Sample task to perform constrained retrosynthesis
+                    # Should be written over - S.Z
+
+                    # node_id = data["nodeId"]
+
+                    # assert (
+                    #     retro_synth_context is not None
+                    # ), "Retro synthesis context is not initialized"
+                    # parent_node = retro_synth_context.get_parent(node_id)
+                    # node = retro_synth_context.get_node_by_id(node_id)
+
+                    # assert (
+                    #     parent_node is not None
+                    # ), f"Parent node for {node_id} not found"
+
+                    # parent_id = parent_node.id
+                    # parent_smiles = parent_node.smiles
+                    # constraint_id = node_id
+                    # constraint_smiles = node.smiles
+
+                    # user_prompt = get_constrained_prompt(
+                    #     parent_smiles, constraint_smiles
+                    # )
+
+                    # retro_experiment = RetrosynthesisExperiment(user_prompt=user_prompt)
+                    # retro_runner = make_client(
+                    #     retro_runner, retro_experiment, server_urls, websocket
+                    # )
+
+                    # run_func = partial(
+                    #     constrained_retro,
+                    #     parent_id,
+                    #     parent_smiles,
+                    #     constraint_id,
+                    #     constraint_smiles,
+                    #     retro_runner,
+                    #     aizynthfinder_planner,
+                    #     retro_synth_context,
+                    #     websocket,
+                    # )
                 else:
-
-                    if action == "compute-from" or action == "recompute-reaction":
-                        logger.info("Compute from action received")
-                        logger.info(f"Data: {data}")
-
-                        smiles = data["smiles"]
-                        node_id = data["nodeId"]
-
-                        user_prompt = get_unconstrained_prompt(smiles)
-                        retro_experiment = RetrosynthesisExperiment(
-                            user_prompt=user_prompt
-                        )
-                        retro_runner = make_client(
-                            retro_runner, retro_experiment, server_urls, websocket
-                        )
-                        run_func = partial(unconstrained_retro,
-                                            node_id,
-                                            smiles,
-                                            retro_runner,
-                                            aizynthfinder_planner,
-                                            retro_synth_context if retro_synth_context else RetroSynthesisContext(),
-                                            websocket
-                                            )
-                    elif action == "recompute-parent-reaction":
-                        logger.info("Recompute parent reaction action received")
-                        logger.info(f"Data: {data}")
-
-                        smiles = data["smiles"]
-                        node_id = data["nodeId"]
-                        assert retro_synth_context is not None, "Retro synthesis context is not initialized"
-                        parent_node = retro_synth_context.get_parent(node_id)
-
-                        assert (
-                            parent_node is not None
-                        ), f"Parent node for {node_id} not found"
-
-                        parent_id = parent_node.id
-                        parent_smiles = parent_node.smiles
-                        constraint_id = node_id
-                        constraint_smiles = smiles
-
-                        user_prompt = get_constrained_prompt(
-                            parent_smiles, constraint_smiles
-                        )
-
-                        retro_experiment = RetrosynthesisExperiment(
-                            user_prompt=user_prompt
-                        )
-                        retro_runner = make_client(
-                            retro_runner, retro_experiment, server_urls, websocket
-                        )
-
-                        run_func = partial(
-                            constrained_retro,
-                            parent_id,
-                            parent_smiles,
-                            constraint_id,
-                            constraint_smiles,
-                            retro_runner,
-                            aizynthfinder_planner
-                            retro_synth_context,
-                            websocket,
-                        )
-                    else:
-                        raise ValueError(f"Unknown action: {action}")
+                    raise ValueError(f"Unknown action: {action}")
 
                 async def run_task():
                     await run_func()
