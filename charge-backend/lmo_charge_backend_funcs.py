@@ -11,6 +11,7 @@ from charge.tasks.LMOTask import (
     LMOTask as LeadMoleculeOptimization,
     MoleculeOutputSchema,
 )
+from charge.experiments.LMOExperiment import MoleculeOutputSchema, SCHEMA_PROMPT
 
 from backend_helper_funcs import CallbackHandler, Node, Edge
 from backend_helper_funcs import get_bandgap, get_price
@@ -21,6 +22,21 @@ MOLECULE_HOVER_TEMPLATE = """**SMILES:** `{smiles}`\n
  - **Band Gap:** {bandgap:.2f}
  - **Density:** {density:.3f}
  - **Synthesizability (SA) Score:** {sascore:.3f}"""
+
+DENSITY_USER_PROMPT = """
+You are an expert chemist designing organic molecules. Given the lead molecule with SMILES, {}, 
+suggest 3 new molecules that only contain C,H,O,N and have as high of density as possible. 
+For each molecule that you suggest, give the SMILES string and the density of that molecule. 
+The suggested molecules need not be similar to the lead molecule, but must be valid, new molecules not on the internet, and only contain C,H,O, and N atoms.
+"""
+
+
+FURTHER_REFINE_PROMPT = """
+Using quantum simulations, I have determined the densities of those three molecules to be
+ {}, respectively, for molecules {}. 
+ Given this information, suggest 3 new molecules that only contain C,H,O,N and have as high of density as possible. For each molecule that you suggest, give the SMILES string and the density of that molecule.
+ The suggested molecules need not be similar to the lead molecule, but must be valid, new molecules not on the internet, and only contain C,H,O, and N atoms.
+"""
 
 
 async def generate_lead_molecule(
@@ -50,7 +66,11 @@ async def generate_lead_molecule(
     clogger = CallbackLogger(websocket)
 
     clogger.info(
+<<<<<<< HEAD
         f"Starting task with lead molecule: {lead_molecule_smiles}",
+=======
+        f"Starting experiment with lead molecule: {lead_molecule_smiles}",
+>>>>>>> a348d01 (Updated LMO with density run)
         smiles=lead_molecule_smiles,
     )
 
@@ -107,6 +127,12 @@ async def generate_lead_molecule(
 
     canonical_smiles = lead_molecule_smiles
     callback = CallbackHandler(websocket)
+    density_experiment = LeadMoleculeOptimization(
+        lead_molecule=lead_molecule_smiles,
+        user_prompt=DENSITY_USER_PROMPT.format(lead_molecule_smiles)
+        + "\n"
+        + SCHEMA_PROMPT,
+    )
 
     for i in range(depth):
         logger.info(f"Iteration {i}")
@@ -178,8 +204,16 @@ async def generate_lead_molecule(
                         density=processed_mol["density"],
                         sascore=processed_mol["sascore"],
                     )
+                    canonical_smiles = processed_mol["smiles"]
+                    densities = processed_mol["density"]
+                    if (
+                        canonical_smiles not in new_molecules
+                        and canonical_smiles != "Invalid SMILES"
+                    ):
+                        new_molecules.append(canonical_smiles)
 
-                    node_id += 1
+                        generated_smiles_list.append(canonical_smiles)
+                        generated_densities.append(densities)
 
                     node = Node(
                         id=f"node_{node_id}",
@@ -203,6 +237,19 @@ async def generate_lead_molecule(
                 else:
                     logger.info(f"Duplicate molecule found: {canonical_smiles}")
                     # Continue the while loop to try generating again
+                if len(generated_smiles_list) > 0:
+
+                    density_experiment = LeadMoleculeOptimization(
+                        lead_molecule=lead_molecule_smiles,
+                        user_prompt=FURTHER_REFINE_PROMPT.format(
+                            ", ".join(map(str, generated_densities)),
+                            ", ".join(generated_smiles_list),
+                        )
+                        + "\n"
+                        + SCHEMA_PROMPT,
+                    )
+                    lmo_runner.experiment = density_experiment
+
             except WebSocketDisconnect:
                 logger.info("WebSocket disconnected")
                 raise

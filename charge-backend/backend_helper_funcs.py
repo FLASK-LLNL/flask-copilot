@@ -8,6 +8,8 @@ from collections import defaultdict
 
 from charge.clients.autogen import AutoGenAgent
 import charge.servers.AiZynthTools as aizynth_funcs
+from charge.servers import SMILES_utils
+from charge.servers.molecular_property_prediction import chemprop_preds_server
 
 
 # TODO: Put this on the top level package and make it reusable
@@ -132,12 +134,12 @@ class CallbackHandler:
 
             for result in assistant_message.content:
                 if result.is_error:
-                    message = (
-                        f"[{source}] Function {result.name} errored with output: {result.content}"
-                    )
+                    message = f"[{source}] Function {result.name} errored with output: {result.content}"
                     logger.error(message)
                 else:
-                    message = f"[{source}] Function {result.name} returned: {result.content}"
+                    message = (
+                        f"[{source}] Function {result.name} returned: {result.content}"
+                    )
                     logger.info(message)
         else:
             message = f"[{source}] Model: {assistant_message.message.content}"
@@ -211,3 +213,17 @@ async def highlight_node(node: Node, websocket: WebSocket, highlight: bool):
 async def loop_executor(executor, func, *args, **kwargs):
     loop = asyncio.get_event_loop()
     return await loop.run_in_executor(executor, func, *args, **kwargs)
+
+
+def post_process_lmo_smiles(smiles: str, parent_id: int, node_id: int) -> Dict:
+    """Post-process LMO SMILES to add properties like density and SAScore."""
+    canonical_smiles = SMILES_utils.canonicalize_smiles(smiles)
+    density = chemprop_preds_server(canonical_smiles, property_name="density")
+    sa_score = SMILES_utils.get_synthesizability(canonical_smiles)
+    return {
+        "smiles": canonical_smiles,
+        "parent_id": parent_id,
+        "node_id": node_id,
+        "density": density,
+        "sascore": sa_score,
+    }
