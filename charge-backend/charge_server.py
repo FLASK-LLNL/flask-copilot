@@ -176,6 +176,11 @@ async def websocket_endpoint(websocket: WebSocket):
             if action == "compute":
 
                 if data["problemType"] == "optimization":
+
+                    # Task to optimize lead molecule using LMO
+                    logger.info("Start Optimization action received")
+                    logger.info(f"Data: {data}")
+
                     lmo_experiment = LeadMoleculeOptimization(lead_molecule=data["smiles"])
                     if lmo_runner is None:
                         lmo_runner = AutoGenClient(
@@ -193,6 +198,7 @@ async def websocket_endpoint(websocket: WebSocket):
                     # Set up retrosynthesis experiment to retrosynthesis
                     # to ensure the reactant is not used in the synthesis
                     logger.info("Setting up retrosynthesis experiment...")
+                    logger.info(f"Data: {data}")
 
                     if retro_synth_context is None:
                         retro_synth_context = RetrosynthesisContext()
@@ -230,7 +236,7 @@ async def websocket_endpoint(websocket: WebSocket):
                 # Leaf node optimization
                 logger.info("Synthesize tree leaf action received")
                 logger.info(f"Data: {data}")
-                await optimize_molecule_retro(data["nodeId"], retro_synth_context, websocket, MODLE, BACKEND, API_KEY, MODEL_KWARGS, RETRO_URLS)
+                await optimize_molecule_retro(data["nodeId"], retro_synth_context, websocket, MODEL, BACKEND, API_KEY, MODEL_KWARGS, RETRO_URLS)
                 await websocket.send_json({"type": "complete"})
             elif action == "optimize-from":
                 # Leaf node optimization
