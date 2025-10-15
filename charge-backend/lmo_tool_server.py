@@ -1,7 +1,7 @@
 import sys
 import os
 
-import charge.servers.molecule_generation_server as LMO_MCP
+import charge.servers.molecular_generation_server as LMO_MCP
 from charge.servers.server_utils import update_mcp_network, get_hostname
 
 

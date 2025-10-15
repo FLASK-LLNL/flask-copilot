@@ -4,7 +4,7 @@ import os
 
 from charge.servers.AiZynthTools import is_molecule_synthesizable, RetroPlanner
 
-import charge.experiments.Retrosynthesis.reaction_server as RETRO_MCP
+import charge.servers.retrosynthesis_reaction_server as RETRO_MCP
 from charge.servers.server_utils import update_mcp_network, get_hostname
 
 if __name__ == "__main__":
