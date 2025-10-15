@@ -13,8 +13,8 @@ from charge.tasks.LMOTask import (
 )
 from charge.experiments.LMOExperiment import MoleculeOutputSchema, SCHEMA_PROMPT
 
-from backend_helper_funcs import CallbackHandler, Node, Edge
-from backend_helper_funcs import get_bandgap, post_process_lmo_smiles
+from backend_helper_funcs import Node, Edge
+from backend_helper_funcs import get_bandgap, post_process_lmo_smiles, get_price
 
 # TODO: Convert this to a dataclass
 MOLECULE_HOVER_TEMPLATE = """**SMILES:** `{smiles}`\n
@@ -211,23 +211,35 @@ async def generate_lead_molecule(
                         generated_smiles_list.append(canonical_smiles)
                         generated_densities.append(densities)
 
-                    node = Node(
-                        id=f"node_{node_id}",
-                        smiles=canonical_smiles,
-                        label=f"{canonical_smiles}",
-                        # Add property calculations here
-                        density=processed_mol["density"],
-                        bandgap=get_bandgap(canonical_smiles),
-                        yield_=None,
-                        level=i + 1,
-                        cost=get_price(canonical_smiles),
-                        # Not sure what to put here
-                        hoverInfo=mol_hov,
-                        x=150 + node_id * 350,
-                        y=100,
-                    )
+                        mol_data.append(processed_mol)
+                        lmo_helper_funcs.save_list_to_json_file(
+                            data=mol_data, file_path=mol_file_path
+                        )
+                        logger.info(f"New molecule added: {canonical_smiles}")
+                        node_id += 1
+                        mol_hov = MOLECULE_HOVER_TEMPLATE.format(
+                            canonical_smiles,
+                            0.0,  # TODO: Add cost calculation
+                            processed_mol["density"],
+                            processed_mol["sascore"],
+                        )
+                        node = Node(
+                            id=f"node_{node_id}",
+                            smiles=canonical_smiles,
+                            label=f"{canonical_smiles}",
+                            # Add property calculations here
+                            density=processed_mol["density"],
+                            bandgap=get_bandgap(canonical_smiles),
+                            yield_=None,
+                            level=i + 1,
+                            cost=get_price(canonical_smiles),
+                            # Not sure what to put here
+                            hoverInfo=mol_hov,
+                            x=150 + node_id * 270,
+                            y=100,
+                        )
 
-                    await websocket.send_json({"type": "node", "node": node.json()})
+                        await websocket.send_json({"type": "node", **node.json()})
 
                     break  # Exit while loop to proceed to next node
                 else:
