@@ -8,6 +8,7 @@ from charge.clients.autogen import AutoGenClient
 
 from charge.experiments.LMOExperiment import (
     LMOExperiment as LeadMoleculeOptimization,
+    MoleculeOutputSchema,
 )
 
 from backend_helper_funcs import Node, Edge
@@ -65,7 +66,7 @@ async def lead_molecule(
         # Add property calculations here
         hoverInfo=leader_hov,
         level=0,
-        x=100,
+        x=50,
         y=100,
     )
     logger.info(f"Sending root node: {node}")
@@ -80,7 +81,7 @@ async def lead_molecule(
         label="Optimizing",
     )
     logger.info(f"Sending initial edge: {edge_data}")
-    await websocket.send_json({"type": "edge", **edge_data.json()})
+
     # Generate one node at a time
 
     mol_data = [lead_molecule_data]
@@ -107,7 +108,7 @@ async def lead_molecule(
 
             try:
                 iteration += 1
-                results = await lmo_runner.run()
+                results: MoleculeOutputSchema = await lmo_runner.run()
                 results = results.as_list()  # Convert to list of strings
                 logger.info(f"New molecules generated: {results}")
                 processed_mol = lmo_helper_funcs.post_process_smiles(
@@ -145,7 +146,7 @@ async def lead_molecule(
                         cost=get_price(canonical_smiles),
                         # Not sure what to put here
                         hoverInfo=mol_hov,
-                        x=node_id * 250,
+                        x=50 + node_id * 250,
                         y=100,
                     )
 
