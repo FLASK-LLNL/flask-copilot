@@ -1,5 +1,9 @@
-import sys
-import os
+################################################################################
+## Copyright 2025 Lawrence Livermore National Security, LLC. and Binghamton University.
+## See the top-level LICENSE file for details.
+##
+## SPDX-License-Identifier: Apache-2.0
+################################################################################
 
 
 from charge.servers.AiZynthTools import is_molecule_synthesizable, RetroPlanner

@@ -1,5 +1,10 @@
-import sys
-import os
+################################################################################
+## Copyright 2025 Lawrence Livermore National Security, LLC. and Binghamton University.
+## See the top-level LICENSE file for details.
+##
+## SPDX-License-Identifier: Apache-2.0
+################################################################################
+
 
 import charge.servers.molecular_generation_server as LMO_MCP
 from charge.servers.server_utils import update_mcp_network, get_hostname
