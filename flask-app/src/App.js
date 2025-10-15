@@ -600,6 +600,7 @@ const ChemistryTool = () => {
       setWsConnected(true);
       setWsReconnecting(false);
       setWsError('');
+      reset();  // Server state must match UI state
     };
     
     socket.onmessage = (event) => {
@@ -1596,10 +1597,12 @@ const ChemistryTool = () => {
             </>
           )}
 
+          { (problemType === "retrosynthesis" && hasDescendants(contextMenu.node.id, treeNodes)) && (
           <button onClick={() => handleCustomQuery(contextMenu.node)} className="w-full px-4 py-2 text-left text-sm text-white hover:bg-purple-600/50 transition-colors flex items-center gap-2 border-t border-purple-400/30">
             <Send className="w-4 h-4" />
             { (problemType === "retrosynthesis" && hasDescendants(contextMenu.node.id, treeNodes)) ? (<>Find Another Reaction with Custom Prompt...</>) : (<>Custom Query...</>) }
           </button>
+          )}
         </div>
       )}
 
