@@ -1,4 +1,5 @@
 from loguru import logger
+from callback_logger import callback_logger
 
 from fastapi import WebSocket
 import asyncio
@@ -75,8 +76,9 @@ async def aizynth_retro(
     retro_synth_context: RetrosynthesisContext,
     websocket: WebSocket,
 ):
+    clogger = callback_logger(websocket)
     """Stream positioned nodes and edges"""
-    logger.info(f"Planning retrosynthesis for: {start_smiles}")
+    clogger.info(f"Planning retrosynthesis for: {start_smiles}")
 
     # Generate and position entire tree upfront
 
@@ -106,11 +108,11 @@ async def aizynth_retro(
         )
         await websocket.send_json({"type": "complete"})
         return
-    logger.info(f"Found {len(routes)} routes for {start_smiles}.")
+    clogger.info(f"Found {len(routes)} routes for {start_smiles}.")
 
     reaction_path = AiZynthFuncs.ReactionPath(route=routes[0])
     nodes, edges = generate_tree_structure(reaction_path.nodes, retro_synth_context)
-    logger.info(f"Generated {len(nodes)} nodes and {len(edges)} edges.")
+    clogger.info(f"Generated {len(nodes)} nodes and {len(edges)} edges.")
 
     positioned_nodes = calculate_positions(nodes)
 

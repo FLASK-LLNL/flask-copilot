@@ -182,7 +182,7 @@ async def websocket_endpoint(websocket: WebSocket):
 
                     # Task to optimize lead molecule using LMO
                     clogger.info("Start Optimization action received")
-                    clogger.info(f"Data: {data}")
+                    logger.info(f"Data: {data}")
 
                     lmo_experiment = LeadMoleculeOptimization(lead_molecule=data["smiles"])
                     if lmo_runner is None:
@@ -200,7 +200,7 @@ async def websocket_endpoint(websocket: WebSocket):
                 elif data["problemType"] == "retrosynthesis":
                     # Set up retrosynthesis experiment to retrosynthesis
                     # to ensure the reactant is not used in the synthesis
-                    logger.info("Setting up retrosynthesis experiment...")
+                    clogger.info("Setting up retrosynthesis experiment...")
                     logger.info(f"Data: {data}")
 
                     if retro_synth_context is None:

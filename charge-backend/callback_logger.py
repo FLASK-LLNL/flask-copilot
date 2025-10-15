@@ -7,10 +7,16 @@ async def handle_callback_log(message):
     record = message.record
     websocket = record["extra"].get("websocket", None)
     if websocket:
+        # Timestamp is already included in the GUI window
+        # timestamp = record["time"].isoformat(" ", timespec='seconds')
+        msg = record["message"]
+        level = record["level"].name,
         await websocket.send_json(
             {
                 "type": "response",
-                "message": message,
+                "source": f"Logger ({level})",
+                "message": msg,
+#                "message": f"{timestamp}: {msg}",
             }
         )
     sys.stdout.write(message)
