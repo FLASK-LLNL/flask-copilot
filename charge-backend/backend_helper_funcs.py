@@ -120,7 +120,7 @@ def tool_output_formatting(function_message: str, func_type: str) -> dict:
             "smiles": smiles,
         }
     else:
-        if func_type == "log_msg":
+        if func_type == "log_progress":
             _str = f"**Model**\n{str_to_dict['log_msg']}"
         else:
             msg = {"type": "response", "message": function_message}
