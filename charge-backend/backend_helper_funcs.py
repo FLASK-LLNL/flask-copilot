@@ -2,29 +2,8 @@ from loguru import logger
 from fastapi import WebSocket
 import asyncio
 import json
-from typing import Optional, Literal
+from typing import Dict, Optional, Literal, Tuple
 from dataclasses import dataclass, asdict
-
-RETROSYNTH_UNCONSTRAINED_USER_PROMPT_TEMPLATE = (
-    "Provide a retrosynthetic pathway for the target molecule {target_molecule}. "
-    + "The pathway should be provided as a tuple of reactants as SMILES and the product as SMILES. "
-    + "Perform only single step retrosynthesis. Make sure the SMILES strings are valid. "
-    + "Use tools to verify the SMILES strings and diagnose any issues that arise."
-    + "Do the evaluation step-by-step. Propose a retrosynthetic step, then evaluate it. "
-    + "If the evaluation fails, propose a new retrosynthetic step and evaluate it again. "
-    + "Find the best possible retrosynthetic step, and use tools to see if the "
-    + "proposed reactants are synthesizable. "
-)
-
-RETROSYNTH_CONSTRAINED_USER_PROMPT_TEMPLATE = (
-    "Provide a retrosynthetic pathway for the target molecule {target_molecule}. "
-    + "The pathway should be provided as a tuple of reactants as SMILES and the product as SMILES. "
-    + "Perform only single step retrosynthesis. Make sure the SMILES strings are valid. "
-    + "Use tools to verify the SMILES strings and diagnose any issues that arise. "
-    + "The following reactant cannot be used in the retrosynthetic step: {constrained_reactant}. "
-    + "Do the evaluation step-by-step. Propose a retrosynthetic step, then evaluate it. "
-    + "If the evaluation fails, propose a new retrosynthetic step and evaluate it again. "
-)
 
 
 # TODO: Put this on the top level package and make it reusable
@@ -153,9 +132,14 @@ class CallbackHandler:
 class RetroSynthesisContext:
 
     def __init__(self):
-        self.node_ids = {}
-        self.node_by_smiles = {}
+        self.node_ids: Dict[str, Node] = {}
+        self.node_by_smiles: Dict[str, Node] = {}
 
     def reset(self):
         self.node_by_smiles = {}
         self.node_ids = {}
+
+    def get_node_by_id(self, node_id: str) -> Optional[Node]:
+        if node_id in self.node_ids:
+            return self.node_ids[node_id]
+        return None
