@@ -62,6 +62,15 @@ class ModelMessage:
         return ret
 
 
+@dataclass
+class Tool:
+    name: str
+    description: Optional[str] = None
+
+    def json(self):
+        return asdict(self)
+
+
 def get_price(smiles: str) -> float:
     """Mock function to get price of a molecule given its SMILES string."""
     # In a real implementation, this would query a database or an API.
@@ -218,7 +227,7 @@ async def loop_executor(executor, func, *args, **kwargs):
 def post_process_lmo_smiles(smiles: str, parent_id: int, node_id: int) -> Dict:
     """Post-process LMO SMILES to add properties like density and SAScore."""
     canonical_smiles = SMILES_utils.canonicalize_smiles(smiles)
-    density = chemprop_preds_server(canonical_smiles, property_name="density")
+    density = chemprop_preds_server(canonical_smiles, "density")
     sa_score = SMILES_utils.get_synthesizability(canonical_smiles)
     return {
         "smiles": canonical_smiles,

@@ -66,11 +66,7 @@ async def generate_lead_molecule(
     clogger = CallbackLogger(websocket)
 
     clogger.info(
-<<<<<<< HEAD
         f"Starting task with lead molecule: {lead_molecule_smiles}",
-=======
-        f"Starting experiment with lead molecule: {lead_molecule_smiles}",
->>>>>>> a348d01 (Updated LMO with density run)
         smiles=lead_molecule_smiles,
     )
 
