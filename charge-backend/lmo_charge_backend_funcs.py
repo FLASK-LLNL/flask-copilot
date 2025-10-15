@@ -10,6 +10,7 @@ from charge.experiments.LMOExperiment import (
     LMOExperiment as LeadMoleculeOptimization,
     MoleculeOutputSchema,
 )
+from charge.experiments.LMOExperiment import MoleculeOutputSchema, SCHEMA_PROMPT
 
 from backend_helper_funcs import Node, Edge
 from backend_helper_funcs import get_bandgap, get_price
@@ -20,6 +21,21 @@ MOLECULE_HOVER_TEMPLATE = """**SMILES:** `{smiles}`\n
  - **Band Gap:** {bandgap:.2f}
  - **Density:** {density:.3f}
  - **Synthesizability (SA) Score:** {sascore:.3f}"""
+
+DENSITY_USER_PROMPT = """
+You are an expert chemist designing organic molecules. Given the lead molecule with SMILES, {}, 
+suggest 3 new molecules that only contain C,H,O,N and have as high of density as possible. 
+For each molecule that you suggest, give the SMILES string and the density of that molecule. 
+The suggested molecules need not be similar to the lead molecule, but must be valid, new molecules not on the internet, and only contain C,H,O, and N atoms.
+"""
+
+
+FURTHER_REFINE_PROMPT = """
+Using quantum simulations, I have determined the densities of those three molecules to be
+ {}, respectively, for molecules {}. 
+ Given this information, suggest 3 new molecules that only contain C,H,O,N and have as high of density as possible. For each molecule that you suggest, give the SMILES string and the density of that molecule.
+ The suggested molecules need not be similar to the lead molecule, but must be valid, new molecules not on the internet, and only contain C,H,O, and N atoms.
+"""
 
 
 async def lead_molecule(
@@ -86,6 +102,13 @@ async def lead_molecule(
 
     mol_data = [lead_molecule_data]
 
+    density_experiment = LeadMoleculeOptimization(
+        lead_molecule=lead_molecule_smiles,
+        user_prompt=DENSITY_USER_PROMPT.format(lead_molecule_smiles)
+        + "\n"
+        + SCHEMA_PROMPT,
+    )
+
     for i in range(depth):
         logger.info(f"Iteration {i}")
         edge = Edge(
@@ -110,58 +133,81 @@ async def lead_molecule(
                 iteration += 1
                 results: MoleculeOutputSchema = await lmo_runner.run()
                 results = results.as_list()  # Convert to list of strings
+                generated_smiles_list = []
+                generated_densities = []
+
                 logger.info(f"New molecules generated: {results}")
-                processed_mol = lmo_helper_funcs.post_process_smiles(
-                    smiles=results[0], parent_id=parent_id, node_id=node_id
-                )
-                canonical_smiles = processed_mol["smiles"]
-                if (
-                    canonical_smiles not in new_molecules
-                    and canonical_smiles != "Invalid SMILES"
-                ):
-                    new_molecules.append(canonical_smiles)
-                    mol_data.append(processed_mol)
-                    lmo_helper_funcs.save_list_to_json_file(
-                        data=mol_data, file_path=mol_file_path
+                for result in results:
+                    processed_mol = lmo_helper_funcs.post_process_smiles(
+                        smiles=result, parent_id=parent_id, node_id=node_id
                     )
-                    logger.info(f"New molecule added: {canonical_smiles}")
-                    mol_hov = MOLECULE_HOVER_TEMPLATE.format(
-                        smiles=canonical_smiles,
-                        bandgap=get_bandgap(canonical_smiles),
-                        density=processed_mol["density"],
-                        sascore=processed_mol["sascore"],
-                    )
+                    canonical_smiles = processed_mol["smiles"]
+                    densities = processed_mol["density"]
+                    if (
+                        canonical_smiles not in new_molecules
+                        and canonical_smiles != "Invalid SMILES"
+                    ):
+                        new_molecules.append(canonical_smiles)
 
-                    node_id += 1
+                        generated_smiles_list.append(canonical_smiles)
+                        generated_densities.append(densities)
 
-                    node = Node(
-                        id=f"node_{node_id}",
-                        smiles=canonical_smiles,
-                        label=f"{canonical_smiles}",
-                        # Add property calculations here
-                        density=processed_mol["density"],
-                        bandgap=get_bandgap(canonical_smiles),
-                        yield_=None,
-                        level=i + 1,
-                        cost=get_price(canonical_smiles),
-                        # Not sure what to put here
-                        hoverInfo=mol_hov,
-                        x=50 + node_id * 250,
-                        y=100,
-                    )
+                        mol_data.append(processed_mol)
+                        lmo_helper_funcs.save_list_to_json_file(
+                            data=mol_data, file_path=mol_file_path
+                        )
+                        logger.info(f"New molecule added: {canonical_smiles}")
+                        node_id += 1
+                        mol_hov = MOLECULE_HOVER_TEMPLATE.format(
+                            canonical_smiles,
+                            0.0,  # TODO: Add molecule weight calculation
+                            0.0,  # TODO: Add cost calculation
+                            processed_mol["density"],
+                            processed_mol["sascore"],
+                        )
+                        node = dict(
+                            id=f"node_{node_id}",
+                            smiles=canonical_smiles,
+                            label=f"{canonical_smiles}",
+                            # Add property calculations here
+                            energy=processed_mol["density"],
+                            level=0,
+                            cost=processed_mol["sascore"],
+                            # Not sure what to put here
+                            hoverInfo=mol_hov,
+                            x=0,
+                            y=node_id * 150,
+                        )
 
-                    await websocket.send_json({"type": "node", **node.json()})
+                        await websocket.send_json({"type": "node", **node})
 
-                    experiment = LeadMoleculeOptimization(
-                        lead_molecule=canonical_smiles
-                    )
-                    lmo_runner.experiment_type = experiment
-                    parent_id = node_id
+                        edge_data = {
+                            "type": "edge",
+                            "id": f"edge_{node_id}_{node_id+1}",
+                            "status": "computing",
+                            "label": "Optimizing",
+                            "fromNode": {"id": f"node_{node_id}", "x": 0, "y": -150},
+                            "toNode": {"id": f"node_{node_id+1}", "x": 200, "y": -150},
+                        }
 
-                    break  # Exit while loop to proceed to next node
-                else:
-                    logger.info(f"Duplicate molecule found: {canonical_smiles}")
+                        await websocket.send_json(edge_data)
+                        parent_id = node_id
+                    else:
+                        logger.info(f"Duplicate molecule found: {canonical_smiles}")
                     # Continue the while loop to try generating again
+                if len(generated_smiles_list) > 0:
+
+                    density_experiment = LeadMoleculeOptimization(
+                        lead_molecule=lead_molecule_smiles,
+                        user_prompt=FURTHER_REFINE_PROMPT.format(
+                            ", ".join(map(str, generated_densities)),
+                            ", ".join(generated_smiles_list),
+                        )
+                        + "\n"
+                        + SCHEMA_PROMPT,
+                    )
+                    lmo_runner.experiment = density_experiment
+
             except WebSocketDisconnect:
                 logger.info("WebSocket disconnected")
                 raise

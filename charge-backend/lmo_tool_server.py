@@ -6,28 +6,27 @@
 ################################################################################
 
 
-import charge.servers.molecular_generation_server as LMO_MCP
 from charge.servers.server_utils import update_mcp_network, get_hostname
+from charge.servers.SMILES import SMILES_mcp
+from charge.servers.molecular_property_utils import chemprop_preds_server
+from mcp.server.fastmcp import FastMCP
+import argparse
+import asyncio
+
+SMILES_mcp.tool()(chemprop_preds_server)
 
 
 if __name__ == "__main__":
-    import argparse
-
     parser = argparse.ArgumentParser(description="Run a ChARGe MCP Server")
-    parser.add_argument("--port", type=int, default=8124, help="Port to run the server on")
+    parser.add_argument(
+        "--port", type=int, default=8124, help="Port to run the server on"
+    )
     parser.add_argument(
         "--host", type=str, default=None, help="Host to run the server on"
     )
     args = parser.parse_args()
-
+    host = args.host if args.host else get_hostname()
     port = args.port
-    host = args.host
+    update_mcp_network(SMILES_mcp, host, port)
 
-    mcp = LMO_MCP.mcp
-
-    if host is None:
-        _, host = get_hostname()
-
-    update_mcp_network(mcp, host, port)
-
-    mcp.run(transport="sse")
+    SMILES_mcp.run(transport="sse")
