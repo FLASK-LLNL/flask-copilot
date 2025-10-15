@@ -143,8 +143,3 @@ class RetroSynthesisContext:
         if node_id in self.node_ids:
             return self.node_ids[node_id]
         return None
-
-    def get_parent(self, node_id: str) -> Optional[Node]:
-        if node_id in self.node_ids:
-            return self.get_node_by_id(self.node_ids[node_id].parentId)
-        return None
