@@ -267,6 +267,8 @@ async def websocket_endpoint(websocket: WebSocket):
                             data["smiles"],
                             lmo_experiment,
                             lmo_runner,
+                            args.json_file,
+                            args.max_iterations,
                             data.get("depth", 3),
                             websocket,
                         )
