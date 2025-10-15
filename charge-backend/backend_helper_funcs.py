@@ -42,7 +42,7 @@ class Node:
     cost: Optional[float] = None
     bandgap: Optional[float] = None
     yield_: Optional[float] = None
-    highlight: Optional[bool] = False
+    highlight: Optional[str] = "normal"
 
     def json(self):
         ret = asdict(self)
@@ -120,13 +120,13 @@ class CallbackHandler:
                             str_to_dict = json.loads(item.arguments)
                             if "log_msg" in str_to_dict:
                                 _str = str_to_dict["log_msg"]
-                        else:
-                            msg = {"type": "response", "message": _str}
-                            if "smiles" in item.arguments:
-                                str_to_dict = json.loads(item.arguments)
-                                if "smiles" in str_to_dict:
-                                    msg["smiles"] = str_to_dict["smiles"]
-                            await send(msg)
+                        
+                        msg = {"type": "response", "message": _str}
+                        if "smiles" in item.arguments:
+                            str_to_dict = json.loads(item.arguments)
+                            if "smiles" in str_to_dict:
+                                msg["smiles"] = str_to_dict["smiles"]
+                        await send(msg)
 
                     else:
 
