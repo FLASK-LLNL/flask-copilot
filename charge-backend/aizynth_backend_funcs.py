@@ -69,33 +69,6 @@ def generate_tree_structure(
     return nodes, edges
 
 
-def calculate_positions(nodes: list[Node], y_offset: int = 0):
-    """
-    Calculate positions for all nodes (matching frontend logic).
-    Operates in-place.
-    """
-    BOX_WIDTH = 270  # Must match with javascript!
-    BOX_GAP = 160  # Must match with javascript!
-    level_gap = BOX_WIDTH + BOX_GAP
-    node_spacing = 150
-
-    # Group by level
-    levels = {}
-    for node in nodes:
-        level = node.level
-        if level not in levels:
-            levels[level] = []
-        levels[level].append(node)
-
-    # Position nodes
-    for node in nodes:
-        level_nodes = levels[node.level]
-        index_in_level = level_nodes.index(node) + y_offset
-
-        node.x = 100 + node.level * level_gap
-        node.y = 100 + index_in_level * node_spacing
-
-
 async def aizynth_retro(
     start_smiles: str,
     planner: AiZynthFuncs.RetroPlanner,

@@ -4,8 +4,10 @@ import asyncio
 import json
 from typing import Dict, Optional, Literal, Tuple
 from dataclasses import dataclass, asdict
+from collections import defaultdict
 
-import charge.servers.AiZynthTools as AiZynthFuncs
+from charge.clients.autogen import AutoGenClient
+import charge.servers.AiZynthTools as aizynth_funcs
 
 # TODO: Put this on the top level package and make it reusable
 @dataclass
@@ -150,3 +152,34 @@ class RetrosynthesisContext:
         self.azf_nodes.clear()
         self.nodes_per_level.clear()
         self.parents.clear()
+
+
+def calculate_positions(nodes: list[Node], y_offset: int = 0):
+    """
+    Calculate positions for all nodes (matching frontend logic).
+    Operates in-place.
+    """
+    BOX_WIDTH = 270  # Must match with javascript!
+    BOX_GAP = 160  # Must match with javascript!
+    level_gap = BOX_WIDTH + BOX_GAP
+    node_spacing = 150
+
+    # Group by level
+    levels = {}
+    for node in nodes:
+        level = node.level
+        if level not in levels:
+            levels[level] = []
+        levels[level].append(node)
+
+    # Position nodes
+    for node in nodes:
+        level_nodes = levels[node.level]
+        index_in_level = level_nodes.index(node) + y_offset
+
+        node.x = 100 + node.level * level_gap
+        node.y = 100 + index_in_level * node_spacing
+
+
+async def highlight_node(node: Node, websocket: WebSocket, highlight: bool):
+    await websocket.send_json({"type": "node_update", "id": node.id, "highlight": "yellow" if highlight else "normal"})

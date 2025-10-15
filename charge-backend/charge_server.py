@@ -40,15 +40,15 @@ from backend_helper_funcs import (
     RetrosynthesisContext,
     Node,
     Edge,
+    calculate_positions,
 )
 from retro_charge_backend_funcs import (
-    RETROSYNTH_UNCONSTRAINED_USER_PROMPT_TEMPLATE,
-    RETROSYNTH_CONSTRAINED_USER_PROMPT_TEMPLATE,
     generate_molecules,
+    optimize_molecule_retro,
 )
 import copy
 from lmo_charge_backend_funcs import lead_molecule
-from aizynth_backend_funcs import aizynth_retro, calculate_positions
+from aizynth_backend_funcs import aizynth_retro
 from retro_charge_backend_funcs import (
     unconstrained_retro,
     constrained_retro,
@@ -141,68 +141,6 @@ def make_client(client, experiment, server_urls, websocket):
         return client
 
 
-async def highlight_node(node: Node, websocket: WebSocket, highlight: bool):
-    await websocket.send_json({"type": "node_update", "id": node.id, "highlight": "yellow" if highlight else "normal"})
-
-
-async def optimize_molecule_retro(node_id: str, context: RetrosynthesisContext, websocket: WebSocket):
-    """Optimize a molecule using retrosynthesis by node ID"""
-    current_node = context.node_ids.get(node_id)
-    assert current_node is not None, f"Node ID {node_id} not found"
-
-    await websocket.send_json(
-        {
-            "type": "response",
-            "message": f"Finding synthesis pathway to {current_node.smiles}...",
-            "smiles": current_node.smiles,
-        }
-    )
-
-    if node_id in context.node_id_to_charge_client:
-        # Existing context
-        runner = context.node_id_to_charge_client[node_id]
-    else:
-        # New context
-        user_prompt = RETROSYNTH_UNCONSTRAINED_USER_PROMPT_TEMPLATE.format(target_molecule=current_node.smiles)
-        user_prompt += "\nDouble check the reactants with the `predict_reaction_products` tool to see if the products are equivalent to the given product. If there is any inconsistency (canonicalize both sides of the equation first), log it and try some other set of reactants."
-        retro_experiment = RetrosynthesisExperiment(user_prompt=user_prompt)
-        runner = AutoGenClient(
-            experiment_type=retro_experiment,
-            model=MODEL,
-            backend=BACKEND,
-            api_key=API_KEY,
-            model_kwargs=MODEL_KWARGS,
-            server_url=RETRO_URLS,
-            thoughts_callback=CallbackHandler(websocket),
-        )
-        context.node_id_to_charge_client[node_id] = runner
-
-    logger.info(f"Optimizing {current_node.smiles} using retrosynthesis.")
-
-    # Run experiment
-    await highlight_node(current_node, websocket, True)
-    result: ReactionOutputSchema = cast(ReactionOutputSchema, await runner.run())
-    await highlight_node(current_node, websocket, False)
-
-    level = current_node.level + 1
-    num_nodes = len(context.node_ids)
-
-    nodes: list[Node] = []
-    edges: list[Edge] = []
-    for i, smiles in enumerate(result.reactants_smiles_list):
-        node = Node(f"node_{num_nodes+i}", smiles, smiles, "Discovered", level, current_node.id)
-        nodes.append(node)
-        context.node_ids[node.id] = node
-        edges.append(Edge(f"edge_{node_id}_{node.id}", node_id, node.id, "complete"))
-
-    calculate_positions(nodes, context.nodes_per_level[level])
-    context.nodes_per_level[level] += len(nodes)
-
-    for node, edge in zip(nodes, edges):
-        await websocket.send_json({"type": "node", **node.json()})
-        await websocket.send_json({"type": "edge", **edge.json()})
-
-
 @app.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket):
     await websocket.accept()
@@ -276,6 +214,7 @@ async def websocket_endpoint(websocket: WebSocket):
                         assert retro_synth_context is not None
                         await generate_molecules(
                             data["smiles"],
+                            args.config_file,
                             retro_synth_context,
                             websocket,
                         )
@@ -291,7 +230,7 @@ async def websocket_endpoint(websocket: WebSocket):
                 # Leaf node optimization
                 logger.info("Synthesize tree leaf action received")
                 logger.info(f"Data: {data}")
-                await optimize_molecule_retro(data["nodeId"], retro_synth_context, websocket)
+                await optimize_molecule_retro(data["nodeId"], retro_synth_context, websocket, MODLE, BACKEND, API_KEY, MODEL_KWARGS, RETRO_URLS)
                 await websocket.send_json({"type": "complete"})
             elif action == "optimize-from":
                 # Leaf node optimization
