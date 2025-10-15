@@ -2,8 +2,7 @@ import charge.utils.helper_funcs as lmo_helper_funcs
 from fastapi import WebSocket, WebSocketDisconnect
 import asyncio
 from loguru import logger
-import sys
-import os
+
 from charge.clients.autogen import AutoGenClient
 from callback_logger import CallbackLogger
 from charge.tasks.LMOTask import (
@@ -13,7 +12,7 @@ from charge.tasks.LMOTask import (
 from charge.experiments.LMOExperiment import MoleculeOutputSchema, SCHEMA_PROMPT
 
 from backend_helper_funcs import Node, Edge
-from backend_helper_funcs import get_bandgap, get_price
+from backend_helper_funcs import get_bandgap, post_process_lmo_smiles
 
 # TODO: Convert this to a dataclass
 MOLECULE_HOVER_TEMPLATE = """**SMILES:** `{smiles}`\n
@@ -59,7 +58,7 @@ async def lead_molecule(
 
     parent_id = 0
     node_id = 0
-    lead_molecule_data = lmo_helper_funcs.post_process_smiles(
+    lead_molecule_data = post_process_lmo_smiles(
         smiles=lead_molecule_smiles, parent_id=parent_id - 1, node_id=node_id
     )
 
