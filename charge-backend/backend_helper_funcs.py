@@ -8,6 +8,8 @@ from collections import defaultdict
 
 from charge.clients.autogen import AutoGenClient
 import charge.servers.AiZynthTools as aizynth_funcs
+from charge.servers import SMILES_utils
+from charge.servers.molecular_property_prediction import chemprop_preds_server
 
 
 # TODO: Put this on the top level package and make it reusable
@@ -202,3 +204,17 @@ async def highlight_node(node: Node, websocket: WebSocket, highlight: bool):
             "highlight": "yellow" if highlight else "normal",
         }
     )
+
+
+def post_process_lmo_smiles(smiles: str, parent_id: int, node_id: int) -> Dict:
+    """Post-process LMO SMILES to add properties like density and SAScore."""
+    canonical_smiles = SMILES_utils.canonicalize_smiles(smiles)
+    density = chemprop_preds_server(canonical_smiles, property_name="density")
+    sa_score = SMILES_utils.get_synthesizability(canonical_smiles)
+    return {
+        "smiles": canonical_smiles,
+        "parent_id": parent_id,
+        "node_id": node_id,
+        "density": density,
+        "sascore": sa_score,
+    }
