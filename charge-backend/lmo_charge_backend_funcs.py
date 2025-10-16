@@ -24,7 +24,12 @@ MOLECULE_HOVER_TEMPLATE = """**SMILES:** `{smiles}`\n
 DENSITY_USER_PROMPT = """
 You are an expert chemist designing organic molecules. Given the lead molecule with SMILES, {}, 
 suggest 3 new molecules that only contain C,H,O,N and have as high of density as possible. 
-For each molecule that you suggest, give the SMILES string and the density of that molecule. 
+For each molecule that you suggest, give the SMILES string and the density of that molecule.
+
+Think step by step about how to design molecules with high density. First check whether the 
+molecule is already known, then calculate the density, and finally suggest the new molecules.
+Return as soon as you have 3 valid, new molecules that have higher density than the
+lead molecule.
 The suggested molecules need not be similar to the lead molecule, but must be valid, new molecules not on the internet, and only contain C,H,O, and N atoms.
 """
 
@@ -95,6 +100,7 @@ async def lead_molecule(
         status="computing",
         label="Optimizing",
     )
+    await websocket.send_json({"type": "edge", **edge_data.json()})
     logger.info(f"Sending initial edge: {edge_data}")
 
     # Generate one node at a time
@@ -110,19 +116,7 @@ async def lead_molecule(
 
     for i in range(depth):
         logger.info(f"Iteration {i}")
-        edge = Edge(
-            id=f"edge_{parent_id}_{node_id}",
-            fromNode=f"node_{parent_id}",
-            toNode=f"node_{node_id+1}",
-            status="computing",
-            label="Optimizing",
-        )
 
-        edge_data = {
-            "type": "edge",
-            **edge.json(),
-        }
-        await websocket.send_json(edge_data)
         # Generate new molecule
 
         iteration = 0
@@ -132,6 +126,7 @@ async def lead_molecule(
                 iteration += 1
                 results: MoleculeOutputSchema = await lmo_runner.run()
                 results = results.as_list()  # Convert to list of strings
+
                 generated_smiles_list = []
                 generated_densities = []
 
@@ -158,10 +153,10 @@ async def lead_molecule(
                         logger.info(f"New molecule added: {canonical_smiles}")
                         node_id += 1
                         mol_hov = MOLECULE_HOVER_TEMPLATE.format(
-                            canonical_smiles,
-                            0.0,  # TODO: Add cost calculation
-                            processed_mol["density"],
-                            processed_mol["sascore"],
+                            smiles=canonical_smiles,
+                            bandgap=0.0,  # TODO: Add cost calculation
+                            density=processed_mol["density"],
+                            sascore=processed_mol["sascore"],
                         )
                         node = Node(
                             id=f"node_{node_id}",
@@ -175,7 +170,7 @@ async def lead_molecule(
                             cost=get_price(canonical_smiles),
                             # Not sure what to put here
                             hoverInfo=mol_hov,
-                            x=150 + node_id * 270,
+                            x=150 + node_id * 300,
                             y=100,
                         )
 
@@ -211,5 +206,15 @@ async def lead_molecule(
 
         # TODO: Compute here!!!
         await asyncio.sleep(0.8)
+    edge_data = Edge(
+        id=f"edge_{0}_{1}",
+        fromNode=f"node_{0}",
+        toNode=f"node_{1}",
+        status="complete",
+        label="Completed",
+    )
+
+    await websocket.send_json({"type": "edge_update", **edge_data.json()})
+    logger.info(f"Sending initial edge: {edge_data}")
 
     await websocket.send_json({"type": "complete"})
