@@ -5,7 +5,7 @@ from loguru import logger
 import sys
 import os
 from charge.clients.autogen import AutoGenClient
-
+from callback_logger import callback_logger
 from charge.experiments.LMOExperiment import (
     LMOExperiment as LeadMoleculeOptimization,
     MoleculeOutputSchema,
@@ -34,7 +34,10 @@ async def lead_molecule(
     """Stream positioned nodes and edges"""
 
     lead_molecule_smiles = start_smiles
-    logger.info(f"Starting experiment with lead molecule: {lead_molecule_smiles}")
+    clogger = callback_logger(websocket)
+
+    clogger.info(f"Starting experiment with lead molecule: {lead_molecule_smiles}", smiles=lead_molecule_smiles)
+
     parent_id = 0
     node_id = 0
     lead_molecule_data = lmo_helper_funcs.post_process_smiles(
@@ -46,7 +49,7 @@ async def lead_molecule(
         data=[lead_molecule_data], file_path=mol_file_path
     )
 
-    logger.info(f"Storing found molecules in {mol_file_path}")
+    clogger.info(f"Storing found molecules in {mol_file_path}")
 
     # Run the experiment in a loop
     new_molecules = lmo_helper_funcs.get_list_from_json_file(
@@ -110,7 +113,7 @@ async def lead_molecule(
                 iteration += 1
                 results: MoleculeOutputSchema = await lmo_runner.run()
                 results = results.as_list()  # Convert to list of strings
-                logger.info(f"New molecules generated: {results}")
+                clogger.info(f"New molecules generated: {results}")
                 processed_mol = lmo_helper_funcs.post_process_smiles(
                     smiles=results[0], parent_id=parent_id, node_id=node_id
                 )
@@ -124,7 +127,7 @@ async def lead_molecule(
                     lmo_helper_funcs.save_list_to_json_file(
                         data=mol_data, file_path=mol_file_path
                     )
-                    logger.info(f"New molecule added: {canonical_smiles}")
+                    clogger.info(f"New molecule added: {canonical_smiles}", smiles=canonical_smiles)
                     mol_hov = MOLECULE_HOVER_TEMPLATE.format(
                         smiles=canonical_smiles,
                         bandgap=get_bandgap(canonical_smiles),
