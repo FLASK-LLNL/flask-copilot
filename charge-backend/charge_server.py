@@ -34,6 +34,8 @@ from aizynthfinder.utils.logging import setup_logger
 setup_logger(console_level=logging.INFO)
 
 from loguru import logger
+from callback_logger import callback_logger
+
 import sys
 from backend_helper_funcs import (
     CallbackHandler,
@@ -140,7 +142,6 @@ def make_client(client, experiment, server_urls, websocket):
         client.experiment_type = experiment
         return client
 
-
 @app.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket):
     await websocket.accept()
@@ -150,6 +151,8 @@ async def websocket_endpoint(websocket: WebSocket):
     # Initialize Charge experiment with a dummy lead molecule
     lmo_experiment = None
     lmo_runner = None
+
+    clogger = callback_logger(websocket)
 
     retro_synth_context: RetrosynthesisContext | None = None
     try:
@@ -178,7 +181,7 @@ async def websocket_endpoint(websocket: WebSocket):
                 if data["problemType"] == "optimization":
 
                     # Task to optimize lead molecule using LMO
-                    logger.info("Start Optimization action received")
+                    clogger.info("Start Optimization action received")
                     logger.info(f"Data: {data}")
 
                     lmo_experiment = LeadMoleculeOptimization(lead_molecule=data["smiles"])
@@ -197,7 +200,7 @@ async def websocket_endpoint(websocket: WebSocket):
                 elif data["problemType"] == "retrosynthesis":
                     # Set up retrosynthesis experiment to retrosynthesis
                     # to ensure the reactant is not used in the synthesis
-                    logger.info("Setting up retrosynthesis experiment...")
+                    clogger.info("Setting up retrosynthesis experiment...")
                     logger.info(f"Data: {data}")
 
                     if retro_synth_context is None:
