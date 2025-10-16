@@ -24,23 +24,68 @@ MOLECULE_HOVER_TEMPLATE = """**SMILES:** `{smiles}`\n
  - **Synthesizability (SA) Score:** {sascore:.3f}"""
 
 DENSITY_USER_PROMPT = """
-You are an expert chemist designing organic molecules. Given the lead molecule with SMILES, {}, 
-suggest 3 new molecules that only contain C,H,O,N and have as high of density as possible. 
-For each molecule that you suggest, give the SMILES string and the density of that molecule.
+TASK:
+Given a lead molecule defined by its SMILES string:
+  LEAD_SMILES = {}
 
-Think step by step about how to design molecules with high density. First check whether the 
-molecule is already known, then calculate the density, and finally suggest the new molecules.
-Return as soon as you have 3 valid, new molecules that have higher density than the
-lead molecule.
-The suggested molecules need not be similar to the lead molecule, but must be valid, new molecules not on the internet, and only contain C,H,O, and N atoms.
+Goal:
+Propose a **new**, **valid** organic molecule (SMILES) that:
+  1. Contain only elements C, H, O, and N.
+  2. Are not already known (as determined by calling known_smiles(smiles)).
+  3. Have a **density strictly greater** than that of the lead molecule.
+  4. Are chemically valid and syntactically correct SMILES.
+
+You must stop as soon as you have found a valid new molecule with higher density than the lead.
+
+PROCEDURE (must be followed deterministically):
+1. Compute the lead molecule density:
+   - Use calculate_density(LEAD_SMILES).
+   - Store the value as LEAD_DENSITY.
+2. Generate up to 10 candidate SMILES containing only C,H,O,N.
+3. For each candidate:
+   a. Validate that the SMILES is syntactically correct and contains only allowed elements.
+   b. Call known_smiles(smiles). If True, skip this candidate.
+   c. If valid and new, call calculate_density(smiles) and record the density.
+   d. Keep only candidates with density > LEAD_DENSITY.
+4. Rank the valid new candidates by density (highest first).
+5. Return the top 1 or repeat steps 2-4 until you have found 3 valid new molecules.
+
+CONSTRAINTS:
+- Do not estimate or guess density without calling calculate_density(smiles).
+- Do not claim global novelty. Use only known_smiles(smiles) for novelty checking.
+- Do not compute density for invalid or known SMILES.
 """
 
 
 FURTHER_REFINE_PROMPT = """
-Using quantum simulations, I have determined the densities of those three molecules to be
- {}, respectively, for molecules {}. 
- Given this information, suggest 3 new molecules that only contain C,H,O,N and have as high of density as possible. For each molecule that you suggest, give the SMILES string and the density of that molecule.
- The suggested molecules need not be similar to the lead molecule, but must be valid, new molecules not on the internet, and only contain C,H,O, and N atoms.
+TASK:
+Using quantum simulations, I have determined the densities of those one molecule to be
+ {}, respectively, for molecules {}.
+
+Goal:
+Propose up to 1 **new**, **valid** organic molecules (SMILES) that:
+  1. Contain only elements C, H, O, and N.
+  2. Are not already known (as determined by calling known_smiles(smiles)).
+  3. Have a **density strictly greater** than that of the lead molecules.
+  4. Are chemically valid and syntactically correct SMILES.
+
+You must stop as soon as you have found 1 valid new molecule with higher density than the lead.
+
+PROCEDURE (must be followed deterministically):
+1. Store the given density value as LEAD_DENSITY.
+2. Generate up to 10 candidate SMILES containing only C,H,O,N.
+3. For each candidate:
+   a. Validate that the SMILES is syntactically correct and contains only allowed elements.
+   b. Call known_smiles(smiles). If True, skip this candidate.
+   c. If valid and new, call calculate_density(smiles) and record the density.
+   d. Keep only candidates with density > LEAD_DENSITY.
+4. Rank the valid new candidates by density (highest first).
+5. Return the top 1 or repeat steps 2-4 until you have found 3 valid new molecules.
+
+CONSTRAINTS:
+- Do not estimate or guess density without calling calculate_density(smiles).
+- Do not claim global novelty. Use only known_smiles(smiles) for novelty checking.
+- Do not compute density for invalid or known SMILES.
 """
 
 
@@ -135,6 +180,7 @@ async def generate_lead_molecule(
         + "\n"
         + SCHEMA_PROMPT,
     )
+    lmo_runner.experiment_type = density_experiment
 
     for i in range(depth):
         logger.info(f"Iteration {i}")
