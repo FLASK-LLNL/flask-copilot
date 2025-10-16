@@ -220,7 +220,7 @@ async def lead_molecule(
                         + "\n"
                         + SCHEMA_PROMPT,
                     )
-                    lmo_runner.experiment = density_experiment
+                    lmo_runner.experiment_type = density_experiment
 
             except WebSocketDisconnect:
                 logger.info("WebSocket disconnected")
