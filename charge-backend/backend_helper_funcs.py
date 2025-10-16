@@ -87,7 +87,7 @@ def get_bandgap(smiles: str) -> float:
     return round(random.uniform(1.0, 5.0), 2)
 
 # Add a temporary blacklist until UI filtering of messages is added
-tool_callback_blacklist = ["verify_smiles", "canonicalize_smiles", "diagnose_smiles", "is_already_known", "get_density", "get_synthesizability"]
+tool_callback_blacklist = ["verify_smiles", "canonicalize_smiles", "diagnose_smiles", "is_already_known", "get_density", "get_synthesizability", "is_molecule_synthesizable"]
 class CallbackHandler:
     def __init__(self, websocket: WebSocket):
         self.websocket = websocket
