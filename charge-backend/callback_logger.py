@@ -1,11 +1,16 @@
 import sys
 from fastapi import WebSocket
 from loguru import logger
+from typing import Optional
 
 # Define the callback function - will send message to the websocket if it is provided
 async def handle_callback_log(message):
     record = message.record
     websocket = record["extra"].get("websocket", None)
+    smiles = record["extra"].get("smiles", None)
+    kwargs = {}
+    if smiles:
+        kwargs["smiles"] = smiles
     if websocket:
         # Timestamp is already included in the GUI window
         # timestamp = record["time"].isoformat(" ", timespec='seconds')
@@ -16,8 +21,8 @@ async def handle_callback_log(message):
                 "type": "response",
                 "source": f"Logger ({level})",
                 "message": msg,
-#                "message": f"{timestamp}: {msg}",
-            }
+                **kwargs
+                }
         )
     sys.stdout.write(message)
         
@@ -29,6 +34,9 @@ class callback_logger:
      def __init__(self, websocket: WebSocket):
          self.websocket = websocket
          self.logger = logger.bind(websocket=websocket)
-     def info(self, message):
-         self.logger.info(message)
+     def info(self, message, **kwargs: Optional[dict]):
+         if kwargs:
+             logger.bind(websocket=self.websocket, **kwargs).info(message)
+         else:
+             self.logger.info(message)
 

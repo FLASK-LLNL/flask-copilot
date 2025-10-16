@@ -36,7 +36,7 @@ async def lead_molecule(
     lead_molecule_smiles = start_smiles
     clogger = callback_logger(websocket)
 
-    clogger.info(f"Starting experiment with lead molecule: {lead_molecule_smiles}")
+    clogger.info(f"Starting experiment with lead molecule: {lead_molecule_smiles}", smiles=lead_molecule_smiles)
 
     parent_id = 0
     node_id = 0
@@ -127,7 +127,7 @@ async def lead_molecule(
                     lmo_helper_funcs.save_list_to_json_file(
                         data=mol_data, file_path=mol_file_path
                     )
-                    clogger.info(f"New molecule added: {canonical_smiles}")
+                    clogger.info(f"New molecule added: {canonical_smiles}", smiles=canonical_smiles)
                     mol_hov = MOLECULE_HOVER_TEMPLATE.format(
                         smiles=canonical_smiles,
                         bandgap=get_bandgap(canonical_smiles),
