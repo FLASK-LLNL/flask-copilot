@@ -322,11 +322,17 @@ async def websocket_endpoint(websocket: WebSocket):
                 await websocket.send_json(
                     {"type": "subtree_update", "id": data['nodeId'], "withNode": True, "highlight": "yellow"}
                 )
-            elif data["action"] == "custom_query":
+            elif data["action"] == "recompute-reaction" and "query" not in data:
+                await websocket.send_json(
+                        {"type": "response", "source": "Some custom source", "message": f"Hi from server", "smiles": "CCO"}
+                    )
+                await websocket.send_json({"type": "complete"})
+            elif data["action"] == "recompute-reaction":
                 if "water" in data["query"].lower():
                     await websocket.send_json(
                         {
                             "type": "response",
+                            "source": "System",
                             "message": f"Processing query: {data['query']} for node {data['nodeId']}",
                             "smiles": "O",
                         }
