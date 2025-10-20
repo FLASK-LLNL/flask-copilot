@@ -188,6 +188,7 @@ const ChemistryTool = () => {
     'Logger (Debug)': false
   });
   const [sourceFilterOpen, setSourceFilterOpen] = useState(false);
+  const [availableTools, setAvailableTools] = useState([]);
 
   const containerRef = useRef(null);
   const wsRef = useRef(null);
@@ -607,6 +608,8 @@ const ChemistryTool = () => {
       setWsReconnecting(false);
       setWsError('');
       reset();  // Server state must match UI state
+
+      socket.send(JSON.stringify({ action: 'list-tools' }));
     };
     
     socket.onmessage = (event) => {
@@ -660,6 +663,8 @@ const ChemistryTool = () => {
       } else if (data.type === 'response') {
         addSidebarMessage(data.message, data.smiles || null);
         console.log('Server response:', data.message);
+      } else if (data.type === 'available-tools-response') {
+        setAvailableTools(data.tools || []);
       } else if (data.type === 'error') {
         console.error(data.message);
         alert("Server error: " + data.message);
@@ -671,6 +676,7 @@ const ChemistryTool = () => {
       setWsReconnecting(false);
       setIsComputing(false);
       setWsError(error.message || 'Connection failed');
+      setAvailableTools([]);
     };
 
     socket.onclose = () => {
@@ -680,6 +686,7 @@ const ChemistryTool = () => {
       setWsConnected(false);
       setIsComputing(false);
       setWsReconnecting(false);
+      setAvailableTools([]);
     };
   };
 
@@ -1216,7 +1223,7 @@ const ChemistryTool = () => {
               </div>
               
               <div className="absolute right-0 top-8 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-50">
-                <div className="bg-slate-800 border-2 border-purple-400 rounded-lg px-3 py-2 text-sm whitespace-nowrap shadow-xl">
+                <div className="bg-slate-800 border-2 border-purple-400 rounded-lg px-3 py-2 text-sm shadow-xl" style={{ minWidth: '220px', maxWidth: '300px' }}>
                   <div className={`font-semibold ${
                     wsReconnecting ? 'text-yellow-400' :
                     wsConnected ? 'text-green-400' : 
@@ -1231,6 +1238,30 @@ const ChemistryTool = () => {
                     {wsError && (
                       <div className="text-purple-300 text-xs mt-1">
                         {wsError}
+                      </div>
+                    )}
+                    {wsConnected && availableTools.length > 0 && (
+                      <div className="mt-3 pt-2 border-t border-purple-400/30">
+                        <div className="text-purple-300 text-xs font-semibold mb-1.5">
+                          Available Tools ({availableTools.length})
+                        </div>
+                        <div className="space-y-1 max-h-60 overflow-y-auto">
+                          {availableTools.map((tool, idx) => (
+                            <div key={idx} className="text-xs bg-purple-900/30 rounded px-2 py-1">
+                              <div className="text-purple-100 font-medium">{tool.name || tool}</div>
+                              {tool.description && (
+                                <div className="text-purple-300 mt-0.5 text-[10px] leading-tight">
+                                  {tool.description}
+                                </div>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                    {wsConnected && availableTools.length === 0 && (
+                      <div className="mt-2 text-purple-300 text-xs italic">
+                        Loading tools...
                       </div>
                     )}
                   </div>

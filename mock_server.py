@@ -108,6 +108,14 @@ class SidebarMessage:
     def json(self):
         return asdict(self)
 
+@dataclass
+class Tool:
+    name: str
+    description: Optional[str] = None
+
+    def json(self):
+        return asdict(self)
+
 
 def generate_tree_structure(start_smiles: str, depth: int = 3):
     """
@@ -343,6 +351,13 @@ async def websocket_endpoint(websocket: WebSocket):
                     )
                 await asyncio.sleep(3)  # Random wait
                 await websocket.send_json({"type": "complete"})
+            elif data["action"] == "list-tools":
+                tools = [Tool(f"tool_{i}", f"Does what tool {i} does") for i in range(16)]
+                tools.append(Tool("a_tool_with_no_desc"))
+                await websocket.send_json({
+                    "type": "available-tools-response",
+                    "tools": [tool.json() for tool in tools],
+                })
             else:
                 print("WARN: Unhandled message:", data)
     except WebSocketDisconnect:
