@@ -189,6 +189,7 @@ const ChemistryTool = () => {
   });
   const [sourceFilterOpen, setSourceFilterOpen] = useState(false);
   const [availableTools, setAvailableTools] = useState([]);
+  const [wsTooltipPinned, setWsTooltipPinned] = useState(false);
 
   const containerRef = useRef(null);
   const wsRef = useRef(null);
@@ -569,12 +570,17 @@ const ChemistryTool = () => {
   }, [treeNodes, autoZoom]);
 
   useEffect(() => {
-    const handleClickOutside = () => setContextMenu(null);
-    if (contextMenu) {
+    const handleClickOutside = () => {
+      setContextMenu(null);
+      setSaveDropdownOpen(false);
+      setSourceFilterOpen(false);
+      setWsTooltipPinned(false);
+    };
+    if (contextMenu || saveDropdownOpen || sourceFilterOpen || wsTooltipPinned) {
       window.addEventListener('mousedown', handleClickOutside);
       return () => window.removeEventListener('mousedown', handleClickOutside);
     }
-  }, [contextMenu]);
+  }, [contextMenu, saveDropdownOpen, sourceFilterOpen, wsTooltipPinned]);
   
   const runComputation = async () => {
     setSidebarOpen(true);
@@ -713,6 +719,9 @@ const ChemistryTool = () => {
     setCustomQueryModal(null);
     setMetricsHistory([]);
     setSidebarMessages([]);
+    setSaveDropdownOpen(false);
+    setSourceFilterOpen(false);
+    setWsTooltipPinned(false);
     if (websocket && websocket.readyState === WebSocket.OPEN) {
       websocket.send(JSON.stringify({ action: 'reset' }));
     }
@@ -1205,11 +1214,19 @@ const ChemistryTool = () => {
 
           {/* WebSocket Status Indicator */}
             <div 
-              className="absolute top-10 group cursor-pointer"
-              onClick={reconnectWS}
-              title="Click to reconnect"
+              className="absolute top-10 group"
+              onClick={(e) => {
+                e.stopPropagation();
+                setWsTooltipPinned(!wsTooltipPinned);
+              }}
+              onDoubleClick={(e) => {
+                e.stopPropagation();
+                reconnectWS();
+              }}
+              onMouseDown={(e) => e.stopPropagation()}
+              title={wsTooltipPinned ? "" : "Click for details • Double-click to reconnect"}
             >
-              <div className="relative">
+              <div className="relative cursor-pointer">
                 <div className={`w-4 h-4 rounded-full absolute ${
                   wsReconnecting ? 'bg-yellow-400 animate-ping' :
                   wsConnected ? 'bg-green-400' : 
@@ -1219,19 +1236,39 @@ const ChemistryTool = () => {
                   wsReconnecting ? 'bg-yellow-400' :
                   wsConnected ? 'bg-green-400' : 
                   'bg-red-400 animate-ping'
-                }`} />
+                } ${wsTooltipPinned ? 'ring-2 ring-white ring-offset-2 ring-offset-slate-900' : ''}`} />
               </div>
               
-              <div className="absolute right-0 top-8 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-50">
-                <div className="bg-slate-800 border-2 border-purple-400 rounded-lg px-3 py-2 text-sm shadow-xl" style={{ minWidth: '220px', maxWidth: '300px' }}>
-                  <div className={`font-semibold ${
-                    wsReconnecting ? 'text-yellow-400' :
-                    wsConnected ? 'text-green-400' : 
-                    'text-red-400'
-                  }`}>
-                    {wsReconnecting ? '● Reconnecting...' :
-                     wsConnected ? '● Connected' : 
-                     '● Disconnected'}
+              <div className={`absolute right-0 top-8 transition-opacity z-50 ${
+                wsTooltipPinned ? 'opacity-100' : 'opacity-0 group-hover:opacity-100 pointer-events-none'
+              }`}>
+                <div 
+                  className="bg-slate-800 border-2 border-purple-400 rounded-lg px-3 py-2 text-sm shadow-xl"
+                  style={{ minWidth: '220px', maxWidth: '300px' }}
+                  onClick={(e) => e.stopPropagation()}
+                  onMouseDown={(e) => e.stopPropagation()}
+                >
+                  <div className="flex items-center justify-between mb-1">
+                    <div className={`font-semibold ${
+                      wsReconnecting ? 'text-yellow-400' :
+                      wsConnected ? 'text-green-400' : 
+                      'text-red-400'
+                    }`}>
+                      {wsReconnecting ? '● Reconnecting...' :
+                      wsConnected ? '● Connected' : 
+                      '● Disconnected'}
+                    </div>
+                    {wsTooltipPinned && (
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setWsTooltipPinned(false);
+                        }}
+                        className="text-purple-400 hover:text-white transition-colors cursor-pointer"
+                      >
+                        <X className="w-3 h-3" />
+                      </button>
+                    )}
                   </div>
                   <div className="text-purple-200 text-xs mt-1">
                     {WS_SERVER}
@@ -1245,7 +1282,7 @@ const ChemistryTool = () => {
                         <div className="text-purple-300 text-xs font-semibold mb-1.5">
                           Available Tools ({availableTools.length})
                         </div>
-                        <div className="space-y-1 max-h-60 overflow-y-auto">
+                        <div className="space-y-1 max-h-60 overflow-y-auto pr-1">
                           {availableTools.map((tool, idx) => (
                             <div key={idx} className="text-xs bg-purple-900/30 rounded px-2 py-1">
                               <div className="text-purple-100 font-medium">{tool.name || tool}</div>
@@ -1266,8 +1303,27 @@ const ChemistryTool = () => {
                     )}
                   </div>
                   {!wsConnected && !wsReconnecting && (
-                    <div className="text-purple-300 text-xs mt-1 italic">
-                      Click to reconnect
+                    <div className="mt-2">
+                      <div className="text-purple-300 text-xs italic">
+                        Backend server required for computation
+                      </div>
+                      {wsTooltipPinned && (
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            reconnectWS();
+                          }}
+                          className="mt-2 w-full px-3 py-1.5 bg-purple-600 hover:bg-purple-500 text-white text-xs font-semibold rounded transition-colors flex items-center justify-center gap-1"
+                        >
+                          <RefreshCw className="w-3 h-3" />
+                          Reconnect
+                        </button>
+                      )}
+                    </div>
+                  )}
+                  {!wsTooltipPinned && (
+                    <div className="text-purple-400 text-[10px] mt-2 italic text-center border-t border-purple-400/30 pt-1.5">
+                      Click to pin, double-click to reconnect
                     </div>
                   )}
                 </div>
@@ -1822,6 +1878,22 @@ const ChemistryTool = () => {
         .animate-dash { animation: dash 1s linear infinite; }
         .animate-slideIn { animation: slideIn 0.4s ease-out; }
         .animate-slideInSidebar { animation: slideInSidebar 0.3s ease-out; }
+
+        /* Custom scrollbar for tools list */
+        .max-h-60::-webkit-scrollbar {
+          width: 6px;
+        }
+        .max-h-60::-webkit-scrollbar-track {
+          background: rgba(139, 92, 246, 0.1);
+          border-radius: 3px;
+        }
+        .max-h-60::-webkit-scrollbar-thumb {
+          background: rgba(139, 92, 246, 0.5);
+          border-radius: 3px;
+        }
+        .max-h-60::-webkit-scrollbar-thumb:hover {
+          background: rgba(139, 92, 246, 0.7);
+        }
       `}</style>
     </div>
   );
