@@ -1217,7 +1217,11 @@ const ChemistryTool = () => {
               className="absolute top-10 group"
               onClick={(e) => {
                 e.stopPropagation();
-                setWsTooltipPinned(!wsTooltipPinned);
+                if (!wsConnected) {
+                  reconnectWS();
+                } else {
+                  setWsTooltipPinned(!wsTooltipPinned);
+                }
               }}
               onDoubleClick={(e) => {
                 e.stopPropagation();
@@ -1323,7 +1327,10 @@ const ChemistryTool = () => {
                   )}
                   {!wsTooltipPinned && (
                     <div className="text-purple-400 text-[10px] mt-2 italic text-center border-t border-purple-400/30 pt-1.5">
-                      Click to pin, double-click to reconnect
+                      {wsConnected ?
+                        "Click to pin, double-click to reconnect" :
+                        "Click to reconnect"
+                        }
                     </div>
                   )}
                 </div>
