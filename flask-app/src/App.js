@@ -1,5 +1,5 @@
 /* eslint-disable react-hooks/exhaustive-deps */
-import React, { useState, useRef, useEffect, useMemo } from 'react';
+import React, { useState, useRef, useEffect, useMemo, useCallback } from 'react';
 import { Loader2, FlaskConical, TestTubeDiagonal, Network, Play, RotateCcw, Move, X, Send, RefreshCw, Sparkles } from 'lucide-react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 
@@ -179,7 +179,17 @@ const ChemistryTool = () => {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [sidebarMessages, setSidebarMessages] = useState([]);
   const [copiedField, setCopiedField] = useState(null);
-
+  const [visibleSources, setVisibleSources] = useState({
+    'System': true,
+    'Reasoning': true,
+    'Logger (Error)': true,
+    'Logger (Warning)': true,
+    'Logger (Info)': false,
+    'Logger (Debug)': false
+  });
+  const [sourceFilterOpen, setSourceFilterOpen] = useState(false);
+  const [availableTools, setAvailableTools] = useState([]);
+  const [wsTooltipPinned, setWsTooltipPinned] = useState(false);
 
   const containerRef = useRef(null);
   const wsRef = useRef(null);
@@ -215,8 +225,7 @@ const ChemistryTool = () => {
     };
   }, []);
 
-  const findAllDescendants = (nodeId, nodes) => {
-    // Find all descendants recursively
+  const findAllDescendants = useCallback((nodeId, nodes) => {
     const descendants = new Set();
     const findDescendants = (id) => {
       nodes.forEach(n => {
@@ -228,22 +237,21 @@ const ChemistryTool = () => {
     };
     findDescendants(nodeId);
     return descendants;
-  };
+  }, []);
 
-  const hasDescendants = (nodeId, nodes) => {
+  const hasDescendants = useCallback((nodeId, nodes) => {
     return nodes.some(n => n.parentId === nodeId);
-  };
+  }, []);
 
-  const isRootNode = (nodeId, nodes) => {
+  const isRootNode = useCallback((nodeId, nodes) => {
     const node = nodes.find(n => n.id === nodeId);
     return !node.parentId;
-  };
+  }, []);
 
-  const getNode = (nodeId) => {
+  const getNode = useCallback((nodeId) => {
     return treeNodes.find(n => n.id === nodeId);
-  };
+  }, [treeNodes]);
   
-
   const copyToClipboard = async (text, fieldName) => {
     try {
       await navigator.clipboard.writeText(text);
@@ -562,12 +570,17 @@ const ChemistryTool = () => {
   }, [treeNodes, autoZoom]);
 
   useEffect(() => {
-    const handleClickOutside = () => setContextMenu(null);
-    if (contextMenu) {
+    const handleClickOutside = () => {
+      setContextMenu(null);
+      setSaveDropdownOpen(false);
+      setSourceFilterOpen(false);
+      setWsTooltipPinned(false);
+    };
+    if (contextMenu || saveDropdownOpen || sourceFilterOpen || wsTooltipPinned) {
       window.addEventListener('mousedown', handleClickOutside);
       return () => window.removeEventListener('mousedown', handleClickOutside);
     }
-  }, [contextMenu]);
+  }, [contextMenu, saveDropdownOpen, sourceFilterOpen, wsTooltipPinned]);
   
   const runComputation = async () => {
     setSidebarOpen(true);
@@ -601,6 +614,8 @@ const ChemistryTool = () => {
       setWsReconnecting(false);
       setWsError('');
       reset();  // Server state must match UI state
+
+      socket.send(JSON.stringify({ action: 'list-tools' }));
     };
     
     socket.onmessage = (event) => {
@@ -654,6 +669,8 @@ const ChemistryTool = () => {
       } else if (data.type === 'response') {
         addSidebarMessage(data.message, data.smiles || null);
         console.log('Server response:', data.message);
+      } else if (data.type === 'available-tools-response') {
+        setAvailableTools(data.tools || []);
       } else if (data.type === 'error') {
         console.error(data.message);
         alert("Server error: " + data.message);
@@ -665,6 +682,7 @@ const ChemistryTool = () => {
       setWsReconnecting(false);
       setIsComputing(false);
       setWsError(error.message || 'Connection failed');
+      setAvailableTools([]);
     };
 
     socket.onclose = () => {
@@ -674,6 +692,7 @@ const ChemistryTool = () => {
       setWsConnected(false);
       setIsComputing(false);
       setWsReconnecting(false);
+      setAvailableTools([]);
     };
   };
 
@@ -700,6 +719,9 @@ const ChemistryTool = () => {
     setCustomQueryModal(null);
     setMetricsHistory([]);
     setSidebarMessages([]);
+    setSaveDropdownOpen(false);
+    setSourceFilterOpen(false);
+    setWsTooltipPinned(false);
     if (websocket && websocket.readyState === WebSocket.OPEN) {
       websocket.send(JSON.stringify({ action: 'reset' }));
     }
@@ -730,7 +752,7 @@ const ChemistryTool = () => {
   };
 
   const saveFullContext = () => {
-    const data = { version: '1.0', type: 'full-context', timestamp: new Date().toISOString(), smiles, problemType, systemPrompt, problemPrompt, nodes: treeNodes, edges, metricsHistory, visibleMetrics, zoom, offset, sidebarMessages };
+    const data = { version: '1.0', type: 'full-context', timestamp: new Date().toISOString(), smiles, problemType, systemPrompt, problemPrompt, nodes: treeNodes, edges, metricsHistory, visibleMetrics, zoom, offset, sidebarMessages, visibleSources };
     const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -766,6 +788,13 @@ const ChemistryTool = () => {
               setZoom(data.zoom || 1);
               setOffset(data.offset || { x: 50, y: 50 });
               setSidebarMessages(data.sidebarMessages || []);
+              setVisibleSources(data.visibleSources || {
+                'System': true,
+                'Reasoning': true,
+                'Logger (Error)': true,
+                'Logger (Warning)': true,
+                'Logger (Info)': false,
+                'Logger (Debug)': false });
             }
           } else {
             alert('Invalid file format');
@@ -1061,15 +1090,23 @@ const ChemistryTool = () => {
     setIsComputing(true); // If expecting new nodes
   };
 
-  const addSidebarMessage = (content, moleculeSmiles = null) => {
+  const addSidebarMessage = (content, moleculeSmiles = null, source = 'System') => {
     const message = {
       id: Date.now(),
       timestamp: new Date().toISOString(),
       content,
-      moleculeSmiles
+      moleculeSmiles,
+      source
     };
     setSidebarMessages(prev => [...prev, message]);
     setSidebarOpen(true);
+    
+    setVisibleSources(prev => {
+      if (!(source in prev)) {
+        return { ...prev, [source]: true };
+      }
+      return prev;
+    });
   };
 
   // Memoize the metrics charts to prevent re-render on mouse move
@@ -1177,11 +1214,23 @@ const ChemistryTool = () => {
 
           {/* WebSocket Status Indicator */}
             <div 
-              className="absolute top-10 group cursor-pointer"
-              onClick={reconnectWS}
-              title="Click to reconnect"
+              className="absolute top-10 group"
+              onClick={(e) => {
+                e.stopPropagation();
+                if (!wsConnected) {
+                  reconnectWS();
+                } else {
+                  setWsTooltipPinned(!wsTooltipPinned);
+                }
+              }}
+              onDoubleClick={(e) => {
+                e.stopPropagation();
+                reconnectWS();
+              }}
+              onMouseDown={(e) => e.stopPropagation()}
+              title={wsTooltipPinned ? "" : "Click for details • Double-click to reconnect"}
             >
-              <div className="relative">
+              <div className="relative cursor-pointer">
                 <div className={`w-4 h-4 rounded-full absolute ${
                   wsReconnecting ? 'bg-yellow-400 animate-ping' :
                   wsConnected ? 'bg-green-400' : 
@@ -1191,19 +1240,39 @@ const ChemistryTool = () => {
                   wsReconnecting ? 'bg-yellow-400' :
                   wsConnected ? 'bg-green-400' : 
                   'bg-red-400 animate-ping'
-                }`} />
+                } ${wsTooltipPinned ? 'ring-2 ring-white ring-offset-2 ring-offset-slate-900' : ''}`} />
               </div>
               
-              <div className="absolute right-0 top-8 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-50">
-                <div className="bg-slate-800 border-2 border-purple-400 rounded-lg px-3 py-2 text-sm whitespace-nowrap shadow-xl">
-                  <div className={`font-semibold ${
-                    wsReconnecting ? 'text-yellow-400' :
-                    wsConnected ? 'text-green-400' : 
-                    'text-red-400'
-                  }`}>
-                    {wsReconnecting ? '● Reconnecting...' :
-                     wsConnected ? '● Connected' : 
-                     '● Disconnected'}
+              <div className={`absolute right-0 top-8 transition-opacity z-50 ${
+                wsTooltipPinned ? 'opacity-100' : 'opacity-0 group-hover:opacity-100 pointer-events-none'
+              }`}>
+                <div 
+                  className="bg-slate-800 border-2 border-purple-400 rounded-lg px-3 py-2 text-sm shadow-xl"
+                  style={{ minWidth: '220px', maxWidth: '300px' }}
+                  onClick={(e) => e.stopPropagation()}
+                  onMouseDown={(e) => e.stopPropagation()}
+                >
+                  <div className="flex items-center justify-between mb-1">
+                    <div className={`font-semibold ${
+                      wsReconnecting ? 'text-yellow-400' :
+                      wsConnected ? 'text-green-400' : 
+                      'text-red-400'
+                    }`}>
+                      {wsReconnecting ? '● Reconnecting...' :
+                      wsConnected ? '● Connected' : 
+                      '● Disconnected'}
+                    </div>
+                    {wsTooltipPinned && (
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setWsTooltipPinned(false);
+                        }}
+                        className="text-purple-400 hover:text-white transition-colors cursor-pointer"
+                      >
+                        <X className="w-3 h-3" />
+                      </button>
+                    )}
                   </div>
                   <div className="text-purple-200 text-xs mt-1">
                     {WS_SERVER}
@@ -1212,10 +1281,56 @@ const ChemistryTool = () => {
                         {wsError}
                       </div>
                     )}
+                    {wsConnected && availableTools.length > 0 && (
+                      <div className="mt-3 pt-2 border-t border-purple-400/30">
+                        <div className="text-purple-300 text-xs font-semibold mb-1.5">
+                          Available Tools ({availableTools.length})
+                        </div>
+                        <div className="space-y-1 max-h-60 overflow-y-auto pr-1">
+                          {availableTools.map((tool, idx) => (
+                            <div key={idx} className="text-xs bg-purple-900/30 rounded px-2 py-1">
+                              <div className="text-purple-100 font-medium">{tool.name || tool}</div>
+                              {tool.description && (
+                                <div className="text-purple-300 mt-0.5 text-[10px] leading-tight">
+                                  {tool.description}
+                                </div>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                    {wsConnected && availableTools.length === 0 && (
+                      <div className="mt-2 text-purple-300 text-xs italic">
+                        Loading tools...
+                      </div>
+                    )}
                   </div>
                   {!wsConnected && !wsReconnecting && (
-                    <div className="text-purple-300 text-xs mt-1 italic">
-                      Click to reconnect
+                    <div className="mt-2">
+                      <div className="text-purple-300 text-xs italic">
+                        Backend server required for computation
+                      </div>
+                      {wsTooltipPinned && (
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            reconnectWS();
+                          }}
+                          className="mt-2 w-full px-3 py-1.5 bg-purple-600 hover:bg-purple-500 text-white text-xs font-semibold rounded transition-colors flex items-center justify-center gap-1"
+                        >
+                          <RefreshCw className="w-3 h-3" />
+                          Reconnect
+                        </button>
+                      )}
+                    </div>
+                  )}
+                  {!wsTooltipPinned && (
+                    <div className="text-purple-400 text-[10px] mt-2 italic text-center border-t border-purple-400/30 pt-1.5">
+                      {wsConnected ?
+                        "Click to pin, double-click to reconnect" :
+                        "Click to reconnect"
+                        }
                     </div>
                   )}
                 </div>
@@ -1266,8 +1381,15 @@ const ChemistryTool = () => {
                   <div className="absolute bottom-full mb-2 left-1/2 transform -translate-x-1/2 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
                     <div className="bg-slate-800 border-2 border-purple-400 rounded-lg px-3 py-2 text-sm whitespace-nowrap shadow-xl">
                       <div className="text-purple-200">
-                        {!wsConnected ? 'Websocket is not connected' : isComputing ? 'Computation already running' : 'Enter a SMILES string first'}
+                        {!wsConnected ? 'Backend server not connected' : 
+                         isComputing ? 'Computation already running' : 
+                         'Enter a SMILES string first'}
                       </div>
+                      {!wsConnected && (
+                        <div className="text-purple-300 text-xs mt-1">
+                          Start the backend server at {WS_SERVER}
+                        </div>
+                      )}
                     </div>
                   </div>
                 )}
@@ -1289,10 +1411,22 @@ const ChemistryTool = () => {
           {treeNodes.length === 0 && !isComputing ? (
             <div className="flex flex-col items-center justify-center h-full text-purple-300">
               <FlaskConical className="w-16 h-16 mb-4 opacity-50" />
-              <p className="text-center text-lg">Click "Run" to start {problemType === "optimization" ? <>molecular discovery</> : <>the molecular computation tree</>}</p>
+              <p className="text-center text-lg">
+                {wsConnected ? 
+                  `Click "Run" to start ${problemType === "optimization" ? "molecular discovery" : "the molecular computation tree"}` :
+                  "Waiting for backend connection..."
+                }
+              </p>
               <p className="text-sm text-purple-400 mt-2">
                 {autoZoom ? 'Auto-zoom will fit all molecules' : 'Drag to pan • Scroll to zoom'}
               </p>
+              {!wsConnected && (
+                <div className="mt-4 bg-amber-500/20 border border-amber-400/50 rounded-lg p-4 max-w-md">
+                  <div className="text-amber-200 text-sm text-center">
+                    <strong>Backend Required:</strong> Start your Python backend server at <code className="bg-black/30 px-2 py-1 rounded">{WS_SERVER}</code> to enable molecular computations.
+                  </div>
+                </div>
+              )}
             </div>
           ) : (
             <div 
@@ -1368,7 +1502,7 @@ const ChemistryTool = () => {
                     onMouseLeave={() => setHoveredNode(null)}
                     onClick={(e) => handleNodeClick(e, node)}
                   >
-                    <div className={`bg-gradient-to-br backdrop-blur-sm rounded-xl p-3 border-2 shadow-lg hover:shadow-2xl hover:scale-105 transition-all pointer-events-auto cursor-pointer ${NODE_STYLES[node.highlight]}`} style={{ textAlign: 'center' }}>
+                    <div className={`bg-gradient-to-br backdrop-blur-sm rounded-xl p-3 border-2 shadow-lg hover:shadow-2xl hover:scale-105 transition-all pointer-events-auto cursor-pointer ${NODE_STYLES[node.highlight || 'normal']}`} style={{ textAlign: 'center' }}>
                       <MoleculeSVG smiles={node.smiles} height={80} rdkitModule={rdkitModule} />
                       <div className="mt-2 text-center">
                         <div className="text-xs font-semibold text-purple-200 bg-black/30 rounded px-2 py-1 whitespace-pre-line">{node.label}</div>
@@ -1490,31 +1624,90 @@ const ChemistryTool = () => {
         <div className="flex flex-col h-full">
           <div className="flex items-center justify-between p-4 border-b border-purple-400/30">
             <h3 className="text-lg font-semibold text-white">Reasoning</h3>
-            <button onClick={() => setSidebarOpen(false)} className="text-purple-300 hover:text-white transition-colors">
-              <X className="w-5 h-5" />
-            </button>
+            <div className="flex items-center gap-2">
+              <div className="relative">
+                <button 
+                  onClick={(e) => { e.stopPropagation(); setSourceFilterOpen(!sourceFilterOpen); }}
+                  onMouseDown={(e) => e.stopPropagation()}
+                  className="px-3 py-1 bg-purple-500/30 text-white rounded-lg text-xs font-semibold hover:bg-purple-500/50 transition-all flex items-center gap-2"
+                >
+                  <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z" />
+                  </svg>
+                  Filter
+                  <svg className={`w-3 h-3 transition-transform ${sourceFilterOpen ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                  </svg>
+                </button>
+                {sourceFilterOpen && (
+                  <div className="absolute top-full mt-2 right-0 bg-slate-800 border-2 border-purple-400 rounded-lg shadow-2xl py-2 min-w-48 z-[100]" onClick={(e) => e.stopPropagation()} onMouseDown={(e) => e.stopPropagation()}>
+                    <div className="px-3 py-2 border-b border-purple-400/30 text-xs font-semibold text-purple-300">
+                      Message Sources
+                    </div>
+                    {Object.keys(visibleSources).map(source => (
+                      <label key={source} className="flex items-center gap-2 px-3 py-2 hover:bg-purple-600/30 cursor-pointer transition-colors">
+                        <input
+                          type="checkbox"
+                          checked={visibleSources[source]}
+                          onChange={() => setVisibleSources(prev => ({ ...prev, [source]: !prev[source] }))}
+                          className="w-4 h-4 rounded border-purple-400/50 bg-white/20 text-purple-600 focus:ring-purple-500 focus:ring-offset-0"
+                        />
+                        <span className="text-sm text-white">{source}</span>
+                        <span className="ml-auto text-xs text-purple-400">
+                          ({sidebarMessages.filter(m => m.source === source).length})
+                        </span>
+                      </label>
+                    ))}
+                    <div className="px-3 py-2 border-t border-purple-400/30 flex gap-2">
+                      <button
+                        onClick={() => setVisibleSources(Object.keys(visibleSources).reduce((acc, key) => ({ ...acc, [key]: true }), {}))}
+                        className="flex-1 px-2 py-1 bg-purple-500/30 text-white rounded text-xs font-semibold hover:bg-purple-500/50 transition-all"
+                      >
+                        All
+                      </button>
+                      <button
+                        onClick={() => setVisibleSources(Object.keys(visibleSources).reduce((acc, key) => ({ ...acc, [key]: false }), {}))}
+                        className="flex-1 px-2 py-1 bg-purple-500/30 text-white rounded text-xs font-semibold hover:bg-purple-500/50 transition-all"
+                      >
+                        None
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+              <button onClick={() => setSidebarOpen(false)} className="text-purple-300 hover:text-white transition-colors">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
           </div>
 
           <div className="flex-1 overflow-y-auto p-4 space-y-3" ref={sidebarRef} style={{ overflowX: 'hidden' }}>
-            {sidebarMessages.length === 0 ? (
+            {sidebarMessages.filter(msg => visibleSources[msg.source]).length === 0 ? (
               <div className="text-center text-purple-400 mt-8">
                 <svg className="w-12 h-12 mx-auto mb-2 opacity-50" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" />
                 </svg>
-                <p className="text-sm">No messages yet</p>
+                <p className="text-sm">
+                  {sidebarMessages.length === 0 ? 'No messages yet' : 'No messages match the selected filters'}
+                </p>
               </div>
             ) : (
-              sidebarMessages.map((msg, idx) => (
+              sidebarMessages.filter(msg => visibleSources[msg.source]).map((msg, idx) => (
                 <div key={msg.id} className="bg-white/5 rounded-lg p-4 border border-purple-400/30 animate-slideIn opacity-0" style={{ animationDelay: `${idx * 50}ms`, animationFillMode: 'forwards' }}>
-                  <div className="text-xs text-purple-400 mb-2">
-                    {new Date(msg.timestamp).toLocaleTimeString()}
+                  <div className="flex items-center justify-between mb-2">
+                    <div className="text-xs text-purple-400">
+                      {new Date(msg.timestamp).toLocaleTimeString()}
+                    </div>
+                    <div className="px-2 py-0.5 bg-purple-500/30 rounded text-xs font-semibold text-purple-200">
+                      {msg.source}
+                    </div>
                   </div>
                   <div className="text-sm text-purple-100">
                     <MarkdownText text={msg.content} />
                   </div>
                   {msg.moleculeSmiles && (
                     <div className="mt-3 bg-white/50 rounded-lg p-2 flex justify-center">
-                      <MoleculeSVG smiles={msg.moleculeSmiles} size={120} rdkitModule={rdkitModule} />
+                      <MoleculeSVG smiles={msg.moleculeSmiles} height={120} rdkitModule={rdkitModule} />
                     </div>
                   )}
                 </div>
@@ -1692,6 +1885,22 @@ const ChemistryTool = () => {
         .animate-dash { animation: dash 1s linear infinite; }
         .animate-slideIn { animation: slideIn 0.4s ease-out; }
         .animate-slideInSidebar { animation: slideInSidebar 0.3s ease-out; }
+
+        /* Custom scrollbar for tools list */
+        .max-h-60::-webkit-scrollbar {
+          width: 6px;
+        }
+        .max-h-60::-webkit-scrollbar-track {
+          background: rgba(139, 92, 246, 0.1);
+          border-radius: 3px;
+        }
+        .max-h-60::-webkit-scrollbar-thumb {
+          background: rgba(139, 92, 246, 0.5);
+          border-radius: 3px;
+        }
+        .max-h-60::-webkit-scrollbar-thumb:hover {
+          background: rgba(139, 92, 246, 0.7);
+        }
       `}</style>
     </div>
   );
