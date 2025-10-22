@@ -30,6 +30,7 @@ from charge.tasks.RetrosynthesisTask import (
 
 import charge.utils.helper_funcs as lmo_helper_funcs
 from charge.servers.server_utils import try_get_public_hostname
+from charge.clients.autogen_utils import list_client_tools
 
 import os
 from charge.clients.Client import Client
@@ -49,6 +50,7 @@ from backend_helper_funcs import (
     RetrosynthesisContext,
     Node,
     Edge,
+    Tool,
     calculate_positions,
 )
 from retro_charge_backend_funcs import (
@@ -286,6 +288,18 @@ async def websocket_endpoint(websocket: WebSocket):
                 logger.info(f"Data: {data}")
                 await websocket.send_json({"type": "complete"})
 
+            elif action == "list-tools":
+                tools = []
+                tool_list = []
+                if lmo_runner:
+                    tool_list = await list_client_tools(lmo_runner)
+                for (name, description) in tool_list:
+                    tools.append(Tool(name, description))
+
+                await websocket.send_json({
+                    "type": "available-tools-response",
+                    "tools": [tool.json() for tool in tools],
+                })
             elif action == "custom_query":
                 await websocket.send_json(
                     {
