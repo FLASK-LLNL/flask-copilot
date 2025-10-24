@@ -6,8 +6,8 @@ import sys
 import os
 from charge.clients.autogen import AutoGenClient
 from callback_logger import callback_logger
-from charge.experiments.LMOExperiment import (
-    LMOExperiment as LeadMoleculeOptimization,
+from charge.tasks.LMOTask import (
+    LMOTask as LeadMoleculeOptimization,
     MoleculeOutputSchema,
 )
 
@@ -24,7 +24,7 @@ MOLECULE_HOVER_TEMPLATE = """**SMILES:** `{smiles}`\n
 
 async def lead_molecule(
     start_smiles: str,
-    experiment: LeadMoleculeOptimization,
+    task: LeadMoleculeOptimization,
     lmo_runner: AutoGenClient,
     mol_file_path: str,
     max_iterations: int,
@@ -36,7 +36,7 @@ async def lead_molecule(
     lead_molecule_smiles = start_smiles
     clogger = callback_logger(websocket)
 
-    clogger.info(f"Starting experiment with lead molecule: {lead_molecule_smiles}", smiles=lead_molecule_smiles)
+    clogger.info(f"Starting task with lead molecule: {lead_molecule_smiles}", smiles=lead_molecule_smiles)
 
     parent_id = 0
     node_id = 0
@@ -51,7 +51,7 @@ async def lead_molecule(
 
     clogger.info(f"Storing found molecules in {mol_file_path}")
 
-    # Run the experiment in a loop
+    # Run the task in a loop
     new_molecules = lmo_helper_funcs.get_list_from_json_file(
         file_path=mol_file_path
     )  # Start with known molecules
@@ -155,10 +155,10 @@ async def lead_molecule(
 
                     await websocket.send_json({"type": "node", **node.json()})
 
-                    experiment = LeadMoleculeOptimization(
+                    task = LeadMoleculeOptimization(
                         lead_molecule=canonical_smiles
                     )
-                    lmo_runner.experiment_type = experiment
+                    lmo_runner.task_type = task
                     parent_id = node_id
 
                     break  # Exit while loop to proceed to next node

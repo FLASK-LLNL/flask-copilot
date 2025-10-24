@@ -15,8 +15,8 @@ from backend_helper_funcs import (
     Edge,
 )
 
-from charge.experiments.RetrosynthesisExperiment import (
-    TemplateFreeRetrosynthesisExperiment as RetrosynthesisExperiment,
+from charge.tasks.RetrosynthesisTask import (
+    TemplateFreeRetrosynthesisTask as RetrosynthesisTask,
     TemplateFreeReactionOutputSchema as ReactionOutputSchema,
 )
 
@@ -89,7 +89,7 @@ async def constrained_retro(
             charge_runner (AutoGenClient): An asynchronous runner client that, when
                     awaited (charge_runner.run()), performs the retrosynthesis / optimization
                     and returns a result object with a to_dict() method. This object also wraps
-                    the experiment in experiment_type, which contains the prompts
+                    the task in task_type, which contains the prompts
             aizynth_planner (RetroPlanner): AiZynthFinder-based planner instance
             retro_synth_context (RetrosynthesisContext): Context/configuration object
                     containing Node objects representing the retrosynthetic state.
@@ -169,7 +169,7 @@ async def unconstrained_retro(
             charge_runner (AutoGenClient): An asynchronous runner client that, when
                     awaited (charge_runner.run()), performs the retrosynthesis / optimization
                     and returns a result object with a to_dict() method. This object also wraps
-                    the experiment in experiment_type, which contains the prompts
+                    the task in task_type, which contains the prompts
             aizynth_planner (RetroPlanner): AiZynthFinder-based planner instance
             retro_synth_context (RetrosynthesisContext): Context/configuration object
                     containing Node objects representing the retrosynthetic state.
@@ -292,8 +292,8 @@ async def constrained_opt(parent_smiles, constraint_smiles, planner, websocket: 
     user_prompt = RETROSYNTH_CONSTRAINED_USER_PROMPT_TEMPLATE.format(
         target_molecule=parent_smiles, constrained_reactant=constraint_smiles
     )
-    retro_experiment = RetrosynthesisExperiment(user_prompt=user_prompt)
-    planner.experiment_type = retro_experiment
+    retro_task = RetrosynthesisTask(user_prompt=user_prompt)
+    planner.task_type = retro_task
     logger.info(f"Optimizing {parent_smiles} without using {constraint_smiles} in the synthesis.")
     result = await planner.run()
     return result
@@ -326,9 +326,9 @@ async def optimize_molecule_retro(node_id: str,
         # New context
         user_prompt = RETROSYNTH_UNCONSTRAINED_USER_PROMPT_TEMPLATE.format(target_molecule=current_node.smiles)
         user_prompt += "\nDouble check the reactants with the `predict_reaction_products` tool to see if the products are equivalent to the given product. If there is any inconsistency (canonicalize both sides of the equation first), log it and try some other set of reactants."
-        retro_experiment = RetrosynthesisExperiment(user_prompt=user_prompt)
+        retro_task = RetrosynthesisTask(user_prompt=user_prompt)
         runner = AutoGenClient(
-            experiment_type=retro_experiment,
+            task_type=retro_task,
             model=model,
             backend=backend,
             api_key=api_key,
@@ -340,7 +340,7 @@ async def optimize_molecule_retro(node_id: str,
 
     logger.info(f"Optimizing {current_node.smiles} using retrosynthesis.")
 
-    # Run experiment
+    # Run task
     await highlight_node(current_node, websocket, True)
     result: ReactionOutputSchema = cast(ReactionOutputSchema, await runner.run())
     await highlight_node(current_node, websocket, False)
