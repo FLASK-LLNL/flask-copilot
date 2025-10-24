@@ -197,6 +197,17 @@ async def websocket_endpoint(websocket: WebSocket):
                         )
                     else:
                         lmo_runner.experiment_type = lmo_experiment
+
+                    run_func = partial(
+                        lead_molecule,
+                        data["smiles"],
+                        lmo_experiment,
+                        lmo_runner,
+                        args.json_file,
+                        args.max_iterations,
+                        data.get("depth", 3),
+                        websocket,
+                    )
                 elif data["problemType"] == "retrosynthesis":
                     # Set up retrosynthesis experiment to retrosynthesis
                     # to ensure the reactant is not used in the synthesis
@@ -205,30 +216,20 @@ async def websocket_endpoint(websocket: WebSocket):
 
                     if retro_synth_context is None:
                         retro_synth_context = RetrosynthesisContext()
+
+                    assert retro_synth_context is not None
+                    run_func = partial(
+                        generate_molecules,
+                        data["smiles"],
+                        args.config_file,
+                        retro_synth_context,
+                        websocket,
+                    )
                 else:
-                    raise ValueError(f"Unknown action: {action}")
+                    raise ValueError(f"Unknown problem type: {data['problemType']}")
 
                 async def run_task():
-                    if data["problemType"] == "optimization":
-                        await lead_molecule(
-                            data["smiles"],
-                            lmo_experiment,
-                            lmo_runner,
-                            args.json_file,
-                            args.max_iterations,
-                            data.get("depth", 3),
-                            websocket,
-                        )
-                    elif data["problemType"] == "retrosynthesis":
-                        assert retro_synth_context is not None
-                        await generate_molecules(
-                            data["smiles"],
-                            args.config_file,
-                            retro_synth_context,
-                            websocket,
-                        )
-                    else:
-                        logger.error(f"Unknown problem type: {data['problemType']}")
+                    await run_func()
 
                 # start a new task
                 CURRENT_TASK = asyncio.create_task(run_task())
