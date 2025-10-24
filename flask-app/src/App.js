@@ -60,14 +60,14 @@ const MoleculeSVG = ({ smiles, height = 80, rdkitModule = null }) => {
     const hash = smiles.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
     const color = colors[hash % colors.length];
     const nodes = 5 + (hash % 3);
-    
+
     const points = [];
     for (let i = 0; i < nodes; i++) {
       const angle = (i * 2 * Math.PI) / nodes;
       const r = 25;
       points.push([40 + r * Math.cos(angle), 40 + r * Math.sin(angle)]);
     }
-    
+
     return (
       <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', width: '100%', height: height }}>
         <svg height={height} viewBox="0 0 80 80" style={{ display: 'block', margin: '0 auto' }}>
@@ -113,14 +113,14 @@ const MoleculeSVG = ({ smiles, height = 80, rdkitModule = null }) => {
 // Simple markdown-like parser for hover info
 const MarkdownText = ({ text }) => {
   const lines = text.split('\n');
-  
+
   const parseInline = (line) => {
     line = line.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
     line = line.replace(/\*(.+?)\*/g, '<em>$1</em>');
     line = line.replace(/`(.+?)`/g, '<code class="bg-purple-900/50 px-1 rounded">$1</code>');
     return line;
   };
-  
+
   return (
     <div className="space-y-2">
       {lines.map((line, idx) => {
@@ -194,13 +194,13 @@ const ChemistryTool = () => {
   const containerRef = useRef(null);
   const wsRef = useRef(null);
   const sidebarRef = useRef(null);
-  
+
   // Load RDKit.js on mount
   useEffect(() => {
     const script = document.createElement('script');
     script.src = 'https://unpkg.com/@rdkit/rdkit/Code/MinimalLib/dist/RDKit_minimal.js';
     script.async = true;
-    
+
     script.onload = () => {
       if (window.initRDKitModule) {
         window.initRDKitModule().then((RDKit) => {
@@ -211,13 +211,13 @@ const ChemistryTool = () => {
         });
       }
     };
-    
+
     script.onerror = () => {
       console.error('Failed to load RDKit script');
     };
-    
+
     document.body.appendChild(script);
-    
+
     return () => {
       if (document.body.contains(script)) {
         document.body.removeChild(script);
@@ -251,7 +251,7 @@ const ChemistryTool = () => {
   const getNode = useCallback((nodeId) => {
     return treeNodes.find(n => n.id === nodeId);
   }, [treeNodes]);
-  
+
   const copyToClipboard = async (text, fieldName) => {
     try {
       await navigator.clipboard.writeText(text);
@@ -262,7 +262,7 @@ const ChemistryTool = () => {
     }
   };
 
-  /* Mock "re-randomize children" button behavior 
+  /* Mock "re-randomize children" button behavior
   const reactionTypes = ['Hydrogenation', 'Oxidation', 'Methylation', 'Reduction', 'Cyclization', 'Halogenation'];
   const commonNames = ['Ethanol', 'Acetone', 'Benzene', 'Toluene', 'Aspirin', 'Caffeine', 'Glucose', 'Fructose'];
 
@@ -291,12 +291,12 @@ const ChemistryTool = () => {
       if (depth > maxLevel) return;
 
       const numChildren = Math.random() > 0.5 ? 2 : 1;
-      
+
       for (let i = 0; i < numChildren; i++) {
         const nodeId = `node_${timestamp}_${random}_${nodeCounter++}`;
         const nodeSMILES = `${parent}_${depth}_${i}`;
         const nodeLabel = `${getRandomName()}-${depth}${i}`;
-        
+
         const node = {
           id: nodeId,
           smiles: nodeSMILES,
@@ -306,9 +306,9 @@ const ChemistryTool = () => {
           parentId: parentIdx,
           cost: Math.random() * 100 + 10 // Random cost between 10-110
         };
-        
+
         nodes.push(node);
-        
+
         if (parentIdx !== null) {
           edgesList.push({
             id: `edge_${parentIdx}_${nodeId}`,
@@ -317,7 +317,7 @@ const ChemistryTool = () => {
             reactionType: getRandomReaction()
           });
         }
-        
+
         buildNode(nodeSMILES, nodeId, depth + 1);
       }
     };
@@ -333,9 +333,9 @@ const ChemistryTool = () => {
       parentId: null,
       cost: Math.random() * 100 + 10
     });
-    
+
     buildNode(parentSmiles, rootId, startLevel + 1);
-    
+
     return { nodes, edges: edgesList };
   };
 
@@ -363,57 +363,57 @@ const ChemistryTool = () => {
       ...n,
       parentId: n.parentId === 'root' ? nodeId : n.parentId
     }));
-    
+
     // Update edges to point from actual parent node, not 'root'
     const edgesWithCorrectParent = newEdges.map(e => ({
       ...e,
       fromNode: e.fromNode === 'root' ? nodeId : e.fromNode
     }));
-    
+
     // Position new children, finding available space at each level
     const levelGap = BOX_WIDTH + BOX_GAP;
     const nodeSpacing = 150;
-    
+
     // Find occupied Y positions at each level
     const occupiedYByLevel = {};
     filteredNodes.forEach(n => {
       if (!occupiedYByLevel[n.level]) occupiedYByLevel[n.level] = [];
       occupiedYByLevel[n.level].push(n.y);
     });
-    
+
     // Group new children by level
     const newChildrenByLevel = {};
     childNodes.forEach(child => {
       if (!newChildrenByLevel[child.level]) newChildrenByLevel[child.level] = [];
       newChildrenByLevel[child.level].push(child);
     });
-    
+
     const positionedNewChildren = childNodes.map(child => {
       const siblingsAtLevel = newChildrenByLevel[child.level];
       const indexInLevel = siblingsAtLevel.indexOf(child);
-      
+
       // Start from parent's Y and find first available slots
       const occupiedY = occupiedYByLevel[child.level] || [];
       let candidateY = node.y + indexInLevel * nodeSpacing;
-      
+
       // Check if this Y position is too close to any occupied position
       const minDistance = nodeSpacing * 0.8; // Allow some tolerance
       // eslint-disable-next-line no-loop-func
       while (occupiedY.some(y => Math.abs(y - candidateY) < minDistance)) {
         candidateY += nodeSpacing;
       }
-      
+
       // Mark this position as occupied for next siblings
       if (!occupiedYByLevel[child.level]) occupiedYByLevel[child.level] = [];
       occupiedYByLevel[child.level].push(candidateY);
-      
+
       return {
         ...child,
         x: 100 + child.level * levelGap,
         y: candidateY
       };
     });
-    
+
     // Combine: keep existing nodes unchanged, add new positioned children
     const allNodes = [...filteredNodes, ...positionedNewChildren];
 
@@ -458,22 +458,22 @@ const ChemistryTool = () => {
 
   const handleWheel = (e) => {
     e.preventDefault();
-    
+
     if (autoZoom) {
       setAutoZoom(false);
     }
-    
+
     const rect = containerRef.current.getBoundingClientRect();
     const mouseX = e.clientX - rect.left;
     const mouseY = e.clientY - rect.top;
-    
+
     const delta = -e.deltaY * 0.001;
     const newZoom = Math.min(Math.max(0.1, zoom + delta), 3);
-    
+
     const zoomRatio = newZoom / zoom;
     const newOffsetX = mouseX - (mouseX - offset.x) * zoomRatio;
     const newOffsetY = mouseY - (mouseY - offset.y) * zoomRatio;
-    
+
     setZoom(newZoom);
     setOffset({ x: newOffsetX, y: newOffsetY });
   };
@@ -485,13 +485,13 @@ const ChemistryTool = () => {
 
   const fitToView = () => {
     if (!containerRef.current || treeNodes.length === 0) return;
-    
+
     const padding = 80;
     let minX = Infinity, maxX = -Infinity;
     let minY = Infinity, maxY = -Infinity;
-    
+
     const nodeElements = containerRef.current.querySelectorAll('[data-node-id]');
-    
+
     if (nodeElements.length === 0) {
       treeNodes.forEach(node => {
         minX = Math.min(minX, node.x);
@@ -503,11 +503,11 @@ const ChemistryTool = () => {
       nodeElements.forEach((element) => {
         const nodeId = element.getAttribute('data-node-id');
         const node = treeNodes.find(n => n.id === nodeId);
-        
+
         if (node) {
           const actualWidth = element.offsetWidth;
           const actualHeight = element.offsetHeight;
-          
+
           minX = Math.min(minX, node.x);
           maxX = Math.max(maxX, node.x + actualWidth);
           minY = Math.min(minY, node.y);
@@ -515,24 +515,24 @@ const ChemistryTool = () => {
         }
       });
     }
-    
+
     const contentWidth = maxX - minX + padding * 2;
     const contentHeight = maxY - minY + padding * 2;
-    
+
     const rect = containerRef.current.getBoundingClientRect();
     const viewWidth = rect.width;
     const viewHeight = rect.height;
-    
+
     const scaleX = viewWidth / contentWidth;
     const scaleY = viewHeight / contentHeight;
     const newZoom = Math.min(scaleX, scaleY, 1);
-    
+
     const contentCenterX = (minX + maxX) / 2;
     const contentCenterY = (minY + maxY) / 2;
-    
+
     const newOffsetX = viewWidth / 2 - contentCenterX * newZoom;
     const newOffsetY = viewHeight / 2 - contentCenterY * newZoom;
-    
+
     setZoom(newZoom);
     setOffset({ x: newOffsetX, y: newOffsetY });
   };
@@ -581,7 +581,7 @@ const ChemistryTool = () => {
       return () => window.removeEventListener('mousedown', handleClickOutside);
     }
   }, [contextMenu, saveDropdownOpen, sourceFilterOpen, wsTooltipPinned]);
-  
+
   const runComputation = async () => {
     setSidebarOpen(true);
     setIsComputing(true);
@@ -589,11 +589,15 @@ const ChemistryTool = () => {
     setEdges([]);
     setOffset({ x: 50, y: 50 });
     setZoom(1);
-    
+
     websocket.send(JSON.stringify({
       action: 'compute',
       smiles: smiles,
       problemType: problemType,
+    }));
+
+    websocket.send(JSON.stringify({
+      action: 'list-tools'
     }));
   };
 
@@ -601,12 +605,12 @@ const ChemistryTool = () => {
     if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
       wsRef.current.close();
     }
-    
+
     setWsReconnecting(true);
-    
+
     const socket = new WebSocket(WS_SERVER);
     wsRef.current = socket;
-    
+
     socket.onopen = () => {
       console.log('WebSocket connected');
       setWebsocket(socket);
@@ -617,16 +621,16 @@ const ChemistryTool = () => {
 
       socket.send(JSON.stringify({ action: 'list-tools' }));
     };
-    
+
     socket.onmessage = (event) => {
       const data = JSON.parse(event.data);
-      
+
       if (data.type === 'node') {
         setTreeNodes(prev => [...prev, data]);
       } else if (data.type === 'node_update') {
         const { id, type, ...restData } = data;
 
-        setTreeNodes(prev => prev.map(n => 
+        setTreeNodes(prev => prev.map(n =>
           n.id === data.id ? { ...n, ...restData } : n
         ));
       } else if (data.type === 'node_delete') {
@@ -634,7 +638,7 @@ const ChemistryTool = () => {
           const descendants = findAllDescendants(data.id, prev);
           return prev.filter(n => !descendants.has(n.id) && n.id !== data.id);
         });
-        setEdges(prev => prev.filter(e => 
+        setEdges(prev => prev.filter(e =>
           e.fromNode !== data.id && e.toNode !== data.id
         ));
       } else if (data.type === 'subtree_update') {
@@ -642,9 +646,9 @@ const ChemistryTool = () => {
         const { id, type, ...restData } = data;
         setTreeNodes(prev => {
           const descendants = findAllDescendants(data.id, prev);
-          return prev.map(n => 
-            (descendants.has(n.id) || (withNode && n.id === data.id)) 
-              ? { ...n, ...restData } 
+          return prev.map(n =>
+            (descendants.has(n.id) || (withNode && n.id === data.id))
+              ? { ...n, ...restData }
               : n
           );
         });
@@ -652,7 +656,7 @@ const ChemistryTool = () => {
         setEdges(prev => [...prev, data]);
       } else if (data.type === 'edge_update') {
         const { id, type, ...restData } = data;
-        setEdges(prev => prev.map(e => 
+        setEdges(prev => prev.map(e =>
           e.id === data.id ? { ...e, ...restData } : e
          ));
       } else if (data.type === 'subtree_delete') {
@@ -661,7 +665,7 @@ const ChemistryTool = () => {
           descendantsSet = findAllDescendants(data.id, prev);
           return prev.filter(n => !descendantsSet.has(n.id));
         });
-        setEdges(prev => prev.filter(e => 
+        setEdges(prev => prev.filter(e =>
           !descendantsSet.has(e.fromNode) && !descendantsSet.has(e.toNode)
         ));
       } else if (data.type === 'complete') {
@@ -676,7 +680,7 @@ const ChemistryTool = () => {
         alert("Server error: " + data.message);
       }
     };
-    
+
     socket.onerror = (error) => {
       console.error('WebSocket error:', error);
       setWsReconnecting(false);
@@ -701,7 +705,7 @@ const ChemistryTool = () => {
     let socket = null;
 
     reconnectWS();
-    
+
     return () => {
       if (socket && socket.readyState === WebSocket.OPEN) {
         socket.close();
@@ -842,23 +846,23 @@ const ChemistryTool = () => {
 
   // Metric definitions for extensibility
   const metricDefinitions = {
-    cost: { 
-      label: 'Reaction Cost ($)', 
+    cost: {
+      label: 'Reaction Cost ($)',
       color: '#EC4899',
       calculate: (nodes) => nodes.reduce((sum, node) => sum + (node.cost || 0), 0)
     },
-    bandgap: { 
-      label: 'Band Gap (eV)', 
+    bandgap: {
+      label: 'Band Gap (eV)',
       color: '#F59E0B',
       calculate: (nodes) => nodes[nodes.length-1].bandgap || 0
     },
-    density: { 
-      label: 'Molecular Density (g/cm³)', 
+    density: {
+      label: 'Molecular Density (g/cm³)',
       color: '#10B981',
       calculate: (nodes) => nodes[nodes.length-1].density || 0
     },
-    /*yield: { 
-      label: 'Yield (%)', 
+    /*yield: {
+      label: 'Yield (%)',
       color: '#10B981',
       calculate: (nodes) => nodes.length > 0 ? (nodes.reduce((sum, node) => sum + (node.yield || Math.random() * 100), 0) / nodes.length) : 0
     },*/
@@ -902,7 +906,7 @@ const ChemistryTool = () => {
   // Relayouts the molecule graph for better visibility (assumes tree)
   const relayoutTree = () => {
     if (treeNodes.length === 0) return;
-    
+
     // Build parent-to-children map
     const childrenMap = new Map();
     treeNodes.forEach(node => {
@@ -913,14 +917,14 @@ const ChemistryTool = () => {
         childrenMap.get(node.parentId).push(node);
       }
     });
-    
+
     // Find root node(s)
     const roots = treeNodes.filter(n => n.parentId === null || !treeNodes.find(t => t.id === n.parentId));
-    
+
     const levelGap = BOX_WIDTH + BOX_GAP;
     const nodeSpacing = 150;
     const newPositions = new Map();
-    
+
     // First pass: calculate subtree sizes (number of leaf descendants)
     const subtreeSizes = new Map();
     const calculateSubtreeSize = (nodeId) => {
@@ -933,16 +937,16 @@ const ChemistryTool = () => {
       subtreeSizes.set(nodeId, size);
       return size;
     };
-    
+
     roots.forEach(root => calculateSubtreeSize(root.id));
-    
+
     // Second pass: assign positions based on subtree sizes
     const assignPositions = (nodeId, level, startY) => {
       const node = treeNodes.find(n => n.id === nodeId);
       if (!node) return startY;
-      
+
       const children = childrenMap.get(nodeId) || [];
-      
+
       if (children.length === 0) {
         // Leaf node - place at next available Y
         newPositions.set(nodeId, {
@@ -951,31 +955,31 @@ const ChemistryTool = () => {
         });
         return startY + nodeSpacing;
       }
-      
+
       // Internal node - place children first, then center parent
       let currentY = startY;
       const childPositions = [];
-      
+
       children.forEach(child => {
         currentY = assignPositions(child.id, level + 1, currentY);
         childPositions.push(newPositions.get(child.id).y);
       });
-      
+
       // Center parent among its children
       const avgChildY = childPositions.reduce((sum, y) => sum + y, 0) / childPositions.length;
       newPositions.set(nodeId, {
         x: 100 + level * levelGap,
         y: avgChildY
       });
-      
+
       return currentY;
     };
-    
+
     let currentY = 100;
     roots.forEach(root => {
       currentY = assignPositions(root.id, 0, currentY);
     });
-    
+
     // Update nodes with new positions
     const updatedNodes = treeNodes.map(node => {
       const pos = newPositions.get(node.id);
@@ -984,18 +988,18 @@ const ChemistryTool = () => {
       }
       return node;
     });
-    
+
     // Create node map for edges
     const nodeMap = {};
     updatedNodes.forEach(n => {
       nodeMap[n.id] = n;
     });
-    
+
     // Update all edges with new positions
     const updatedEdges = edges.map(e => ({
       ...e,
     }));
-    
+
     setTreeNodes(updatedNodes);
     setEdges(updatedEdges);
   };
@@ -1007,10 +1011,10 @@ const ChemistryTool = () => {
     const startY = from.y + BOX_HEIGHT / 2;
     const endX = to.x;
     const endY = to.y + BOX_HEIGHT / 2;
-    
+
     const controlX1 = startX + (endX - startX) * 0.3;
     const controlX2 = startX + (endX - startX) * 0.7;
-    
+
     return `M ${startX} ${startY} C ${controlX1} ${startY}, ${controlX2} ${endY}, ${endX} ${endY}`;
   };
 
@@ -1020,21 +1024,21 @@ const ChemistryTool = () => {
     const startY = from.y + BOX_HEIGHT / 2;
     const endX = to.x;
     const endY = to.y + BOX_HEIGHT / 2;
-    
+
     const t = 0.5;
     const controlX1 = startX + (endX - startX) * 0.3;
     const controlX2 = startX + (endX - startX) * 0.7;
-    
-    const x = Math.pow(1-t, 3) * startX + 
-              3 * Math.pow(1-t, 2) * t * controlX1 + 
-              3 * (1-t) * Math.pow(t, 2) * controlX2 + 
+
+    const x = Math.pow(1-t, 3) * startX +
+              3 * Math.pow(1-t, 2) * t * controlX1 +
+              3 * (1-t) * Math.pow(t, 2) * controlX2 +
               Math.pow(t, 3) * endX;
-    
-    const y = Math.pow(1-t, 3) * startY + 
-              3 * Math.pow(1-t, 2) * t * startY + 
-              3 * (1-t) * Math.pow(t, 2) * endY + 
+
+    const y = Math.pow(1-t, 3) * startY +
+              3 * Math.pow(1-t, 2) * t * startY +
+              3 * (1-t) * Math.pow(t, 2) * endY +
               Math.pow(t, 3) * endY;
-    
+
     return { x, y };
   };
 
@@ -1078,13 +1082,13 @@ const ChemistryTool = () => {
       return;
     }
     console.log(`Custom query for ${customQueryModal.label}: ${customQueryText}`);
-    
+
     websocket.send(JSON.stringify({
       action: problemType === "optimization" ? "optimize-from" : "recompute-reaction",
       nodeId: customQueryModal.id,
       query: customQueryText
     }));
-    
+
     setCustomQueryModal(null);
     setCustomQueryText('');
     setIsComputing(true); // If expecting new nodes
@@ -1100,7 +1104,7 @@ const ChemistryTool = () => {
     };
     setSidebarMessages(prev => [...prev, message]);
     setSidebarOpen(true);
-    
+
     setVisibleSources(prev => {
       if (!(source in prev)) {
         return { ...prev, [source]: true };
@@ -1112,7 +1116,7 @@ const ChemistryTool = () => {
   // Memoize the metrics charts to prevent re-render on mouse move
   const metricsCharts = useMemo(() => {
     if (metricsHistory.length === 0) return null;
-    
+
     return (
       <div className={`grid gap-6 ${Object.values(visibleMetrics).filter(Boolean).length > 1 ? 'grid-cols-2' : 'grid-cols-1'}`}>
         {Object.keys(metricDefinitions).filter(key => visibleMetrics[key]).map(metricKey => {
@@ -1123,26 +1127,26 @@ const ChemistryTool = () => {
               <ResponsiveContainer width="100%" height={200}>
                 <LineChart data={metricsHistory}>
                   <CartesianGrid strokeDasharray="3 3" stroke="#8B5CF6" opacity={0.1} />
-                  <XAxis 
-                    dataKey="step" 
+                  <XAxis
+                    dataKey="step"
                     stroke="#A78BFA"
                     tick={{ fontSize: 12 }}
                   />
-                  <YAxis 
+                  <YAxis
                     stroke="#A78BFA"
                     tick={{ fontSize: 12 }}
                   />
-                  <Tooltip 
-                    contentStyle={{ 
-                      backgroundColor: '#1E1B4B', 
+                  <Tooltip
+                    contentStyle={{
+                      backgroundColor: '#1E1B4B',
                       border: '2px solid #8B5CF6',
                       borderRadius: '8px',
                       color: '#E9D5FF'
                     }}
                     formatter={(value) => value.toFixed(2)}
                   />
-                  <Line 
-                    type="monotone" 
+                  <Line
+                    type="monotone"
                     dataKey={metricKey}
                     stroke={metric.color}
                     strokeWidth={3}
@@ -1213,7 +1217,7 @@ const ChemistryTool = () => {
           </button>
 
           {/* WebSocket Status Indicator */}
-            <div 
+            <div
               className="absolute top-10 group"
               onClick={(e) => {
                 e.stopPropagation();
@@ -1233,20 +1237,20 @@ const ChemistryTool = () => {
               <div className="relative cursor-pointer">
                 <div className={`w-4 h-4 rounded-full absolute ${
                   wsReconnecting ? 'bg-yellow-400 animate-ping' :
-                  wsConnected ? 'bg-green-400' : 
+                  wsConnected ? 'bg-green-400' :
                   'bg-red-400 animate-pulse'
                 }`} />
                 <div className={`w-4 h-4 rounded-full ${
                   wsReconnecting ? 'bg-yellow-400' :
-                  wsConnected ? 'bg-green-400' : 
+                  wsConnected ? 'bg-green-400' :
                   'bg-red-400 animate-ping'
                 } ${wsTooltipPinned ? 'ring-2 ring-white ring-offset-2 ring-offset-slate-900' : ''}`} />
               </div>
-              
+
               <div className={`absolute right-0 top-8 transition-opacity z-50 ${
                 wsTooltipPinned ? 'opacity-100' : 'opacity-0 group-hover:opacity-100 pointer-events-none'
               }`}>
-                <div 
+                <div
                   className="bg-slate-800 border-2 border-purple-400 rounded-lg px-3 py-2 text-sm shadow-xl"
                   style={{ minWidth: '220px', maxWidth: '300px' }}
                   onClick={(e) => e.stopPropagation()}
@@ -1255,11 +1259,11 @@ const ChemistryTool = () => {
                   <div className="flex items-center justify-between mb-1">
                     <div className={`font-semibold ${
                       wsReconnecting ? 'text-yellow-400' :
-                      wsConnected ? 'text-green-400' : 
+                      wsConnected ? 'text-green-400' :
                       'text-red-400'
                     }`}>
                       {wsReconnecting ? '● Reconnecting...' :
-                      wsConnected ? '● Connected' : 
+                      wsConnected ? '● Connected' :
                       '● Disconnected'}
                     </div>
                     {wsTooltipPinned && (
@@ -1351,7 +1355,7 @@ const ChemistryTool = () => {
               </label>
             </div>
           </div>
-          
+
           <div className="flex items-center gap-4">
             <div className="flex items-end gap-2">
               <div className="w-100">
@@ -1371,7 +1375,7 @@ const ChemistryTool = () => {
                 Edit
               </button>
             </div>
-            
+
             <div className="flex gap-3 flex-1 justify-end">
               <div className="relative group">
                 <button onClick={runComputation} disabled={!wsConnected || isComputing || !smiles} className="px-6 py-3 bg-gradient-to-r from-purple-600 to-pink-600 text-white rounded-lg font-semibold shadow-lg hover:shadow-xl transform hover:-translate-y-0.5 transition-all disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none flex items-center gap-2">
@@ -1381,8 +1385,8 @@ const ChemistryTool = () => {
                   <div className="absolute bottom-full mb-2 left-1/2 transform -translate-x-1/2 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
                     <div className="bg-slate-800 border-2 border-purple-400 rounded-lg px-3 py-2 text-sm whitespace-nowrap shadow-xl">
                       <div className="text-purple-200">
-                        {!wsConnected ? 'Backend server not connected' : 
-                         isComputing ? 'Computation already running' : 
+                        {!wsConnected ? 'Backend server not connected' :
+                         isComputing ? 'Computation already running' :
                          'Enter a SMILES string first'}
                       </div>
                       {!wsConnected && (
@@ -1412,7 +1416,7 @@ const ChemistryTool = () => {
             <div className="flex flex-col items-center justify-center h-full text-purple-300">
               <FlaskConical className="w-16 h-16 mb-4 opacity-50" />
               <p className="text-center text-lg">
-                {wsConnected ? 
+                {wsConnected ?
                   `Click "Run" to start ${problemType === "optimization" ? "molecular discovery" : "the molecular computation tree"}` :
                   "Waiting for backend connection..."
                 }
@@ -1429,7 +1433,7 @@ const ChemistryTool = () => {
               )}
             </div>
           ) : (
-            <div 
+            <div
               ref={containerRef}
               className={`relative w-full h-full overflow-hidden ${
                 autoZoom ? 'cursor-default' : isDragging ? 'cursor-grabbing' : 'cursor-grab'
@@ -1465,7 +1469,7 @@ const ChemistryTool = () => {
                           <circle cx={getNode(edge.toNode).x + 10} cy={getNode(edge.toNode).y + 50} r="5" fill={edge.status === 'computing' ? '#F59E0B' : '#EC4899'} />
                         </g>
                       </svg>
-                      
+
                       <div className="absolute pointer-events-auto" style={{ left: `${midpoint.x}px`, top: `${midpoint.y}px`, transform: 'translate(-50%, -50%)' }}>
                         {edge.label && (
                           <div className={`px-3 py-1.5 rounded-lg text-xs font-semibold shadow-lg ${edge.status === 'computing' ? 'bg-amber-500 text-white animate-pulse' : 'bg-purple-500 text-white'}`}>
@@ -1483,9 +1487,9 @@ const ChemistryTool = () => {
                     key={node.id}
                     data-node-id={node.id}
                     className="absolute animate-fadeInScale"
-                    style={{ 
-                      left: `${node.x}px`, 
-                      top: `${node.y}px`, 
+                    style={{
+                      left: `${node.x}px`,
+                      top: `${node.y}px`,
                       width: `${BOX_WIDTH*1.05}px`,
                       animationDelay: `${idx * 100}ms`,
                       transition: 'left 0.6s cubic-bezier(0.34, 1.56, 0.64, 1), top 0.6s cubic-bezier(0.34, 1.56, 0.64, 1)'
@@ -1560,7 +1564,7 @@ const ChemistryTool = () => {
           <div className="mt-6 bg-white/10 backdrop-blur-lg rounded-2xl shadow-2xl p-6 border border-white/20">
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-xl font-semibold text-white">Optimization Metrics</h3>
-              
+
               {/* Metric Toggles */}
               <div className="flex gap-2">
                 {Object.keys(metricDefinitions).map(key => (
@@ -1626,7 +1630,7 @@ const ChemistryTool = () => {
             <h3 className="text-lg font-semibold text-white">Reasoning</h3>
             <div className="flex items-center gap-2">
               <div className="relative">
-                <button 
+                <button
                   onClick={(e) => { e.stopPropagation(); setSourceFilterOpen(!sourceFilterOpen); }}
                   onMouseDown={(e) => e.stopPropagation()}
                   className="px-3 py-1 bg-purple-500/30 text-white rounded-lg text-xs font-semibold hover:bg-purple-500/50 transition-all flex items-center gap-2"
@@ -1748,8 +1752,8 @@ const ChemistryTool = () => {
             <RotateCcw className="w-4 h-4" />
             Restart from here
             </button>
-            <button 
-              onClick={() => copyToClipboard(contextMenu.node.smiles, 'smiles')} 
+            <button
+              onClick={() => copyToClipboard(contextMenu.node.smiles, 'smiles')}
               className="w-full px-4 py-2 text-left text-sm text-white hover:bg-purple-600/50 transition-colors flex items-center gap-2"
             >
               {copiedField === 'smiles' ? (
@@ -1818,13 +1822,13 @@ const ChemistryTool = () => {
               placeholder="Enter your custom query here..."
               className="w-full h-40 px-4 py-3 bg-white/10 border-2 border-purple-400/50 rounded-lg focus:border-purple-400 focus:outline-none text-white placeholder-purple-300/50 resize-none"
             />
-            
+
             <div className="flex gap-3 mt-4">
               <button onClick={submitCustomQuery} disabled={!customQueryText.trim()} className="flex-1 px-6 py-3 bg-gradient-to-r from-purple-600 to-pink-600 text-white rounded-lg font-semibold shadow-lg hover:shadow-xl transform hover:-translate-y-0.5 transition-all disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none flex items-center justify-center gap-2">
                 <Send className="w-5 h-5" />
                 Submit Query
               </button>
-              
+
               <button onClick={() => setCustomQueryModal(null)} className="px-6 py-3 bg-white/20 text-white rounded-lg font-semibold hover:bg-white/30 transition-all">
                 Cancel
               </button>
@@ -1845,19 +1849,19 @@ const ChemistryTool = () => {
                 <X className="w-6 h-6" />
               </button>
             </div>
-            
+
             <div className="space-y-4">
               <div>
                 <label className="block text-sm font-medium text-purple-200 mb-2">System Prompt</label>
                 <textarea value={systemPrompt} onChange={(e) => setSystemPrompt(e.target.value)} placeholder="Enter system-level instructions..." className="w-full h-32 px-4 py-3 bg-white/10 border-2 border-purple-400/50 rounded-lg focus:border-purple-400 focus:outline-none text-white placeholder-purple-300/50 resize-none" />
               </div>
-              
+
               <div>
                 <label className="block text-sm font-medium text-purple-200 mb-2">Problem Prompt</label>
                 <textarea value={problemPrompt} onChange={(e) => setProblemPrompt(e.target.value)} placeholder="Enter problem-specific instructions..." className="w-full h-32 px-4 py-3 bg-white/10 border-2 border-purple-400/50 rounded-lg focus:border-purple-400 focus:outline-none text-white placeholder-purple-300/50 resize-none" />
               </div>
             </div>
-            
+
             <div className="flex gap-3 mt-4">
               <button onClick={() => { savePrompts('', ''); setProblemType('retrosynthesis'); }} className="px-4 py-3 bg-white/10 text-purple-200 rounded-lg font-medium hover:bg-white/20 transition-all flex items-center gap-2">
                 <RotateCcw className="w-4 h-4" />
