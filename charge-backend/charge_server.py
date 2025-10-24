@@ -292,14 +292,25 @@ async def websocket_endpoint(websocket: WebSocket):
                 tools = []
                 tool_list = []
                 if lmo_runner:
-                    tool_list = await list_client_tools(lmo_runner)
+                    tool_list.extend(await list_client_tools(lmo_runner))
+                if retro_synth_context:
+                    for k,v in retro_synth_context.node_id_to_charge_client:
+                        print(f"BVE I ahve a k {k} and v {v}")
+                        tool_list.extend(await list_client_tools(v))
+
                 for (name, description) in tool_list:
                     tools.append(Tool(name, description))
 
-                await websocket.send_json({
-                    "type": "available-tools-response",
-                    "tools": [tool.json() for tool in tools],
-                })
+                if tools == []:
+                    await websocket.send_json({
+                        "type": "available-tools-response",
+                        "tools": [],
+                    })
+                else:
+                    await websocket.send_json({
+                        "type": "available-tools-response",
+                        "tools": [tool.json() for tool in tools],
+                    })
             elif action == "custom_query":
                 await websocket.send_json(
                     {
