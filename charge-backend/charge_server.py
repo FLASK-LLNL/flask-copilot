@@ -104,10 +104,10 @@ app.add_middleware(
 )
 
 if 'FLASK_APPDIR' in os.environ:
-    BUILD_PATH = os.environ['FLASK_APPDIR']
+    DIST_PATH = os.environ['FLASK_APPDIR']
 else:
-    BUILD_PATH = os.path.join(os.path.dirname(__file__), "flask-app", "build")
-STATIC_PATH = os.path.join(BUILD_PATH, "static")
+    DIST_PATH = os.path.join(os.path.dirname(__file__), "flask-app", "dist")
+ASSETS_PATH = os.path.join(DIST_PATH, "assets")
 
 
 (MODEL, BACKEND, API_KEY, MODEL_KWARGS) = AutoGenClient.configure(args.model, args.backend)
@@ -121,13 +121,13 @@ LMO_URLS = args.lmo_urls + server_urls
 RETRO_URLS = args.retro_urls + server_urls
 
 
-if os.path.exists(STATIC_PATH):
+if os.path.exists(ASSETS_PATH):
     # Serve the frontend
-    app.mount("/static", StaticFiles(directory=STATIC_PATH), name="static")
+    app.mount("/assets", StaticFiles(directory=ASSETS_PATH), name="assets")
 
     @app.get("/")
     async def root():
-        return FileResponse(os.path.join(BUILD_PATH, "index.html"))
+        return FileResponse(os.path.join(DIST_PATH, "index.html"))
 
 
 def make_client(client, experiment, server_urls, websocket):
