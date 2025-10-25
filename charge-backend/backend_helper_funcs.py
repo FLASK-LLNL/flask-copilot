@@ -8,6 +8,8 @@ from collections import defaultdict
 
 from charge.clients.autogen import AutoGenClient
 import charge.servers.AiZynthTools as aizynth_funcs
+from charge.servers import SMILES_utils
+from charge.servers.molecular_property_utils import chemprop_preds_server
 
 
 # TODO: Put this on the top level package and make it reusable
@@ -86,8 +88,46 @@ def get_bandgap(smiles: str) -> float:
 
     return round(random.uniform(1.0, 5.0), 2)
 
+
 # Add a temporary blacklist until UI filtering of messages is added
-tool_callback_blacklist = ["verify_smiles", "canonicalize_smiles", "diagnose_smiles", "is_already_known", "get_density", "get_synthesizability", "is_molecule_synthesizable"]
+tool_callback_blacklist = [
+    "verify_smiles",
+    "canonicalize_smiles",
+    "diagnose_smiles",
+    "is_already_known",
+    "get_density",
+    "get_synthesizability",
+    "is_molecule_synthesizable",
+]
+
+
+def tool_output_formatting(function_message: str, func_type: str) -> dict:
+    str_to_dict = json.loads(function_message)
+
+    if "smiles" in str_to_dict:
+        smiles = str_to_dict["smiles"]
+        if func_type == "verify_smiles":
+            _str = f"**Model**\nChecking if `{smiles}` is a valid SMILES string..."
+        elif func_type == "known_smiles":
+            _str = f"**Model**\nChecking if `{smiles}` has already been found..."
+        elif func_type == "chemprop_preds_server":
+            _str = f"**Model**\nPredicting density for `{smiles}` using ChemProp..."
+        else:
+            _str = f"**Model**\nFunction `{func_type}` called with SMILES `{smiles}`."
+        msg = {
+            "type": "response",
+            "message": _str,
+            "smiles": smiles,
+        }
+    else:
+        if func_type == "log_progress":
+            _str = f"**Model**\n{str_to_dict['log_msg']}"
+            msg = {"type": "response", "message": _str}
+        else:
+            msg = {"type": "response", "message": function_message}
+    return msg
+
+
 class CallbackHandler:
     def __init__(self, websocket: WebSocket):
         self.websocket = websocket
@@ -111,18 +151,8 @@ class CallbackHandler:
                         name = item.name
                         _str = f"Function call: {item.name} with args {item.arguments}"
                         logger.info(_str)
-                        if name not in tool_callback_blacklist:
-                            if "log_msg" in item.arguments:
-                                str_to_dict = json.loads(item.arguments)
-                                if "log_msg" in str_to_dict:
-                                    _str = str_to_dict["log_msg"]
-
-                            msg = {"type": "response", "source": name, "message": _str}
-                            if "smiles" in item.arguments:
-                                str_to_dict = json.loads(item.arguments)
-                                if "smiles" in str_to_dict:
-                                    msg["smiles"] = str_to_dict["smiles"]
-                            await send(msg)
+                        msg = tool_output_formatting(item.arguments, item.name)
+                        await send(msg)
                     else:
 
                         logger.info(f"Model: {item}")
@@ -202,3 +232,17 @@ async def highlight_node(node: Node, websocket: WebSocket, highlight: bool):
             "highlight": "yellow" if highlight else "normal",
         }
     )
+
+
+def post_process_lmo_smiles(smiles: str, parent_id: int, node_id: int) -> Dict:
+    """Post-process LMO SMILES to add properties like density and SAScore."""
+    canonical_smiles = SMILES_utils.canonicalize_smiles(smiles)
+    density = chemprop_preds_server(canonical_smiles, "density")
+    sa_score = SMILES_utils.get_synthesizability(canonical_smiles)
+    return {
+        "smiles": canonical_smiles,
+        "parent_id": parent_id,
+        "node_id": node_id,
+        "density": density,
+        "sascore": sa_score,
+    }
