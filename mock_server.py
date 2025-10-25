@@ -16,7 +16,7 @@ Supported messages from frontend to server:
 """
 
 from fastapi import FastAPI, Request, WebSocket, WebSocketDisconnect
-from fastapi.responses import StreamingResponse, FileResponse
+from fastapi.responses import StreamingResponse, HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 from dataclasses import dataclass, asdict
@@ -51,7 +51,16 @@ if os.path.exists(ASSETS_PATH):
 
     @app.get("/")
     async def root():
-        return FileResponse(os.path.join(DIST_PATH, "index.html"))
+        with open(os.path.join(DIST_PATH, "index.html"), 'r') as fp:
+            html = fp.read()
+
+        html = html.replace('<!-- APP CONFIG -->', f'''
+           <script>
+           window.APP_CONFIG = {{
+               WS_SERVER: '{os.getenv("WS_SERVER", "ws://localhost:8001/ws")}'
+           }};
+           </script>''')
+        return HTMLResponse(html)
 
 CACTUS = "https://cactus.nci.nih.gov/chemical/structure/{0}/{1}"
 
