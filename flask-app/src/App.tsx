@@ -4,11 +4,12 @@ import { Loader2, FlaskConical, TestTubeDiagonal, Network, Play, RotateCcw, Move
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { RDKitModule } from '@rdkit/rdkit';
 
+import { WS_SERVER } from './config';
+
 const MOLECULE_WIDTH = 250;
 const BOX_WIDTH = 10 + MOLECULE_WIDTH + 10;
 const BOX_GAP = 160;
 const BOX_HEIGHT = 100;
-const WS_SERVER = "ws://localhost:8001/ws";
 
 const NODE_STYLES = {
   "normal": 'from-purple-50/80 to-pink-300/80 border-purple-400/50 hover:border-purple-300',

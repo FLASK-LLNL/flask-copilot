@@ -1,6 +1,6 @@
 from functools import partial
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
-from fastapi.responses import FileResponse
+from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 import asyncio
@@ -128,7 +128,16 @@ if os.path.exists(ASSETS_PATH):
 
     @app.get("/")
     async def root():
-        return FileResponse(os.path.join(DIST_PATH, "index.html"))
+        with open(os.path.join(DIST_PATH, "index.html"), 'r') as fp:
+            html = fp.read()
+
+        html = html.replace('<!-- APP CONFIG -->', f'''
+           <script>
+           window.APP_CONFIG = {{
+               WS_SERVER: '{os.getenv("WS_SERVER", "ws://localhost:8001/ws")}'
+           }};
+           </script>''')
+        return HTMLResponse(html)
 
 
 def make_client(client, task, server_urls, websocket):
