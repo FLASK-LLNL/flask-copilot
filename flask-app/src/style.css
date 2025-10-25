@@ -1,1 +1,20 @@
 @import "tailwindcss";
+
+/* Custom scrollbar for tools list */
+.max-h-60::-webkit-scrollbar {
+  width: 6px;
+}
+
+.max-h-60::-webkit-scrollbar-track {
+  background: rgba(139, 92, 246, 0.1);
+  border-radius: 3px;
+}
+
+.max-h-60::-webkit-scrollbar-thumb {
+  background: rgba(139, 92, 246, 0.5);
+  border-radius: 3px;
+}
+
+.max-h-60::-webkit-scrollbar-thumb:hover {
+  background: rgba(139, 92, 246, 0.7);
+}
