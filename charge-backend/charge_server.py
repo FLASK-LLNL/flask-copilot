@@ -103,7 +103,10 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-BUILD_PATH = os.path.join(os.path.dirname(__file__), "flask-app", "build")
+if 'FLASK_APPDIR' in os.environ:
+    BUILD_PATH = os.environ['FLASK_APPDIR']
+else:
+    BUILD_PATH = os.path.join(os.path.dirname(__file__), "flask-app", "build")
 STATIC_PATH = os.path.join(BUILD_PATH, "static")
 
 
