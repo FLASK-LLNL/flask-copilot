@@ -89,7 +89,7 @@ async def constrained_retro(
             charge_runner (AutoGenClient): An asynchronous runner client that, when
                     awaited (charge_runner.run()), performs the retrosynthesis / optimization
                     and returns a result object with a to_dict() method. This object also wraps
-                    the task in task_type, which contains the prompts
+                    the task in task, which contains the prompts
             aizynth_planner (RetroPlanner): AiZynthFinder-based planner instance
             retro_synth_context (RetrosynthesisContext): Context/configuration object
                     containing Node objects representing the retrosynthetic state.
@@ -169,7 +169,7 @@ async def unconstrained_retro(
             charge_runner (AutoGenClient): An asynchronous runner client that, when
                     awaited (charge_runner.run()), performs the retrosynthesis / optimization
                     and returns a result object with a to_dict() method. This object also wraps
-                    the task in task_type, which contains the prompts
+                    the task in task, which contains the prompts
             aizynth_planner (RetroPlanner): AiZynthFinder-based planner instance
             retro_synth_context (RetrosynthesisContext): Context/configuration object
                     containing Node objects representing the retrosynthetic state.
