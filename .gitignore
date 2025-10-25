@@ -141,6 +141,10 @@ vite.config.ts.timestamp-*
 # Python
 *~
 .venv/
+venv/
+
+# Visual Studio Code
+.vscode/
 
 # Public assets
 flask-app/public/rdkit/
