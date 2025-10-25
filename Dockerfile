@@ -20,7 +20,7 @@ RUN git clone --recursive https://github.com/FLASK-LLNL/ChARGe.git charge && \
 
 COPY mock_server.py /app
 
-ENV FLASK_APPDIR=/app/build
+ENV FLASK_APPDIR=/app/dist
 
 EXPOSE 8001
 CMD ["--host", "0.0.0.0", "--port", "8001", "--workers", "8", "mock_server:app"]
