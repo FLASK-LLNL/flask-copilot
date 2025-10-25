@@ -19,10 +19,12 @@ async def handle_callback_log(message):
         await websocket.send_json(
             {
                 "type": "response",
-                "source": f"Logger ({level})",
-                "message": msg,
-                **kwargs
+                "message": {
+                    "source": f"Logger ({level})",
+                    "message": msg,
+                    **kwargs
                 }
+            }
         )
     sys.stdout.write(message)
         

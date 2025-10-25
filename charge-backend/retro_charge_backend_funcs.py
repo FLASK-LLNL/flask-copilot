@@ -117,15 +117,21 @@ async def constrained_retro(
     await websocket.send_json(
         {
             "type": "response",
-            "message": f"Finding synthesis pathway for {parent_smiles}...",
-            "smiles": parent_smiles,
+            "message": {
+                "source": "System",
+                "message": f"Finding synthesis pathway for {parent_smiles}...",
+                "smiles": parent_smiles,
+            }
         }
     )
     await websocket.send_json(
         {
             "type": "response",
-            "message": f"Searching for alternatives without {constraint_smiles}",
-            "smiles": constraint_smiles,
+            "message": {
+                "source": "System",
+                "message": f"Searching for alternatives without {constraint_smiles}",
+                "smiles": constraint_smiles,
+            }
         }
     )
 
@@ -197,8 +203,11 @@ async def unconstrained_retro(
     await websocket.send_json(
         {
             "type": "response",
-            "message": f"Finding synthesis pathway to {parent_smiles}...",
-            "smiles": parent_smiles,
+            "message": {
+                "source": "System",
+                "message": f"Finding synthesis pathway to {parent_smiles}...",
+                "smiles": parent_smiles,
+            }
         }
     )
 
@@ -233,15 +242,18 @@ async def generate_molecules(start_smiles: str, config_file: str, context: Retro
         x=100,
         y=100,
     )
-    await websocket.send_json({"type": "node", **root.json()})
+    await websocket.send_json({"type": "node", "node": root.json()})
     planner = context.node_id_to_planner[root.id] = RetroPlanner(configfile=config_file)
     _, _, routes = planner.plan(start_smiles)
     if not routes:
         await websocket.send_json(
             {
                 "type": "response",
-                "message": f"No synthesis routes found for {start_smiles}.",
-                "smiles": start_smiles,
+                "message": {
+                    "source": "System",
+                    "message": f"No synthesis routes found for {start_smiles}.",
+                    "smiles": start_smiles,
+                }
             }
         )
         await websocket.send_json({"type": "complete"})
@@ -261,11 +273,11 @@ async def generate_molecules(start_smiles: str, config_file: str, context: Retro
         edge = next((e for e in edges if e.toNode == node.id), None)
 
         # Send node
-        await websocket.send_json({"type": "node", **node.json()})
+        await websocket.send_json({"type": "node", "node": node.json()})
         if edge:
-            await websocket.send_json({"type": "edge", **edge.json()})
+            await websocket.send_json({"type": "edge", "edge": edge.json()})
 
-    await websocket.send_json({"type": "node_update", "id": root.id, "highlight": "normal"})
+    await websocket.send_json({"type": "node_update", "node": {"id": root.id, "highlight": "normal"}})
     await websocket.send_json({"type": "complete"})
 
 
@@ -277,15 +289,21 @@ async def constrained_opt(parent_smiles, constraint_smiles, planner, websocket: 
     await websocket.send_json(
         {
             "type": "response",
-            "message": f"Finding synthesis pathway for {parent_smiles}...",
-            "smiles": parent_smiles,
+            "message": {
+                "source": "System",
+                "message": f"Finding synthesis pathway for {parent_smiles}...",
+                "smiles": parent_smiles,
+            }
         }
     )
     await websocket.send_json(
         {
             "type": "response",
-            "message": f"Searching for alternatives without {constraint_smiles}",
-            "smiles": constraint_smiles,
+            "message": {
+                "source": "System",
+                "message": f"Searching for alternatives without {constraint_smiles}",
+                "smiles": constraint_smiles,
+            }
         }
     )
 
@@ -314,8 +332,11 @@ async def optimize_molecule_retro(node_id: str,
     await websocket.send_json(
         {
             "type": "response",
-            "message": f"Finding synthesis pathway to {current_node.smiles}...",
-            "smiles": current_node.smiles,
+            "message": {
+                "source": "System",
+                "message": f"Finding synthesis pathway to {current_node.smiles}...",
+                "smiles": current_node.smiles,
+            }
         }
     )
 
@@ -360,5 +381,5 @@ async def optimize_molecule_retro(node_id: str,
     context.nodes_per_level[level] += len(nodes)
 
     for node, edge in zip(nodes, edges):
-        await websocket.send_json({"type": "node", **node.json()})
-        await websocket.send_json({"type": "edge", **edge.json()})
+        await websocket.send_json({"type": "node", "node": node.json()})
+        await websocket.send_json({"type": "edge", "edge": edge.json()})
