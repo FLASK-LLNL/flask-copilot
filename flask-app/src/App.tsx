@@ -2,7 +2,6 @@
 import React, { useState, useRef, useEffect, useMemo, useCallback } from 'react';
 import { Loader2, FlaskConical, TestTubeDiagonal, Network, Play, RotateCcw, Move, X, Send, RefreshCw, Sparkles } from 'lucide-react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
-import { NameType } from 'recharts/types/component/DefaultTooltipContent';
 
 const MOLECULE_WIDTH = 250;
 const BOX_WIDTH = 10 + MOLECULE_WIDTH + 10;
@@ -701,13 +700,14 @@ const ChemistryTool: React.FC = () => {
     setEdges([]);
     setOffset({ x: 50, y: 50 });
     setZoom(1);
-    
-    // WebSocketMessageToServer
-    websocket?.send(JSON.stringify({
+
+    const message: WebSocketMessageToServer = {
       action: 'compute',
       smiles: smiles,
-      problemType: problemType,
-    }));
+      problemType: problemType
+    };
+
+    websocket?.send(JSON.stringify(message));
   };
 
   const reconnectWS = (): void => {
@@ -1158,10 +1158,11 @@ const ChemistryTool: React.FC = () => {
       alert('WebSocket not connected');
       return;
     }
-    websocket.send(JSON.stringify({
+    const msg: WebSocketMessageToServer = {
       action: message,
       nodeId: nodeId
-    }));
+    };
+    websocket.send(JSON.stringify(msg));
     setContextMenu(null);
   };
 
@@ -1184,12 +1185,13 @@ const ChemistryTool: React.FC = () => {
     }
     console.log(`Custom query for ${customQueryModal?.label}: ${customQueryText}`);
     
-    websocket.send(JSON.stringify({
+    const message: WebSocketMessageToServer = {
       action: problemType === "optimization" ? "optimize-from" : "recompute-reaction",
       nodeId: customQueryModal?.id,
       query: customQueryText
-    }));
-    
+    };
+    websocket.send(JSON.stringify(message));
+
     setCustomQueryModal(null);
     setCustomQueryText('');
     setIsComputing(true); // If expecting new nodes
