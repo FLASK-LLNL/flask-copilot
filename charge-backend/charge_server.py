@@ -130,7 +130,7 @@ if os.path.exists(STATIC_PATH):
 def make_client(client, task, server_urls, websocket):
     if client is None:
         return AutoGenClient(
-            task_type=task,
+            task=task,
             model=MODEL,
             backend=BACKEND,
             api_key=API_KEY,
@@ -139,7 +139,7 @@ def make_client(client, task, server_urls, websocket):
             thoughts_callback=CallbackHandler(websocket),
         )
     else:
-        client.task_type = task
+        client.task = task
         return client
 
 @app.websocket("/ws")
@@ -187,7 +187,7 @@ async def websocket_endpoint(websocket: WebSocket):
                     lmo_task = LeadMoleculeOptimization(lead_molecule=data["smiles"])
                     if lmo_runner is None:
                         lmo_runner = AutoGenClient(
-                            task_type=lmo_task,
+                            task=lmo_task,
                             model=MODEL,
                             backend=BACKEND,
                             api_key=API_KEY,
@@ -196,7 +196,7 @@ async def websocket_endpoint(websocket: WebSocket):
                             thoughts_callback=CallbackHandler(websocket),
                         )
                     else:
-                        lmo_runner.task_type = lmo_task
+                        lmo_runner.task = lmo_task
 
                     run_func = partial(
                         lead_molecule,

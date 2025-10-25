@@ -293,7 +293,7 @@ async def constrained_opt(parent_smiles, constraint_smiles, planner, websocket: 
         target_molecule=parent_smiles, constrained_reactant=constraint_smiles
     )
     retro_task = RetrosynthesisTask(user_prompt=user_prompt)
-    planner.task_type = retro_task
+    planner.task = retro_task
     logger.info(f"Optimizing {parent_smiles} without using {constraint_smiles} in the synthesis.")
     result = await planner.run()
     return result
@@ -328,7 +328,7 @@ async def optimize_molecule_retro(node_id: str,
         user_prompt += "\nDouble check the reactants with the `predict_reaction_products` tool to see if the products are equivalent to the given product. If there is any inconsistency (canonicalize both sides of the equation first), log it and try some other set of reactants."
         retro_task = RetrosynthesisTask(user_prompt=user_prompt)
         runner = AutoGenClient(
-            task_type=retro_task,
+            task=retro_task,
             model=model,
             backend=backend,
             api_key=api_key,

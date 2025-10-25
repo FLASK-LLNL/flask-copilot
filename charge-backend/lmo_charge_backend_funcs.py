@@ -158,7 +158,7 @@ async def lead_molecule(
                     task = LeadMoleculeOptimization(
                         lead_molecule=canonical_smiles
                     )
-                    lmo_runner.task_type = task
+                    lmo_runner.task = task
                     parent_id = node_id
 
                     break  # Exit while loop to proceed to next node
