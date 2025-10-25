@@ -23,70 +23,12 @@ MOLECULE_HOVER_TEMPLATE = """**SMILES:** `{smiles}`\n
  - **Density:** {density:.3f}
  - **Synthesizability (SA) Score:** {sascore:.3f}"""
 
-DENSITY_USER_PROMPT = """
-TASK:
-Given a lead molecule defined by its SMILES string:
-  LEAD_SMILES = {}
-
-Goal:
-Propose a **new**, **valid** organic molecule (SMILES) that:
-  1. Contain only elements C, H, O, and N.
-  2. Are not already known (as determined by calling known_smiles(smiles)).
-  3. Have a **density strictly greater** than that of the lead molecule.
-  4. Are chemically valid and syntactically correct SMILES.
-
-You must stop as soon as you have found a valid new molecule with higher density than the lead.
-
-PROCEDURE (must be followed deterministically):
-1. Compute the lead molecule density:
-   - Use calculate_density(LEAD_SMILES).
-   - Store the value as LEAD_DENSITY.
-2. Generate up to 10 candidate SMILES containing only C,H,O,N.
-3. For each candidate:
-   a. Validate that the SMILES is syntactically correct and contains only allowed elements.
-   b. Call known_smiles(smiles). If True, skip this candidate.
-   c. If valid and new, call calculate_density(smiles) and record the density.
-   d. Keep only candidates with density > LEAD_DENSITY.
-4. Rank the valid new candidates by density (highest first).
-5. Return the top 1 or repeat steps 2-4 until you have found 3 valid new molecules.
-
-CONSTRAINTS:
-- Do not estimate or guess density without calling calculate_density(smiles).
-- Do not claim global novelty. Use only known_smiles(smiles) for novelty checking.
-- Do not compute density for invalid or known SMILES.
-"""
+with open("prompts/lmo_density_user_prompt.txt", "r") as f:
+    DENSITY_USER_PROMPT = f.read()
 
 
-FURTHER_REFINE_PROMPT = """
-TASK:
-Using quantum simulations, I have determined the densities of those one molecule to be
- {}, respectively, for molecules {}.
-
-Goal:
-Propose up to 1 **new**, **valid** organic molecules (SMILES) that:
-  1. Contain only elements C, H, O, and N.
-  2. Are not already known (as determined by calling known_smiles(smiles)).
-  3. Have a **density strictly greater** than that of the lead molecules.
-  4. Are chemically valid and syntactically correct SMILES.
-
-You must stop as soon as you have found 1 valid new molecule with higher density than the lead.
-
-PROCEDURE (must be followed deterministically):
-1. Store the given density value as LEAD_DENSITY.
-2. Generate up to 10 candidate SMILES containing only C,H,O,N.
-3. For each candidate:
-   a. Validate that the SMILES is syntactically correct and contains only allowed elements.
-   b. Call known_smiles(smiles). If True, skip this candidate.
-   c. If valid and new, call calculate_density(smiles) and record the density.
-   d. Keep only candidates with density > LEAD_DENSITY.
-4. Rank the valid new candidates by density (highest first).
-5. Return the top 1 or repeat steps 2-4 until you have found 3 valid new molecules.
-
-CONSTRAINTS:
-- Do not estimate or guess density without calling calculate_density(smiles).
-- Do not claim global novelty. Use only known_smiles(smiles) for novelty checking.
-- Do not compute density for invalid or known SMILES.
-"""
+with open("prompts/lmo_refine_prompt.txt", "r") as f:
+    FURTHER_REFINE_PROMPT = f.read()
 
 
 async def generate_lead_molecule(
@@ -226,24 +168,6 @@ async def generate_lead_molecule(
                     smiles=results[0], parent_id=parent_id, node_id=node_id
                 )
                 canonical_smiles = processed_mol["smiles"]
-                if (
-                    canonical_smiles not in new_molecules
-                    and canonical_smiles != "Invalid SMILES"
-                ):
-                    new_molecules.append(canonical_smiles)
-                    mol_data.append(processed_mol)
-                    lmo_helper_funcs.save_list_to_json_file(
-                        data=mol_data, file_path=mol_file_path
-                    )
-                    clogger.info(
-                        f"New molecule added: {canonical_smiles}",
-                        smiles=canonical_smiles,
-                    )
-                    mol_hov = MOLECULE_HOVER_TEMPLATE.format(
-                        smiles=canonical_smiles,
-                        bandgap=get_bandgap(canonical_smiles),
-                        density=processed_mol["density"],
-                        sascore=processed_mol["sascore"],
 
                 generated_smiles_list = []
                 generated_densities = []
@@ -310,7 +234,6 @@ async def generate_lead_molecule(
                         + SCHEMA_PROMPT,
                     )
                     lmo_runner.experiment_type = density_experiment
-
             except WebSocketDisconnect:
                 logger.info("WebSocket disconnected")
                 raise
