@@ -13,11 +13,11 @@ from typing import Dict, cast
 
 import httpx
 
-from charge.experiments.LMOExperiment import (
-    LMOExperiment as LeadMoleculeOptimization,
+from charge.tasks.LMOTask import (
+    LMOTask as LeadMoleculeOptimization,
 )
-from charge.experiments.RetrosynthesisExperiment import (
-    TemplateFreeRetrosynthesisExperiment as RetrosynthesisExperiment,
+from charge.tasks.RetrosynthesisTask import (
+    TemplateFreeRetrosynthesisTask as RetrosynthesisTask,
     TemplateFreeReactionOutputSchema as ReactionOutputSchema,
 )
 
@@ -130,10 +130,10 @@ if os.path.exists(STATIC_PATH):
         return FileResponse(os.path.join(BUILD_PATH, "index.html"))
 
 
-def make_client(client, experiment, server_urls, websocket):
+def make_client(client, task, server_urls, websocket):
     if client is None:
         return AutoGenClient(
-            experiment_type=experiment,
+            task=task,
             model=MODEL,
             backend=BACKEND,
             api_key=API_KEY,
@@ -142,7 +142,7 @@ def make_client(client, experiment, server_urls, websocket):
             thoughts_callback=CallbackHandler(websocket),
         )
     else:
-        client.experiment_type = experiment
+        client.task = task
         return client
 
 @app.websocket("/ws")
@@ -151,8 +151,8 @@ async def websocket_endpoint(websocket: WebSocket):
 
     # Keep track of currently running task
     CURRENT_TASK: asyncio.Task | None = None
-    # Initialize Charge experiment with a dummy lead molecule
-    lmo_experiment = None
+    # Initialize Charge task with a dummy lead molecule
+    lmo_task = None
     lmo_runner = None
 
     clogger = callback_logger(websocket)
@@ -187,10 +187,10 @@ async def websocket_endpoint(websocket: WebSocket):
                     clogger.info("Start Optimization action received")
                     logger.info(f"Data: {data}")
 
-                    lmo_experiment = LeadMoleculeOptimization(lead_molecule=data["smiles"])
+                    lmo_task = LeadMoleculeOptimization(lead_molecule=data["smiles"])
                     if lmo_runner is None:
                         lmo_runner = AutoGenClient(
-                            experiment_type=lmo_experiment,
+                            task=lmo_task,
                             model=MODEL,
                             backend=BACKEND,
                             api_key=API_KEY,
@@ -199,12 +199,12 @@ async def websocket_endpoint(websocket: WebSocket):
                             thoughts_callback=CallbackHandler(websocket),
                         )
                     else:
-                        lmo_runner.experiment_type = lmo_experiment
+                        lmo_runner.task = lmo_task
 
                     run_func = partial(
                         lead_molecule,
                         data["smiles"],
-                        lmo_experiment,
+                        lmo_task,
                         lmo_runner,
                         args.json_file,
                         args.max_iterations,
@@ -212,9 +212,9 @@ async def websocket_endpoint(websocket: WebSocket):
                         websocket,
                     )
                 elif data["problemType"] == "retrosynthesis":
-                    # Set up retrosynthesis experiment to retrosynthesis
+                    # Set up retrosynthesis task to retrosynthesis
                     # to ensure the reactant is not used in the synthesis
-                    clogger.info("Setting up retrosynthesis experiment...")
+                    clogger.info("Setting up retrosynthesis task...")
                     logger.info(f"Data: {data}")
 
                     if retro_synth_context is None:
@@ -288,7 +288,7 @@ async def websocket_endpoint(websocket: WebSocket):
                     lmo_runner.reset()
                 if retro_synth_context is not None:
                     retro_synth_context.reset()
-                logger.info("Experiment state has been reset.")
+                logger.info("Task state has been reset.")
 
             elif action == "stop":
                 if CURRENT_TASK and not CURRENT_TASK.done():
