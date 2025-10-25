@@ -2,6 +2,7 @@
 import React, { useState, useRef, useEffect, useMemo, useCallback } from 'react';
 import { Loader2, FlaskConical, TestTubeDiagonal, Network, Play, RotateCcw, Move, X, Send, RefreshCw, Sparkles } from 'lucide-react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
+import { RDKitModule } from '@rdkit/rdkit';
 
 const MOLECULE_WIDTH = 250;
 const BOX_WIDTH = 10 + MOLECULE_WIDTH + 10;
@@ -116,7 +117,7 @@ interface MetricHistoryItem {
 interface MoleculeSVGProps {
   smiles: string;
   height?: number;
-  rdkitModule?: any;
+  rdkitModule?: RDKitModule;
 }
 
 interface MarkdownTextProps {
@@ -283,7 +284,7 @@ const ChemistryTool: React.FC = () => {
     density: false,
     yield: false,
   });
-  const [rdkitModule, setRdkitModule] = useState<any>(null);
+  const [rdkitModule, setRdkitModule] = useState<RDKitModule | null>(null);
   const [sidebarOpen, setSidebarOpen] = useState<boolean>(false);
   const [sidebarMessages, setSidebarMessages] = useState<SidebarMessage[]>([]);
   const [copiedField, setCopiedField] = useState<string | null>(null);
@@ -306,18 +307,16 @@ const ChemistryTool: React.FC = () => {
   // Load RDKit.js on mount
   useEffect(() => {
     const script = document.createElement('script');
-    script.src = 'https://unpkg.com/@rdkit/rdkit/Code/MinimalLib/dist/RDKit_minimal.js';
+    script.src = '/rdkit/RDKit_minimal.js';
     script.async = true;
     
     script.onload = () => {
-      if ((window as any).initRDKitModule) {
-        (window as any).initRDKitModule().then((RDKit: any) => {
-          console.log('RDKit loaded successfully!');
-          setRdkitModule(RDKit);
-        }).catch((error: any) => {
-          console.error('RDKit initialization failed:', error);
-        });
-      }
+      window.initRDKitModule().then((RDKit: RDKitModule) => {
+        console.log('RDKit loaded successfully!');
+        setRdkitModule(RDKit);
+      }).catch((error: any) => {
+        console.error('RDKit initialization failed:', error);
+      });
     };
     
     script.onerror = () => {

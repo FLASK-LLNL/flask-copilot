@@ -47,6 +47,7 @@ ASSETS_PATH = os.path.join(DIST_PATH, "assets")
 if os.path.exists(ASSETS_PATH):
     # Serve the frontend
     app.mount("/assets", StaticFiles(directory=ASSETS_PATH), name="assets")
+    app.mount("/rdkit", StaticFiles(directory=os.path.join(DIST_PATH, "rdkit")), name="rdkit")
 
     @app.get("/")
     async def root():
