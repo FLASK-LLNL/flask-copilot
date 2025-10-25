@@ -97,14 +97,14 @@ class CallbackHandler:
         if assistant_message.type == "UserMessage":
             message = f"User: {assistant_message.content}"
             logger.info(message)
-            await send({"type": "response", "message": message})
+            await send({"type": "response", "message": {"message": message}})
         elif assistant_message.type == "AssistantMessage":
 
             if assistant_message.thought is not None:
                 _str = f"Model thought: {assistant_message.thought}"
                 output = ModelMessage(message=_str, smiles=None)
                 logger.info(_str)
-                await send({"type": "response", **output.json()})
+                await send({"type": "response", "message": output.json()})
             if isinstance(assistant_message.content, list):
                 for item in assistant_message.content:
                     if hasattr(item, "name") and hasattr(item, "arguments"):
@@ -117,7 +117,7 @@ class CallbackHandler:
                                 if "log_msg" in str_to_dict:
                                     _str = str_to_dict["log_msg"]
 
-                            msg = {"type": "response", "source": name, "message": _str}
+                            msg = {"type": "response", "message": {"source": name, "message": _str}}
                             if "smiles" in item.arguments:
                                 str_to_dict = json.loads(item.arguments)
                                 if "smiles" in str_to_dict:
@@ -198,7 +198,9 @@ async def highlight_node(node: Node, websocket: WebSocket, highlight: bool):
     await websocket.send_json(
         {
             "type": "node_update",
-            "id": node.id,
-            "highlight": "yellow" if highlight else "normal",
+            "node": {
+                "id": node.id,
+                "highlight": "yellow" if highlight else "normal",
+            },
         }
     )

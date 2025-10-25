@@ -2,6 +2,7 @@
 import React, { useState, useRef, useEffect, useMemo, useCallback } from 'react';
 import { Loader2, FlaskConical, TestTubeDiagonal, Network, Play, RotateCcw, Move, X, Send, RefreshCw, Sparkles } from 'lucide-react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
+import { NameType } from 'recharts/types/component/DefaultTooltipContent';
 
 const MOLECULE_WIDTH = 250;
 const BOX_WIDTH = 10 + MOLECULE_WIDTH + 10;
@@ -13,12 +14,120 @@ const NODE_STYLES = {
   "normal": 'from-purple-50/80 to-pink-300/80 border-purple-400/50 hover:border-purple-300',
   "red": 'from-amber-500/40 to-red-500/100 border-red-400 ring-4 ring-red-400/50',
   "yellow": 'from-amber-500/40 to-yellow-500/40 border-amber-400 ring-4 ring-amber-400/50 animate-pulse',
-};
+} as const;
+
+// TypeScript interfaces and types
+interface TreeNode {
+  id: string;
+  smiles: string;
+  label: string;
+  hoverInfo: string;
+  level: number;
+  parentId: string | null;
+  cost?: number;
+  bandgap?: number;
+  density?: number;
+  yield?: number;
+  x: number;
+  y: number;
+  highlight?: keyof typeof NODE_STYLES;
+}
+
+interface Edge {
+  id: string;
+  fromNode: string;
+  toNode: string;
+  reactionType?: string;
+  status?: 'complete' | 'computing';
+  label?: string;
+}
+
+interface SidebarMessage {
+  id: number;
+  timestamp: string;
+  message: string;
+  smiles: string | null;
+  source: string;
+}
+
+interface Tool {
+  name?: string;
+  description?: string;
+}
+
+interface WebSocketMessageToServer {
+  action?: string;
+  smiles?: string;
+  problemType?: string;
+  nodeId?: string;
+  query?: string;
+}
+
+// Messages received from backend
+interface WebSocketMessage {
+  type: string;
+  
+  node?: TreeNode;
+  edge?: Edge;
+  message?: SidebarMessage;
+  tools?: Tool[];
+
+  withNode?: boolean;
+}
+
+
+interface MetricDefinition {
+  label: string;
+  color: string;
+  calculate: (nodes: TreeNode[]) => number;
+}
+
+interface MetricDefinitions {
+  [key: string]: MetricDefinition;
+}
+
+interface VisibleMetrics {
+  cost: boolean;
+  bandgap: boolean;
+  density: boolean;
+  yield: boolean;
+}
+
+interface VisibleSources {
+  [key: string]: boolean;
+}
+
+interface ContextMenuState {
+  node: TreeNode;
+  x: number;
+  y: number;
+}
+
+interface Position {
+  x: number;
+  y: number;
+}
+
+interface MetricHistoryItem {
+  step: number;
+  nodeCount: number;
+  [key: string]: number;
+}
+
+interface MoleculeSVGProps {
+  smiles: string;
+  height?: number;
+  rdkitModule?: any;
+}
+
+interface MarkdownTextProps {
+  text: string;
+}
 
 // Dummy molecule SVG generator (fallback if RDKit fails)
-const MoleculeSVG = ({ smiles, height = 80, rdkitModule = null }) => {
-  const [svg, setSvg] = useState(null);
-  const [error, setError] = useState(false);
+const MoleculeSVG: React.FC<MoleculeSVGProps> = ({ smiles, height = 80, rdkitModule = null }) => {
+  const [svg, setSvg] = useState<string | null>(null);
+  const [error, setError] = useState<boolean>(false);
 
   useEffect(() => {
     if (rdkitModule && smiles) {
@@ -61,7 +170,7 @@ const MoleculeSVG = ({ smiles, height = 80, rdkitModule = null }) => {
     const color = colors[hash % colors.length];
     const nodes = 5 + (hash % 3);
     
-    const points = [];
+    const points: [number, number][] = [];
     for (let i = 0; i < nodes; i++) {
       const angle = (i * 2 * Math.PI) / nodes;
       const r = 25;
@@ -107,14 +216,14 @@ const MoleculeSVG = ({ smiles, height = 80, rdkitModule = null }) => {
     );
   }
 
-  return <div dangerouslySetInnerHTML={{ __html: svg }} />;
+  return <div dangerouslySetInnerHTML={{ __html: svg || '' }} />;
 };
 
 // Simple markdown-like parser for hover info
-const MarkdownText = ({ text }) => {
+const MarkdownText: React.FC<MarkdownTextProps> = ({ text }) => {
   const lines = text.split('\n');
   
-  const parseInline = (line) => {
+  const parseInline = (line: string): string => {
     line = line.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
     line = line.replace(/\*(.+?)\*/g, '<em>$1</em>');
     line = line.replace(/`(.+?)`/g, '<code class="bg-purple-900/50 px-1 rounded">$1</code>');
@@ -142,44 +251,44 @@ const MarkdownText = ({ text }) => {
   );
 };
 
-const ChemistryTool = () => {
-  const [smiles, setSmiles] = useState('O=C\\C1=C(\\C=C/CC1(C)C)C');
-  const [problemType, setProblemType] = useState('retrosynthesis');
-  const [problemName, setProblemName] = useState('retro-safranal');
-  const [systemPrompt, setSystemPrompt] = useState('');
-  const [problemPrompt, setProblemPrompt] = useState('');
-  const [promptsModified, setPromptsModified] = useState(false);
-  const [editPromptsModal, setEditPromptsModal] = useState(false);
-  const [isComputing, setIsComputing] = useState(false);
-  const [autoZoom, setAutoZoom] = useState(true);
-  const [treeNodes, setTreeNodes] = useState([]);
-  const [edges, setEdges] = useState([]);
-  const [offset, setOffset] = useState({ x: 50, y: 50 });
-  const [zoom, setZoom] = useState(1);
-  const [isDragging, setIsDragging] = useState(false);
-  const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
-  const [hoveredNode, setHoveredNode] = useState(null);
-  const [mousePos, setMousePos] = useState({ x: 0, y: 0 });
-  const [contextMenu, setContextMenu] = useState(null);
-  const [customQueryModal, setCustomQueryModal] = useState(null);
-  const [customQueryText, setCustomQueryText] = useState('');
-  const [metricsHistory, setMetricsHistory] = useState([]);
-  const [websocket, setWebsocket] = useState(null);
-  const [wsConnected, setWsConnected] = useState(false);
-  const [saveDropdownOpen, setSaveDropdownOpen] = useState(false);
-  const [wsError, setWsError] = useState('');
-  const [wsReconnecting, setWsReconnecting] = useState(false);
-  const [visibleMetrics, setVisibleMetrics] = useState({
+const ChemistryTool: React.FC = () => {
+  const [smiles, setSmiles] = useState<string>('O=C\\C1=C(\\C=C/CC1(C)C)C');
+  const [problemType, setProblemType] = useState<string>('retrosynthesis');
+  const [problemName, setProblemName] = useState<string>('retro-safranal');
+  const [systemPrompt, setSystemPrompt] = useState<string>('');
+  const [problemPrompt, setProblemPrompt] = useState<string>('');
+  const [promptsModified, setPromptsModified] = useState<boolean>(false);
+  const [editPromptsModal, setEditPromptsModal] = useState<boolean>(false);
+  const [isComputing, setIsComputing] = useState<boolean>(false);
+  const [autoZoom, setAutoZoom] = useState<boolean>(true);
+  const [treeNodes, setTreeNodes] = useState<TreeNode[]>([]);
+  const [edges, setEdges] = useState<Edge[]>([]);
+  const [offset, setOffset] = useState<Position>({ x: 50, y: 50 });
+  const [zoom, setZoom] = useState<number>(1);
+  const [isDragging, setIsDragging] = useState<boolean>(false);
+  const [dragStart, setDragStart] = useState<Position>({ x: 0, y: 0 });
+  const [hoveredNode, setHoveredNode] = useState<TreeNode | null>(null);
+  const [mousePos, setMousePos] = useState<Position>({ x: 0, y: 0 });
+  const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null);
+  const [customQueryModal, setCustomQueryModal] = useState<TreeNode | null>(null);
+  const [customQueryText, setCustomQueryText] = useState<string>('');
+  const [metricsHistory, setMetricsHistory] = useState<MetricHistoryItem[]>([]);
+  const [websocket, setWebsocket] = useState<WebSocket | null>(null);
+  const [wsConnected, setWsConnected] = useState<boolean>(false);
+  const [saveDropdownOpen, setSaveDropdownOpen] = useState<boolean>(false);
+  const [wsError, setWsError] = useState<string>('');
+  const [wsReconnecting, setWsReconnecting] = useState<boolean>(false);
+  const [visibleMetrics, setVisibleMetrics] = useState<VisibleMetrics>({
     cost: true,
     bandgap: false,
     density: false,
     yield: false,
   });
-  const [rdkitModule, setRdkitModule] = useState(null);
-  const [sidebarOpen, setSidebarOpen] = useState(false);
-  const [sidebarMessages, setSidebarMessages] = useState([]);
-  const [copiedField, setCopiedField] = useState(null);
-  const [visibleSources, setVisibleSources] = useState({
+  const [rdkitModule, setRdkitModule] = useState<any>(null);
+  const [sidebarOpen, setSidebarOpen] = useState<boolean>(false);
+  const [sidebarMessages, setSidebarMessages] = useState<SidebarMessage[]>([]);
+  const [copiedField, setCopiedField] = useState<string | null>(null);
+  const [visibleSources, setVisibleSources] = useState<VisibleSources>({
     'System': true,
     'Reasoning': true,
     'Logger (Error)': true,
@@ -187,13 +296,13 @@ const ChemistryTool = () => {
     'Logger (Info)': false,
     'Logger (Debug)': false
   });
-  const [sourceFilterOpen, setSourceFilterOpen] = useState(false);
-  const [availableTools, setAvailableTools] = useState([]);
-  const [wsTooltipPinned, setWsTooltipPinned] = useState(false);
+  const [sourceFilterOpen, setSourceFilterOpen] = useState<boolean>(false);
+  const [availableTools, setAvailableTools] = useState<Tool[]>([]);
+  const [wsTooltipPinned, setWsTooltipPinned] = useState<boolean>(false);
 
-  const containerRef = useRef(null);
-  const wsRef = useRef(null);
-  const sidebarRef = useRef(null);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const wsRef = useRef<WebSocket | null>(null);
+  const sidebarRef = useRef<HTMLDivElement>(null);
   
   // Load RDKit.js on mount
   useEffect(() => {
@@ -202,11 +311,11 @@ const ChemistryTool = () => {
     script.async = true;
     
     script.onload = () => {
-      if (window.initRDKitModule) {
-        window.initRDKitModule().then((RDKit) => {
+      if ((window as any).initRDKitModule) {
+        (window as any).initRDKitModule().then((RDKit: any) => {
           console.log('RDKit loaded successfully!');
           setRdkitModule(RDKit);
-        }).catch((error) => {
+        }).catch((error: any) => {
           console.error('RDKit initialization failed:', error);
         });
       }
@@ -225,9 +334,9 @@ const ChemistryTool = () => {
     };
   }, []);
 
-  const findAllDescendants = useCallback((nodeId, nodes) => {
-    const descendants = new Set();
-    const findDescendants = (id) => {
+  const findAllDescendants = useCallback((nodeId: string, nodes: TreeNode[]): Set<string> => {
+    const descendants = new Set<string>();
+    const findDescendants = (id: string): void => {
       nodes.forEach(n => {
         if (n.parentId === id && !descendants.has(n.id)) {
           descendants.add(n.id);
@@ -239,20 +348,20 @@ const ChemistryTool = () => {
     return descendants;
   }, []);
 
-  const hasDescendants = useCallback((nodeId, nodes) => {
+  const hasDescendants = useCallback((nodeId: string, nodes: TreeNode[]): boolean => {
     return nodes.some(n => n.parentId === nodeId);
   }, []);
 
-  const isRootNode = useCallback((nodeId, nodes) => {
+  const isRootNode = useCallback((nodeId: string, nodes: TreeNode[]): boolean => {
     const node = nodes.find(n => n.id === nodeId);
-    return !node.parentId;
+    return !node?.parentId;
   }, []);
 
-  const getNode = useCallback((nodeId) => {
+  const getNode = useCallback((nodeId: string): TreeNode | undefined => {
     return treeNodes.find(n => n.id === nodeId);
   }, [treeNodes]);
   
-  const copyToClipboard = async (text, fieldName) => {
+  const copyToClipboard = async (text: string, fieldName: string): Promise<void> => {
     try {
       await navigator.clipboard.writeText(text);
       setCopiedField(fieldName);
@@ -437,14 +546,14 @@ const ChemistryTool = () => {
   };
    End of mock code */
 
-  const handleMouseDown = (e) => {
+  const handleMouseDown = (e: React.MouseEvent<HTMLDivElement>): void => {
     if (e.button !== 0) return;
     setIsDragging(true);
     setDragStart({ x: e.clientX - offset.x, y: e.clientY - offset.y });
     e.preventDefault();
   };
 
-  const handleMouseMove = (e) => {
+  const handleMouseMove = (e: MouseEvent): void => {
     if (!isDragging) return;
     setOffset({
       x: e.clientX - dragStart.x,
@@ -452,18 +561,20 @@ const ChemistryTool = () => {
     });
   };
 
-  const handleMouseUp = () => {
+  const handleMouseUp = (): void => {
     setIsDragging(false);
   };
 
-  const handleWheel = (e) => {
+  const handleWheel = (e: WheelEvent): void => {
     e.preventDefault();
     
     if (autoZoom) {
       setAutoZoom(false);
     }
     
-    const rect = containerRef.current.getBoundingClientRect();
+    const rect = containerRef.current?.getBoundingClientRect();
+    if (!rect) return;
+    
     const mouseX = e.clientX - rect.left;
     const mouseY = e.clientY - rect.top;
     
@@ -478,12 +589,12 @@ const ChemistryTool = () => {
     setOffset({ x: newOffsetX, y: newOffsetY });
   };
 
-  const resetZoom = () => {
+  const resetZoom = (): void => {
     setZoom(1);
     setOffset({ x: 50, y: 50 });
   };
 
-  const fitToView = () => {
+  const fitToView = (): void => {
     if (!containerRef.current || treeNodes.length === 0) return;
     
     const padding = 80;
@@ -505,8 +616,8 @@ const ChemistryTool = () => {
         const node = treeNodes.find(n => n.id === nodeId);
         
         if (node) {
-          const actualWidth = element.offsetWidth;
-          const actualHeight = element.offsetHeight;
+          const actualWidth = (element as HTMLElement).offsetWidth;
+          const actualHeight = (element as HTMLElement).offsetHeight;
           
           minX = Math.min(minX, node.x);
           maxX = Math.max(maxX, node.x + actualWidth);
@@ -570,11 +681,12 @@ const ChemistryTool = () => {
   }, [treeNodes, autoZoom]);
 
   useEffect(() => {
-    const handleClickOutside = () => {
+    const handleClickOutside = (): void => {
       setContextMenu(null);
       setSaveDropdownOpen(false);
       setSourceFilterOpen(false);
       setWsTooltipPinned(false);
+      setCopiedField(null);
     };
     if (contextMenu || saveDropdownOpen || sourceFilterOpen || wsTooltipPinned) {
       window.addEventListener('mousedown', handleClickOutside);
@@ -582,7 +694,7 @@ const ChemistryTool = () => {
     }
   }, [contextMenu, saveDropdownOpen, sourceFilterOpen, wsTooltipPinned]);
   
-  const runComputation = async () => {
+  const runComputation = async (): Promise<void> => {
     setSidebarOpen(true);
     setIsComputing(true);
     setTreeNodes([]);
@@ -590,14 +702,15 @@ const ChemistryTool = () => {
     setOffset({ x: 50, y: 50 });
     setZoom(1);
     
-    websocket.send(JSON.stringify({
+    // WebSocketMessageToServer
+    websocket?.send(JSON.stringify({
       action: 'compute',
       smiles: smiles,
       problemType: problemType,
     }));
   };
 
-  const reconnectWS = () => {
+  const reconnectWS = (): void => {
     if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
       wsRef.current.close();
     }
@@ -618,56 +731,56 @@ const ChemistryTool = () => {
       socket.send(JSON.stringify({ action: 'list-tools' }));
     };
     
-    socket.onmessage = (event) => {
-      const data = JSON.parse(event.data);
+    socket.onmessage = (event: MessageEvent) => {
+      const data: WebSocketMessage = JSON.parse(event.data);
       
       if (data.type === 'node') {
-        setTreeNodes(prev => [...prev, data]);
+        setTreeNodes(prev => [...prev, data.node!]);
       } else if (data.type === 'node_update') {
-        const { id, type, ...restData } = data;
+        const { id, ...restData } = data.node!;
 
         setTreeNodes(prev => prev.map(n => 
-          n.id === data.id ? { ...n, ...restData } : n
+          n.id === data.node!.id ? { ...n, ...restData } : n
         ));
       } else if (data.type === 'node_delete') {
         setTreeNodes(prev => {
-          const descendants = findAllDescendants(data.id, prev);
-          return prev.filter(n => !descendants.has(n.id) && n.id !== data.id);
+          const descendants = findAllDescendants(data.node!.id, prev);
+          return prev.filter(n => !descendants.has(n.id) && n.id !== data.node!.id);
         });
         setEdges(prev => prev.filter(e => 
-          e.fromNode !== data.id && e.toNode !== data.id
+          e.fromNode !== data.node!.id && e.toNode !== data.node!.id
         ));
       } else if (data.type === 'subtree_update') {
         const withNode = data.withNode || false;
-        const { id, type, ...restData } = data;
+        const { id, ...restData } = data.node!;
         setTreeNodes(prev => {
-          const descendants = findAllDescendants(data.id, prev);
+          const descendants = findAllDescendants(data.node!.id, prev);
           return prev.map(n => 
-            (descendants.has(n.id) || (withNode && n.id === data.id)) 
+            (descendants.has(n.id) || (withNode && n.id === data.node!.id)) 
               ? { ...n, ...restData } 
               : n
           );
         });
       } else if (data.type === 'edge') {
-        setEdges(prev => [...prev, data]);
+        setEdges(prev => [...prev, data.edge!]);
       } else if (data.type === 'edge_update') {
-        const { id, type, ...restData } = data;
+        const { id, ...restData } = data.edge!;
         setEdges(prev => prev.map(e => 
-          e.id === data.id ? { ...e, ...restData } : e
+          e.id === data.edge!.id ? { ...e, ...restData } : e
          ));
       } else if (data.type === 'subtree_delete') {
-        let descendantsSet;
+        let descendantsSet: Set<string>;
         setTreeNodes(prev => {
-          descendantsSet = findAllDescendants(data.id, prev);
+          descendantsSet = findAllDescendants(data.node!.id, prev);
           return prev.filter(n => !descendantsSet.has(n.id));
         });
         setEdges(prev => prev.filter(e => 
-          !descendantsSet.has(e.fromNode) && !descendantsSet.has(e.toNode)
+          !descendantsSet!.has(e.fromNode) && !descendantsSet!.has(e.toNode)
         ));
       } else if (data.type === 'complete') {
         setIsComputing(false);
       } else if (data.type === 'response') {
-        addSidebarMessage(data.message, data.smiles || null);
+        addSidebarMessage(data.message!);
         console.log('Server response:', data.message);
       } else if (data.type === 'available-tools-response') {
         setAvailableTools(data.tools || []);
@@ -677,11 +790,11 @@ const ChemistryTool = () => {
       }
     };
     
-    socket.onerror = (error) => {
+    socket.onerror = (error: Event) => {
       console.error('WebSocket error:', error);
       setWsReconnecting(false);
       setIsComputing(false);
-      setWsError(error.message || 'Connection failed');
+      setWsError((error as any).message || 'Connection failed');
       setAvailableTools([]);
     };
 
@@ -698,18 +811,10 @@ const ChemistryTool = () => {
 
   // Connect WebSocket on mount
   useEffect(() => {
-    let socket = null;
-
     reconnectWS();
-    
-    return () => {
-      if (socket && socket.readyState === WebSocket.OPEN) {
-        socket.close();
-      }
-    };
   }, []);
 
-  const reset = () => {
+  const reset = (): void => {
     setTreeNodes([]);
     setEdges([]);
     setIsComputing(false);
@@ -727,7 +832,7 @@ const ChemistryTool = () => {
     }
   };
 
-  const stop = () => {
+  const stop = (): void => {
     if (!websocket || websocket.readyState !== WebSocket.OPEN) {
       // alert('WebSocket not connected');
       return;
@@ -739,7 +844,7 @@ const ChemistryTool = () => {
   };
 
   // TODO: Improve saveTree and saveFullContext by handing the information to/from the backend
-  const saveTree = () => {
+  const saveTree = (): void => {
     const data = { version: '1.0', type: 'tree', timestamp: new Date().toISOString(), smiles, problemType, systemPrompt, problemPrompt, nodes: treeNodes, edges };
     const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
@@ -751,7 +856,7 @@ const ChemistryTool = () => {
     setSaveDropdownOpen(false);
   };
 
-  const saveFullContext = () => {
+  const saveFullContext = (): void => {
     const data = { version: '1.0', type: 'full-context', timestamp: new Date().toISOString(), smiles, problemType, systemPrompt, problemPrompt, nodes: treeNodes, edges, metricsHistory, visibleMetrics, zoom, offset, sidebarMessages, visibleSources };
     const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
@@ -763,17 +868,17 @@ const ChemistryTool = () => {
     setSaveDropdownOpen(false);
   };
 
-  const loadContext = () => {
+  const loadContext = (): void => {
     const input = document.createElement('input');
     input.type = 'file';
     input.accept = '.json';
-    input.onchange = (e) => {
-      const file = e.target.files[0];
+    input.onchange = (e: Event) => {
+      const file = (e.target as HTMLInputElement).files?.[0];
       if (!file) return;
       const reader = new FileReader();
-      reader.onload = (e) => {
+      reader.onload = (e: ProgressEvent<FileReader>) => {
         try {
-          const data = JSON.parse(e.target.result);
+          const data = JSON.parse(e.target?.result as string);
           if (data.type === 'tree' || data.type === 'full-context') {
             setSmiles(data.smiles || 'CCO');
             setProblemType(data.problemType || 'retrosynthesis');
@@ -800,7 +905,7 @@ const ChemistryTool = () => {
             alert('Invalid file format');
           }
         } catch (error) {
-          alert('Error loading file: ' + error.message);
+          alert('Error loading file: ' + (error as Error).message);
         }
       };
       reader.readAsText(file);
@@ -808,14 +913,14 @@ const ChemistryTool = () => {
     input.click();
   };
 
-  const savePrompts = (newSystemPrompt, newProblemPrompt) => {
+  const savePrompts = (newSystemPrompt: string, newProblemPrompt: string): void => {
     setSystemPrompt(newSystemPrompt);
     setProblemPrompt(newProblemPrompt);
     setPromptsModified(!!(newSystemPrompt || newProblemPrompt));
     setEditPromptsModal(false);
   };
 
-  const resetProblemType = (problem_name) => {
+  const resetProblemType = (problem_name: string): void => {
     setSystemPrompt('');
     setProblemPrompt('');
     setPromptsModified(false);
@@ -841,21 +946,21 @@ const ChemistryTool = () => {
 
 
   // Metric definitions for extensibility
-  const metricDefinitions = {
+  const metricDefinitions: MetricDefinitions = {
     cost: { 
       label: 'Reaction Cost ($)', 
       color: '#EC4899',
-      calculate: (nodes) => nodes.reduce((sum, node) => sum + (node.cost || 0), 0)
+      calculate: (nodes: TreeNode[]) => nodes.reduce((sum, node) => sum + (node.cost || 0), 0)
     },
     bandgap: { 
       label: 'Band Gap (eV)', 
       color: '#F59E0B',
-      calculate: (nodes) => nodes[nodes.length-1].bandgap || 0
+      calculate: (nodes: TreeNode[]) => nodes[nodes.length-1]?.bandgap || 0
     },
     density: { 
       label: 'Molecular Density (g/cm³)', 
       color: '#10B981',
-      calculate: (nodes) => nodes[nodes.length-1].density || 0
+      calculate: (nodes: TreeNode[]) => nodes[nodes.length-1]?.density || 0
     },
     /*yield: { 
       label: 'Yield (%)', 
@@ -865,8 +970,8 @@ const ChemistryTool = () => {
   };
 
   // Calculate all metrics
-  const calculateMetrics = (nodes) => {
-    const metrics = { nodeCount: nodes.length };
+  const calculateMetrics = (nodes: TreeNode[]): MetricHistoryItem => {
+    const metrics: MetricHistoryItem = { nodeCount: nodes.length, step: 0 };
     Object.keys(metricDefinitions).forEach(key => {
       metrics[key] = metricDefinitions[key].calculate(nodes);
     });
@@ -876,11 +981,11 @@ const ChemistryTool = () => {
   // Update metrics history whenever tree changes
   useEffect(() => {
     if (treeNodes.length > 0) {
-      const metrics = calculateMetrics(treeNodes);
-      setMetricsHistory(prev => [...prev, {
-        step: prev.length,
-        ...metrics
-      }]);
+      let metrics = calculateMetrics(treeNodes);
+      setMetricsHistory(prev => {
+        metrics.step = prev.length;
+        return [...prev, { ...metrics }];
+      });
     }
   }, [treeNodes.length]);
 
@@ -900,17 +1005,17 @@ const ChemistryTool = () => {
   }, [sidebarMessages]);
 
   // Relayouts the molecule graph for better visibility (assumes tree)
-  const relayoutTree = () => {
+  const relayoutTree = (): void => {
     if (treeNodes.length === 0) return;
     
     // Build parent-to-children map
-    const childrenMap = new Map();
+    const childrenMap = new Map<string, TreeNode[]>();
     treeNodes.forEach(node => {
       if (node.parentId) {
         if (!childrenMap.has(node.parentId)) {
           childrenMap.set(node.parentId, []);
         }
-        childrenMap.get(node.parentId).push(node);
+        childrenMap.get(node.parentId)!.push(node);
       }
     });
     
@@ -919,11 +1024,11 @@ const ChemistryTool = () => {
     
     const levelGap = BOX_WIDTH + BOX_GAP;
     const nodeSpacing = 150;
-    const newPositions = new Map();
+    const newPositions = new Map<string, Position>();
     
     // First pass: calculate subtree sizes (number of leaf descendants)
-    const subtreeSizes = new Map();
-    const calculateSubtreeSize = (nodeId) => {
+    const subtreeSizes = new Map<string, number>();
+    const calculateSubtreeSize = (nodeId: string): number => {
       const children = childrenMap.get(nodeId) || [];
       if (children.length === 0) {
         subtreeSizes.set(nodeId, 1);
@@ -937,7 +1042,7 @@ const ChemistryTool = () => {
     roots.forEach(root => calculateSubtreeSize(root.id));
     
     // Second pass: assign positions based on subtree sizes
-    const assignPositions = (nodeId, level, startY) => {
+    const assignPositions = (nodeId: string, level: number, startY: number): number => {
       const node = treeNodes.find(n => n.id === nodeId);
       if (!node) return startY;
       
@@ -954,11 +1059,11 @@ const ChemistryTool = () => {
       
       // Internal node - place children first, then center parent
       let currentY = startY;
-      const childPositions = [];
+      const childPositions: number[] = [];
       
       children.forEach(child => {
         currentY = assignPositions(child.id, level + 1, currentY);
-        childPositions.push(newPositions.get(child.id).y);
+        childPositions.push(newPositions.get(child.id)!.y);
       });
       
       // Center parent among its children
@@ -986,7 +1091,7 @@ const ChemistryTool = () => {
     });
     
     // Create node map for edges
-    const nodeMap = {};
+    const nodeMap: { [key: string]: TreeNode } = {};
     updatedNodes.forEach(n => {
       nodeMap[n.id] = n;
     });
@@ -1000,7 +1105,7 @@ const ChemistryTool = () => {
     setEdges(updatedEdges);
   };
 
-  const getCurvedPath = (from, to) => {
+  const getCurvedPath = (from: TreeNode | undefined, to: TreeNode | undefined): string => {
     if (!from || !to) return '';
 
     const startX = from.x + BOX_WIDTH;
@@ -1014,7 +1119,7 @@ const ChemistryTool = () => {
     return `M ${startX} ${startY} C ${controlX1} ${startY}, ${controlX2} ${endY}, ${endX} ${endY}`;
   };
 
-  const getCurveMidpoint = (from, to) => {
+  const getCurveMidpoint = (from: TreeNode | undefined, to: TreeNode | undefined): Position => {
     if (!from || !to) return { x: 0, y: 0 };
     const startX = from.x + BOX_WIDTH;
     const startY = from.y + BOX_HEIGHT / 2;
@@ -1038,7 +1143,7 @@ const ChemistryTool = () => {
     return { x, y };
   };
 
-  const handleNodeClick = (e, node) => {
+  const handleNodeClick = (e: React.MouseEvent<HTMLDivElement>, node: TreeNode): void => {
     e.stopPropagation();
     if (isComputing) return; // Don't open menu while computing
     setContextMenu({
@@ -1048,7 +1153,7 @@ const ChemistryTool = () => {
     });
   };
 
-  const sendMessageToServer = (message, nodeId) => {
+  const sendMessageToServer = (message: string, nodeId: string): void => {
     if (!websocket || websocket.readyState !== WebSocket.OPEN) {
       alert('WebSocket not connected');
       return;
@@ -1060,7 +1165,7 @@ const ChemistryTool = () => {
     setContextMenu(null);
   };
 
-  const handleCustomQuery = (node) => {
+  const handleCustomQuery = (node: TreeNode): void => {
     if (problemType === "optimization") {
       // Invalidate all nodes below this one
       setTreeNodes(prev => {
@@ -1072,16 +1177,16 @@ const ChemistryTool = () => {
     setContextMenu(null);
   };
 
-  const submitCustomQuery = () => {
+  const submitCustomQuery = (): void => {
     if (!websocket || websocket.readyState !== WebSocket.OPEN) {
       alert('WebSocket not connected');
       return;
     }
-    console.log(`Custom query for ${customQueryModal.label}: ${customQueryText}`);
+    console.log(`Custom query for ${customQueryModal?.label}: ${customQueryText}`);
     
     websocket.send(JSON.stringify({
       action: problemType === "optimization" ? "optimize-from" : "recompute-reaction",
-      nodeId: customQueryModal.id,
+      nodeId: customQueryModal?.id,
       query: customQueryText
     }));
     
@@ -1090,20 +1195,19 @@ const ChemistryTool = () => {
     setIsComputing(true); // If expecting new nodes
   };
 
-  const addSidebarMessage = (content, moleculeSmiles = null, source = 'System') => {
-    const message = {
-      id: Date.now(),
-      timestamp: new Date().toISOString(),
-      content,
-      moleculeSmiles,
-      source
-    };
+  const addSidebarMessage = (message: SidebarMessage): void => {
+    message.id = Date.now();
+    message.timestamp = new Date().toISOString();
+    if (!message.source) {
+      message.source = "Backend";
+    }
+
     setSidebarMessages(prev => [...prev, message]);
     setSidebarOpen(true);
     
     setVisibleSources(prev => {
-      if (!(source in prev)) {
-        return { ...prev, [source]: true };
+      if (!(message.source in prev)) {
+        return { ...prev, [message.source]: true };
       }
       return prev;
     });
@@ -1115,7 +1219,7 @@ const ChemistryTool = () => {
     
     return (
       <div className={`grid gap-6 ${Object.values(visibleMetrics).filter(Boolean).length > 1 ? 'grid-cols-2' : 'grid-cols-1'}`}>
-        {Object.keys(metricDefinitions).filter(key => visibleMetrics[key]).map(metricKey => {
+        {Object.keys(metricDefinitions).filter(key => visibleMetrics[key as keyof VisibleMetrics]).map(metricKey => {
           const metric = metricDefinitions[metricKey];
           return (
             <div key={metricKey} className="bg-white/5 rounded-xl p-4">
@@ -1139,7 +1243,8 @@ const ChemistryTool = () => {
                       borderRadius: '8px',
                       color: '#E9D5FF'
                     }}
-                    formatter={(value) => value.toFixed(2)}
+                    // NOTE: Returning `as any` since no other type information worked
+                    formatter={(value: number) => value.toFixed(2) as any}
                   />
                   <Line 
                     type="monotone" 
@@ -1289,7 +1394,7 @@ const ChemistryTool = () => {
                         <div className="space-y-1 max-h-60 overflow-y-auto pr-1">
                           {availableTools.map((tool, idx) => (
                             <div key={idx} className="text-xs bg-purple-900/30 rounded px-2 py-1">
-                              <div className="text-purple-100 font-medium">{tool.name || tool}</div>
+                              <div className="text-purple-100 font-medium">{tool.name || tool as string}</div>
                               {tool.description && (
                                 <div className="text-purple-300 mt-0.5 text-[10px] leading-tight">
                                   {tool.description}
@@ -1462,7 +1567,7 @@ const ChemistryTool = () => {
                             className={edge.status === 'computing' ? 'animate-dash' : ''}
                             opacity="0.8"
                           />
-                          <circle cx={getNode(edge.toNode).x + 10} cy={getNode(edge.toNode).y + 50} r="5" fill={edge.status === 'computing' ? '#F59E0B' : '#EC4899'} />
+                          <circle cx={getNode(edge.toNode)!.x + 10} cy={getNode(edge.toNode)!.y + 50} r="5" fill={edge.status === 'computing' ? '#F59E0B' : '#EC4899'} />
                         </g>
                       </svg>
                       
@@ -1566,9 +1671,9 @@ const ChemistryTool = () => {
                 {Object.keys(metricDefinitions).map(key => (
                   <button
                     key={key}
-                    onClick={() => setVisibleMetrics(prev => ({ ...prev, [key]: !prev[key] }))}
+                    onClick={() => setVisibleMetrics(prev => ({ ...prev, [key]: !prev[key as keyof VisibleMetrics] }))}
                     className={`px-3 py-1 rounded-lg text-sm font-medium transition-all ${
-                      visibleMetrics[key]
+                      visibleMetrics[key as keyof VisibleMetrics]
                         ? 'bg-purple-500 text-white'
                         : 'bg-white/10 text-purple-300 hover:bg-white/20'
                     }`}
@@ -1617,9 +1722,7 @@ const ChemistryTool = () => {
       </div>
     </div>
 
-
-      {/* Sidebar */
-      sidebarOpen && (
+    {sidebarOpen && (
       <div className="w-96 bg-slate-900 border-l-2 border-purple-400 shadow-2xl flex-shrink-0 sticky top-0 h-screen overflow-hidden animate-slideInSidebar">
         <div className="flex flex-col h-full">
           <div className="flex items-center justify-between p-4 border-b border-purple-400/30">
@@ -1703,11 +1806,11 @@ const ChemistryTool = () => {
                     </div>
                   </div>
                   <div className="text-sm text-purple-100">
-                    <MarkdownText text={msg.content} />
+                    <MarkdownText text={msg.message} />
                   </div>
-                  {msg.moleculeSmiles && (
+                  {msg.smiles && (
                     <div className="mt-3 bg-white/50 rounded-lg p-2 flex justify-center">
-                      <MoleculeSVG smiles={msg.moleculeSmiles} height={120} rdkitModule={rdkitModule} />
+                      <MoleculeSVG smiles={msg.smiles} height={120} rdkitModule={rdkitModule} />
                     </div>
                   )}
                 </div>

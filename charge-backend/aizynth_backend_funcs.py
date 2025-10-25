@@ -6,7 +6,7 @@ import asyncio
 import copy
 from typing import Dict
 
-from backend_helper_funcs import Node, Edge, RetrosynthesisContext
+from backend_helper_funcs import Node, Edge, RetrosynthesisContext, calculate_positions
 import charge.servers.AiZynthTools as AiZynthFuncs
 
 
@@ -96,14 +96,17 @@ async def aizynth_retro(
         x=100,
         y=100,
     )
-    await websocket.send_json({"type": "node", **root.json()})
+    await websocket.send_json({"type": "node", "node": root.json()})
     tree, stats, routes = planner.plan(start_smiles)
     if not routes:
         await websocket.send_json(
             {
                 "type": "response",
-                "message": f"No synthesis routes found for {start_smiles}.",
-                "smiles": start_smiles,
+                "message": {
+                    "source": "AiZynthFinder",
+                    "message": f"No synthesis routes found for {start_smiles}.",
+                    "smiles": start_smiles,
+                }
             }
         )
         await websocket.send_json({"type": "complete"})
@@ -114,7 +117,7 @@ async def aizynth_retro(
     nodes, edges = generate_tree_structure(reaction_path.nodes, retro_synth_context)
     clogger.info(f"Generated {len(nodes)} nodes and {len(edges)} edges.")
 
-    positioned_nodes = calculate_positions(nodes)
+    calculate_positions(nodes)
 
     # Create node map
     # Stream root first
@@ -122,8 +125,8 @@ async def aizynth_retro(
     await asyncio.sleep(0.8)
 
     # Stream remaining nodes with edges
-    for i in range(1, len(positioned_nodes)):
-        node = positioned_nodes[i]
+    for i in range(1, len(nodes)):
+        node = nodes[i]
 
         # Find edge for this node
         edge = next((e for e in edges if e.toNode == node.id), None)
@@ -132,29 +135,31 @@ async def aizynth_retro(
             # Send edge with computing status
             edge_data = {
                 "type": "edge",
-                **edge.json(),
+                "edge": edge.json(),
             }
-            edge_data["label"] = f"Computing: {edge.label}"
-            edge_data["toNode"] = node.id
+            edge_data["edge"]["label"] = f"Computing: {edge.label}"
+            edge_data["edge"]["toNode"] = node.id
             await websocket.send_json(edge_data)
 
             await asyncio.sleep(0.6)
 
             # Send node
-            await websocket.send_json({"type": "node", **node.json()})
+            await websocket.send_json({"type": "node", "node": node.json()})
 
             # Update edge to complete
             edge_complete = {
                 "type": "edge_update",
-                "id": edge.id,
-                "status": "complete",
-                "label": edge.label,
+                "edge": {
+                    "id": edge.id,
+                    "status": "complete",
+                    "label": edge.label,
+                }
             }
             await websocket.send_json(edge_complete)
 
             await asyncio.sleep(0.2)
     await websocket.send_json(
-        {"type": "node_update", "id": root.id, "highlight": False}
+        {"type": "node_update", "node": {"id": root.id, "highlight": "normal"}}
     )
 
     await websocket.send_json({"type": "complete"})

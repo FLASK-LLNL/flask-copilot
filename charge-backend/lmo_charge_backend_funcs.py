@@ -74,7 +74,7 @@ async def lead_molecule(
     )
     logger.info(f"Sending root node: {node}")
 
-    await websocket.send_json({"type": "node", **node.json()})
+    await websocket.send_json({"type": "node", "node": node.json()})
 
     edge_data = Edge(
         id=f"edge_{node_id}_{node_id+1}",
@@ -101,7 +101,7 @@ async def lead_molecule(
 
         edge_data = {
             "type": "edge",
-            **edge.json(),
+            "edge": edge.json(),
         }
         await websocket.send_json(edge_data)
         # Generate new molecule
@@ -153,7 +153,7 @@ async def lead_molecule(
                         y=100,
                     )
 
-                    await websocket.send_json({"type": "node", **node.json()})
+                    await websocket.send_json({"type": "node", "node": node.json()})
 
                     experiment = LeadMoleculeOptimization(
                         lead_molecule=canonical_smiles

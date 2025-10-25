@@ -252,7 +252,10 @@ async def websocket_endpoint(websocket: WebSocket):
                     await websocket.send_json(
                         {
                             "type": "response",
-                            "message": f"Processing optimization query: {data['query']} for node {data['nodeId']}",
+                            "message": {
+                                "source": "System",
+                                "message": f"Processing optimization query: {data['query']} for node {data['nodeId']}",
+                            }
                         }
                     )
                 logger.info("Optimize from action received")
@@ -265,7 +268,10 @@ async def websocket_endpoint(websocket: WebSocket):
                     await websocket.send_json(
                         {
                             "type": "response",
-                            "message": f"Processing reaction query: {data['query']} for node {data['nodeId']}",
+                            "message": {
+                                "source": "System",
+                                "message": f"Processing reaction query: {data['query']} for node {data['nodeId']}",
+                            }
                         }
                     )
 
@@ -277,7 +283,10 @@ async def websocket_endpoint(websocket: WebSocket):
                 await websocket.send_json(
                     {
                         "type": "response",
-                        "message": f"Processing query: {data['query']} for node {data['nodeId']}",
+                        "message": {
+                            "source": "System",
+                            "message": f"Processing query: {data['query']} for node {data['nodeId']}",
+                        }
                     }
                 )
                 await asyncio.sleep(3)

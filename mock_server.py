@@ -229,7 +229,7 @@ async def generate_molecules(start_smiles: str, depth: int = 3, websocket: WebSo
 
     # Stream root first
     root = positioned_nodes[0]
-    await websocket.send_json({"type": "node", **root.json()})
+    await websocket.send_json({"type": "node", "node": root.json()})
     await asyncio.sleep(0.8)
 
     # Stream remaining nodes with edges
@@ -243,23 +243,25 @@ async def generate_molecules(start_smiles: str, depth: int = 3, websocket: WebSo
             # Send edge with computing status
             edge_data = {
                 "type": "edge",
-                **edge.json(),
+                "edge": edge.json(),
             }
-            edge_data["label"] = f"Computing: {edge.label}"
-            edge_data["toNode"] = node.id
+            edge_data["edge"]["label"] = f"Computing: {edge.label}"
+            edge_data["edge"]["toNode"] = node.id
             await websocket.send_json(edge_data)
 
             await asyncio.sleep(0.6)
 
             # Send node
-            await websocket.send_json({"type": "node", **node.json()})
+            await websocket.send_json({"type": "node", "node": node.json()})
 
             # Update edge to complete
             edge_complete = {
                 "type": "edge_update",
-                "id": edge.id,
-                "status": "complete",
-                "label": edge.label,
+                "edge": {
+                    "id": edge.id,
+                    "status": "complete",
+                    "label": edge.label,
+                }
             }
             await websocket.send_json(edge_complete)
 
@@ -278,11 +280,13 @@ async def lead_molecule(start_smiles: str, depth: int = 3, websocket: WebSocket 
         if i > 0:
             edge_complete = {
                 "type": "edge_update",
-                "id": f"edge_{i-1}_{i}",
-                "status": "complete",
-                "label": "",
-                "fromNode": {"id": f"node_{i-1}", "x": 0, "y": 0},
-                "toNode": {"id": f"node_{i}", "x": 0, "y": 0},
+                "edge": {
+                    "id": f"edge_{i-1}_{i}",
+                    "status": "complete",
+                    "label": "",
+                    "fromNode": {"id": f"node_{i-1}", "x": 0, "y": 0},
+                    "toNode": {"id": f"node_{i}", "x": 0, "y": 0},
+                }
             }
             await websocket.send_json(edge_complete)
         node = dict(
@@ -295,16 +299,18 @@ async def lead_molecule(start_smiles: str, depth: int = 3, websocket: WebSocket 
             x=0,
             y=i * 150,
         )
-        await websocket.send_json({"type": "node", **node})
+        await websocket.send_json({"type": "node", "node": node})
         if i == depth - 1:
             break
         edge_data = {
             "type": "edge",
-            "id": f"edge_{i}_{i+1}",
-            "status": "computing",
-            "label": "Optimizing",
-            "fromNode": {"id": f"node_{i}", "x": 0, "y": 0},
-            "toNode": {"id": f"node_{i+1}", "x": 0, "y": 0},
+            "edge": {
+                "id": f"edge_{i}_{i+1}",
+                "status": "computing",
+                "label": "Optimizing",
+                "fromNode": {"id": f"node_{i}", "x": 0, "y": 0},
+                "toNode": {"id": f"node_{i+1}", "x": 0, "y": 0},
+            }
         }
         await websocket.send_json(edge_data)
         # TODO: Compute here
@@ -327,15 +333,15 @@ async def websocket_endpoint(websocket: WebSocket):
                     await generate_molecules(data["smiles"], data.get("depth", 3), websocket)
                 else:
                     await websocket.send_json(
-                        {"type": "error", "message": f"Unsupported problem type {data['problemType']}"}
+                        {"type": "error", "error": f"Unsupported problem type {data['problemType']}"}
                     )
             elif data["action"] == "compute-reaction-from":
                 await websocket.send_json(
-                    {"type": "subtree_update", "id": data['nodeId'], "withNode": True, "highlight": "yellow"}
+                    {"type": "subtree_update", "node": {"id": data['nodeId'], "highlight": "yellow"}, "withNode": True}
                 )
             elif data["action"] == "recompute-reaction" and "query" not in data:
                 await websocket.send_json(
-                        {"type": "response", "source": "Some custom source", "message": f"Hi from server", "smiles": "CCO"}
+                        {"type": "response", "message": { "source": "Some custom source", "message": f"Hi from server", "smiles": "CCO"} }
                     )
                 await websocket.send_json({"type": "complete"})
             elif data["action"] == "recompute-reaction":
@@ -343,14 +349,16 @@ async def websocket_endpoint(websocket: WebSocket):
                     await websocket.send_json(
                         {
                             "type": "response",
-                            "source": "System",
-                            "message": f"Processing query: {data['query']} for node {data['nodeId']}",
-                            "smiles": "O",
+                            "message": {
+                                "source": "System",
+                                "message": f"Processing query: {data['query']} for node {data['nodeId']}",
+                                "smiles": "O",
+                            }
                         }
                     )
                 else:
                     await websocket.send_json(
-                        {"type": "response", "message": f"Processing query: {data['query']} for node {data['nodeId']}"}
+                        {"type": "response", "message": {"message": f"Processing query: {data['query']} for node {data['nodeId']}"}}
                     )
                 await asyncio.sleep(3)  # Random wait
                 await websocket.send_json({"type": "complete"})
