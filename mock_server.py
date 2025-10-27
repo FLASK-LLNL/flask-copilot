@@ -373,7 +373,7 @@ async def websocket_endpoint(websocket: WebSocket):
                 await asyncio.sleep(3)  # Random wait
                 await websocket.send_json({"type": "complete"})
             elif data["action"] == "list-tools":
-                tools = [Tool(f"tool_{i}", f"Does what tool {i} does") for i in range(16)]
+                tools = [Tool(f"tool_{i}", f"Does what tool {i} does") for i in range(1, 16)]
                 tools.append(Tool("a_tool_with_no_desc"))
                 await websocket.send_json({
                     "type": "available-tools-response",
