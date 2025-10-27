@@ -20,7 +20,7 @@ RUN git clone --recursive https://github.com/FLASK-LLNL/ChARGe.git charge && \
 
 COPY mock_server.py /app
 
-RUN chown -R g+rx /app
+RUN chmod -R g+rx /app
 
 ENV FLASK_APPDIR=/app/dist
 
