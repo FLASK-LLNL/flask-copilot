@@ -1,0 +1,19 @@
+include: [component: $CI_SERVER_FQDN/lc-components/id_tokens/id_tokens-component@main]
+
+variables:
+  LLNL_SLURM_SCHEDULER_PARAMETERS: "--nodes=1 --reservation=ci --userns --exclusive"
+
+build:
+  stage: build
+  tags:
+    - dane
+    - batch
+  script:
+    - /collab/usr/gapps/lcweg/containers/scripts/enable-podman.sh
+    - echo "${CI_REGISTRY_PASSWORD}" | podman login -u="$CI_REGISTRY_USER" --password-stdin $CI_REGISTRY
+    - podman build --rm --pull-always --force-rm --cgroup-manager=cgroupfs -t "$CI_REGISTRY_IMAGE:$CI_COMMIT_REF_SLUG" .
+    - podman push "$CI_REGISTRY_IMAGE:$CI_COMMIT_REF_SLUG"
+    - podman push "$CI_REGISTRY_IMAGE:$CI_COMMIT_REF_SLUG" "$CI_REGISTRY_IMAGE:latest"
+    - podman logout $CI_REGISTRY
+
+
