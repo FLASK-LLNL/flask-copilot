@@ -16,4 +16,13 @@ build:
     - podman push "$CI_REGISTRY_IMAGE:$CI_COMMIT_REF_SLUG" "$CI_REGISTRY_IMAGE:latest"
     - podman logout $CI_REGISTRY
 
-
+deploy:
+  stage: deploy
+  tags:
+    - shell
+    - oslic
+  script:
+    - echo "Deploying FLASK-Copilot App in K8s server"
+    - /usr/global/openshift/bin/oc login --server=$K8S_SERVER_API --token=$FLASK_DEPLOYER_TOKEN
+    - /usr/global/openshift/bin/oc rollout restart deployment $DEPLOYMENT_NAME
+  when: manual
