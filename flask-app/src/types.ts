@@ -129,6 +129,8 @@ export interface MoleculeGraphProps extends MoleculeGraphState {
 }
 
 export interface SidebarState {
+    messages: SidebarMessage[];
+    setMessages: Dispatch<SetStateAction<SidebarMessage[]>>;
     sourceFilterOpen: boolean;
     setSourceFilterOpen: Dispatch<SetStateAction<boolean>>;
     visibleSources: VisibleSources;
@@ -136,9 +138,19 @@ export interface SidebarState {
 }
 
 export interface SidebarProps extends SidebarState {
-    messages: SidebarMessage[];
-
-    // General state
+    // General state from app
     setSidebarOpen: Dispatch<SetStateAction<boolean>>;
     rdkitModule: RDKitModule | null;
+}
+
+export interface MetricsDashboardState {
+    metricsHistory: MetricHistoryItem[];
+    setMetricsHistory: Dispatch<SetStateAction<MetricHistoryItem[]>>;
+    visibleMetrics: VisibleMetrics;
+    setVisibleMetrics: Dispatch<SetStateAction<VisibleMetrics>>;
+}
+
+export interface MetricsDashboardProps extends MetricsDashboardState {
+    // General state from app
+    treeNodes: TreeNode[];
 }

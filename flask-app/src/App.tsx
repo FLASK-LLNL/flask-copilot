@@ -1,10 +1,9 @@
 /* eslint-disable react-hooks/exhaustive-deps */
-import React, { useState, useRef, useEffect, useMemo, useCallback } from 'react';
-import { Loader2, FlaskConical, TestTubeDiagonal, Network, Play, RotateCcw, Move, X, Send, RefreshCw, Sparkles } from 'lucide-react';
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
+import React, { useState, useRef, useEffect } from 'react';
+import { Loader2, FlaskConical, TestTubeDiagonal, Network, Play, RotateCcw, X, Send, RefreshCw, Sparkles } from 'lucide-react';
 
 import { WS_SERVER } from './config';
-import { TreeNode, Edge, ContextMenuState, MetricHistoryItem, VisibleMetrics, SidebarMessage, VisibleSources, Tool, WebSocketMessageToServer, WebSocketMessage, MetricDefinitions } from './types';
+import { TreeNode, Edge, ContextMenuState, SidebarMessage, Tool, WebSocketMessageToServer, WebSocketMessage } from './types';
 
 import { loadRDKit } from './components/molecule';
 import { ReasoningSidebar, useSidebarState } from './components/sidebar';
@@ -14,6 +13,7 @@ import { findAllDescendants, hasDescendants, isRootNode, relayoutTree } from './
 import { copyToClipboard } from './utils';
 
 import './animations.css';
+import { MetricsDashboard, useMetricsDashboardState } from './components/metrics';
 
 const ChemistryTool: React.FC = () => {
   const [smiles, setSmiles] = useState<string>('O=C\\C1=C(\\C=C/CC1(C)C)C');
@@ -30,21 +30,13 @@ const ChemistryTool: React.FC = () => {
   const [contextMenu, setContextMenu] = useState<ContextMenuState>({node: null, x: 0, y: 0});
   const [customQueryModal, setCustomQueryModal] = useState<TreeNode | null>(null);
   const [customQueryText, setCustomQueryText] = useState<string>('');
-  const [metricsHistory, setMetricsHistory] = useState<MetricHistoryItem[]>([]);
   const [websocket, setWebsocket] = useState<WebSocket | null>(null);
   const [wsConnected, setWsConnected] = useState<boolean>(false);
   const [saveDropdownOpen, setSaveDropdownOpen] = useState<boolean>(false);
   const [wsError, setWsError] = useState<string>('');
   const [wsReconnecting, setWsReconnecting] = useState<boolean>(false);
-  const [visibleMetrics, setVisibleMetrics] = useState<VisibleMetrics>({
-    cost: true,
-    bandgap: false,
-    density: false,
-    yield: false,
-  });
   const rdkitModule = loadRDKit();
   const [sidebarOpen, setSidebarOpen] = useState<boolean>(false);
-  const [sidebarMessages, setSidebarMessages] = useState<SidebarMessage[]>([]);
   const [copiedField, setCopiedField] = useState<string | null>(null);
   const [availableTools, setAvailableTools] = useState<Tool[]>([]);
   const [wsTooltipPinned, setWsTooltipPinned] = useState<boolean>(false);
@@ -53,6 +45,7 @@ const ChemistryTool: React.FC = () => {
 
   const graphState = useGraphState();
   const sidebarState = useSidebarState();
+  const metricsDashboardState = useMetricsDashboardState();
 
 
   useEffect(() => {
@@ -198,8 +191,8 @@ const ChemistryTool: React.FC = () => {
     graphState.setZoom(1);
     setContextMenu({node: null, x:0, y:0});
     setCustomQueryModal(null);
-    setMetricsHistory([]);
-    setSidebarMessages([]);
+    metricsDashboardState.setMetricsHistory([]);
+    sidebarState.setMessages([]);
     setSaveDropdownOpen(false);
     sidebarState.setSourceFilterOpen(false);
     setWsTooltipPinned(false);
@@ -233,7 +226,7 @@ const ChemistryTool: React.FC = () => {
   };
 
   const saveFullContext = (): void => {
-    const data = { version: '1.0', type: 'full-context', timestamp: new Date().toISOString(), smiles, problemType, systemPrompt, problemPrompt, nodes: treeNodes, edges, metricsHistory, visibleMetrics, sidebarMessages, sidebarState };
+    const data = { version: '1.0', type: 'full-context', timestamp: new Date().toISOString(), smiles, problemType, systemPrompt, problemPrompt, nodes: treeNodes, edges, metricsDashboardState, sidebarState };
     const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -264,11 +257,11 @@ const ChemistryTool: React.FC = () => {
             setTreeNodes(data.nodes || []);
             setEdges(data.edges || []);
             if (data.type === 'full-context') {
-              setMetricsHistory(data.metricsHistory || []);
-              setVisibleMetrics(data.visibleMetrics || { cost: true, bandgap: false, yield: false, density: false });
+              metricsDashboardState.setMetricsHistory(data.metricsHistory || []);
+              metricsDashboardState.setVisibleMetrics(data.visibleMetrics || { cost: true, bandgap: false, yield: false, density: false });
               graphState.setZoom(data.zoom || 1);
               graphState.setOffset(data.offset || { x: 50, y: 50 });
-              setSidebarMessages(data.sidebarMessages || []);
+              sidebarState.setMessages(data.sidebarMessages || []);
               sidebarState.setVisibleSources(data.visibleSources || {
                 'System': true,
                 'Reasoning': true,
@@ -303,67 +296,22 @@ const ChemistryTool: React.FC = () => {
     setProblemName(problem_name);
     if (problem_name === 'retro-safranal') {
       setSmiles('O=C\\C1=C(\\C=C/CC1(C)C)C')
-      setVisibleMetrics({cost: false, bandgap: false, yield: false, density: false});
+      metricsDashboardState.setVisibleMetrics({cost: false, bandgap: false, yield: false, density: false});
       setProblemType('retrosynthesis');
     } else if (problem_name === 'retro-nirmatrelvir') {
       setSmiles('CC1([C@@H]2[C@H]1[C@H](N(C2)C(=O)[C@H](C(C)(C)C)NC(=O)C(F)(F)F)C(=O)N[C@@H](C[C@@H]3CCNC3=O)C#N)C')
-      setVisibleMetrics({cost: false, bandgap: false, yield: false, density: false});
+      metricsDashboardState.setVisibleMetrics({cost: false, bandgap: false, yield: false, density: false});
       setProblemType('retrosynthesis');
     } else if (problem_name === 'optimization-bandgap') {
       setSmiles('C1(N2C3=CC=CC=C3N(C4=CC=CC=C4)C5=C2C=CC=C5)=CC=CC=C1');
-      setVisibleMetrics({cost: false, bandgap: true, yield: false, density: false});
+      metricsDashboardState.setVisibleMetrics({cost: false, bandgap: true, yield: false, density: false});
       setProblemType('optimization');
     } else if (problem_name === 'optimization-density') {
       setSmiles('CCC(=O)CCc1cccc(CCC(=O)CC)c1ONC(C)=O');
-      setVisibleMetrics({cost: false, bandgap: false, yield: false, density: true});
+      metricsDashboardState.setVisibleMetrics({cost: false, bandgap: false, yield: false, density: true});
       setProblemType('optimization');
     }
   };
-
-
-  // Metric definitions for extensibility
-  const metricDefinitions: MetricDefinitions = {
-    cost: { 
-      label: 'Reaction Cost ($)', 
-      color: '#EC4899',
-      calculate: (nodes: TreeNode[]) => nodes.reduce((sum, node) => sum + (node.cost || 0), 0)
-    },
-    bandgap: { 
-      label: 'Band Gap (eV)', 
-      color: '#F59E0B',
-      calculate: (nodes: TreeNode[]) => nodes[nodes.length-1]?.bandgap || 0
-    },
-    density: { 
-      label: 'Molecular Density (g/cm³)', 
-      color: '#10B981',
-      calculate: (nodes: TreeNode[]) => nodes[nodes.length-1]?.density || 0
-    },
-    /*yield: { 
-      label: 'Yield (%)', 
-      color: '#10B981',
-      calculate: (nodes) => nodes.length > 0 ? (nodes.reduce((sum, node) => sum + (node.yield || Math.random() * 100), 0) / nodes.length) : 0
-    },*/
-  };
-
-  // Calculate all metrics
-  const calculateMetrics = (nodes: TreeNode[]): MetricHistoryItem => {
-    const metrics: MetricHistoryItem = { nodeCount: nodes.length, step: 0 };
-    Object.keys(metricDefinitions).forEach(key => {
-      metrics[key] = metricDefinitions[key].calculate(nodes);
-    });
-    return metrics;
-  };
-
-  // Update metrics history whenever tree changes
-  useEffect(() => {
-    if (treeNodes.length > 0) {
-      let metrics = calculateMetrics(treeNodes);
-      setMetricsHistory(prev => {
-        metrics.step = prev.length;
-        return [...prev, { ...metrics }];
-      });
-    }
-  }, [treeNodes.length]);
   
   const handleNodeClick = (e: React.MouseEvent<HTMLDivElement>, node: TreeNode): void => {
       e.stopPropagation();
@@ -426,7 +374,7 @@ const ChemistryTool: React.FC = () => {
       message.source = "Backend";
     }
 
-    setSidebarMessages(prev => [...prev, message]);
+    sidebarState.setMessages(prev => [...prev, message]);
     setSidebarOpen(true);
     
     sidebarState.setVisibleSources(prev => {
@@ -436,62 +384,6 @@ const ChemistryTool: React.FC = () => {
       return prev;
     });
   };
-
-  // Memoize the metrics charts to prevent re-render on mouse move
-  const metricsCharts = useMemo(() => {
-    if (metricsHistory.length === 0) return null;
-    
-    return (
-      <div className={`grid gap-6 ${Object.values(visibleMetrics).filter(Boolean).length > 1 ? 'grid-cols-2' : 'grid-cols-1'}`}>
-        {Object.keys(metricDefinitions).filter(key => visibleMetrics[key as keyof VisibleMetrics]).map(metricKey => {
-          const metric = metricDefinitions[metricKey];
-          return (
-            <div key={metricKey} className="bg-white/5 rounded-xl p-4">
-              <h4 className="text-sm font-semibold text-purple-200 mb-2">{metric.label}</h4>
-              <ResponsiveContainer width="100%" height={200}>
-                <LineChart data={metricsHistory}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#8B5CF6" opacity={0.1} />
-                  <XAxis 
-                    dataKey="step" 
-                    stroke="#A78BFA"
-                    tick={{ fontSize: 12 }}
-                  />
-                  <YAxis 
-                    stroke="#A78BFA"
-                    tick={{ fontSize: 12 }}
-                  />
-                  <Tooltip 
-                    contentStyle={{ 
-                      backgroundColor: '#1E1B4B', 
-                      border: '2px solid #8B5CF6',
-                      borderRadius: '8px',
-                      color: '#E9D5FF'
-                    }}
-                    // NOTE: Returning `as any` since no other type information worked
-                    formatter={(value: number) => value.toFixed(2) as any}
-                  />
-                  <Line 
-                    type="monotone" 
-                    dataKey={metricKey}
-                    stroke={metric.color}
-                    strokeWidth={3}
-                    dot={{ fill: metric.color, r: 3 }}
-                    activeDot={{ r: 5 }}
-                  />
-                </LineChart>
-              </ResponsiveContainer>
-              <div className="mt-2 text-center">
-                <div className="text-2xl font-bold text-white">
-                  {metricsHistory[metricsHistory.length - 1][metricKey].toFixed(2)}
-                </div>
-                <div className="text-xs text-purple-300">Current Value</div>
-              </div>
-            </div>
-          );
-        })}
-      </div>
-    );
-  }, [metricsHistory, visibleMetrics]);
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900">
@@ -787,7 +679,7 @@ const ChemistryTool: React.FC = () => {
 
             {/* Metrics Dashboard */}
             {treeNodes.length > 0 && (
-              <MetricsDashboard />
+              <MetricsDashboard {...metricsDashboardState} treeNodes={treeNodes} />
             )}
 
           <div className="absolute top-10 left-10 text-white">
@@ -809,7 +701,7 @@ const ChemistryTool: React.FC = () => {
         </div>
 
         {sidebarOpen && (
-          <ReasoningSidebar {...sidebarState} messages={sidebarMessages} setSidebarOpen={setSidebarOpen} rdkitModule={rdkitModule} />
+          <ReasoningSidebar {...sidebarState} setSidebarOpen={setSidebarOpen} rdkitModule={rdkitModule} />
         )}
       </div>
 

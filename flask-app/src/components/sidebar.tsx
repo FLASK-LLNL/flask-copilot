@@ -1,12 +1,13 @@
 // Reasoning sidebar component
 
 import { useRef, useEffect, useState } from "react";
-import { SidebarProps, SidebarState, VisibleSources } from "../types";
+import { SidebarMessage, SidebarProps, SidebarState, VisibleSources } from "../types";
 import { X } from "lucide-react";
 import { MarkdownText } from "./markdown";
 import { MoleculeSVG } from "./molecule";
 
 export const useSidebarState = (): SidebarState => {
+    const [messages, setMessages] = useState<SidebarMessage[]>([]);
     const [sourceFilterOpen, setSourceFilterOpen] = useState<boolean>(false);
     const [visibleSources, setVisibleSources] = useState<VisibleSources>({
         'System': true,
@@ -17,7 +18,8 @@ export const useSidebarState = (): SidebarState => {
         'Logger (Debug)': false
     });
 
-    return { sourceFilterOpen, setSourceFilterOpen, visibleSources, setVisibleSources };
+
+    return {messages, setMessages, sourceFilterOpen, setSourceFilterOpen, visibleSources, setVisibleSources };
 };
 
 export const ReasoningSidebar: React.FC<SidebarProps> = ({messages, rdkitModule, setSidebarOpen, sourceFilterOpen, setSourceFilterOpen, visibleSources, setVisibleSources}) => {
