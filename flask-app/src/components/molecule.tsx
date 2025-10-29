@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { MOLECULE_WIDTH } from "../constants";
 import { MoleculeSVGProps } from "../types";
+import { RDKitModule } from '@rdkit/rdkit';
 
 export const MoleculeSVG: React.FC<MoleculeSVGProps> = ({ smiles, height = 80, rdkitModule = null }) => {
   const [svg, setSvg] = useState<string | null>(null);
@@ -94,4 +95,38 @@ export const MoleculeSVG: React.FC<MoleculeSVGProps> = ({ smiles, height = 80, r
   }
 
   return <div dangerouslySetInnerHTML={{ __html: svg || '' }} />;
+};
+
+export const loadRDKit = (): RDKitModule | null => {
+    const [rdkitModule, setRdkitModule] = useState<RDKitModule | null>(null);
+
+    // Load RDKit.js on mount
+    useEffect(() => {
+        const script = document.createElement('script');
+        script.src = '/rdkit/RDKit_minimal.js';
+        script.async = true;
+        
+        script.onload = () => {
+        window.initRDKitModule().then((RDKit: RDKitModule) => {
+            console.log('RDKit loaded successfully!');
+            setRdkitModule(RDKit);
+        }).catch((error: any) => {
+            console.error('RDKit initialization failed:', error);
+        });
+        };
+        
+        script.onerror = () => {
+        console.error('Failed to load RDKit script');
+        };
+        
+        document.body.appendChild(script);
+        
+        return () => {
+        if (document.body.contains(script)) {
+            document.body.removeChild(script);
+        }
+        };
+    }, []);
+
+    return rdkitModule;
 };

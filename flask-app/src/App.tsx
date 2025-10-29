@@ -2,13 +2,13 @@
 import React, { useState, useRef, useEffect, useMemo, useCallback } from 'react';
 import { Loader2, FlaskConical, TestTubeDiagonal, Network, Play, RotateCcw, Move, X, Send, RefreshCw, Sparkles } from 'lucide-react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
-import { RDKitModule } from '@rdkit/rdkit';
 
 import { WS_SERVER } from './config';
 import { BOX_WIDTH, BOX_GAP, BOX_HEIGHT, NODE_STYLES } from './constants';
 import { TreeNode, Edge, Position, ContextMenuState, MetricHistoryItem, VisibleMetrics, SidebarMessage, VisibleSources, Tool, WebSocketMessageToServer, WebSocketMessage, MetricDefinitions } from './types';
-import { MoleculeSVG } from './components/molecule';
+import { MoleculeSVG, loadRDKit } from './components/molecule';
 import { MarkdownText } from './components/markdown';
+import { findAllDescendants, hasDescendants, isRootNode } from './tree_utils';
 
 import './animations.css';
 
@@ -45,7 +45,7 @@ const ChemistryTool: React.FC = () => {
     density: false,
     yield: false,
   });
-  const [rdkitModule, setRdkitModule] = useState<RDKitModule | null>(null);
+  const rdkitModule = loadRDKit();
   const [sidebarOpen, setSidebarOpen] = useState<boolean>(false);
   const [sidebarMessages, setSidebarMessages] = useState<SidebarMessage[]>([]);
   const [copiedField, setCopiedField] = useState<string | null>(null);
@@ -65,61 +65,6 @@ const ChemistryTool: React.FC = () => {
   const wsRef = useRef<WebSocket | null>(null);
   const sidebarRef = useRef<HTMLDivElement>(null);
   
-  // Load RDKit.js on mount
-  useEffect(() => {
-    const script = document.createElement('script');
-    script.src = '/rdkit/RDKit_minimal.js';
-    script.async = true;
-    
-    script.onload = () => {
-      window.initRDKitModule().then((RDKit: RDKitModule) => {
-        console.log('RDKit loaded successfully!');
-        setRdkitModule(RDKit);
-      }).catch((error: any) => {
-        console.error('RDKit initialization failed:', error);
-      });
-    };
-    
-    script.onerror = () => {
-      console.error('Failed to load RDKit script');
-    };
-    
-    document.body.appendChild(script);
-    
-    return () => {
-      if (document.body.contains(script)) {
-        document.body.removeChild(script);
-      }
-    };
-  }, []);
-
-  const findAllDescendants = useCallback((nodeId: string, nodes: TreeNode[]): Set<string> => {
-    const descendants = new Set<string>();
-    const findDescendants = (id: string): void => {
-      nodes.forEach(n => {
-        if (n.parentId === id && !descendants.has(n.id)) {
-          descendants.add(n.id);
-          findDescendants(n.id);
-        }
-      });
-    };
-    findDescendants(nodeId);
-    return descendants;
-  }, []);
-
-  const hasDescendants = useCallback((nodeId: string, nodes: TreeNode[]): boolean => {
-    return nodes.some(n => n.parentId === nodeId);
-  }, []);
-
-  const isRootNode = useCallback((nodeId: string, nodes: TreeNode[]): boolean => {
-    const node = nodes.find(n => n.id === nodeId);
-    return !node?.parentId;
-  }, []);
-
-  const getNode = useCallback((nodeId: string): TreeNode | undefined => {
-    return treeNodes.find(n => n.id === nodeId);
-  }, [treeNodes]);
-  
   const copyToClipboard = async (text: string, fieldName: string): Promise<void> => {
     try {
       await navigator.clipboard.writeText(text);
@@ -130,180 +75,10 @@ const ChemistryTool: React.FC = () => {
     }
   };
 
-  /* Mock "re-randomize children" button behavior 
-  const reactionTypes = ['Hydrogenation', 'Oxidation', 'Methylation', 'Reduction', 'Cyclization', 'Halogenation'];
-  const commonNames = ['Ethanol', 'Acetone', 'Benzene', 'Toluene', 'Aspirin', 'Caffeine', 'Glucose', 'Fructose'];
+  const getNode = useCallback((nodeId: string): TreeNode | undefined => {
+      return treeNodes.find(n => n.id === nodeId);
+  }, [treeNodes]);
 
-  const getRandomReaction = () => reactionTypes[Math.floor(Math.random() * reactionTypes.length)];
-  const getRandomName = () => commonNames[Math.floor(Math.random() * commonNames.length)];
-
-  const getMockHoverInfo = (smiles, label) => {
-    return `# ${label}
-
-**SMILES:** \`${smiles}\`
-**Molecular Weight:** ${Math.floor(Math.random() * 300 + 50)} g/mol
-
-## Properties
-- Boiling point: ${Math.floor(Math.random() * 200 + 50)}°C
-- *Water soluble*: ${Math.random() > 0.5 ? 'Yes' : 'No'}`;
-  };
-
-  const generateTree = (parentSmiles, parentId, level, maxLevel, startLevel = 0) => {
-    const nodes = [];
-    const edgesList = [];
-    const timestamp = Date.now();
-    const random = Math.random();
-    let nodeCounter = 0;
-
-    const buildNode = (parent, parentIdx, depth) => {
-      if (depth > maxLevel) return;
-
-      const numChildren = Math.random() > 0.5 ? 2 : 1;
-      
-      for (let i = 0; i < numChildren; i++) {
-        const nodeId = `node_${timestamp}_${random}_${nodeCounter++}`;
-        const nodeSMILES = `${parent}_${depth}_${i}`;
-        const nodeLabel = `${getRandomName()}-${depth}${i}`;
-        
-        const node = {
-          id: nodeId,
-          smiles: nodeSMILES,
-          label: nodeLabel,
-          hoverInfo: getMockHoverInfo(nodeSMILES, nodeLabel),
-          level: depth,
-          parentId: parentIdx,
-          cost: Math.random() * 100 + 10 // Random cost between 10-110
-        };
-        
-        nodes.push(node);
-        
-        if (parentIdx !== null) {
-          edgesList.push({
-            id: `edge_${parentIdx}_${nodeId}`,
-            fromNode: parentIdx,
-            toNode: nodeId,
-            reactionType: getRandomReaction()
-          });
-        }
-        
-        buildNode(nodeSMILES, nodeId, depth + 1);
-      }
-    };
-
-    const rootId = 'root';
-    const rootLabel = getRandomName();
-    nodes.push({
-      id: rootId,
-      smiles: parentSmiles,
-      label: rootLabel,
-      hoverInfo: getMockHoverInfo(parentSmiles, rootLabel),
-      level: startLevel,
-      parentId: null,
-      cost: Math.random() * 100 + 10
-    });
-    
-    buildNode(parentSmiles, rootId, startLevel + 1);
-    
-    return { nodes, edges: edgesList };
-  };
-
-  const rerandomizeChildren = (nodeId) => {
-    const node = getNode(nodeId);
-    if (!node) return;
-
-    const descendants = findAllDescendants(nodeId, treeNodes);
-
-    // Remove descendants from nodes and edges
-    const filteredNodes = treeNodes.filter(n => !descendants.has(n.id));
-    const filteredEdges = edges.filter(e => !descendants.has(e.to) && !descendants.has(e.from));
-
-    // Generate new children starting from this node's level
-    const { nodes: newNodes, edges: newEdges } = generateTree(
-      node.smiles,
-      nodeId,
-      node.level,
-      node.level + 3,
-      node.level
-    );
-
-    // Remove the 'root' node and update parentId of its children
-    const childNodes = newNodes.filter(n => n.id !== 'root').map(n => ({
-      ...n,
-      parentId: n.parentId === 'root' ? nodeId : n.parentId
-    }));
-    
-    // Update edges to point from actual parent node, not 'root'
-    const edgesWithCorrectParent = newEdges.map(e => ({
-      ...e,
-      fromNode: e.fromNode === 'root' ? nodeId : e.fromNode
-    }));
-    
-    // Position new children, finding available space at each level
-    const levelGap = BOX_WIDTH + BOX_GAP;
-    const nodeSpacing = 150;
-    
-    // Find occupied Y positions at each level
-    const occupiedYByLevel = {};
-    filteredNodes.forEach(n => {
-      if (!occupiedYByLevel[n.level]) occupiedYByLevel[n.level] = [];
-      occupiedYByLevel[n.level].push(n.y);
-    });
-    
-    // Group new children by level
-    const newChildrenByLevel = {};
-    childNodes.forEach(child => {
-      if (!newChildrenByLevel[child.level]) newChildrenByLevel[child.level] = [];
-      newChildrenByLevel[child.level].push(child);
-    });
-    
-    const positionedNewChildren = childNodes.map(child => {
-      const siblingsAtLevel = newChildrenByLevel[child.level];
-      const indexInLevel = siblingsAtLevel.indexOf(child);
-      
-      // Start from parent's Y and find first available slots
-      const occupiedY = occupiedYByLevel[child.level] || [];
-      let candidateY = node.y + indexInLevel * nodeSpacing;
-      
-      // Check if this Y position is too close to any occupied position
-      const minDistance = nodeSpacing * 0.8; // Allow some tolerance
-      // eslint-disable-next-line no-loop-func
-      while (occupiedY.some(y => Math.abs(y - candidateY) < minDistance)) {
-        candidateY += nodeSpacing;
-      }
-      
-      // Mark this position as occupied for next siblings
-      if (!occupiedYByLevel[child.level]) occupiedYByLevel[child.level] = [];
-      occupiedYByLevel[child.level].push(candidateY);
-      
-      return {
-        ...child,
-        x: 100 + child.level * levelGap,
-        y: candidateY
-      };
-    });
-    
-    // Combine: keep existing nodes unchanged, add new positioned children
-    const allNodes = [...filteredNodes, ...positionedNewChildren];
-
-    // Create node map for edges
-    const nodeMap = {};
-    allNodes.forEach(n => {
-      nodeMap[n.id] = n;
-    });
-
-    // Keep old edges as-is (they already have correct positions)
-    // Only add new edges with positions
-    const newEdgesWithNodes = edgesWithCorrectParent.map(e => ({
-      ...e,
-      status: 'complete',
-      label: e.reactionType
-    }));
-
-    setTreeNodes(allNodes);
-    setEdges([...filteredEdges, ...newEdgesWithNodes]);
-    setContextMenu(null);
-  };
-   End of mock code */
 
   const handleMouseDown = (e: React.MouseEvent<HTMLDivElement>): void => {
     if (e.button !== 0) return;

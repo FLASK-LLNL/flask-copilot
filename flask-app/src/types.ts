@@ -102,7 +102,7 @@ export interface MetricHistoryItem {
 export interface MoleculeSVGProps {
   smiles: string;
   height?: number;
-  rdkitModule?: RDKitModule;
+  rdkitModule: RDKitModule | null;
 }
 
 export interface MarkdownTextProps {
