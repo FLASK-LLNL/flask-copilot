@@ -9,11 +9,16 @@ from dataclasses import dataclass
 from fastapi import Request
 import socket
 from loguru import logger
+import requests
 
 @dataclass(frozen=True)
 class Server:
     address: str
     port: int
+    name: str
+
+    def __str__(self):
+        return f"http://{self.address}:{self.port}/sse"
 
 SERVERS: set[Server] = set()    
 
@@ -37,13 +42,34 @@ def get_client_info(request: Request):
 
 @dataclass
 class RegistrationRequest:
+    host: str
     port: int
+    name: str
 
 async def register_post(request: Request, data: RegistrationRequest):
-    hostname = get_client_info(request)
+    hostname = data.host
+    if not hostname:
+        hostname = get_client_info(request)
 
     SERVERS.add(Server(
         address=hostname,
-        port=data.port
+        port=data.port,
+        name=data.name
     ))
-    return {"status": f"registered MCP server at {hostname}:{data.port}"}
+    return {"status": f"registered MCP server {data.name} at {hostname}:{data.port}"}
+
+def register_tool_server(port, host, name, copilot_port, copilot_host):
+    url = f"http://{copilot_host}:{copilot_port}/register"
+    response = requests.post(url, json={"host": host, "port": port, "name": name})
+    logger.info(response.json())
+
+def list_server_urls() -> list[str]:
+    server_urls = []
+    for server in SERVERS:
+        server_urls.append(f"{server}")
+
+    assert server_urls is not None, "Server URLs must be registered"
+    for url in server_urls:
+        assert url.endswith("/sse"), f"Server URL {url} must end with /sse"
+
+    return server_urls

@@ -116,19 +116,10 @@ else:
     DIST_PATH = os.path.join(os.path.dirname(__file__), "flask-app", "dist")
 ASSETS_PATH = os.path.join(DIST_PATH, "assets")
 
-from tool_registration import SERVERS, register_post
+from tool_registration import SERVERS, register_post, list_server_urls
 app.post("/register")(register_post)
 
 (MODEL, BACKEND, API_KEY, MODEL_KWARGS) = AutoGenClient.configure(args.model, args.backend)
-
-server_urls = args.server_urls
-assert server_urls is not None, "Server URLs must be provided"
-for url in server_urls + args.lmo_urls + args.retro_urls:
-    assert url.endswith("/sse"), f"Server URL {url} must end with /sse"
-
-LMO_URLS = args.lmo_urls + server_urls
-RETRO_URLS = args.retro_urls + server_urls
-
 
 if os.path.exists(ASSETS_PATH):
     # Serve the frontend
@@ -214,7 +205,7 @@ async def websocket_endpoint(websocket: WebSocket):
                             backend=BACKEND,
                             api_key=API_KEY,
                             model_kwargs=MODEL_KWARGS,
-                            server_url=LMO_URLS,
+                            server_url=list_server_urls(),
                             thoughts_callback=CallbackHandler(websocket),
                         )
                     else:
@@ -262,7 +253,7 @@ async def websocket_endpoint(websocket: WebSocket):
                 # Leaf node optimization
                 logger.info("Synthesize tree leaf action received")
                 logger.info(f"Data: {data}")
-                await optimize_molecule_retro(data["nodeId"], retro_synth_context, websocket, MODEL, BACKEND, API_KEY, MODEL_KWARGS, RETRO_URLS)
+                await optimize_molecule_retro(data["nodeId"], retro_synth_context, websocket, MODEL, BACKEND, API_KEY, MODEL_KWARGS, list_server_urls())
                 await websocket.send_json({"type": "complete"})
             elif action == "optimize-from":
                 # Leaf node optimization
