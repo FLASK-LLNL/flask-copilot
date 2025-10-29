@@ -11,6 +11,7 @@ import { MarkdownText } from './components/markdown';
 import { MoleculeGraph, useGraphState } from './components/graph';
 
 import { findAllDescendants, hasDescendants, isRootNode, relayoutTree } from './tree_utils';
+import { copyToClipboard } from './utils';
 
 import './animations.css';
 
@@ -62,15 +63,7 @@ const ChemistryTool: React.FC = () => {
 
   const graphState = useGraphState();
   
-  const copyToClipboard = async (text: string, fieldName: string): Promise<void> => {
-    try {
-      await navigator.clipboard.writeText(text);
-      setCopiedField(fieldName);
-      setTimeout(() => setCopiedField(null), 2000);
-    } catch (err) {
-      console.error('Failed to copy:', err);
-    }
-  };
+
 
   useEffect(() => {
     const handleClickOutside = (): void => {
@@ -1000,7 +993,7 @@ const ChemistryTool: React.FC = () => {
             Restart from here
             </button>
             <button 
-              onClick={() => copyToClipboard(contextMenu.node!.smiles, 'smiles')} 
+              onClick={() => copyToClipboard(contextMenu.node!.smiles, 'smiles', setCopiedField)}
               className="w-full px-4 py-2 text-left text-sm text-white hover:bg-purple-600/50 transition-colors flex items-center gap-2"
             >
               {copiedField === 'smiles' ? (
