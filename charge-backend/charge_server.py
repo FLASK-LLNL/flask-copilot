@@ -90,9 +90,6 @@ parser.add_argument(
 parser.add_argument("--port", type=int, default=8001, help="Port to run the server on")
 parser.add_argument("--host", type=str, default=None, help="Host to run the server on")
 
-parser.add_argument("--lmo-urls", nargs="*", type=str, default=[])
-parser.add_argument("--retro-urls", nargs="*", type=str, default=[])
-
 # Add standard CLI arguments
 Client.add_std_parser_arguments(parser)
 
