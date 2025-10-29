@@ -4,11 +4,11 @@ import { Loader2, FlaskConical, TestTubeDiagonal, Network, Play, RotateCcw, Move
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 
 import { WS_SERVER } from './config';
-import { BOX_WIDTH, BOX_GAP, BOX_HEIGHT, NODE_STYLES } from './constants';
+import { BOX_WIDTH, BOX_HEIGHT, NODE_STYLES } from './constants';
 import { TreeNode, Edge, Position, ContextMenuState, MetricHistoryItem, VisibleMetrics, SidebarMessage, VisibleSources, Tool, WebSocketMessageToServer, WebSocketMessage, MetricDefinitions } from './types';
 import { MoleculeSVG, loadRDKit } from './components/molecule';
 import { MarkdownText } from './components/markdown';
-import { findAllDescendants, hasDescendants, isRootNode } from './tree_utils';
+import { findAllDescendants, hasDescendants, isRootNode, relayoutTree } from './tree_utils';
 
 import './animations.css';
 
@@ -539,107 +539,6 @@ const ChemistryTool: React.FC = () => {
     }
   }, [sidebarMessages]);
 
-  // Relayouts the molecule graph for better visibility (assumes tree)
-  const relayoutTree = (): void => {
-    if (treeNodes.length === 0) return;
-    
-    // Build parent-to-children map
-    const childrenMap = new Map<string, TreeNode[]>();
-    treeNodes.forEach(node => {
-      if (node.parentId) {
-        if (!childrenMap.has(node.parentId)) {
-          childrenMap.set(node.parentId, []);
-        }
-        childrenMap.get(node.parentId)!.push(node);
-      }
-    });
-    
-    // Find root node(s)
-    const roots = treeNodes.filter(n => n.parentId === null || !treeNodes.find(t => t.id === n.parentId));
-    
-    const levelGap = BOX_WIDTH + BOX_GAP;
-    const nodeSpacing = 150;
-    const newPositions = new Map<string, Position>();
-    
-    // First pass: calculate subtree sizes (number of leaf descendants)
-    const subtreeSizes = new Map<string, number>();
-    const calculateSubtreeSize = (nodeId: string): number => {
-      const children = childrenMap.get(nodeId) || [];
-      if (children.length === 0) {
-        subtreeSizes.set(nodeId, 1);
-        return 1;
-      }
-      const size = children.reduce((sum, child) => sum + calculateSubtreeSize(child.id), 0);
-      subtreeSizes.set(nodeId, size);
-      return size;
-    };
-    
-    roots.forEach(root => calculateSubtreeSize(root.id));
-    
-    // Second pass: assign positions based on subtree sizes
-    const assignPositions = (nodeId: string, level: number, startY: number): number => {
-      const node = treeNodes.find(n => n.id === nodeId);
-      if (!node) return startY;
-      
-      const children = childrenMap.get(nodeId) || [];
-      
-      if (children.length === 0) {
-        // Leaf node - place at next available Y
-        newPositions.set(nodeId, {
-          x: 100 + level * levelGap,
-          y: startY
-        });
-        return startY + nodeSpacing;
-      }
-      
-      // Internal node - place children first, then center parent
-      let currentY = startY;
-      const childPositions: number[] = [];
-      
-      children.forEach(child => {
-        currentY = assignPositions(child.id, level + 1, currentY);
-        childPositions.push(newPositions.get(child.id)!.y);
-      });
-      
-      // Center parent among its children
-      const avgChildY = childPositions.reduce((sum, y) => sum + y, 0) / childPositions.length;
-      newPositions.set(nodeId, {
-        x: 100 + level * levelGap,
-        y: avgChildY
-      });
-      
-      return currentY;
-    };
-    
-    let currentY = 100;
-    roots.forEach(root => {
-      currentY = assignPositions(root.id, 0, currentY);
-    });
-    
-    // Update nodes with new positions
-    const updatedNodes = treeNodes.map(node => {
-      const pos = newPositions.get(node.id);
-      if (pos) {
-        return { ...node, x: pos.x, y: pos.y };
-      }
-      return node;
-    });
-    
-    // Create node map for edges
-    const nodeMap: { [key: string]: TreeNode } = {};
-    updatedNodes.forEach(n => {
-      nodeMap[n.id] = n;
-    });
-    
-    // Update all edges with new positions
-    const updatedEdges = edges.map(e => ({
-      ...e,
-    }));
-    
-    setTreeNodes(updatedNodes);
-    setEdges(updatedEdges);
-  };
-
   const getCurvedPath = (from: TreeNode | undefined, to: TreeNode | undefined): string => {
     if (!from || !to) return '';
 
@@ -1036,7 +935,11 @@ const ChemistryTool: React.FC = () => {
                   </div>
                 )}
               </div>
-              <button onClick={relayoutTree} disabled={isComputing || treeNodes.length === 0} className="px-6 py-3 bg-purple-500/30 text-white rounded-lg font-semibold hover:bg-purple-500/50 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2">
+              <button onClick={() => {
+                const [updatedNodes, updatedEdges] = relayoutTree(treeNodes, edges);
+                setTreeNodes(updatedNodes);
+                setEdges(updatedEdges);
+              }} disabled={isComputing || treeNodes.length === 0} className="px-6 py-3 bg-purple-500/30 text-white rounded-lg font-semibold hover:bg-purple-500/50 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2">
                 <Sparkles className="w-5 h-5" />Relayout
               </button>
               <button onClick={reset} disabled={isComputing} className="px-6 py-3 bg-white/20 text-white rounded-lg font-semibold hover:bg-white/30 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2">
