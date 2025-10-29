@@ -27,6 +27,7 @@ export interface Edge {
   label?: string;
 }
 
+
 export interface SidebarMessage {
   id: number;
   timestamp: string;
@@ -83,7 +84,7 @@ export interface VisibleSources {
 }
 
 export interface ContextMenuState {
-  node: TreeNode;
+  node: TreeNode | null;
   x: number;
   y: number;
 }
@@ -107,4 +108,21 @@ export interface MoleculeSVGProps {
 
 export interface MarkdownTextProps {
   text: string;
+}
+
+export interface MoleculeGraphState {
+  offset: Position;
+  setOffset: (position: Position) => void;
+  zoom: number;
+  setZoom: (n: number) => void;
+}
+
+export interface MoleculeGraphProps extends MoleculeGraphState {
+    nodes: TreeNode[];
+    edges: Edge[];
+    ctx: ContextMenuState;
+    autoZoom: boolean;
+    setAutoZoom: (v: boolean) => void;
+    handleNodeClick: (e: React.MouseEvent<HTMLDivElement>, node: TreeNode) => void;
+    rdkitModule: RDKitModule | null;
 }
