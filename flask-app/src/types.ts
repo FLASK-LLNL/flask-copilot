@@ -1,6 +1,7 @@
 // TypeScript interfaces and types
 import { RDKitModule } from '@rdkit/rdkit';
 import { NODE_STYLES } from "./constants";
+import { Dispatch, SetStateAction } from 'react';
 
 export interface TreeNode {
   id: string;
@@ -112,9 +113,9 @@ export interface MarkdownTextProps {
 
 export interface MoleculeGraphState {
   offset: Position;
-  setOffset: (position: Position) => void;
+  setOffset: Dispatch<SetStateAction<Position>>;
   zoom: number;
-  setZoom: (n: number) => void;
+  setZoom: Dispatch<SetStateAction<number>>;
 }
 
 export interface MoleculeGraphProps extends MoleculeGraphState {
@@ -122,7 +123,22 @@ export interface MoleculeGraphProps extends MoleculeGraphState {
     edges: Edge[];
     ctx: ContextMenuState;
     autoZoom: boolean;
-    setAutoZoom: (v: boolean) => void;
+    setAutoZoom: Dispatch<SetStateAction<boolean>>;
     handleNodeClick: (e: React.MouseEvent<HTMLDivElement>, node: TreeNode) => void;
+    rdkitModule: RDKitModule | null;
+}
+
+export interface SidebarState {
+    sourceFilterOpen: boolean;
+    setSourceFilterOpen: Dispatch<SetStateAction<boolean>>;
+    visibleSources: VisibleSources;
+    setVisibleSources: Dispatch<SetStateAction<VisibleSources>>;
+}
+
+export interface SidebarProps extends SidebarState {
+    messages: SidebarMessage[];
+
+    // General state
+    setSidebarOpen: Dispatch<SetStateAction<boolean>>;
     rdkitModule: RDKitModule | null;
 }
