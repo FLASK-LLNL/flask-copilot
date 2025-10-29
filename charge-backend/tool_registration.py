@@ -19,8 +19,10 @@ class Server:
 
     def __str__(self):
         return f"http://{self.address}:{self.port}/sse"
+    def long_name(self):
+        return f"[{self.name}] http://{self.address}:{self.port}/sse"
 
-SERVERS: set[Server] = set()    
+SERVERS: dict[Server] = {}
 
 def get_client_info(request: Request):
     """Get client IP and hostname with fallbacks"""
@@ -51,11 +53,17 @@ async def register_post(request: Request, data: RegistrationRequest):
     if not hostname:
         hostname = get_client_info(request)
 
-    SERVERS.add(Server(
+    key = f"{hostname}:{data.port}"
+    new_server = Server(
         address=hostname,
         port=data.port,
         name=data.name
-    ))
+    )
+    old_server = SERVERS.pop(key, None)
+    if old_server:
+        logger.info(f"Replacing server at {key} with new registration: {old_server.long_name()} -> {new_server.long_name()}")
+
+    SERVERS[key] = new_server
     return {"status": f"registered MCP server {data.name} at {hostname}:{data.port}"}
 
 def register_tool_server(port, host, name, copilot_port, copilot_host):
@@ -65,7 +73,7 @@ def register_tool_server(port, host, name, copilot_port, copilot_host):
 
 def list_server_urls() -> list[str]:
     server_urls = []
-    for server in SERVERS:
+    for _, server in SERVERS:
         server_urls.append(f"{server}")
 
     assert server_urls is not None, "Server URLs must be registered"
