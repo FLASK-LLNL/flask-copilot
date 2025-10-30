@@ -65,6 +65,7 @@ from retro_charge_backend_funcs import (
     get_unconstrained_prompt,
 )
 
+from tool_registration import SERVERS, register_post, list_server_urls
 
 parser = argparse.ArgumentParser()
 
@@ -113,7 +114,6 @@ else:
     DIST_PATH = os.path.join(os.path.dirname(__file__), "flask-app", "dist")
 ASSETS_PATH = os.path.join(DIST_PATH, "assets")
 
-from tool_registration import SERVERS, register_post, list_server_urls
 app.post("/register")(register_post)
 
 (MODEL, BACKEND, API_KEY, MODEL_KWARGS) = AutoGenClient.configure(args.model, args.backend)

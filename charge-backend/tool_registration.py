@@ -24,7 +24,7 @@ class Server:
     def long_name(self):
         return f"[{self.name}] http://{self.address}:{self.port}/sse"
 
-SERVERS: dict[Server] = {}
+SERVERS: dict[str, Server] = {}
 
 def get_client_info(request: Request):
     """Get client IP and hostname with fallbacks"""
@@ -69,8 +69,13 @@ async def register_post(request: Request, data: RegistrationRequest):
     return {"status": f"registered MCP server {data.name} at {hostname}:{data.port}"}
 
 def register_tool_server(port, host, name, copilot_port, copilot_host):
-    url = f"http://{copilot_host}:{copilot_port}/register"
-    response = requests.post(url, json={"host": host, "port": port, "name": name})
+    try:
+        url = f"https://{copilot_host}:{copilot_port}/register"
+        response = requests.post(url, json={"host": host, "port": port, "name": name})
+    except:
+        url = f"http://{copilot_host}:{copilot_port}/register"
+        response = requests.post(url, json={"host": host, "port": port, "name": name})
+
     logger.info(response.json())
 
 def list_server_urls() -> list[str]:
