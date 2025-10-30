@@ -11,6 +11,8 @@ import socket
 from loguru import logger
 import requests
 
+from charge.utils.system_utils import check_server_paths
+
 @dataclass(frozen=True)
 class Server:
     address: str
@@ -73,8 +75,17 @@ def register_tool_server(port, host, name, copilot_port, copilot_host):
 
 def list_server_urls() -> list[str]:
     server_urls = []
-    for _, server in SERVERS:
-        server_urls.append(f"{server}")
+    invalid_keys = []
+    for key, server in SERVERS.items():
+        validated_server = check_server_paths(f"{server}")
+        if validated_server:
+            server_urls.append(f"{server}")
+        else:
+            logger.info(f"Previously cached URL is no longer valid - removing {server.long_name()} from cache")
+            invalid_keys.append(key)
+
+    for key in invalid_keys:
+        SERVERS.pop(key)
 
     assert server_urls is not None, "Server URLs must be registered"
     for url in server_urls:

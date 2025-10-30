@@ -41,7 +41,7 @@ from aizynthfinder.utils.logging import setup_logger
 setup_logger(console_level=logging.INFO)
 
 from loguru import logger
-from callback_logger import callback_logger
+from callback_logger import CallbackLogger
 
 import sys
 from backend_helper_funcs import (
@@ -162,7 +162,7 @@ async def websocket_endpoint(websocket: WebSocket):
     lmo_task = None
     lmo_runner = None
 
-    clogger = callback_logger(websocket)
+    clogger = CallbackLogger(websocket)
 
     retro_synth_context: RetrosynthesisContext | None = None
     try:
@@ -328,7 +328,16 @@ async def websocket_endpoint(websocket: WebSocket):
         logger.error(f"Connection error: {e}")
     except Exception as e:
         logger.error(f"Error in WebSocket connection: {e}")
+    finally:
+        if CURRENT_TASK and not CURRENT_TASK.done():
+            logger.info("Stopping current task as per user request.")
+            CURRENT_TASK.cancel()
+            try:
+                await CURRENT_TASK
+            except asyncio.CancelledError:
+                logger.info("Current task cancelled successfully.")
 
+        clogger.unbind()
 
 if __name__ == "__main__":
     import uvicorn

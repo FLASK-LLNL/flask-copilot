@@ -1,5 +1,5 @@
 from loguru import logger
-from callback_logger import callback_logger
+from callback_logger import CallbackLogger
 
 from fastapi import WebSocket
 import asyncio
@@ -76,7 +76,7 @@ async def aizynth_retro(
     retro_synth_context: RetrosynthesisContext,
     websocket: WebSocket,
 ):
-    clogger = callback_logger(websocket)
+    clogger = CallbackLogger(websocket)
     """Stream positioned nodes and edges"""
     clogger.info(f"Planning retrosynthesis for: {start_smiles}")
 
