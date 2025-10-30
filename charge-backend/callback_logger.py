@@ -36,11 +36,13 @@ class CallbackLogger:
     def __init__(self, websocket: WebSocket):
         self.websocket = websocket
         self.logger = logger.bind(websocket=websocket)
-    def info(self, message, **kwargs: Optional[dict]):
+
+    def info(self, message, **kwargs):
         if kwargs:
             logger.bind(websocket=self.websocket, **kwargs).info(message)
         else:
             self.logger.info(message)
+
     def unbind(self):
         self.websocket = None
         self.logger = logger.bind()

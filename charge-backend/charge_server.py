@@ -330,7 +330,7 @@ async def websocket_endpoint(websocket: WebSocket):
         logger.error(f"Error in WebSocket connection: {e}")
     finally:
         if CURRENT_TASK and not CURRENT_TASK.done():
-            logger.info("Stopping current task as per user request.")
+            logger.info("Stopping current task due to connection closure.")
             CURRENT_TASK.cancel()
             try:
                 await CURRENT_TASK
