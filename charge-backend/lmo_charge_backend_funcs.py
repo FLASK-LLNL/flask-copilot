@@ -5,7 +5,7 @@ from loguru import logger
 import sys
 import os
 from charge.clients.autogen import AutoGenClient
-from callback_logger import callback_logger
+from callback_logger import CallbackLogger
 from charge.tasks.LMOTask import (
     LMOTask as LeadMoleculeOptimization,
     MoleculeOutputSchema,
@@ -34,7 +34,7 @@ async def lead_molecule(
     """Stream positioned nodes and edges"""
 
     lead_molecule_smiles = start_smiles
-    clogger = callback_logger(websocket)
+    clogger = CallbackLogger(websocket)
 
     clogger.info(f"Starting task with lead molecule: {lead_molecule_smiles}", smiles=lead_molecule_smiles)
 
