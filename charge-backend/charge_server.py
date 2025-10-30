@@ -1,3 +1,10 @@
+################################################################################
+## Copyright 2025 Lawrence Livermore National Security, LLC. and Binghamton University.
+## See the top-level LICENSE file for details.
+##
+## SPDX-License-Identifier: Apache-2.0
+################################################################################
+
 from functools import partial
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.responses import HTMLResponse
@@ -34,7 +41,7 @@ from aizynthfinder.utils.logging import setup_logger
 setup_logger(console_level=logging.INFO)
 
 from loguru import logger
-from callback_logger import callback_logger
+from callback_logger import CallbackLogger
 
 import sys
 from backend_helper_funcs import (
@@ -58,6 +65,7 @@ from retro_charge_backend_funcs import (
     get_unconstrained_prompt,
 )
 
+from tool_registration import SERVERS, register_post, list_server_urls
 
 parser = argparse.ArgumentParser()
 
@@ -83,9 +91,6 @@ parser.add_argument(
 parser.add_argument("--port", type=int, default=8001, help="Port to run the server on")
 parser.add_argument("--host", type=str, default=None, help="Host to run the server on")
 
-parser.add_argument("--lmo-urls", nargs="*", type=str, default=[])
-parser.add_argument("--retro-urls", nargs="*", type=str, default=[])
-
 # Add standard CLI arguments
 Client.add_std_parser_arguments(parser)
 
@@ -109,17 +114,9 @@ else:
     DIST_PATH = os.path.join(os.path.dirname(__file__), "flask-app", "dist")
 ASSETS_PATH = os.path.join(DIST_PATH, "assets")
 
+app.post("/register")(register_post)
 
 (MODEL, BACKEND, API_KEY, MODEL_KWARGS) = AutoGenClient.configure(args.model, args.backend)
-
-server_urls = args.server_urls
-assert server_urls is not None, "Server URLs must be provided"
-for url in server_urls + args.lmo_urls + args.retro_urls:
-    assert url.endswith("/sse"), f"Server URL {url} must end with /sse"
-
-LMO_URLS = args.lmo_urls + server_urls
-RETRO_URLS = args.retro_urls + server_urls
-
 
 if os.path.exists(ASSETS_PATH):
     # Serve the frontend
@@ -165,7 +162,7 @@ async def websocket_endpoint(websocket: WebSocket):
     lmo_task = None
     lmo_runner = None
 
-    clogger = callback_logger(websocket)
+    clogger = CallbackLogger(websocket)
 
     retro_synth_context: RetrosynthesisContext | None = None
     try:
@@ -205,7 +202,7 @@ async def websocket_endpoint(websocket: WebSocket):
                             backend=BACKEND,
                             api_key=API_KEY,
                             model_kwargs=MODEL_KWARGS,
-                            server_url=LMO_URLS,
+                            server_url=list_server_urls(),
                             thoughts_callback=CallbackHandler(websocket),
                         )
                     else:
@@ -253,7 +250,7 @@ async def websocket_endpoint(websocket: WebSocket):
                 # Leaf node optimization
                 logger.info("Synthesize tree leaf action received")
                 logger.info(f"Data: {data}")
-                await optimize_molecule_retro(data["nodeId"], retro_synth_context, websocket, MODEL, BACKEND, API_KEY, MODEL_KWARGS, RETRO_URLS)
+                await optimize_molecule_retro(data["nodeId"], retro_synth_context, websocket, MODEL, BACKEND, API_KEY, MODEL_KWARGS, list_server_urls())
                 await websocket.send_json({"type": "complete"})
             elif action == "optimize-from":
                 # Leaf node optimization
@@ -331,7 +328,16 @@ async def websocket_endpoint(websocket: WebSocket):
         logger.error(f"Connection error: {e}")
     except Exception as e:
         logger.error(f"Error in WebSocket connection: {e}")
+    finally:
+        if CURRENT_TASK and not CURRENT_TASK.done():
+            logger.info("Stopping current task due to connection closure.")
+            CURRENT_TASK.cancel()
+            try:
+                await CURRENT_TASK
+            except asyncio.CancelledError:
+                logger.info("Current task cancelled successfully.")
 
+        clogger.unbind()
 
 if __name__ == "__main__":
     import uvicorn
