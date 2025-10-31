@@ -12,6 +12,10 @@ from loguru import logger
 import requests
 
 from charge.utils.system_utils import check_server_paths
+from autogen_ext.tools.mcp import McpWorkbench, SseServerParams
+from charge.clients.autogen_utils import (
+    _list_wb_tools,
+)
 
 @dataclass(frozen=True)
 class Server:
@@ -97,3 +101,7 @@ def list_server_urls() -> list[str]:
         assert url.endswith("/sse"), f"Server URL {url} must end with /sse"
 
     return server_urls
+
+async def list_server_tools(urls: list[str]):
+    workbenches = [McpWorkbench(SseServerParams(url=server)) for server in urls]
+    return await _list_wb_tools(workbenches)

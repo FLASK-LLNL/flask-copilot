@@ -49,6 +49,7 @@ from backend_helper_funcs import (
     RetrosynthesisContext,
     Node,
     Edge,
+    Tool,
     calculate_positions,
 )
 from retro_charge_backend_funcs import (
@@ -65,7 +66,7 @@ from retro_charge_backend_funcs import (
     get_unconstrained_prompt,
 )
 
-from tool_registration import SERVERS, register_post, list_server_urls
+from tool_registration import SERVERS, register_post, list_server_urls, list_server_tools
 
 parser = argparse.ArgumentParser()
 
@@ -286,6 +287,24 @@ async def websocket_endpoint(websocket: WebSocket):
                 logger.info(f"Data: {data}")
                 await websocket.send_json({"type": "complete"})
 
+            elif action == "list-tools":
+                tools = []
+                server_list = list_server_urls()
+                tool_list = await list_server_tools(server_list)
+
+                for (name, description) in tool_list:
+                    tools.append(Tool(name, description))
+
+                if tools == []:
+                    await websocket.send_json({
+                        "type": "available-tools-response",
+                        "tools": [],
+                    })
+                else:
+                    await websocket.send_json({
+                        "type": "available-tools-response",
+                        "tools": [tool.json() for tool in tools],
+                    })
             elif action == "custom_query":
                 await websocket.send_json(
                     {
