@@ -16,7 +16,7 @@ import './animations.css';
 import { MetricsDashboard, useMetricsDashboardState } from './components/metrics';
 
 // Define the type for your items
-interface SelectableItem {
+interface SelectableTool {
   id: number;
   name: string;
 }
@@ -54,17 +54,15 @@ const ChemistryTool: React.FC = () => {
   const metricsDashboardState = useMetricsDashboardState();
 
 
-  // Add these state variables at the top of your component
   const [showToolSelectionModal, setShowToolSelectionModal] = useState<boolean>(false);
   const [selectedTools, setSelectedTools] = useState<number[]>([]);
 
-  // Sample data structure - replace with your actual data
-  const availableItems: SelectableItem[] = [
-    { id: 1, name: "Item 1" },
-    { id: 2, name: "Item 2" },
-    { id: 3, name: "Item 3" },
-    { id: 4, name: "Item 4" },
-    { id: 5, name: "Item 5" }
+  const availableToolsMap: SelectableTool[] = [
+    { id: 1, name: "Tool 1" },
+    { id: 2, name: "Tool 2" },
+    { id: 3, name: "Tool 3" },
+    { id: 4, name: "Tool 4" },
+    { id: 5, name: "Tool 5" }
   ];
 
   const toggleItemToolSelection = (itemId: number): void => {
@@ -892,7 +890,7 @@ const ChemistryTool: React.FC = () => {
             <h3 className="text-xl font-semibold text-purple-200 mb-4">Select Tools for Task</h3>
 
             <div className="max-h-96 overflow-y-auto space-y-2 mb-4">
-              {availableItems.map((item: SelectableItem) => (
+              {availableToolsMap.map((item: SelectableTool) => (
                 <label
                   key={item.id}
                   className="flex items-center gap-3 p-3 bg-white/10 rounded-lg hover:bg-white/20 cursor-pointer transition-colors"
