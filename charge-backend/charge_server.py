@@ -30,7 +30,6 @@ from charge.tasks.RetrosynthesisTask import (
 
 import charge.utils.helper_funcs as lmo_helper_funcs
 from charge.servers.server_utils import try_get_public_hostname
-from charge.clients.autogen_utils import list_client_tools
 
 import os
 from charge.clients.Client import Client
@@ -67,7 +66,7 @@ from retro_charge_backend_funcs import (
     get_unconstrained_prompt,
 )
 
-from tool_registration import SERVERS, register_post, list_server_urls
+from tool_registration import SERVERS, register_post, list_server_urls, list_server_tools
 
 parser = argparse.ArgumentParser()
 
@@ -290,13 +289,8 @@ async def websocket_endpoint(websocket: WebSocket):
 
             elif action == "list-tools":
                 tools = []
-                tool_list = []
-                if lmo_runner:
-                    tool_list.extend(await list_client_tools(lmo_runner))
-                if retro_synth_context:
-                    for k,v in retro_synth_context.node_id_to_charge_client:
-                        print(f"BVE I ahve a k {k} and v {v}")
-                        tool_list.extend(await list_client_tools(v))
+                server_list = list_server_urls()
+                tool_list = await list_server_tools(server_list)
 
                 for (name, description) in tool_list:
                     tools.append(Tool(name, description))
