@@ -15,11 +15,7 @@ import { copyToClipboard } from './utils';
 import './animations.css';
 import { MetricsDashboard, useMetricsDashboardState } from './components/metrics';
 
-// Define the type for your items
-interface SelectableTool {
-  id: number;
-  name: string;
-}
+import { MultiSelectToolModal, SelectableTool } from './components/multi_select_tools';
 
 const ChemistryTool: React.FC = () => {
   const [smiles, setSmiles] = useState<string>('O=C\\C1=C(\\C=C/CC1(C)C)C');
@@ -53,7 +49,6 @@ const ChemistryTool: React.FC = () => {
   const sidebarState = useSidebarState();
   const metricsDashboardState = useMetricsDashboardState();
 
-
   const [showToolSelectionModal, setShowToolSelectionModal] = useState<boolean>(false);
   const [selectedTools, setSelectedTools] = useState<number[]>([]);
 
@@ -64,14 +59,6 @@ const ChemistryTool: React.FC = () => {
     { id: 4, name: "Tool 4" },
     { id: 5, name: "Tool 5" }
   ];
-
-  const toggleItemToolSelection = (itemId: number): void => {
-    setSelectedTools((prev: number[]) =>
-      prev.includes(itemId)
-        ? prev.filter((id: number) => id !== itemId)
-        : [...prev, itemId]
-    );
-  };
 
   useEffect(() => {
     const handleClickOutside = (): void => {
@@ -883,46 +870,15 @@ const ChemistryTool: React.FC = () => {
         </div>
       )}
 
-      {/* Multi-select Modal */}
-      {showToolSelectionModal && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div className="bg-slate-800 rounded-lg p-6 max-w-md w-full mx-4 border-2 border-purple-400/50">
-            <h3 className="text-xl font-semibold text-purple-200 mb-4">Select Tools for Task</h3>
-
-            <div className="max-h-96 overflow-y-auto space-y-2 mb-4">
-              {availableToolsMap.map((item: SelectableTool) => (
-                <label
-                  key={item.id}
-                  className="flex items-center gap-3 p-3 bg-white/10 rounded-lg hover:bg-white/20 cursor-pointer transition-colors"
-                >
-                  <input
-                    type="checkbox"
-                    checked={selectedTools.includes(item.id)}
-                    onChange={() => toggleItemToolSelection(item.id)}
-                    className="w-4 h-4 accent-purple-500"
-                  />
-                  <span className="text-white">{item.name}</span>
-                </label>
-              ))}
-            </div>
-
-            <div className="flex gap-3">
-              <button
-                onClick={() => setShowToolSelectionModal(false)}
-                className="flex-1 px-4 py-2 bg-purple-500 hover:bg-purple-600 text-white rounded-lg font-medium transition-colors"
-              >
-                Done
-              </button>
-              <button
-                onClick={() => setSelectedTools([])}
-                className="px-4 py-2 bg-white/10 hover:bg-white/20 text-purple-200 rounded-lg font-medium transition-colors"
-              >
-                Clear All
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      {/* Use the MultiSelectToolModal component */}
+      <MultiSelectToolModal
+        isOpen={showToolSelectionModal}
+        onClose={() => setShowToolSelectionModal(false)}
+        availableToolsMap={availableToolsMap}
+        selectedTools={selectedTools}
+        onSelectionChange={setSelectedTools}
+        title="Select Tools to use for Task" // Optional, defaults to "Select Tools"
+      />
 
     </div>
   );
