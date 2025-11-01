@@ -15,6 +15,8 @@ import { copyToClipboard } from './utils';
 import './animations.css';
 import { MetricsDashboard, useMetricsDashboardState } from './components/metrics';
 
+import { MultiSelectToolModal, SelectableTool } from './components/multi_select_tools';
+
 const ChemistryTool: React.FC = () => {
   const [smiles, setSmiles] = useState<string>('O=C\\C1=C(\\C=C/CC1(C)C)C');
   const [problemType, setProblemType] = useState<string>('retrosynthesis');
@@ -47,6 +49,16 @@ const ChemistryTool: React.FC = () => {
   const sidebarState = useSidebarState();
   const metricsDashboardState = useMetricsDashboardState();
 
+  const [showToolSelectionModal, setShowToolSelectionModal] = useState<boolean>(false);
+  const [selectedTools, setSelectedTools] = useState<number[]>([]);
+
+  const availableToolsMap: SelectableTool[] = [
+    { id: 1, name: "Tool 1" },
+    { id: 2, name: "Tool 2" },
+    { id: 3, name: "Tool 3" },
+    { id: 4, name: "Tool 4" },
+    { id: 5, name: "Tool 5" }
+  ];
 
   useEffect(() => {
     const handleClickOutside = (): void => {
@@ -61,7 +73,7 @@ const ChemistryTool: React.FC = () => {
       return () => window.removeEventListener('mousedown', handleClickOutside);
     }
   }, [contextMenu, saveDropdownOpen, sidebarState, wsTooltipPinned]);
-  
+
   const runComputation = async (): Promise<void> => {
     setSidebarOpen(true);
     setIsComputing(true);
@@ -83,12 +95,12 @@ const ChemistryTool: React.FC = () => {
     if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
       wsRef.current.close();
     }
-    
+
     setWsReconnecting(true);
-    
+
     const socket = new WebSocket(WS_SERVER);
     wsRef.current = socket;
-    
+
     socket.onopen = () => {
       console.log('WebSocket connected');
       setWebsocket(socket);
@@ -99,16 +111,16 @@ const ChemistryTool: React.FC = () => {
 
       socket.send(JSON.stringify({ action: 'list-tools' }));
     };
-    
+
     socket.onmessage = (event: MessageEvent) => {
       const data: WebSocketMessage = JSON.parse(event.data);
-      
+
       if (data.type === 'node') {
         setTreeNodes(prev => [...prev, data.node!]);
       } else if (data.type === 'node_update') {
         const { id, ...restData } = data.node!;
 
-        setTreeNodes(prev => prev.map(n => 
+        setTreeNodes(prev => prev.map(n =>
           n.id === data.node!.id ? { ...n, ...restData } : n
         ));
       } else if (data.type === 'node_delete') {
@@ -116,7 +128,7 @@ const ChemistryTool: React.FC = () => {
           const descendants = findAllDescendants(data.node!.id, prev);
           return prev.filter(n => !descendants.has(n.id) && n.id !== data.node!.id);
         });
-        setEdges(prev => prev.filter(e => 
+        setEdges(prev => prev.filter(e =>
           e.fromNode !== data.node!.id && e.toNode !== data.node!.id
         ));
       } else if (data.type === 'subtree_update') {
@@ -124,9 +136,9 @@ const ChemistryTool: React.FC = () => {
         const { id, ...restData } = data.node!;
         setTreeNodes(prev => {
           const descendants = findAllDescendants(data.node!.id, prev);
-          return prev.map(n => 
-            (descendants.has(n.id) || (withNode && n.id === data.node!.id)) 
-              ? { ...n, ...restData } 
+          return prev.map(n =>
+            (descendants.has(n.id) || (withNode && n.id === data.node!.id))
+              ? { ...n, ...restData }
               : n
           );
         });
@@ -134,7 +146,7 @@ const ChemistryTool: React.FC = () => {
         setEdges(prev => [...prev, data.edge!]);
       } else if (data.type === 'edge_update') {
         const { id, ...restData } = data.edge!;
-        setEdges(prev => prev.map(e => 
+        setEdges(prev => prev.map(e =>
           e.id === data.edge!.id ? { ...e, ...restData } : e
          ));
       } else if (data.type === 'subtree_delete') {
@@ -143,7 +155,7 @@ const ChemistryTool: React.FC = () => {
           descendantsSet = findAllDescendants(data.node!.id, prev);
           return prev.filter(n => !descendantsSet.has(n.id));
         });
-        setEdges(prev => prev.filter(e => 
+        setEdges(prev => prev.filter(e =>
           !descendantsSet!.has(e.fromNode) && !descendantsSet!.has(e.toNode)
         ));
       } else if (data.type === 'complete') {
@@ -158,7 +170,7 @@ const ChemistryTool: React.FC = () => {
         alert("Server error: " + data.message);
       }
     };
-    
+
     socket.onerror = (error: Event) => {
       console.error('WebSocket error:', error);
       setWsReconnecting(false);
@@ -312,7 +324,7 @@ const ChemistryTool: React.FC = () => {
       setProblemType('optimization');
     }
   };
-  
+
   const handleNodeClick = (e: React.MouseEvent<HTMLDivElement>, node: TreeNode): void => {
       e.stopPropagation();
       if (isComputing) return; // Don't open menu while computing
@@ -354,7 +366,7 @@ const ChemistryTool: React.FC = () => {
       return;
     }
     console.log(`Custom query for ${customQueryModal?.label}: ${customQueryText}`);
-    
+
     const message: WebSocketMessageToServer = {
       action: problemType === "optimization" ? "optimize-from" : "recompute-reaction",
       nodeId: customQueryModal?.id,
@@ -376,7 +388,7 @@ const ChemistryTool: React.FC = () => {
 
     sidebarState.setMessages(prev => [...prev, message]);
     setSidebarOpen(true);
-    
+
     sidebarState.setVisibleSources(prev => {
       if (!(message.source in prev)) {
         return { ...prev, [message.source]: true };
@@ -434,7 +446,7 @@ const ChemistryTool: React.FC = () => {
               </button>
 
               {/* WebSocket Status Indicator */}
-                <div 
+                <div
                   className="absolute top-10 group"
                   onClick={(e) => {
                     e.stopPropagation();
@@ -454,20 +466,20 @@ const ChemistryTool: React.FC = () => {
                   <div className="relative cursor-pointer">
                     <div className={`w-4 h-4 rounded-full absolute ${
                       wsReconnecting ? 'bg-yellow-400 animate-ping' :
-                      wsConnected ? 'bg-green-400' : 
+                      wsConnected ? 'bg-green-400' :
                       'bg-red-400 animate-pulse'
                     }`} />
                     <div className={`w-4 h-4 rounded-full ${
                       wsReconnecting ? 'bg-yellow-400' :
-                      wsConnected ? 'bg-green-400' : 
+                      wsConnected ? 'bg-green-400' :
                       'bg-red-400 animate-ping'
                     } ${wsTooltipPinned ? 'ring-2 ring-white ring-offset-2 ring-offset-slate-900' : ''}`} />
                   </div>
-                  
+
                   <div className={`absolute right-0 top-8 transition-opacity z-50 ${
                     wsTooltipPinned ? 'opacity-100' : 'opacity-0 group-hover:opacity-100 pointer-events-none'
                   }`}>
-                    <div 
+                    <div
                       className="bg-slate-800 border-2 border-purple-400 rounded-lg px-3 py-2 text-sm shadow-xl"
                       style={{ minWidth: '220px', maxWidth: '300px' }}
                       onClick={(e) => e.stopPropagation()}
@@ -476,11 +488,11 @@ const ChemistryTool: React.FC = () => {
                       <div className="flex items-center justify-between mb-1">
                         <div className={`font-semibold ${
                           wsReconnecting ? 'text-yellow-400' :
-                          wsConnected ? 'text-green-400' : 
+                          wsConnected ? 'text-green-400' :
                           'text-red-400'
                         }`}>
                           {wsReconnecting ? '● Reconnecting...' :
-                          wsConnected ? '● Connected' : 
+                          wsConnected ? '● Connected' :
                           '● Disconnected'}
                         </div>
                         {wsTooltipPinned && (
@@ -572,7 +584,7 @@ const ChemistryTool: React.FC = () => {
                   </label>
                 </div>
               </div>
-              
+
               <div className="flex items-center gap-4">
                 <div className="flex items-end gap-2">
                   <div className="w-100">
@@ -591,8 +603,15 @@ const ChemistryTool: React.FC = () => {
                   <button onClick={() => setEditPromptsModal(true)} disabled={true} className="px-3 py-2.5 bg-white/10 text-purple-200 rounded-lg text-sm font-medium hover:bg-white/20 transition-all disabled:opacity-50 disabled:cursor-not-allowed">
                     Edit
                   </button>
+                  <button
+                    onClick={() => setShowToolSelectionModal(true)}
+                    disabled={isComputing}
+                    className="px-3 py-2.5 bg-white/10 text-purple-200 rounded-lg text-sm font-medium hover:bg-white/20 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    Select Tools {selectedTools.length > 0 && `(${selectedTools.length})`}
+                  </button>
                 </div>
-                
+
                 <div className="flex gap-3 flex-1 justify-end">
                   <div className="relative group">
                     <button onClick={runComputation} disabled={!wsConnected || isComputing || !smiles} className="px-6 py-3 bg-gradient-to-r from-purple-600 to-pink-600 text-white rounded-lg font-semibold shadow-lg hover:shadow-xl transform hover:-translate-y-0.5 transition-all disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none flex items-center gap-2">
@@ -602,8 +621,8 @@ const ChemistryTool: React.FC = () => {
                       <div className="absolute bottom-full mb-2 left-1/2 transform -translate-x-1/2 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
                         <div className="bg-slate-800 border-2 border-purple-400 rounded-lg px-3 py-2 text-sm whitespace-nowrap shadow-xl">
                           <div className="text-purple-200">
-                            {!wsConnected ? 'Backend server not connected' : 
-                            isComputing ? 'Computation already running' : 
+                            {!wsConnected ? 'Backend server not connected' :
+                            isComputing ? 'Computation already running' :
                             'Enter a SMILES string first'}
                           </div>
                           {!wsConnected && (
@@ -637,7 +656,7 @@ const ChemistryTool: React.FC = () => {
                 <div className="flex flex-col items-center justify-center h-full text-purple-300">
                   <FlaskConical className="w-16 h-16 mb-4 opacity-50" />
                   <p className="text-center text-lg">
-                    {wsConnected ? 
+                    {wsConnected ?
                       `Click "Run" to start ${problemType === "optimization" ? "molecular discovery" : "the molecular computation tree"}` :
                       "Waiting for backend connection..."
                     }
@@ -725,7 +744,7 @@ const ChemistryTool: React.FC = () => {
             <RotateCcw className="w-4 h-4" />
             Restart from here
             </button>
-            <button 
+            <button
               onClick={() => copyToClipboard(contextMenu.node!.smiles, 'smiles', setCopiedField)}
               className="w-full px-4 py-2 text-left text-sm text-white hover:bg-purple-600/50 transition-colors flex items-center gap-2"
             >
@@ -795,13 +814,13 @@ const ChemistryTool: React.FC = () => {
               placeholder="Enter your custom query here..."
               className="w-full h-40 px-4 py-3 bg-white/10 border-2 border-purple-400/50 rounded-lg focus:border-purple-400 focus:outline-none text-white placeholder-purple-300/50 resize-none"
             />
-            
+
             <div className="flex gap-3 mt-4">
               <button onClick={submitCustomQuery} disabled={!customQueryText.trim()} className="flex-1 px-6 py-3 bg-gradient-to-r from-purple-600 to-pink-600 text-white rounded-lg font-semibold shadow-lg hover:shadow-xl transform hover:-translate-y-0.5 transition-all disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none flex items-center justify-center gap-2">
                 <Send className="w-5 h-5" />
                 Submit Query
               </button>
-              
+
               <button onClick={() => setCustomQueryModal(null)} className="px-6 py-3 bg-white/20 text-white rounded-lg font-semibold hover:bg-white/30 transition-all">
                 Cancel
               </button>
@@ -822,19 +841,19 @@ const ChemistryTool: React.FC = () => {
                 <X className="w-6 h-6" />
               </button>
             </div>
-            
+
             <div className="space-y-4">
               <div>
                 <label className="block text-sm font-medium text-purple-200 mb-2">System Prompt</label>
                 <textarea value={systemPrompt} onChange={(e) => setSystemPrompt(e.target.value)} placeholder="Enter system-level instructions..." className="w-full h-32 px-4 py-3 bg-white/10 border-2 border-purple-400/50 rounded-lg focus:border-purple-400 focus:outline-none text-white placeholder-purple-300/50 resize-none" />
               </div>
-              
+
               <div>
                 <label className="block text-sm font-medium text-purple-200 mb-2">Problem Prompt</label>
                 <textarea value={problemPrompt} onChange={(e) => setProblemPrompt(e.target.value)} placeholder="Enter problem-specific instructions..." className="w-full h-32 px-4 py-3 bg-white/10 border-2 border-purple-400/50 rounded-lg focus:border-purple-400 focus:outline-none text-white placeholder-purple-300/50 resize-none" />
               </div>
             </div>
-            
+
             <div className="flex gap-3 mt-4">
               <button onClick={() => { savePrompts('', ''); setProblemType('retrosynthesis'); }} className="px-4 py-3 bg-white/10 text-purple-200 rounded-lg font-medium hover:bg-white/20 transition-all flex items-center gap-2">
                 <RotateCcw className="w-4 h-4" />
@@ -850,6 +869,17 @@ const ChemistryTool: React.FC = () => {
           </div>
         </div>
       )}
+
+      {/* Use the MultiSelectToolModal component */}
+      <MultiSelectToolModal
+        isOpen={showToolSelectionModal}
+        onClose={() => setShowToolSelectionModal(false)}
+        availableToolsMap={availableToolsMap}
+        selectedTools={selectedTools}
+        onSelectionChange={setSelectedTools}
+        title="Select Tools to use for Task" // Optional, defaults to "Select Tools"
+      />
+
     </div>
   );
 };
