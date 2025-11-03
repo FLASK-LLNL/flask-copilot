@@ -66,6 +66,42 @@ const ChemistryTool: React.FC = () => {
     { id: 5, name: "Tool 5" }
   ];
 
+  // Callback function to send selected tools to backend
+  const handleToolSelectionConfirm = async (
+    selectedIds: number[],
+    selectedItemsData: SelectableItem[]
+  ): Promise<void> => {
+    if (!websocket || websocket.readyState !== WebSocket.OPEN) {
+      alert('WebSocket not connected');
+//      return;
+    }
+    console.log(`Set Task Tool Selection`);
+    console.log('Selected IDs:', selectedIds);
+    console.log('Selected Items Data:', selectedItemsData);
+
+    // Send data to backend via WebSocket
+    // const payload = {
+    //   type: 'ITEMS_SELECTED',
+    //   timestamp: new Date().toISOString(),
+    //   selectedIds: selectedIds,
+    //   selectedItems: selectedItemsData,
+    //   problemType: problemName // Include other relevant context
+    // };
+
+    if (!websocket || websocket.readyState !== WebSocket.OPEN) {
+      const message: WebSocketMessageToServer = {
+        action: problemType === "enableTool",
+        nodeId: showToolSelectionModal?.id,
+        query: itemId
+      };
+      websocket.send(JSON.stringify(message));
+    }
+//    sendMessage(payload);
+
+    // Optional: Add any additional processing or API calls here
+    // await fetch('/api/save-selection', { method: 'POST', body: JSON.stringify(payload) });
+  };
+
   useEffect(() => {
     const handleClickOutside = (): void => {
       setContextMenu({node: null, x:0, y:0});
@@ -129,7 +165,7 @@ const ChemistryTool: React.FC = () => {
     data.experimentContext && sendMessageToServer('load-context', {experimentContext: data.experimentContext});
   }
 
-  const saveStateToExperiment = useCallback((): boolean => {   
+  const saveStateToExperiment = useCallback((): boolean => {
     // Use the ref directly to always get the latest selection
     const projectId = projectSidebar.selectionRef.current.projectId;
     const experimentId = projectSidebar.selectionRef.current.experimentId;
@@ -154,16 +190,16 @@ const ChemistryTool: React.FC = () => {
       const hours = String(now.getHours()).padStart(2, '0');
       const minutes = String(now.getMinutes()).padStart(2, '0');
       const timestamp = `${month}/${day}/${year} ${hours}:${minutes}`;
-      
+
       const projectName = `Project ${timestamp}`;
       const experimentName = `Experiment 1`;
-      
+
       try {
         const { projectId, experimentId } = await projectManagement.createProjectAndExperiment(
           projectName,
           experimentName
         );
-        
+
         projectSidebar.setSelection({ projectId, experimentId });
         await new Promise(resolve => setTimeout(resolve, 100));
       } catch (error) {
@@ -174,12 +210,12 @@ const ChemistryTool: React.FC = () => {
     } else if (!projectSidebar.selectionRef.current.experimentId) {
       // Project exists but no experiment - create just an experiment
       const projectId = projectSidebar.selectionRef.current.projectId!;
-      
+
       // Find the project to count existing experiments
       const project = projectManagement.projects.find(p => p.id === projectId);
       const experimentCount = project ? project.experiments.length + 1 : 1;
       const experimentName = `Experiment ${experimentCount}`;
-      
+
       try {
         const experiment = await projectManagement.createExperiment(projectId, experimentName);
         projectSidebar.setSelection({ projectId, experimentId: experiment.id });
@@ -853,7 +889,7 @@ const ChemistryTool: React.FC = () => {
               <MetricsDashboard {...metricsDashboardState} treeNodes={treeNodes} />
             )}
 
-          
+
           <div className="mt-8 pt-6 border-t border-purple-400/30 text-center text-purple-300 text-sm">
             <p>This work was performed under the auspices of the U.S. Department of Energy
             by Lawrence Livermore National Laboratory (LLNL) under Contract DE-AC52-07NA27344
@@ -1020,7 +1056,8 @@ const ChemistryTool: React.FC = () => {
         availableToolsMap={availableToolsMap}
         selectedTools={selectedTools}
         onSelectionChange={setSelectedTools}
-        title="Select Tools to use for Experiment" // Optional, defaults to "Select Tools"
+        onConfirm={handleToolSelectionConfirm}
+        title="Select Tools to use for Task" // Optional, defaults to "Select Tools"
       />
 
     </div>

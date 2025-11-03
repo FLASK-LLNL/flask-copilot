@@ -11,6 +11,7 @@ interface MultiSelectToolModalProps {
   availableToolsMap: SelectableTool[];
   selectedTools: number[];
   onSelectionChange: (selectedIds: number[]) => void;
+  onConfirm?: (selectedIds: number[], selectedItemsData: SelectableItem[]) => void | Promise<void>;
   title?: string;
 }
 
@@ -20,6 +21,7 @@ export const MultiSelectToolModal: React.FC<MultiSelectToolModalProps> = ({
   availableToolsMap,
   selectedTools,
   onSelectionChange,
+  onConfirm,
   title = "Select Tools"
 }) => {
   if (!isOpen) return null;
@@ -29,6 +31,20 @@ export const MultiSelectToolModal: React.FC<MultiSelectToolModalProps> = ({
       ? selectedTools.filter((id: number) => id !== toolId)
       : [...selectedTools, toolId];
     onSelectionChange(newSelection);
+  };
+
+  const handleDone = async (): Promise<void> => {
+    // Get the full item data for selected tools
+    const selectedToolsData = availableToolsMap.filter(tool =>
+      selectedTools.includes(tool.id)
+    );
+
+    // Call the onConfirm callback if provided
+    if (onConfirm) {
+      await onConfirm(selectedTools, selectedToolsData);
+    }
+
+    onClose();
   };
 
   const handleClearAll = (): void => {
@@ -59,7 +75,7 @@ export const MultiSelectToolModal: React.FC<MultiSelectToolModalProps> = ({
 
         <div className="flex gap-3">
           <button
-            onClick={onClose}
+            onClick={handleDone}
             className="flex-1 px-4 py-2 bg-purple-500 hover:bg-purple-600 text-white rounded-lg font-medium transition-colors"
           >
             Done
