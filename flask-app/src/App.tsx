@@ -3,11 +3,13 @@ import React, { useState, useRef, useEffect } from 'react';
 import { Loader2, FlaskConical, TestTubeDiagonal, Network, Play, RotateCcw, X, Send, RefreshCw, Sparkles } from 'lucide-react';
 
 import { WS_SERVER } from './config';
-import { TreeNode, Edge, ContextMenuState, SidebarMessage, Tool, WebSocketMessageToServer, WebSocketMessage } from './types';
+import { TreeNode, Edge, ContextMenuState, SidebarMessage, Tool, WebSocketMessageToServer, WebSocketMessage, ProjectSelection } from './types';
 
 import { loadRDKit } from './components/molecule';
 import { ReasoningSidebar, useSidebarState } from './components/sidebar';
 import { MoleculeGraph, useGraphState } from './components/graph';
+import { MultiSelectToolModal, SelectableTool } from './components/multi_select_tools';
+import { ProjectSidebar, useProjectSidebar, useProjectManagement } from './components/project_sidebar';
 
 import { findAllDescendants, hasDescendants, isRootNode, relayoutTree } from './tree_utils';
 import { copyToClipboard } from './utils';
@@ -15,7 +17,6 @@ import { copyToClipboard } from './utils';
 import './animations.css';
 import { MetricsDashboard, useMetricsDashboardState } from './components/metrics';
 
-import { MultiSelectToolModal, SelectableTool } from './components/multi_select_tools';
 
 const ChemistryTool: React.FC = () => {
   const [smiles, setSmiles] = useState<string>('O=C\\C1=C(\\C=C/CC1(C)C)C');
@@ -48,6 +49,8 @@ const ChemistryTool: React.FC = () => {
   const graphState = useGraphState();
   const sidebarState = useSidebarState();
   const metricsDashboardState = useMetricsDashboardState();
+  const projectSidebar = useProjectSidebar();
+  const projectManagement = useProjectManagement();
 
   const [showToolSelectionModal, setShowToolSelectionModal] = useState<boolean>(false);
   const [selectedTools, setSelectedTools] = useState<number[]>([]);
@@ -76,6 +79,54 @@ const ChemistryTool: React.FC = () => {
 
   const runComputation = async (): Promise<void> => {
     setSidebarOpen(true);
+
+    // Check if we need to create project and/or experiment
+    if (!projectSidebar.selection.projectId) {
+      // No project at all - create both project and experiment
+      const now = new Date();
+      const month = String(now.getMonth() + 1).padStart(2, '0');
+      const day = String(now.getDate()).padStart(2, '0');
+      const year = String(now.getFullYear()).slice(-2);
+      const hours = String(now.getHours()).padStart(2, '0');
+      const minutes = String(now.getMinutes()).padStart(2, '0');
+      const timestamp = `${month}/${day}/${year} ${hours}:${minutes}`;
+      
+      const projectName = `Project ${timestamp}`;
+      const experimentName = `Experiment 1`;
+      
+      try {
+        const { projectId, experimentId } = await projectManagement.createProjectAndExperiment(
+          projectName,
+          experimentName
+        );
+        
+        projectSidebar.setSelection({ projectId, experimentId });
+        await new Promise(resolve => setTimeout(resolve, 100));
+      } catch (error) {
+        console.error('Error creating project:', error);
+        alert('Failed to create project');
+        return;
+      }
+    } else if (!projectSidebar.selection.experimentId) {
+      // Project exists but no experiment - create just an experiment
+      const projectId = projectSidebar.selection.projectId;
+      
+      // Find the project to count existing experiments
+      const project = projectManagement.projects.find(p => p.id === projectId);
+      const experimentCount = project ? project.experiments.length + 1 : 1;
+      const experimentName = `Experiment ${experimentCount}`;
+      
+      try {
+        const experiment = await projectManagement.createExperiment(projectId, experimentName);
+        projectSidebar.setSelection({ projectId, experimentId: experiment.id });
+        await new Promise(resolve => setTimeout(resolve, 100));
+      } catch (error) {
+        console.error('Error creating experiment:', error);
+        alert('Failed to create experiment');
+        return;
+      }
+    }
+
     setIsComputing(true);
     setTreeNodes([]);
     setEdges([]);
@@ -249,7 +300,7 @@ const ChemistryTool: React.FC = () => {
     setSaveDropdownOpen(false);
   };
 
-  const loadContext = (): void => {
+  const loadContextFromFile = (): void => {
     const input = document.createElement('input');
     input.type = 'file';
     input.accept = '.json';
@@ -293,6 +344,12 @@ const ChemistryTool: React.FC = () => {
     };
     input.click();
   };
+
+  const loadContextFromExperiment = (projectId: string, experimentId: string | null): void => {
+    // TODO: Properly implement once system state is well defined.
+    console.log('Loading context:', { projectId, experimentId });
+    return;
+  }
 
   const savePrompts = (newSystemPrompt: string, newProblemPrompt: string): void => {
     setSystemPrompt(newSystemPrompt);
@@ -400,8 +457,27 @@ const ChemistryTool: React.FC = () => {
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900">
       <div className="flex min-h-screen">
+        <ProjectSidebar
+          isOpen={projectSidebar.isOpen}
+          onToggle={projectSidebar.toggleSidebar}
+          selection={projectSidebar.selection}
+          onSelectionChange={projectSidebar.setSelection}
+          onLoadContext={loadContextFromExperiment}
+          isComputing={isComputing}
+          hasLoadedInitialSelection={projectSidebar.hasLoadedInitialSelection}
+        />
         <div className={`p-8 ${sidebarOpen ? 'flex-1' : 'w-full'}`}>
           <div className="max-w-7xl mx-auto">
+            <div className="absolute top-10 text-white">
+              <svg version="1.1" id="Layer_1" height="60px" viewBox="0 0 40 40">
+                <g>
+                  <rect x="1.73" y="0.01" fill="#FFFFFF" width="34.19" height="34.19"/>
+                  <path fill="#1E59AE" d="M35.92,0.01v17.53H18.95V0.01H35.92z M15.88,21.82c-1.12-0.07-1.72-0.78-1.79-2.1V0.01h-0.76v19.73
+          c0.09,1.72,1,2.75,2.53,2.84h15.28l-4.83,5l-11.79,0c-3.04-0.36-6.22-2.93-6.14-6.98V0.01H7.6V20.6c-0.09,4.49,3.45,7.34,6.86,7.75
+          h11.09l-4.59,4.75h-6.68C9.71,32.93,3.19,29.44,2.99,21.13V0.01H0.05v37.3h35.87V17.62l-4.05,4.19L15.88,21.82z"/>
+                </g>
+              </svg>
+            </div>
             <div className="text-center mb-8">
               <div className="flex items-center justify-center gap-3 mb-2">
                 <FlaskConical className="w-10 h-10 text-purple-400" />
@@ -411,7 +487,7 @@ const ChemistryTool: React.FC = () => {
             </div>
 
             <div className="flex justify-end gap-2 mb-4">
-              <button onClick={loadContext} disabled={isComputing} className="px-4 py-2 bg-blue-500/30 text-white rounded-lg text-sm font-semibold hover:bg-blue-500/50 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2">
+              <button onClick={loadContextFromFile} disabled={isComputing} className="px-4 py-2 bg-blue-500/30 text-white rounded-lg text-sm font-semibold hover:bg-blue-500/50 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2">
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
                 </svg>
@@ -701,16 +777,7 @@ const ChemistryTool: React.FC = () => {
               <MetricsDashboard {...metricsDashboardState} treeNodes={treeNodes} />
             )}
 
-          <div className="absolute top-10 left-10 text-white">
-            <svg version="1.1" id="Layer_1" height="60px" viewBox="0 0 40 40">
-              <g>
-                <rect x="1.73" y="0.01" fill="#FFFFFF" width="34.19" height="34.19"/>
-                <path fill="#1E59AE" d="M35.92,0.01v17.53H18.95V0.01H35.92z M15.88,21.82c-1.12-0.07-1.72-0.78-1.79-2.1V0.01h-0.76v19.73
-        c0.09,1.72,1,2.75,2.53,2.84h15.28l-4.83,5l-11.79,0c-3.04-0.36-6.22-2.93-6.14-6.98V0.01H7.6V20.6c-0.09,4.49,3.45,7.34,6.86,7.75
-        h11.09l-4.59,4.75h-6.68C9.71,32.93,3.19,29.44,2.99,21.13V0.01H0.05v37.3h35.87V17.62l-4.05,4.19L15.88,21.82z"/>
-              </g>
-            </svg>
-          </div>
+          
           <div className="mt-8 pt-6 border-t border-purple-400/30 text-center text-purple-300 text-sm">
             <p>This work was performed under the auspices of the U.S. Department of Energy
             by Lawrence Livermore National Laboratory (LLNL) under Contract DE-AC52-07NA27344
