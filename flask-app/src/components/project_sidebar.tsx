@@ -1,20 +1,20 @@
 import React, { useState } from 'react';
 import { ChevronRight, ChevronDown, ChevronLeft, Plus, FolderOpen, FileText, Loader2, Edit2, Trash2 } from 'lucide-react';
-import { Project, Task, ProjectSelection } from '../types';
-import { useProjectData } from '../hooks/useProjectData';
+import { Experiment, Task, ExperimentSelection } from '../types';
+import { useExperimentData } from '../hooks/useExperimentData';
 
-interface ProjectSidebarProps {
+interface ExperimentSidebarProps {
   isOpen: boolean;
   onToggle: () => void;
-  selection: ProjectSelection;
-  onSelectionChange: (selection: ProjectSelection) => void;
-  onLoadContext: (projectId: string, taskId: string | null) => void;
+  selection: ExperimentSelection;
+  onSelectionChange: (selection: ExperimentSelection) => void;
+  onLoadContext: (experimentId: string, taskId: string | null) => void;
   isComputing?: boolean;  // Track if main app is currently computing
   hasLoadedInitialSelection?: boolean;  // Track if initial selection from localStorage has been loaded
-  onCreateProjectAndTask?: (projectName: string, taskName: string) => Promise<{ projectId: string; taskId: string }>;
+  onCreateExperimentAndTask?: (experimentName: string, taskName: string) => Promise<{ experimentId: string; taskId: string }>;
 }
 
-export const ProjectSidebar: React.FC<ProjectSidebarProps> = ({
+export const ExperimentSidebar: React.FC<ExperimentSidebarProps> = ({
   isOpen,
   onToggle,
   selection,
@@ -22,169 +22,169 @@ export const ProjectSidebar: React.FC<ProjectSidebarProps> = ({
   onLoadContext,
   isComputing = false,
   hasLoadedInitialSelection = false,
-  onCreateProjectAndTask
+  onCreateExperimentAndTask
 }) => {
   const {
-    projects,
+    experiments,
     loading,
-    createProject,
-    updateProject,
-    deleteProject,
+    createExperiment,
+    updateExperiment,
+    deleteExperiment,
     createTask,
     updateTask,
     deleteTask,
     setTaskRunning
-  } = useProjectData();
+  } = useExperimentData();
 
-  const [expandedProjects, setExpandedProjects] = useState<Set<string>>(new Set());
-  const [creatingProject, setCreatingProject] = useState(false);
-  const [newProjectName, setNewProjectName] = useState('');
+  const [expandedExperiments, setExpandedExperiments] = useState<Set<string>>(new Set());
+  const [creatingExperiment, setCreatingExperiment] = useState(false);
+  const [newExperimentName, setNewExperimentName] = useState('');
   const [creatingTaskFor, setCreatingTaskFor] = useState<string | null>(null);
   const [newTaskName, setNewTaskName] = useState('');
-  const [editingProject, setEditingProject] = useState<string | null>(null);
-  const [editProjectName, setEditProjectName] = useState('');
-  const [editingTask, setEditingTask] = useState<{ projectId: string; taskId: string } | null>(null);
+  const [editingExperiment, setEditingExperiment] = useState<string | null>(null);
+  const [editExperimentName, setEditExperimentName] = useState('');
+  const [editingTask, setEditingTask] = useState<{ experimentId: string; taskId: string } | null>(null);
   const [editTaskName, setEditTaskName] = useState('');
-  const [deletingItem, setDeletingItem] = useState<{ type: 'project' | 'task'; projectId: string; taskId?: string } | null>(null);
+  const [deletingItem, setDeletingItem] = useState<{ type: 'experiment' | 'task'; experimentId: string; taskId?: string } | null>(null);
   const [hasRestoredSelection, setHasRestoredSelection] = useState(false);
 
   // Auto-expand and load context when initial selection is loaded from localStorage
   React.useEffect(() => {
-    if (hasLoadedInitialSelection && !loading && !hasRestoredSelection && projects.length > 0 && selection.projectId) {
-      // Verify the selection still exists in the projects
-      const project = projects.find(p => p.id === selection.projectId);
-      if (project) {
-        // Auto-expand the project
-        setExpandedProjects(prev => new Set(prev).add(selection.projectId!));
+    if (hasLoadedInitialSelection && !loading && !hasRestoredSelection && experiments.length > 0 && selection.experimentId) {
+      // Verify the selection still exists in the experiments
+      const experiment = experiments.find(p => p.id === selection.experimentId);
+      if (experiment) {
+        // Auto-expand the experiment
+        setExpandedExperiments(prev => new Set(prev).add(selection.experimentId!));
         
         // Load the context
-        onLoadContext(selection.projectId, selection.taskId);
+        onLoadContext(selection.experimentId, selection.taskId);
         setHasRestoredSelection(true);
       }
     }
-  }, [hasLoadedInitialSelection, loading, projects, selection, onLoadContext, hasRestoredSelection]);
+  }, [hasLoadedInitialSelection, loading, experiments, selection, onLoadContext, hasRestoredSelection]);
 
   // Update task running status when isComputing changes
   React.useEffect(() => {
-    if (selection.projectId && selection.taskId) {
-      setTaskRunning(selection.projectId, selection.taskId, isComputing);
+    if (selection.experimentId && selection.taskId) {
+      setTaskRunning(selection.experimentId, selection.taskId, isComputing);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isComputing, selection.projectId, selection.taskId]);
+  }, [isComputing, selection.experimentId, selection.taskId]);
 
-  const toggleProjectExpanded = (projectId: string) => {
-    const newExpanded = new Set(expandedProjects);
-    if (newExpanded.has(projectId)) {
-      newExpanded.delete(projectId);
+  const toggleExperimentExpanded = (experimentId: string) => {
+    const newExpanded = new Set(expandedExperiments);
+    if (newExpanded.has(experimentId)) {
+      newExpanded.delete(experimentId);
     } else {
-      newExpanded.add(projectId);
+      newExpanded.add(experimentId);
     }
-    setExpandedProjects(newExpanded);
+    setExpandedExperiments(newExpanded);
   };
 
-  const handleProjectClick = (project: Project) => {
-    // Auto-select the last task if the project has any
-    const lastTask = project.tasks.length > 0 
-      ? project.tasks[project.tasks.length - 1] 
+  const handleExperimentClick = (experiment: Experiment) => {
+    // Auto-select the last task if the experiment has any
+    const lastTask = experiment.tasks.length > 0 
+      ? experiment.tasks[experiment.tasks.length - 1] 
       : null;
     
-    const newSelection: ProjectSelection = {
-      projectId: project.id,
+    const newSelection: ExperimentSelection = {
+      experimentId: experiment.id,
       taskId: lastTask?.id || null
     };
     
     onSelectionChange(newSelection);
-    onLoadContext(project.id, lastTask?.id || null);
+    onLoadContext(experiment.id, lastTask?.id || null);
     
-    // Auto-expand when clicking a project
-    if (!expandedProjects.has(project.id)) {
-      toggleProjectExpanded(project.id);
+    // Auto-expand when clicking a experiment
+    if (!expandedExperiments.has(experiment.id)) {
+      toggleExperimentExpanded(experiment.id);
     }
   };
 
-  const handleTaskClick = (project: Project, task: Task) => {
-    const newSelection: ProjectSelection = {
-      projectId: project.id,
+  const handleTaskClick = (experiment: Experiment, task: Task) => {
+    const newSelection: ExperimentSelection = {
+      experimentId: experiment.id,
       taskId: task.id
     };
     onSelectionChange(newSelection);
-    onLoadContext(project.id, task.id);
+    onLoadContext(experiment.id, task.id);
   };
 
-  const handleCreateProject = async () => {
-    if (!newProjectName.trim()) return;
+  const handleCreateExperiment = async () => {
+    if (!newExperimentName.trim()) return;
     
     try {
-      const project = await createProject(newProjectName);
-      setNewProjectName('');
-      setCreatingProject(false);
-      // Auto-select and expand the new project
-      onSelectionChange({ projectId: project.id, taskId: null });
-      setExpandedProjects(prev => new Set(prev).add(project.id));
+      const experiment = await createExperiment(newExperimentName);
+      setNewExperimentName('');
+      setCreatingExperiment(false);
+      // Auto-select and expand the new experiment
+      onSelectionChange({ experimentId: experiment.id, taskId: null });
+      setExpandedExperiments(prev => new Set(prev).add(experiment.id));
     } catch (error) {
-      console.error('Error creating project:', error);
-      alert('Failed to create project');
+      console.error('Error creating experiment:', error);
+      alert('Failed to create experiment');
     }
   };
 
-  const handleCreateTask = async (projectId: string) => {
+  const handleCreateTask = async (experimentId: string) => {
     if (!newTaskName.trim()) return;
     
     try {
-      const task = await createTask(projectId, newTaskName);
+      const task = await createTask(experimentId, newTaskName);
       setNewTaskName('');
       setCreatingTaskFor(null);
       // Auto-select the new task
-      onSelectionChange({ projectId, taskId: task.id });
-      onLoadContext(projectId, task.id);
+      onSelectionChange({ experimentId, taskId: task.id });
+      onLoadContext(experimentId, task.id);
     } catch (error) {
       console.error('Error creating task:', error);
       alert('Failed to create task');
     }
   };
 
-  const handleEditProject = (project: Project) => {
-    setEditingProject(project.id);
-    setEditProjectName(project.name);
+  const handleEditExperiment = (experiment: Experiment) => {
+    setEditingExperiment(experiment.id);
+    setEditExperimentName(experiment.name);
   };
 
-  const handleSaveProjectEdit = async (project: Project) => {
-    if (!editProjectName.trim()) return;
+  const handleSaveExperimentEdit = async (experiment: Experiment) => {
+    if (!editExperimentName.trim()) return;
     
     try {
-      await updateProject({ ...project, name: editProjectName });
-      setEditingProject(null);
-      setEditProjectName('');
+      await updateExperiment({ ...experiment, name: editExperimentName });
+      setEditingExperiment(null);
+      setEditExperimentName('');
     } catch (error) {
-      console.error('Error updating project:', error);
-      alert('Failed to update project');
+      console.error('Error updating experiment:', error);
+      alert('Failed to update experiment');
     }
   };
 
-  const handleDeleteProject = async (projectId: string) => {
+  const handleDeleteExperiment = async (experimentId: string) => {
     try {
-      await deleteProject(projectId);
+      await deleteExperiment(experimentId);
       setDeletingItem(null);
-      // Clear selection if deleted project was selected
-      if (selection.projectId === projectId) {
-        onSelectionChange({ projectId: null, taskId: null });
+      // Clear selection if deleted experiment was selected
+      if (selection.experimentId === experimentId) {
+        onSelectionChange({ experimentId: null, taskId: null });
       }
     } catch (error) {
-      console.error('Error deleting project:', error);
-      alert('Failed to delete project');
+      console.error('Error deleting experiment:', error);
+      alert('Failed to delete experiment');
     }
   };
 
-  const handleEditTask = (projectId: string, task: Task) => {
-    setEditingTask({ projectId, taskId: task.id });
+  const handleEditTask = (experimentId: string, task: Task) => {
+    setEditingTask({ experimentId, taskId: task.id });
     setEditTaskName(task.name);
   };
 
-  const handleSaveTaskEdit = async (projectId: string, task: Task) => {
+  const handleSaveTaskEdit = async (experimentId: string, task: Task) => {
     if (!editTaskName.trim()) return;
     
     try {
-      await updateTask(projectId, { ...task, name: editTaskName });
+      await updateTask(experimentId, { ...task, name: editTaskName });
       setEditingTask(null);
       setEditTaskName('');
     } catch (error) {
@@ -193,13 +193,13 @@ export const ProjectSidebar: React.FC<ProjectSidebarProps> = ({
     }
   };
 
-  const handleDeleteTask = async (projectId: string, taskId: string) => {
+  const handleDeleteTask = async (experimentId: string, taskId: string) => {
     try {
-      await deleteTask(projectId, taskId);
+      await deleteTask(experimentId, taskId);
       setDeletingItem(null);
       // Clear selection if deleted task was selected
       if (selection.taskId === taskId) {
-        onSelectionChange({ projectId: selection.projectId, taskId: null });
+        onSelectionChange({ experimentId: selection.experimentId, taskId: null });
       }
     } catch (error) {
       console.error('Error deleting task:', error);
@@ -214,7 +214,7 @@ export const ProjectSidebar: React.FC<ProjectSidebarProps> = ({
           <button
             onClick={onToggle}
             className="p-2 text-purple-300 hover:text-white hover:bg-purple-600/30 rounded-lg transition-all"
-            title="Open Projects"
+            title="Open Experiments"
           >
             <FolderOpen className="w-5 h-5" />
           </button>
@@ -227,8 +227,8 @@ export const ProjectSidebar: React.FC<ProjectSidebarProps> = ({
               <div className="mb-4">
                 <h3 className="text-lg font-bold text-white mb-2">Confirm Delete</h3>
                 <p className="text-purple-200 text-sm">
-                  {deletingItem.type === 'project' 
-                    ? `Are you sure you want to delete this project? All ${projects.find(p => p.id === deletingItem.projectId)?.tasks.length || 0} tasks inside will also be deleted.`
+                  {deletingItem.type === 'experiment' 
+                    ? `Are you sure you want to delete this experiment? All ${experiments.find(p => p.id === deletingItem.experimentId)?.tasks.length || 0} tasks inside will also be deleted.`
                     : 'Are you sure you want to delete this task?'}
                 </p>
                 <p className="text-purple-300 text-xs mt-2">This action cannot be undone.</p>
@@ -237,10 +237,10 @@ export const ProjectSidebar: React.FC<ProjectSidebarProps> = ({
               <div className="flex gap-3">
                 <button
                   onClick={() => {
-                    if (deletingItem.type === 'project') {
-                      handleDeleteProject(deletingItem.projectId);
+                    if (deletingItem.type === 'experiment') {
+                      handleDeleteExperiment(deletingItem.experimentId);
                     } else {
-                      handleDeleteTask(deletingItem.projectId, deletingItem.taskId!);
+                      handleDeleteTask(deletingItem.experimentId, deletingItem.taskId!);
                     }
                   }}
                   className="flex-1 px-4 py-2 bg-red-600 hover:bg-red-500 text-white rounded-lg font-semibold transition-all"
@@ -269,7 +269,7 @@ export const ProjectSidebar: React.FC<ProjectSidebarProps> = ({
         <div className="flex items-center justify-between mb-2">
           <div className="flex items-center gap-2">
             <FolderOpen className="w-5 h-5 text-purple-400" />
-            <h2 className="text-lg font-semibold text-white">Projects</h2>
+            <h2 className="text-lg font-semibold text-white">Experiments</h2>
           </div>
           <button
             onClick={onToggle}
@@ -280,12 +280,12 @@ export const ProjectSidebar: React.FC<ProjectSidebarProps> = ({
           </button>
         </div>
         
-        {/* No Project/Task Selected Warning */}
-        {(!selection.projectId || !selection.taskId) && (
+        {/* No Experiment/Task Selected Warning */}
+        {(!selection.experimentId || !selection.taskId) && (
           <div className="mt-2 px-3 py-2 bg-amber-500/20 border border-amber-400/50 rounded-lg">
             <p className="text-amber-200 text-xs">
-              {!selection.projectId 
-                ? '⚠️ No project selected. A new project will be created when you run.'
+              {!selection.experimentId 
+                ? '⚠️ No experiment selected. A new experiment will be created when you run.'
                 : '⚠️ No task selected. A new task will be created when you run.'}
             </p>
           </div>
@@ -300,48 +300,48 @@ export const ProjectSidebar: React.FC<ProjectSidebarProps> = ({
           </div>
         ) : (
           <div className="space-y-1">
-            {/* Projects List */}
-            {projects.map((project) => (
-              <div key={project.id} className="space-y-0.5">
-                {/* Project Item */}
+            {/* Experiments List */}
+            {experiments.map((experiment) => (
+              <div key={experiment.id} className="space-y-0.5">
+                {/* Experiment Item */}
                 <div className="flex items-center group relative">
                   <button
-                    onClick={() => toggleProjectExpanded(project.id)}
+                    onClick={() => toggleExperimentExpanded(experiment.id)}
                     className="p-1 text-purple-300 hover:text-white transition-colors flex-shrink-0"
                   >
-                    {expandedProjects.has(project.id) ? (
+                    {expandedExperiments.has(experiment.id) ? (
                       <ChevronDown className="w-4 h-4" />
                     ) : (
                       <ChevronRight className="w-4 h-4" />
                     )}
                   </button>
                   
-                  {editingProject === project.id ? (
+                  {editingExperiment === experiment.id ? (
                     <div className="flex-1 flex items-center gap-1 px-2">
                       <input
                         type="text"
-                        value={editProjectName}
-                        onChange={(e) => setEditProjectName(e.target.value)}
+                        value={editExperimentName}
+                        onChange={(e) => setEditExperimentName(e.target.value)}
                         onKeyDown={(e) => {
-                          if (e.key === 'Enter') handleSaveProjectEdit(project);
+                          if (e.key === 'Enter') handleSaveExperimentEdit(experiment);
                           if (e.key === 'Escape') {
-                            setEditingProject(null);
-                            setEditProjectName('');
+                            setEditingExperiment(null);
+                            setEditExperimentName('');
                           }
                         }}
                         className="flex-1 px-2 py-1 bg-white/10 border border-purple-400/50 rounded text-white text-sm focus:outline-none focus:border-purple-400"
                         autoFocus
                       />
                       <button
-                        onClick={() => handleSaveProjectEdit(project)}
+                        onClick={() => handleSaveExperimentEdit(experiment)}
                         className="px-2 py-1 bg-purple-600 hover:bg-purple-500 text-white text-xs rounded transition-colors"
                       >
                         Save
                       </button>
                       <button
                         onClick={() => {
-                          setEditingProject(null);
-                          setEditProjectName('');
+                          setEditingExperiment(null);
+                          setEditExperimentName('');
                         }}
                         className="px-2 py-1 bg-white/10 hover:bg-white/20 text-white text-xs rounded transition-colors"
                       >
@@ -351,18 +351,18 @@ export const ProjectSidebar: React.FC<ProjectSidebarProps> = ({
                   ) : (
                     <>
                       <button
-                        onClick={() => handleProjectClick(project)}
+                        onClick={() => handleExperimentClick(experiment)}
                         className={`flex-1 px-3 py-2 text-left text-sm rounded-lg transition-all flex items-center gap-2 min-w-0 ${
-                          selection.projectId === project.id
+                          selection.experimentId === experiment.id
                             ? 'bg-purple-600/50 text-white font-medium'
                             : 'text-purple-200 hover:text-white hover:bg-purple-600/30'
                         }`}
                       >
                         <FolderOpen className="w-4 h-4 flex-shrink-0" />
-                        <span className="truncate flex-1">{project.name}</span>
-                        {project.tasks.length > 0 && (
+                        <span className="truncate flex-1">{experiment.name}</span>
+                        {experiment.tasks.length > 0 && (
                           <span className="text-xs text-purple-400 flex-shrink-0">
-                            {project.tasks.length}
+                            {experiment.tasks.length}
                           </span>
                         )}
                       </button>
@@ -372,20 +372,20 @@ export const ProjectSidebar: React.FC<ProjectSidebarProps> = ({
                           <button
                             onClick={(e) => {
                               e.stopPropagation();
-                              handleEditProject(project);
+                              handleEditExperiment(experiment);
                             }}
                             className="p-1 text-purple-300 hover:text-white hover:bg-purple-600/50 rounded transition-all backdrop-blur-sm bg-slate-800/80"
-                            title="Edit project"
+                            title="Edit experiment"
                           >
                             <Edit2 className="w-3.5 h-3.5" />
                           </button>
                           <button
                             onClick={(e) => {
                               e.stopPropagation();
-                              setDeletingItem({ type: 'project', projectId: project.id });
+                              setDeletingItem({ type: 'experiment', experimentId: experiment.id });
                             }}
                             className="p-1 text-purple-300 hover:text-red-400 hover:bg-red-500/30 rounded transition-all backdrop-blur-sm bg-slate-800/80"
-                            title="Delete project"
+                            title="Delete experiment"
                           >
                             <Trash2 className="w-3.5 h-3.5" />
                           </button>
@@ -396,10 +396,10 @@ export const ProjectSidebar: React.FC<ProjectSidebarProps> = ({
                 </div>
 
                 {/* Tasks List */}
-                {expandedProjects.has(project.id) && (
+                {expandedExperiments.has(experiment.id) && (
                   <div className="ml-6 space-y-0.5">
                     {/* Task Items */}
-                    {project.tasks.map((task) => (
+                    {experiment.tasks.map((task) => (
                       <div key={task.id} className="flex items-center group relative">
                         {editingTask?.taskId === task.id ? (
                           <div className="flex-1 flex items-center gap-1 px-2 py-1">
@@ -408,7 +408,7 @@ export const ProjectSidebar: React.FC<ProjectSidebarProps> = ({
                               value={editTaskName}
                               onChange={(e) => setEditTaskName(e.target.value)}
                               onKeyDown={(e) => {
-                                if (e.key === 'Enter') handleSaveTaskEdit(project.id, task);
+                                if (e.key === 'Enter') handleSaveTaskEdit(experiment.id, task);
                                 if (e.key === 'Escape') {
                                   setEditingTask(null);
                                   setEditTaskName('');
@@ -418,7 +418,7 @@ export const ProjectSidebar: React.FC<ProjectSidebarProps> = ({
                               autoFocus
                             />
                             <button
-                              onClick={() => handleSaveTaskEdit(project.id, task)}
+                              onClick={() => handleSaveTaskEdit(experiment.id, task)}
                               className="px-2 py-0.5 bg-purple-600 hover:bg-purple-500 text-white text-xs rounded transition-colors"
                             >
                               Save
@@ -436,7 +436,7 @@ export const ProjectSidebar: React.FC<ProjectSidebarProps> = ({
                         ) : (
                           <>
                             <button
-                              onClick={() => handleTaskClick(project, task)}
+                              onClick={() => handleTaskClick(experiment, task)}
                               className={`flex-1 px-3 py-1.5 text-left text-xs rounded transition-all flex items-center gap-2 min-w-0 ${
                                 selection.taskId === task.id
                                   ? 'bg-purple-600/50 text-white font-medium'
@@ -456,7 +456,7 @@ export const ProjectSidebar: React.FC<ProjectSidebarProps> = ({
                                 <button
                                   onClick={(e) => {
                                     e.stopPropagation();
-                                    handleEditTask(project.id, task);
+                                    handleEditTask(experiment.id, task);
                                   }}
                                   className="p-0.5 text-purple-300 hover:text-white hover:bg-purple-600/50 rounded transition-all backdrop-blur-sm bg-slate-800/80"
                                   title="Edit task"
@@ -466,7 +466,7 @@ export const ProjectSidebar: React.FC<ProjectSidebarProps> = ({
                                 <button
                                   onClick={(e) => {
                                     e.stopPropagation();
-                                    setDeletingItem({ type: 'task', projectId: project.id, taskId: task.id });
+                                    setDeletingItem({ type: 'task', experimentId: experiment.id, taskId: task.id });
                                   }}
                                   className="p-0.5 text-purple-300 hover:text-red-400 hover:bg-red-500/30 rounded transition-all backdrop-blur-sm bg-slate-800/80"
                                   title="Delete task"
@@ -481,9 +481,9 @@ export const ProjectSidebar: React.FC<ProjectSidebarProps> = ({
                     ))}
 
                     {/* Create New Task (at bottom) */}
-                    {creatingTaskFor !== project.id ? (
+                    {creatingTaskFor !== experiment.id ? (
                       <button
-                        onClick={() => setCreatingTaskFor(project.id)}
+                        onClick={() => setCreatingTaskFor(experiment.id)}
                         className="w-full px-3 py-1.5 text-left text-xs text-purple-300 hover:text-white hover:bg-purple-600/20 rounded transition-all flex items-center gap-2 group"
                       >
                         <Plus className="w-3 h-3 group-hover:scale-110 transition-transform" />
@@ -496,7 +496,7 @@ export const ProjectSidebar: React.FC<ProjectSidebarProps> = ({
                           value={newTaskName}
                           onChange={(e) => setNewTaskName(e.target.value)}
                           onKeyDown={(e) => {
-                            if (e.key === 'Enter') handleCreateTask(project.id);
+                            if (e.key === 'Enter') handleCreateTask(experiment.id);
                             if (e.key === 'Escape') {
                               setCreatingTaskFor(null);
                               setNewTaskName('');
@@ -508,7 +508,7 @@ export const ProjectSidebar: React.FC<ProjectSidebarProps> = ({
                         />
                         <div className="flex gap-2">
                           <button
-                            onClick={() => handleCreateTask(project.id)}
+                            onClick={() => handleCreateTask(experiment.id)}
                             className="flex-1 px-2 py-1 bg-purple-600 hover:bg-purple-500 text-white text-xs rounded transition-colors"
                           >
                             Create
@@ -530,43 +530,43 @@ export const ProjectSidebar: React.FC<ProjectSidebarProps> = ({
               </div>
             ))}
 
-            {/* Create New Project Button (at bottom) */}
-            {!creatingProject ? (
+            {/* Create New Experiment Button (at bottom) */}
+            {!creatingExperiment ? (
               <button
-                onClick={() => setCreatingProject(true)}
+                onClick={() => setCreatingExperiment(true)}
                 className="w-full px-3 py-2 text-left text-sm text-purple-300 hover:text-white hover:bg-purple-600/30 rounded-lg transition-all flex items-center gap-2 group"
               >
                 <Plus className="w-4 h-4 group-hover:scale-110 transition-transform" />
-                <span>New Project</span>
+                <span>New Experiment</span>
               </button>
             ) : (
               <div className="px-3 py-2 space-y-2">
                 <input
                   type="text"
-                  value={newProjectName}
-                  onChange={(e) => setNewProjectName(e.target.value)}
+                  value={newExperimentName}
+                  onChange={(e) => setNewExperimentName(e.target.value)}
                   onKeyDown={(e) => {
-                    if (e.key === 'Enter') handleCreateProject();
+                    if (e.key === 'Enter') handleCreateExperiment();
                     if (e.key === 'Escape') {
-                      setCreatingProject(false);
-                      setNewProjectName('');
+                      setCreatingExperiment(false);
+                      setNewExperimentName('');
                     }
                   }}
-                  placeholder="Project name..."
+                  placeholder="Experiment name..."
                   className="w-full px-2 py-1 bg-white/10 border border-purple-400/50 rounded text-white text-sm focus:outline-none focus:border-purple-400"
                   autoFocus
                 />
                 <div className="flex gap-2">
                   <button
-                    onClick={handleCreateProject}
+                    onClick={handleCreateExperiment}
                     className="flex-1 px-2 py-1 bg-purple-600 hover:bg-purple-500 text-white text-xs rounded transition-colors"
                   >
                     Create
                   </button>
                   <button
                     onClick={() => {
-                      setCreatingProject(false);
-                      setNewProjectName('');
+                      setCreatingExperiment(false);
+                      setNewExperimentName('');
                     }}
                     className="flex-1 px-2 py-1 bg-white/10 hover:bg-white/20 text-white text-xs rounded transition-colors"
                   >
@@ -576,10 +576,10 @@ export const ProjectSidebar: React.FC<ProjectSidebarProps> = ({
               </div>
             )}
 
-            {projects.length === 0 && !creatingProject && (
+            {experiments.length === 0 && !creatingExperiment && (
               <div className="text-center py-8 text-purple-300 text-sm">
-                <p>No projects yet</p>
-                <p className="text-xs mt-1">Click "New Project" to get started</p>
+                <p>No experiments yet</p>
+                <p className="text-xs mt-1">Click "New Experiment" to get started</p>
               </div>
             )}
           </div>
@@ -594,8 +594,8 @@ export const ProjectSidebar: React.FC<ProjectSidebarProps> = ({
           <div className="mb-4">
             <h3 className="text-lg font-bold text-white mb-2">Confirm Delete</h3>
             <p className="text-purple-200 text-sm">
-              {deletingItem.type === 'project' 
-                ? `Are you sure you want to delete this project? All ${projects.find(p => p.id === deletingItem.projectId)?.tasks.length || 0} tasks inside will also be deleted.`
+              {deletingItem.type === 'experiment' 
+                ? `Are you sure you want to delete this experiment? All ${experiments.find(p => p.id === deletingItem.experimentId)?.tasks.length || 0} tasks inside will also be deleted.`
                 : 'Are you sure you want to delete this task?'}
             </p>
             <p className="text-purple-300 text-xs mt-2">This action cannot be undone.</p>
@@ -604,10 +604,10 @@ export const ProjectSidebar: React.FC<ProjectSidebarProps> = ({
           <div className="flex gap-3">
             <button
               onClick={() => {
-                if (deletingItem.type === 'project') {
-                  handleDeleteProject(deletingItem.projectId);
+                if (deletingItem.type === 'experiment') {
+                  handleDeleteExperiment(deletingItem.experimentId);
                 } else {
-                  handleDeleteTask(deletingItem.projectId, deletingItem.taskId!);
+                  handleDeleteTask(deletingItem.experimentId, deletingItem.taskId!);
                 }
               }}
               className="flex-1 px-4 py-2 bg-red-600 hover:bg-red-500 text-white rounded-lg font-semibold transition-all"
@@ -629,12 +629,12 @@ export const ProjectSidebar: React.FC<ProjectSidebarProps> = ({
 };
 
 // Custom hook to manage sidebar state
-export const useProjectSidebar = () => {
+export const useExperimentSidebar = () => {
   const SELECTION_STORAGE_KEY = 'flask_copilot_last_selection';
   
   const [isOpen, setIsOpen] = useState(true);
-  const [selection, setSelectionState] = useState<ProjectSelection>({
-    projectId: null,
+  const [selection, setSelectionState] = useState<ExperimentSelection>({
+    experimentId: null,
     taskId: null
   });
   const [hasLoadedInitialSelection, setHasLoadedInitialSelection] = useState(false);
@@ -654,7 +654,7 @@ export const useProjectSidebar = () => {
   }, []);
 
   // Save selection to localStorage whenever it changes
-  const setSelection = React.useCallback((newSelection: ProjectSelection) => {
+  const setSelection = React.useCallback((newSelection: ExperimentSelection) => {
     setSelectionState(newSelection);
     localStorage.setItem(SELECTION_STORAGE_KEY, JSON.stringify(newSelection));
   }, []);
@@ -669,26 +669,26 @@ export const useProjectSidebar = () => {
   };
 };
 
-// Separate hook for project management functions to be used in the main app
-export const useProjectManagement = () => {
-  const { projects, createProject, createTask } = useProjectData();
+// Separate hook for experiment management functions to be used in the main app
+export const useExperimentManagement = () => {
+  const { experiments, createExperiment, createTask } = useExperimentData();
 
-  const createProjectAndTask = React.useCallback(async (
-    projectName: string, 
+  const createExperimentAndTask = React.useCallback(async (
+    experimentName: string, 
     taskName: string
-  ): Promise<{ projectId: string; taskId: string }> => {
-    const project = await createProject(projectName);
-    const task = await createTask(project.id, taskName);
+  ): Promise<{ experimentId: string; taskId: string }> => {
+    const experiment = await createExperiment(experimentName);
+    const task = await createTask(experiment.id, taskName);
     
     return {
-      projectId: project.id,
+      experimentId: experiment.id,
       taskId: task.id
     };
-  }, [createProject, createTask]);
+  }, [createExperiment, createTask]);
 
   return {
-    projects,  // Expose projects list
-    createProjectAndTask,
+    experiments,  // Expose experiments list
+    createExperimentAndTask,
     createTask  // Export this so it can be used separately
   };
 };

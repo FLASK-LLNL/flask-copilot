@@ -3,13 +3,13 @@ import React, { useState, useRef, useEffect } from 'react';
 import { Loader2, FlaskConical, TestTubeDiagonal, Network, Play, RotateCcw, X, Send, RefreshCw, Sparkles } from 'lucide-react';
 
 import { WS_SERVER } from './config';
-import { TreeNode, Edge, ContextMenuState, SidebarMessage, Tool, WebSocketMessageToServer, WebSocketMessage, ProjectSelection } from './types';
+import { TreeNode, Edge, ContextMenuState, SidebarMessage, Tool, WebSocketMessageToServer, WebSocketMessage } from './types';
 
 import { loadRDKit } from './components/molecule';
 import { ReasoningSidebar, useSidebarState } from './components/sidebar';
 import { MoleculeGraph, useGraphState } from './components/graph';
 import { MultiSelectToolModal, SelectableTool } from './components/multi_select_tools';
-import { ProjectSidebar, useProjectSidebar, useProjectManagement } from './components/project_sidebar';
+import { ExperimentSidebar, useExperimentSidebar, useExperimentManagement } from './components/project_sidebar';
 
 import { findAllDescendants, hasDescendants, isRootNode, relayoutTree } from './tree_utils';
 import { copyToClipboard } from './utils';
@@ -49,8 +49,8 @@ const ChemistryTool: React.FC = () => {
   const graphState = useGraphState();
   const sidebarState = useSidebarState();
   const metricsDashboardState = useMetricsDashboardState();
-  const projectSidebar = useProjectSidebar();
-  const projectManagement = useProjectManagement();
+  const experimentSidebar = useExperimentSidebar();
+  const experimentManagement = useExperimentManagement();
 
   const [showToolSelectionModal, setShowToolSelectionModal] = useState<boolean>(false);
   const [selectedTools, setSelectedTools] = useState<number[]>([]);
@@ -80,9 +80,9 @@ const ChemistryTool: React.FC = () => {
   const runComputation = async (): Promise<void> => {
     setSidebarOpen(true);
 
-    // Check if we need to create project and/or task
-    if (!projectSidebar.selection.projectId) {
-      // No project at all - create both project and task
+    // Check if we need to create experiment and/or task
+    if (!experimentSidebar.selection.experimentId) {
+      // No experiment at all - create both experiment and task
       const now = new Date();
       const month = String(now.getMonth() + 1).padStart(2, '0');
       const day = String(now.getDate()).padStart(2, '0');
@@ -91,34 +91,34 @@ const ChemistryTool: React.FC = () => {
       const minutes = String(now.getMinutes()).padStart(2, '0');
       const timestamp = `${month}/${day}/${year} ${hours}:${minutes}`;
       
-      const projectName = `Project ${timestamp}`;
+      const experimentName = `Experiment ${timestamp}`;
       const taskName = `Task 1`;
       
       try {
-        const { projectId, taskId } = await projectManagement.createProjectAndTask(
-          projectName,
+        const { experimentId, taskId } = await experimentManagement.createExperimentAndTask(
+          experimentName,
           taskName
         );
         
-        projectSidebar.setSelection({ projectId, taskId });
+        experimentSidebar.setSelection({ experimentId, taskId });
         await new Promise(resolve => setTimeout(resolve, 100));
       } catch (error) {
-        console.error('Error creating project:', error);
-        alert('Failed to create project');
+        console.error('Error creating experiment:', error);
+        alert('Failed to create experiment');
         return;
       }
-    } else if (!projectSidebar.selection.taskId) {
-      // Project exists but no task - create just an task
-      const projectId = projectSidebar.selection.projectId;
+    } else if (!experimentSidebar.selection.taskId) {
+      // Experiment exists but no task - create just an task
+      const experimentId = experimentSidebar.selection.experimentId;
       
-      // Find the project to count existing tasks
-      const project = projectManagement.projects.find(p => p.id === projectId);
-      const taskCount = project ? project.tasks.length + 1 : 1;
+      // Find the experiment to count existing tasks
+      const experiment = experimentManagement.experiments.find(p => p.id === experimentId);
+      const taskCount = experiment ? experiment.tasks.length + 1 : 1;
       const taskName = `Task ${taskCount}`;
       
       try {
-        const task = await projectManagement.createTask(projectId, taskName);
-        projectSidebar.setSelection({ projectId, taskId: task.id });
+        const task = await experimentManagement.createTask(experimentId, taskName);
+        experimentSidebar.setSelection({ experimentId, taskId: task.id });
         await new Promise(resolve => setTimeout(resolve, 100));
       } catch (error) {
         console.error('Error creating task:', error);
@@ -345,9 +345,9 @@ const ChemistryTool: React.FC = () => {
     input.click();
   };
 
-  const loadContextFromTask = (projectId: string, taskId: string | null): void => {
+  const loadContextFromTask = (experimentId: string, taskId: string | null): void => {
     // TODO: Properly implement once system state is well defined.
-    console.log('Loading context:', { projectId, taskId });
+    console.log('Loading context:', { experimentId, taskId });
     return;
   }
 
@@ -457,14 +457,14 @@ const ChemistryTool: React.FC = () => {
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900">
       <div className="flex min-h-screen">
-        <ProjectSidebar
-          isOpen={projectSidebar.isOpen}
-          onToggle={projectSidebar.toggleSidebar}
-          selection={projectSidebar.selection}
-          onSelectionChange={projectSidebar.setSelection}
+        <ExperimentSidebar
+          isOpen={experimentSidebar.isOpen}
+          onToggle={experimentSidebar.toggleSidebar}
+          selection={experimentSidebar.selection}
+          onSelectionChange={experimentSidebar.setSelection}
           onLoadContext={loadContextFromTask}
           isComputing={isComputing}
-          hasLoadedInitialSelection={projectSidebar.hasLoadedInitialSelection}
+          hasLoadedInitialSelection={experimentSidebar.hasLoadedInitialSelection}
         />
         <div className={`p-8 ${sidebarOpen ? 'flex-1' : 'w-full'}`}>
           <div className="max-w-7xl mx-auto">

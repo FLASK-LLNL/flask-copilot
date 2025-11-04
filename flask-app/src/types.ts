@@ -155,7 +155,7 @@ export interface MetricsDashboardProps extends MetricsDashboardState {
     treeNodes: TreeNode[];
 }
 
-// Project types
+// Experiment types
 export interface Task {
   id: string;
   name: string;
@@ -169,7 +169,7 @@ export interface Task {
   edges?: any[];
 }
 
-export interface Project {
+export interface Experiment {
   id: string;
   name: string;
   createdAt: string;
@@ -177,7 +177,7 @@ export interface Project {
   tasks: Task[];
 }
 
-export interface ProjectSelection {
-  projectId: string | null;
+export interface ExperimentSelection {
+  experimentId: string | null;
   taskId: string | null;
 }
