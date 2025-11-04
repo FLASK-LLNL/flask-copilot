@@ -80,9 +80,9 @@ const ChemistryTool: React.FC = () => {
   const runComputation = async (): Promise<void> => {
     setSidebarOpen(true);
 
-    // Check if we need to create project and/or experiment
+    // Check if we need to create project and/or task
     if (!projectSidebar.selection.projectId) {
-      // No project at all - create both project and experiment
+      // No project at all - create both project and task
       const now = new Date();
       const month = String(now.getMonth() + 1).padStart(2, '0');
       const day = String(now.getDate()).padStart(2, '0');
@@ -92,37 +92,37 @@ const ChemistryTool: React.FC = () => {
       const timestamp = `${month}/${day}/${year} ${hours}:${minutes}`;
       
       const projectName = `Project ${timestamp}`;
-      const experimentName = `Experiment 1`;
+      const taskName = `Task 1`;
       
       try {
-        const { projectId, experimentId } = await projectManagement.createProjectAndExperiment(
+        const { projectId, taskId } = await projectManagement.createProjectAndTask(
           projectName,
-          experimentName
+          taskName
         );
         
-        projectSidebar.setSelection({ projectId, experimentId });
+        projectSidebar.setSelection({ projectId, taskId });
         await new Promise(resolve => setTimeout(resolve, 100));
       } catch (error) {
         console.error('Error creating project:', error);
         alert('Failed to create project');
         return;
       }
-    } else if (!projectSidebar.selection.experimentId) {
-      // Project exists but no experiment - create just an experiment
+    } else if (!projectSidebar.selection.taskId) {
+      // Project exists but no task - create just an task
       const projectId = projectSidebar.selection.projectId;
       
-      // Find the project to count existing experiments
+      // Find the project to count existing tasks
       const project = projectManagement.projects.find(p => p.id === projectId);
-      const experimentCount = project ? project.experiments.length + 1 : 1;
-      const experimentName = `Experiment ${experimentCount}`;
+      const taskCount = project ? project.tasks.length + 1 : 1;
+      const taskName = `Task ${taskCount}`;
       
       try {
-        const experiment = await projectManagement.createExperiment(projectId, experimentName);
-        projectSidebar.setSelection({ projectId, experimentId: experiment.id });
+        const task = await projectManagement.createTask(projectId, taskName);
+        projectSidebar.setSelection({ projectId, taskId: task.id });
         await new Promise(resolve => setTimeout(resolve, 100));
       } catch (error) {
-        console.error('Error creating experiment:', error);
-        alert('Failed to create experiment');
+        console.error('Error creating task:', error);
+        alert('Failed to create task');
         return;
       }
     }
@@ -345,9 +345,9 @@ const ChemistryTool: React.FC = () => {
     input.click();
   };
 
-  const loadContextFromExperiment = (projectId: string, experimentId: string | null): void => {
+  const loadContextFromTask = (projectId: string, taskId: string | null): void => {
     // TODO: Properly implement once system state is well defined.
-    console.log('Loading context:', { projectId, experimentId });
+    console.log('Loading context:', { projectId, taskId });
     return;
   }
 
@@ -462,7 +462,7 @@ const ChemistryTool: React.FC = () => {
           onToggle={projectSidebar.toggleSidebar}
           selection={projectSidebar.selection}
           onSelectionChange={projectSidebar.setSelection}
-          onLoadContext={loadContextFromExperiment}
+          onLoadContext={loadContextFromTask}
           isComputing={isComputing}
           hasLoadedInitialSelection={projectSidebar.hasLoadedInitialSelection}
         />

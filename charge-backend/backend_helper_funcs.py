@@ -155,7 +155,7 @@ class CallbackHandler:
 
 class RetrosynthesisContext:
     """
-    Manages a retrosynthesis experiment
+    Manages a retrosynthesis task
     """
 
     def __init__(self):

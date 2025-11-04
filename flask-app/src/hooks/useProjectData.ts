@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Project, Experiment } from '../types';
+import { Project, Task } from '../types';
 
 const STORAGE_KEY = 'flask_copilot_projects';
 
@@ -10,10 +10,10 @@ interface ProjectDataSource {
   createProject: (name: string) => Promise<Project>;
   updateProject: (project: Project) => Promise<void>;
   deleteProject: (projectId: string) => Promise<void>;
-  createExperiment: (projectId: string, name: string) => Promise<Experiment>;
-  updateExperiment: (projectId: string, experiment: Experiment) => Promise<void>;
-  deleteExperiment: (projectId: string, experimentId: string) => Promise<void>;
-  setExperimentRunning: (projectId: string, experimentId: string, isRunning: boolean) => Promise<void>;
+  createTask: (projectId: string, name: string) => Promise<Task>;
+  updateTask: (projectId: string, task: Task) => Promise<void>;
+  deleteTask: (projectId: string, taskId: string) => Promise<void>;
+  setTaskRunning: (projectId: string, taskId: string, isRunning: boolean) => Promise<void>;
 }
 
 // LocalStorage implementation
@@ -39,7 +39,7 @@ class LocalStorageDataSource implements ProjectDataSource {
       name,
       createdAt: new Date().toISOString(),
       lastModified: new Date().toISOString(),
-      experiments: []
+      tasks: []
     };
     
     const projects = await this.loadProjects();
@@ -64,8 +64,8 @@ class LocalStorageDataSource implements ProjectDataSource {
     await this.saveProjects(filtered);
   }
 
-  async createExperiment(projectId: string, name: string): Promise<Experiment> {
-    const newExperiment: Experiment = {
+  async createTask(projectId: string, name: string): Promise<Task> {
+    const newTask: Task = {
       id: `exp_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
       name,
       createdAt: new Date().toISOString(),
@@ -75,45 +75,45 @@ class LocalStorageDataSource implements ProjectDataSource {
     const projects = await this.loadProjects();
     const project = projects.find(p => p.id === projectId);
     if (project) {
-      project.experiments.push(newExperiment);
+      project.tasks.push(newTask);
       project.lastModified = new Date().toISOString();
       await this.saveProjects(projects);
     }
 
-    return newExperiment;
+    return newTask;
   }
 
-  async updateExperiment(projectId: string, experiment: Experiment): Promise<void> {
+  async updateTask(projectId: string, task: Task): Promise<void> {
     const projects = await this.loadProjects();
     const project = projects.find(p => p.id === projectId);
     if (project) {
-      const expIndex = project.experiments.findIndex(e => e.id === experiment.id);
+      const expIndex = project.tasks.findIndex(e => e.id === task.id);
       if (expIndex !== -1) {
-        project.experiments[expIndex] = { ...experiment, lastModified: new Date().toISOString() };
+        project.tasks[expIndex] = { ...task, lastModified: new Date().toISOString() };
         project.lastModified = new Date().toISOString();
         await this.saveProjects(projects);
       }
     }
   }
 
-  async deleteExperiment(projectId: string, experimentId: string): Promise<void> {
+  async deleteTask(projectId: string, taskId: string): Promise<void> {
     const projects = await this.loadProjects();
     const project = projects.find(p => p.id === projectId);
     if (project) {
-      project.experiments = project.experiments.filter(e => e.id !== experimentId);
+      project.tasks = project.tasks.filter(e => e.id !== taskId);
       project.lastModified = new Date().toISOString();
       await this.saveProjects(projects);
     }
   }
 
-  async setExperimentRunning(projectId: string, experimentId: string, isRunning: boolean): Promise<void> {
+  async setTaskRunning(projectId: string, taskId: string, isRunning: boolean): Promise<void> {
     const projects = await this.loadProjects();
     const project = projects.find(p => p.id === projectId);
     if (project) {
-      const experiment = project.experiments.find(e => e.id === experimentId);
-      if (experiment) {
-        experiment.isRunning = isRunning;
-        experiment.lastModified = new Date().toISOString();
+      const task = project.tasks.find(e => e.id === taskId);
+      if (task) {
+        task.isRunning = isRunning;
+        task.lastModified = new Date().toISOString();
         project.lastModified = new Date().toISOString();
         await this.saveProjects(projects);
       }
@@ -170,24 +170,24 @@ export const useProjectData = () => {
     await loadProjects();
   };
 
-  const createExperiment = async (projectId: string, name: string): Promise<Experiment> => {
-    const newExperiment = await dataSource.createExperiment(projectId, name);
+  const createTask = async (projectId: string, name: string): Promise<Task> => {
+    const newTask = await dataSource.createTask(projectId, name);
     await loadProjects();
-    return newExperiment;
+    return newTask;
   };
 
-  const updateExperiment = async (projectId: string, experiment: Experiment) => {
-    await dataSource.updateExperiment(projectId, experiment);
-    await loadProjects();
-  };
-
-  const deleteExperiment = async (projectId: string, experimentId: string) => {
-    await dataSource.deleteExperiment(projectId, experimentId);
+  const updateTask = async (projectId: string, task: Task) => {
+    await dataSource.updateTask(projectId, task);
     await loadProjects();
   };
 
-  const setExperimentRunning = async (projectId: string, experimentId: string, isRunning: boolean) => {
-    await dataSource.setExperimentRunning(projectId, experimentId, isRunning);
+  const deleteTask = async (projectId: string, taskId: string) => {
+    await dataSource.deleteTask(projectId, taskId);
+    await loadProjects();
+  };
+
+  const setTaskRunning = async (projectId: string, taskId: string, isRunning: boolean) => {
+    await dataSource.setTaskRunning(projectId, taskId, isRunning);
     await loadProjects();
   };
 
@@ -197,10 +197,10 @@ export const useProjectData = () => {
     createProject,
     updateProject,
     deleteProject,
-    createExperiment,
-    updateExperiment,
-    deleteExperiment,
-    setExperimentRunning,
+    createTask,
+    updateTask,
+    deleteTask,
+    setTaskRunning,
     refreshProjects: loadProjects
   };
 };
