@@ -36,6 +36,12 @@ export const ExperimentSidebar: React.FC<ExperimentSidebarProps> = ({
     setTaskRunning
   } = useExperimentData();
 
+  const SIDEBAR_WIDTH_STORAGE_KEY = 'flask_copilot_sidebar_width';
+  const MIN_WIDTH = 200;
+  const MAX_WIDTH = 1600;
+  const DEFAULT_WIDTH = 320;
+  const COLLAPSE_THRESHOLD = 5;
+
   const [expandedExperiments, setExpandedExperiments] = useState<Set<string>>(new Set());
   const [creatingExperiment, setCreatingExperiment] = useState(false);
   const [newExperimentName, setNewExperimentName] = useState('');
@@ -47,6 +53,57 @@ export const ExperimentSidebar: React.FC<ExperimentSidebarProps> = ({
   const [editTaskName, setEditTaskName] = useState('');
   const [deletingItem, setDeletingItem] = useState<{ type: 'experiment' | 'task'; experimentId: string; taskId?: string } | null>(null);
   const [hasRestoredSelection, setHasRestoredSelection] = useState(false);
+  const [sidebarWidth, setSidebarWidth] = useState<number>(() => {
+    const saved = localStorage.getItem(SIDEBAR_WIDTH_STORAGE_KEY);
+    return saved ? parseInt(saved, 10) : DEFAULT_WIDTH;
+  });
+  const [isResizing, setIsResizing] = useState(false);
+
+  // Save width to localStorage when it changes
+  React.useEffect(() => {
+    localStorage.setItem(SIDEBAR_WIDTH_STORAGE_KEY, sidebarWidth.toString());
+  }, [sidebarWidth]);
+
+  // Handle resize
+  React.useEffect(() => {
+    if (!isResizing) return;
+
+    // Add cursor style to body
+    document.body.style.cursor = 'col-resize';
+    document.body.style.userSelect = 'none';
+
+    const handleMouseMove = (e: MouseEvent) => {
+      const newWidth = e.clientX;
+      
+      // Check if width falls below collapse threshold
+      if (newWidth < COLLAPSE_THRESHOLD) {
+        onToggle(); // Collapse the sidebar
+        setIsResizing(false);
+        return;
+      }
+      
+      // Constrain width between min and max
+      if (newWidth >= MIN_WIDTH && newWidth <= MAX_WIDTH) {
+        setSidebarWidth(newWidth);
+      }
+    };
+
+    const handleMouseUp = () => {
+      setIsResizing(false);
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+    };
+
+    document.addEventListener('mousemove', handleMouseMove);
+    document.addEventListener('mouseup', handleMouseUp);
+
+    return () => {
+      document.removeEventListener('mousemove', handleMouseMove);
+      document.removeEventListener('mouseup', handleMouseUp);
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+    };
+  }, [isResizing, onToggle]);
 
   // Auto-expand and load context when initial selection is loaded from localStorage
   React.useEffect(() => {
@@ -263,7 +320,10 @@ export const ExperimentSidebar: React.FC<ExperimentSidebarProps> = ({
 
   return (
     <>
-    <div className="w-80 bg-slate-800/50 backdrop-blur-sm border-r border-purple-400/30 flex flex-col">
+    <div 
+      className="bg-slate-800/50 backdrop-blur-sm border-r border-purple-400/30 flex flex-col relative"
+      style={{ width: `${sidebarWidth}px` }}
+    >
       {/* Header */}
       <div className="p-4 border-b border-purple-400/30">
         <div className="flex items-center justify-between mb-2">
@@ -584,6 +644,27 @@ export const ExperimentSidebar: React.FC<ExperimentSidebarProps> = ({
             )}
           </div>
         )}
+      </div>
+
+      {/* Resize Handle */}
+      <div
+        className={`absolute top-0 right-0 bottom-0 w-2 cursor-col-resize group ${
+          isResizing ? 'bg-purple-400/30' : ''
+        }`}
+        onMouseDown={(e) => {
+          e.preventDefault();
+          setIsResizing(true);
+        }}
+        title="Drag to resize (drag left to collapse)"
+      >
+        {/* Visual indicator line */}
+        <div className="absolute top-0 bottom-0 right-0 w-0.5 bg-purple-400/20 group-hover:bg-purple-400/50 transition-colors" />
+        {/* Center grip indicator */}
+        <div className="absolute top-1/2 right-0.5 -translate-y-1/2 flex flex-col gap-1">
+          <div className="w-0.5 h-1 bg-purple-400/40 group-hover:bg-purple-400/70 transition-colors" />
+          <div className="w-0.5 h-1 bg-purple-400/40 group-hover:bg-purple-400/70 transition-colors" />
+          <div className="w-0.5 h-1 bg-purple-400/40 group-hover:bg-purple-400/70 transition-colors" />
+        </div>
       </div>
     </div>
 
