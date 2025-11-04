@@ -42,19 +42,25 @@ export interface Tool {
   description?: string;
 }
 
+export interface ToolMap {
+  selectedIds?: number[];
+  selectedTools?: SelectableTool[]
+}
+
 export interface WebSocketMessageToServer {
-  action?: string;
+  action?: string;{
   smiles?: string;
   problemType?: string;
   nodeId?: string;
   query?: string;
   experimentContext?: string;
+  enabledTools?: ToolMap;
 }
 
 // Messages received from backend
 export interface WebSocketMessage {
   type: string;
-  
+
   node?: TreeNode;
   edge?: Edge;
   message?: SidebarMessage;

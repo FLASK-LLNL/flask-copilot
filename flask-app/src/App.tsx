@@ -69,9 +69,9 @@ const ChemistryTool: React.FC = () => {
   // Callback function to send selected tools to backend
   const handleToolSelectionConfirm = async (
     selectedIds: number[],
-    selectedItemsData: SelectableItem[]
+    selectedItemsData: SelectableTool[]
   ): Promise<void> => {
-    if (!websocket || websocket.readyState !== WebSocket.OPEN) {
+    if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) {
       alert('WebSocket not connected');
 //      return;
     }
@@ -79,24 +79,18 @@ const ChemistryTool: React.FC = () => {
     console.log('Selected IDs:', selectedIds);
     console.log('Selected Items Data:', selectedItemsData);
 
-    // Send data to backend via WebSocket
-    // const payload = {
-    //   type: 'ITEMS_SELECTED',
-    //   timestamp: new Date().toISOString(),
-    //   selectedIds: selectedIds,
-    //   selectedItems: selectedItemsData,
-    //   problemType: problemName // Include other relevant context
-    // };
-
-    if (!websocket || websocket.readyState !== WebSocket.OPEN) {
+    if (wsRef.current && wsRef.current.readyState == WebSocket.OPEN) {
       const message: WebSocketMessageToServer = {
-        action: problemType === "enableTool",
-        nodeId: showToolSelectionModal?.id,
-        query: itemId
+        action: "select-tools-for-task",
+          enabledTools: {
+            selectedIds: selectedIds,
+            selectedTools: selectedItemsData,
+          }
       };
-      websocket.send(JSON.stringify(message));
+
+      wsRef.current.send(JSON.stringify(message));
+      console.log('Sending data:', JSON.stringify(message));
     }
-//    sendMessage(payload);
 
     // Optional: Add any additional processing or API calls here
     // await fetch('/api/save-selection', { method: 'POST', body: JSON.stringify(payload) });
