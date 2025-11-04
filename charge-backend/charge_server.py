@@ -305,6 +305,10 @@ async def websocket_endpoint(websocket: WebSocket):
                         "type": "available-tools-response",
                         "tools": [tool.json() for tool in tools],
                     })
+            elif action == "select-tools-for-task":
+                query = data.get("query", None)
+                logger.info("Select tools for task")
+                logger.info(f"Data: {data}")
             elif action == "custom_query":
                 await websocket.send_json(
                     {
