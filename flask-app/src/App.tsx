@@ -466,8 +466,8 @@ const ChemistryTool: React.FC = () => {
           isComputing={isComputing}
           hasLoadedInitialSelection={experimentSidebar.hasLoadedInitialSelection}
         />
-        <div className={`p-8 ${sidebarOpen ? 'flex-1' : 'w-full'}`}>
-          <div className="max-w-7xl mx-auto">
+        <div className="flex-1 min-w-0 p-8">
+          <div className="w-full">
             <div className="absolute top-10 text-white">
               <svg version="1.1" id="Layer_1" height="60px" viewBox="0 0 40 40">
                 <g>
@@ -663,7 +663,7 @@ const ChemistryTool: React.FC = () => {
 
               <div className="flex items-center gap-4">
                 <div className="flex items-end gap-2">
-                  <div className="w-100">
+                  <div>
                     <label className="block text-sm font-medium text-purple-200 mb-2">
                       Problem Type
                       {promptsModified && <span className="ml-2 text-xs text-amber-400">●</span>}
@@ -679,6 +679,7 @@ const ChemistryTool: React.FC = () => {
                   <button onClick={() => setEditPromptsModal(true)} disabled={true} className="px-3 py-2.5 bg-white/10 text-purple-200 rounded-lg text-sm font-medium hover:bg-white/20 transition-all disabled:opacity-50 disabled:cursor-not-allowed">
                     Edit
                   </button>
+                  {/*
                   <button
                     onClick={() => setShowToolSelectionModal(true)}
                     disabled={isComputing}
@@ -686,16 +687,17 @@ const ChemistryTool: React.FC = () => {
                   >
                     Select Tools {selectedTools.length > 0 && `(${selectedTools.length})`}
                   </button>
+                  */}
                 </div>
 
-                <div className="flex gap-3 flex-1 justify-end">
+                <div className="flex gap-3 flex-1 flex-wrap justify-end">
                   <div className="relative group">
-                    <button onClick={runComputation} disabled={!wsConnected || isComputing || !smiles} className="px-6 py-3 bg-gradient-to-r from-purple-600 to-pink-600 text-white rounded-lg font-semibold shadow-lg hover:shadow-xl transform hover:-translate-y-0.5 transition-all disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none flex items-center gap-2">
+                    <button onClick={runComputation} disabled={!wsConnected || isComputing || !smiles} className="px-4 py-2 bg-gradient-to-r from-purple-600 to-pink-600 text-white rounded-lg font-semibold shadow-lg hover:shadow-xl transform hover:-translate-y-0.5 transition-all disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none flex items-center gap-2">
                       {isComputing ? <><Loader2 className="w-5 h-5 animate-spin" />Computing</> : <><Play className="w-5 h-5" />Run</>}
                     </button>
                     {(!wsConnected || isComputing || !smiles) && (
                       <div className="absolute bottom-full mb-2 left-1/2 transform -translate-x-1/2 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
-                        <div className="bg-slate-800 border-2 border-purple-400 rounded-lg px-3 py-2 text-sm whitespace-nowrap shadow-xl">
+                        <div className="bg-slate-800 border-2 border-purple-400 rounded-lg px-4 py-2 text-sm whitespace-nowrap shadow-xl">
                           <div className="text-purple-200">
                             {!wsConnected ? 'Backend server not connected' :
                             isComputing ? 'Computation already running' :
@@ -714,13 +716,13 @@ const ChemistryTool: React.FC = () => {
                     const [updatedNodes, updatedEdges] = relayoutTree(treeNodes, edges);
                     setTreeNodes(updatedNodes);
                     setEdges(updatedEdges);
-                  }} disabled={isComputing || treeNodes.length === 0} className="px-6 py-3 bg-purple-500/30 text-white rounded-lg font-semibold hover:bg-purple-500/50 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2">
+                  }} disabled={isComputing || treeNodes.length === 0} className="px-4 py-2 bg-purple-500/30 text-white rounded-lg font-semibold hover:bg-purple-500/50 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2">
                     <Sparkles className="w-5 h-5" />Relayout
                   </button>
-                  <button onClick={reset} disabled={isComputing} className="px-6 py-3 bg-white/20 text-white rounded-lg font-semibold hover:bg-white/30 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2">
+                  <button onClick={reset} disabled={isComputing} className="px-4 py-2 bg-white/20 text-white rounded-lg font-semibold hover:bg-white/30 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2">
                     <RotateCcw className="w-5 h-5" />Reset
                   </button>
-                  <button onClick={stop} disabled={!isComputing} className="px-6 py-3 bg-white/20 text-white rounded-lg font-semibold hover:bg-white/30 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2">
+                  <button onClick={stop} disabled={!isComputing} className="px-4 py-2 bg-white/20 text-white rounded-lg font-semibold hover:bg-white/30 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2">
                     <X className="w-5 h-5" />Stop
                   </button>
                 </div>
