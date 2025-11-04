@@ -154,3 +154,30 @@ export interface MetricsDashboardProps extends MetricsDashboardState {
     // General state from app
     treeNodes: TreeNode[];
 }
+
+// Project types
+export interface Experiment {
+  id: string;
+  name: string;
+  createdAt: string;
+  lastModified: string;
+  isRunning?: boolean;  // Track if experiment is currently computing
+  // Add any experiment-specific data you need
+  smiles?: string;
+  problemType?: string;
+  nodes?: any[];
+  edges?: any[];
+}
+
+export interface Project {
+  id: string;
+  name: string;
+  createdAt: string;
+  lastModified: string;
+  experiments: Experiment[];
+}
+
+export interface ProjectSelection {
+  projectId: string | null;
+  experimentId: string | null;
+}
