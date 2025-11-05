@@ -164,11 +164,21 @@ export interface Task {
   createdAt: string;
   lastModified: string;
   isRunning?: boolean;  // Track if task is currently computing
-  // Add any task-specific data you need
+
+  // System state
   smiles?: string;
   problemType?: string;
-  nodes?: any[];
-  edges?: any[];
+  systemPrompt?: string;
+  problemPrompt?: string;
+  treeNodes?: TreeNode[];
+  edges?: Edge[];
+  metricsHistory?: MetricHistoryItem[];
+  visibleMetrics?: VisibleMetrics;
+  graphState?: MoleculeGraphState;
+  sidebarState?: SidebarState;
+
+  // Experiment state
+  experimentContext?: string;
 }
 
 export interface Experiment {

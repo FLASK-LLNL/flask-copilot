@@ -3,7 +3,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { Loader2, FlaskConical, TestTubeDiagonal, Network, Play, RotateCcw, X, Send, RefreshCw, Sparkles } from 'lucide-react';
 
 import { WS_SERVER } from './config';
-import { TreeNode, Edge, ContextMenuState, SidebarMessage, Tool, WebSocketMessageToServer, WebSocketMessage, Experiment } from './types';
+import { TreeNode, Edge, ContextMenuState, SidebarMessage, Tool, WebSocketMessageToServer, WebSocketMessage, Experiment, Task } from './types';
 
 import { loadRDKit } from './components/molecule';
 import { ReasoningSidebar, useSidebarState } from './components/sidebar';
@@ -211,6 +211,7 @@ const ChemistryTool: React.FC = () => {
         ));
       } else if (data.type === 'complete') {
         setIsComputing(false);
+        saveStateToTask();  // Keep task up to date
       } else if (data.type === 'response') {
         addSidebarMessage(data.message!);
         console.log('Server response:', data.message);
@@ -277,7 +278,78 @@ const ChemistryTool: React.FC = () => {
     websocket.send(JSON.stringify({ action: 'stop' }));
   };
 
-  // TODO: Improve saveTree and saveFullContext by handing the information to/from the backend
+  // State management
+  const getContext = (): Task => {
+    const experimentId = experimentSidebar.selection.experimentId;
+    const taskId = experimentSidebar.selection.taskId;
+    const experiment = experimentManagement.experiments.find(p => p.id === experimentId);
+    if (experiment) {
+      const task = experiment.tasks.find(e => e.id === taskId);
+      if (task) {
+        return {
+          ...task,
+          smiles,
+          problemType,
+          systemPrompt,
+          problemPrompt,
+          treeNodes,
+          edges,
+          metricsHistory: metricsDashboardState.metricsHistory,
+          visibleMetrics: metricsDashboardState.visibleMetrics,
+          graphState,
+          sidebarState
+        };
+      }
+    }
+    throw "No task found";
+  }
+
+  const saveStateToTask = (): void => {
+    const experimentId = experimentSidebar.selection.experimentId;
+    if (experimentId) {
+      experimentManagement.updateTask(experimentId, getContext());
+    }
+  }
+
+  const maybeSaveState = (): void => {
+    // Maybe not
+  };
+
+  const loadContextFromTask = (experimentId: string, taskId: string | null): void => {
+    console.log('Loading context:', { experimentId, taskId });
+    const experiment = experimentManagement.experiments.find(p => p.id === experimentId);
+    if (experiment) {
+      const task = experiment.tasks.find(e => e.id === taskId);
+      if (task) {
+        loadContext(task);
+      }
+    }
+    return;
+  }
+
+  const loadContext = (data: Task): void => {
+    // Conditionally set everything that is in the context
+    data.smiles && setSmiles(data.smiles);
+    data.problemType && setProblemType(data.problemType);
+    data.systemPrompt && setSystemPrompt(data.systemPrompt);
+    data.problemPrompt && setProblemPrompt(data.problemPrompt || '');
+    setPromptsModified(!!(systemPrompt || problemPrompt));
+    data.treeNodes && setTreeNodes(data.treeNodes);
+    data.edges && setEdges(data.edges);
+    data.metricsHistory && metricsDashboardState.setMetricsHistory(data.metricsHistory);
+    data.visibleMetrics && metricsDashboardState.setVisibleMetrics(data.visibleMetrics);
+    if (data.graphState) {
+      graphState.setZoom(data.graphState.zoom);
+      graphState.setOffset(data.graphState.offset);
+    }
+    if (data.sidebarState) {
+      sidebarState.setMessages(data.sidebarState.messages);
+      sidebarState.setVisibleSources(data.sidebarState.visibleSources);
+    }
+    data.experimentContext && sendMessageToServer('load-context', {experimentContext: data.experimentContext});
+  }
+
+
   const saveTree = (): void => {
     const data = { version: '1.0', type: 'tree', timestamp: new Date().toISOString(), smiles, nodes: treeNodes, edges };
     const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
@@ -296,7 +368,7 @@ const ChemistryTool: React.FC = () => {
   };
 
   const saveFullContext = (experimentContext: string): void => {
-    const data = { version: '1.0', type: 'full-context', timestamp: new Date().toISOString(), smiles, problemType, systemPrompt, problemPrompt, treeNodes, edges, metricsDashboardState, sidebarState, experimentContext };
+    const data = { lastModified: new Date().toISOString(), smiles, problemType, systemPrompt, problemPrompt, treeNodes, edges, graphState, metricsDashboardState, sidebarState, experimentContext };
     const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -317,33 +389,8 @@ const ChemistryTool: React.FC = () => {
       const reader = new FileReader();
       reader.onload = (e: ProgressEvent<FileReader>) => {
         try {
-          const data = JSON.parse(e.target?.result as string);
-          if (data.type === 'tree' || data.type === 'full-context') {
-            setSmiles(data.smiles || 'CCO');
-            setProblemType(data.problemType || 'retrosynthesis');
-            setSystemPrompt(data.systemPrompt || '');
-            setProblemPrompt(data.problemPrompt || '');
-            setPromptsModified(!!(data.systemPrompt || data.problemPrompt));
-            setTreeNodes(data.treeNodes || []);
-            setEdges(data.edges || []);
-            if (data.type === 'full-context') {
-              metricsDashboardState.setMetricsHistory(data.metricsHistory || []);
-              metricsDashboardState.setVisibleMetrics(data.visibleMetrics || { cost: true, bandgap: false, yield: false, density: false });
-              graphState.setZoom(data.zoom || 1);
-              graphState.setOffset(data.offset || { x: 50, y: 50 });
-              sidebarState.setMessages(data.sidebarMessages || []);
-              sidebarState.setVisibleSources(data.visibleSources || {
-                'System': true,
-                'Reasoning': true,
-                'Logger (Error)': true,
-                'Logger (Warning)': true,
-                'Logger (Info)': false,
-                'Logger (Debug)': false });
-            }
-            sendMessageToServer('load-context', {experimentContext: data.experimentContext});
-          } else {
-            alert('Invalid file format');
-          }
+          const data = JSON.parse(e.target?.result as string) as Task;
+          loadContext(data);
         } catch (error) {
           alert('Error loading file: ' + (error as Error).message);
         }
@@ -352,12 +399,6 @@ const ChemistryTool: React.FC = () => {
     };
     input.click();
   };
-
-  const loadContextFromTask = (experimentId: string, taskId: string | null): void => {
-    // TODO: Properly implement once system state is well defined.
-    console.log('Loading context:', { experimentId, taskId });
-    return;
-  }
 
   const savePrompts = (newSystemPrompt: string, newProblemPrompt: string): void => {
     setSystemPrompt(newSystemPrompt);
@@ -471,6 +512,7 @@ const ChemistryTool: React.FC = () => {
           selection={experimentSidebar.selection}
           onSelectionChange={experimentSidebar.setSelection}
           onLoadContext={loadContextFromTask}
+          onSaveContext={maybeSaveState}
           isComputing={isComputing}
           hasLoadedInitialSelection={experimentSidebar.hasLoadedInitialSelection}
         />

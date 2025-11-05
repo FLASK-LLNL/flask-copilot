@@ -9,6 +9,7 @@ interface ExperimentSidebarProps {
   selection: ExperimentSelection;
   onSelectionChange: (selection: ExperimentSelection) => void;
   onLoadContext: (experimentId: string, taskId: string | null) => void;
+  onSaveContext: () => void;
   isComputing?: boolean;  // Track if main app is currently computing
   hasLoadedInitialSelection?: boolean;  // Track if initial selection from localStorage has been loaded
   onCreateExperimentAndTask?: (experimentName: string, taskName: string) => Promise<{ experimentId: string; taskId: string }>;
@@ -20,6 +21,7 @@ export const ExperimentSidebar: React.FC<ExperimentSidebarProps> = ({
   selection,
   onSelectionChange,
   onLoadContext,
+  onSaveContext,
   isComputing = false,
   hasLoadedInitialSelection = false,
   onCreateExperimentAndTask
@@ -140,6 +142,9 @@ export const ExperimentSidebar: React.FC<ExperimentSidebarProps> = ({
   };
 
   const handleExperimentClick = (experiment: Experiment) => {
+    // Save before selecting away
+    onSaveContext();
+
     // Auto-select the last task if the experiment has any
     const lastTask = experiment.tasks.length > 0 
       ? experiment.tasks[experiment.tasks.length - 1] 
@@ -160,6 +165,9 @@ export const ExperimentSidebar: React.FC<ExperimentSidebarProps> = ({
   };
 
   const handleTaskClick = (experiment: Experiment, task: Task) => {
+    // Save before selecting away
+    onSaveContext();
+    
     const newSelection: ExperimentSelection = {
       experimentId: experiment.id,
       taskId: task.id
@@ -186,6 +194,9 @@ export const ExperimentSidebar: React.FC<ExperimentSidebarProps> = ({
 
   const handleCreateTask = async (experimentId: string) => {
     if (!newTaskName.trim()) return;
+
+    // Save before selecting away
+    onSaveContext();
     
     try {
       const task = await createTask(experimentId, newTaskName);
@@ -752,7 +763,7 @@ export const useExperimentSidebar = () => {
 
 // Separate hook for experiment management functions to be used in the main app
 export const useExperimentManagement = () => {
-  const { experiments, createExperiment, createTask } = useExperimentData();
+  const { experiments, createExperiment, createTask, updateTask } = useExperimentData();
 
   const createExperimentAndTask = React.useCallback(async (
     experimentName: string, 
@@ -770,6 +781,7 @@ export const useExperimentManagement = () => {
   return {
     experiments,  // Expose experiments list
     createExperimentAndTask,
-    createTask  // Export this so it can be used separately
+    createTask,
+    updateTask
   };
 };
