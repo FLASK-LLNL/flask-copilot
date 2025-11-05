@@ -3,7 +3,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { Loader2, FlaskConical, TestTubeDiagonal, Network, Play, RotateCcw, X, Send, RefreshCw, Sparkles } from 'lucide-react';
 
 import { WS_SERVER } from './config';
-import { TreeNode, Edge, ContextMenuState, SidebarMessage, Tool, WebSocketMessageToServer, WebSocketMessage } from './types';
+import { TreeNode, Edge, ContextMenuState, SidebarMessage, Tool, WebSocketMessageToServer, WebSocketMessage, Experiment } from './types';
 
 import { loadRDKit } from './components/molecule';
 import { ReasoningSidebar, useSidebarState } from './components/sidebar';
@@ -219,6 +219,8 @@ const ChemistryTool: React.FC = () => {
       } else if (data.type === 'error') {
         console.error(data.message);
         alert("Server error: " + data.message);
+      } else if (data.type === 'save-context-response') {
+        saveFullContext(data.experimentContext!);
       }
     };
 
@@ -277,7 +279,7 @@ const ChemistryTool: React.FC = () => {
 
   // TODO: Improve saveTree and saveFullContext by handing the information to/from the backend
   const saveTree = (): void => {
-    const data = { version: '1.0', type: 'tree', timestamp: new Date().toISOString(), smiles, problemType, systemPrompt, problemPrompt, nodes: treeNodes, edges };
+    const data = { version: '1.0', type: 'tree', timestamp: new Date().toISOString(), smiles, nodes: treeNodes, edges };
     const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -288,13 +290,18 @@ const ChemistryTool: React.FC = () => {
     setSaveDropdownOpen(false);
   };
 
-  const saveFullContext = (): void => {
-    const data = { version: '1.0', type: 'full-context', timestamp: new Date().toISOString(), smiles, problemType, systemPrompt, problemPrompt, nodes: treeNodes, edges, metricsDashboardState, sidebarState };
+  const requestSaveContext = (): void => {
+    // We need to request the up-to-date Experiment object from the server before saving
+    sendMessageToServer('save-context');
+  };
+
+  const saveFullContext = (experimentContext: string): void => {
+    const data = { version: '1.0', type: 'full-context', timestamp: new Date().toISOString(), smiles, problemType, systemPrompt, problemPrompt, treeNodes, edges, metricsDashboardState, sidebarState, experimentContext };
     const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `molecule-context-${Date.now()}.json`;
+    a.download = `experiment-${Date.now()}.json`;
     a.click();
     URL.revokeObjectURL(url);
     setSaveDropdownOpen(false);
@@ -317,7 +324,7 @@ const ChemistryTool: React.FC = () => {
             setSystemPrompt(data.systemPrompt || '');
             setProblemPrompt(data.problemPrompt || '');
             setPromptsModified(!!(data.systemPrompt || data.problemPrompt));
-            setTreeNodes(data.nodes || []);
+            setTreeNodes(data.treeNodes || []);
             setEdges(data.edges || []);
             if (data.type === 'full-context') {
               metricsDashboardState.setMetricsHistory(data.metricsHistory || []);
@@ -333,6 +340,7 @@ const ChemistryTool: React.FC = () => {
                 'Logger (Info)': false,
                 'Logger (Debug)': false });
             }
+            sendMessageToServer('load-context', {experimentContext: data.experimentContext});
           } else {
             alert('Invalid file format');
           }
@@ -392,14 +400,14 @@ const ChemistryTool: React.FC = () => {
       });
   };
 
-  const sendMessageToServer = (message: string, nodeId: string): void => {
+  const sendMessageToServer = (message: string, data?: Omit<WebSocketMessageToServer, 'action'>): void => {
     if (!websocket || websocket.readyState !== WebSocket.OPEN) {
       alert('WebSocket not connected');
       return;
     }
     const msg: WebSocketMessageToServer = {
       action: message,
-      nodeId: nodeId
+      ...data
     };
     websocket.send(JSON.stringify(msg));
     setContextMenu({node: null, x: 0, y: 0});
@@ -494,7 +502,7 @@ const ChemistryTool: React.FC = () => {
                 Load
               </button>
               <div className="relative">
-                <button onClick={(e) => { e.stopPropagation(); setSaveDropdownOpen(!saveDropdownOpen); }} onMouseDown={(e) => e.stopPropagation()} disabled={isComputing || treeNodes.length === 0} className="px-4 py-2 bg-blue-500/30 text-white rounded-lg text-sm font-semibold hover:bg-blue-500/50 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2">
+                <button onClick={(e) => { e.stopPropagation(); setSaveDropdownOpen(!saveDropdownOpen); }} onMouseDown={(e) => e.stopPropagation()} disabled={isComputing || treeNodes.length === 0 || !wsConnected} className="px-4 py-2 bg-blue-500/30 text-white rounded-lg text-sm font-semibold hover:bg-blue-500/50 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2">
                   <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4" />
                   </svg>
@@ -506,7 +514,7 @@ const ChemistryTool: React.FC = () => {
                 {saveDropdownOpen && (
                   <div className="absolute top-full mt-2 left-0 bg-slate-800 border-2 border-purple-400 rounded-lg shadow-2xl py-2 min-w-48 z-[100]" onClick={(e) => e.stopPropagation()} onMouseDown={(e) => e.stopPropagation()}>
                     <button onClick={saveTree} className="w-full px-4 py-2 text-left text-sm text-white hover:bg-purple-600/50 transition-colors">Save Tree Only</button>
-                    <button onClick={saveFullContext} className="w-full px-4 py-2 text-left text-sm text-white hover:bg-purple-600/50 transition-colors border-t border-purple-400/30">Save Full Context</button>
+                    <button onClick={requestSaveContext} className="w-full px-4 py-2 text-left text-sm text-white hover:bg-purple-600/50 transition-colors border-t border-purple-400/30">Save Full Context</button>
                   </div>
                 )}
               </div>
@@ -808,7 +816,7 @@ const ChemistryTool: React.FC = () => {
               setTreeNodes(prev => {
                 return prev.filter(n => n.y <= contextMenu.node!.y);
               });
-              sendMessageToServer("optimize-from", nodeId);
+              sendMessageToServer("optimize-from", {nodeId: nodeId});
             }}  className="w-full px-4 py-2 text-left text-sm text-white hover:bg-purple-600/50 transition-colors flex items-center gap-2">
             <RotateCcw className="w-4 h-4" />
             Restart from here
@@ -833,7 +841,7 @@ const ChemistryTool: React.FC = () => {
 
           { (problemType === "retrosynthesis" && !hasDescendants(contextMenu.node.id, treeNodes)) && (
             <button onClick={() => {
-              sendMessageToServer("compute-reaction-from", contextMenu.node!.id);
+              sendMessageToServer("compute-reaction-from", {nodeId: contextMenu.node!.id});
             }} className="w-full px-4 py-2 text-left text-sm text-white hover:bg-purple-600/50 transition-colors flex items-center gap-2">
               <TestTubeDiagonal className="w-4 h-4" />
               How do I make this?
@@ -842,14 +850,14 @@ const ChemistryTool: React.FC = () => {
 
           { (problemType === "retrosynthesis" && hasDescendants(contextMenu.node.id, treeNodes)) && (
             <>
-            <button onClick={() => {sendMessageToServer("recompute-reaction", contextMenu.node!.id);}} className="w-full px-4 py-2 text-left text-sm text-white hover:bg-purple-600/50 transition-colors flex items-center gap-2">
+            <button onClick={() => {sendMessageToServer("recompute-reaction", {nodeId: contextMenu.node!.id});}} className="w-full px-4 py-2 text-left text-sm text-white hover:bg-purple-600/50 transition-colors flex items-center gap-2">
               <RefreshCw className="w-4 h-4" />Find Another Reaction
             </button>
             </>
           )}
           { (problemType === "retrosynthesis" && !isRootNode(contextMenu.node.id, treeNodes)) && (
             <>
-            <button onClick={() => {sendMessageToServer("recompute-parent-reaction", contextMenu.node!.id);}} className="w-full px-4 py-2 text-left text-sm text-white hover:bg-purple-600/50 transition-colors flex items-center gap-2">
+            <button onClick={() => {sendMessageToServer("recompute-parent-reaction", {nodeId: contextMenu.node!.id});}} className="w-full px-4 py-2 text-left text-sm text-white hover:bg-purple-600/50 transition-colors flex items-center gap-2">
               <Network className="w-4 h-4" />Substitute Molecule
             </button>
             </>

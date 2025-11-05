@@ -48,6 +48,7 @@ export interface WebSocketMessageToServer {
   problemType?: string;
   nodeId?: string;
   query?: string;
+  experimentContext?: string;
 }
 
 // Messages received from backend
@@ -58,6 +59,7 @@ export interface WebSocketMessage {
   edge?: Edge;
   message?: SidebarMessage;
   tools?: Tool[];
+  experimentContext?: string;
 
   withNode?: boolean;
 }
