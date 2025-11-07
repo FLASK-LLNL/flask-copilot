@@ -10,8 +10,8 @@ interface ExperimentSidebarProps {
   onSelectionChange: (selection: ExperimentSelection) => void;
   onLoadContext: (experimentId: string, taskId: string | null) => void;
   onSaveContext: () => void;
+  onReset: () => void;
   isComputing?: boolean;  // Track if main app is currently computing
-  hasLoadedInitialSelection?: boolean;  // Track if initial selection from localStorage has been loaded
   onCreateExperimentAndTask?: (experimentName: string, taskName: string) => Promise<{ experimentId: string; taskId: string }>;
 }
 
@@ -22,8 +22,8 @@ export const ExperimentSidebar: React.FC<ExperimentSidebarProps> = ({
   onSelectionChange,
   onLoadContext,
   onSaveContext,
+  onReset,
   isComputing = false,
-  hasLoadedInitialSelection = false,
   onCreateExperimentAndTask
 }) => {
   const {
@@ -107,22 +107,6 @@ export const ExperimentSidebar: React.FC<ExperimentSidebarProps> = ({
     };
   }, [isResizing, onToggle]);
 
-  // Auto-expand and load context when initial selection is loaded from localStorage
-  React.useEffect(() => {
-    if (hasLoadedInitialSelection && !loading && !hasRestoredSelection && experiments.length > 0 && selection.experimentId) {
-      // Verify the selection still exists in the experiments
-      const experiment = experiments.find(p => p.id === selection.experimentId);
-      if (experiment) {
-        // Auto-expand the experiment
-        setExpandedExperiments(prev => new Set(prev).add(selection.experimentId!));
-        
-        // Load the context
-        onLoadContext(selection.experimentId, selection.taskId);
-        setHasRestoredSelection(true);
-      }
-    }
-  }, [hasLoadedInitialSelection, loading, experiments, selection, onLoadContext, hasRestoredSelection]);
-
   // Update task running status when isComputing changes
   React.useEffect(() => {
     if (selection.experimentId && selection.taskId) {
@@ -144,6 +128,7 @@ export const ExperimentSidebar: React.FC<ExperimentSidebarProps> = ({
   const handleExperimentClick = (experiment: Experiment) => {
     // Save before selecting away
     onSaveContext();
+    onReset();
 
     // Auto-select the last task if the experiment has any
     const lastTask = experiment.tasks.length > 0 
@@ -167,6 +152,7 @@ export const ExperimentSidebar: React.FC<ExperimentSidebarProps> = ({
   const handleTaskClick = (experiment: Experiment, task: Task) => {
     // Save before selecting away
     onSaveContext();
+    onReset();
     
     const newSelection: ExperimentSelection = {
       experimentId: experiment.id,
@@ -179,6 +165,12 @@ export const ExperimentSidebar: React.FC<ExperimentSidebarProps> = ({
   const handleCreateExperiment = async () => {
     if (!newExperimentName.trim()) return;
     
+    // Save before selecting away
+    onSaveContext();
+
+    // Reset UI state
+    onReset();
+
     try {
       const experiment = await createExperiment(newExperimentName);
       setNewExperimentName('');
@@ -197,6 +189,9 @@ export const ExperimentSidebar: React.FC<ExperimentSidebarProps> = ({
 
     // Save before selecting away
     onSaveContext();
+
+    // Reset UI state
+    onReset();
     
     try {
       const task = await createTask(experimentId, newTaskName);
@@ -729,21 +724,6 @@ export const useExperimentSidebar = () => {
     experimentId: null,
     taskId: null
   });
-  const [hasLoadedInitialSelection, setHasLoadedInitialSelection] = useState(false);
-
-  // Load last selection from localStorage on mount
-  React.useEffect(() => {
-    const savedSelection = localStorage.getItem(SELECTION_STORAGE_KEY);
-    if (savedSelection) {
-      try {
-        const parsed = JSON.parse(savedSelection);
-        setSelectionState(parsed);
-      } catch (e) {
-        console.error('Error loading last selection:', e);
-      }
-    }
-    setHasLoadedInitialSelection(true);
-  }, []);
 
   // Save selection to localStorage whenever it changes
   const setSelection = React.useCallback((newSelection: ExperimentSelection) => {
@@ -757,7 +737,6 @@ export const useExperimentSidebar = () => {
     toggleSidebar: () => setIsOpen(prev => !prev),
     selection,
     setSelection,
-    hasLoadedInitialSelection
   };
 };
 

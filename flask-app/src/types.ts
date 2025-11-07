@@ -168,6 +168,7 @@ export interface Task {
   // System state
   smiles?: string;
   problemType?: string;
+  problemName?: string;
   systemPrompt?: string;
   problemPrompt?: string;
   treeNodes?: TreeNode[];
@@ -175,6 +176,7 @@ export interface Task {
   metricsHistory?: MetricHistoryItem[];
   visibleMetrics?: VisibleMetrics;
   graphState?: MoleculeGraphState;
+  autoZoom?: boolean;
   sidebarState?: SidebarState;
 
   // Experiment state

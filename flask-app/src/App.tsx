@@ -45,6 +45,9 @@ const ChemistryTool: React.FC = () => {
   const [wsTooltipPinned, setWsTooltipPinned] = useState<boolean>(false);
 
   const wsRef = useRef<WebSocket | null>(null);
+  const getContextRef = useRef<() => Task>(() => {
+    throw new Error("getContext called before initialization");
+  });
 
   const graphState = useGraphState();
   const sidebarState = useSidebarState();
@@ -159,6 +162,9 @@ const ChemistryTool: React.FC = () => {
       setWsReconnecting(false);
       setWsError('');
       reset();  // Server state must match UI state
+
+
+      loadStateFromCurrentTask();
 
       socket.send(JSON.stringify({ action: 'list-tools' }));
     };
@@ -278,30 +284,38 @@ const ChemistryTool: React.FC = () => {
     websocket.send(JSON.stringify({ action: 'stop' }));
   };
 
+  useEffect(() => {
+    getContextRef.current = () => {
+      const experimentId = experimentSidebar.selection.experimentId;
+      const taskId = experimentSidebar.selection.taskId;
+      const experiment = experimentManagement.experiments.find(p => p.id === experimentId);
+      if (experiment) {
+        const task = experiment.tasks.find(e => e.id === taskId);
+        if (task) {
+          return {
+            ...task,
+            smiles,
+            problemType,
+            problemName,
+            systemPrompt,
+            problemPrompt,
+            treeNodes,
+            edges,
+            metricsHistory: metricsDashboardState.metricsHistory,
+            visibleMetrics: metricsDashboardState.visibleMetrics,
+            graphState,
+            autoZoom,
+            sidebarState
+          };
+        }
+      }
+      throw "No task found";
+    };
+  });
+
   // State management
   const getContext = (): Task => {
-    const experimentId = experimentSidebar.selection.experimentId;
-    const taskId = experimentSidebar.selection.taskId;
-    const experiment = experimentManagement.experiments.find(p => p.id === experimentId);
-    if (experiment) {
-      const task = experiment.tasks.find(e => e.id === taskId);
-      if (task) {
-        return {
-          ...task,
-          smiles,
-          problemType,
-          systemPrompt,
-          problemPrompt,
-          treeNodes,
-          edges,
-          metricsHistory: metricsDashboardState.metricsHistory,
-          visibleMetrics: metricsDashboardState.visibleMetrics,
-          graphState,
-          sidebarState
-        };
-      }
-    }
-    throw "No task found";
+    return getContextRef.current();
   }
 
   const saveStateToTask = (): void => {
@@ -310,10 +324,6 @@ const ChemistryTool: React.FC = () => {
       experimentManagement.updateTask(experimentId, getContext());
     }
   }
-
-  const maybeSaveState = (): void => {
-    // Maybe not
-  };
 
   const loadContextFromTask = (experimentId: string, taskId: string | null): void => {
     console.log('Loading context:', { experimentId, taskId });
@@ -327,10 +337,18 @@ const ChemistryTool: React.FC = () => {
     return;
   }
 
+  const loadStateFromCurrentTask = (): void => {
+    const { experimentId, taskId } = experimentSidebar.selection;
+    if (experimentId && taskId) {
+      loadContextFromTask(experimentId, taskId);
+    }
+  };
+
   const loadContext = (data: Task): void => {
     // Conditionally set everything that is in the context
     data.smiles && setSmiles(data.smiles);
     data.problemType && setProblemType(data.problemType);
+    data.problemName && setProblemName(data.problemName);
     data.systemPrompt && setSystemPrompt(data.systemPrompt);
     data.problemPrompt && setProblemPrompt(data.problemPrompt || '');
     setPromptsModified(!!(systemPrompt || problemPrompt));
@@ -342,6 +360,7 @@ const ChemistryTool: React.FC = () => {
       graphState.setZoom(data.graphState.zoom);
       graphState.setOffset(data.graphState.offset);
     }
+    data.autoZoom && setAutoZoom(data.autoZoom);
     if (data.sidebarState) {
       sidebarState.setMessages(data.sidebarState.messages);
       sidebarState.setVisibleSources(data.sidebarState.visibleSources);
@@ -512,9 +531,9 @@ const ChemistryTool: React.FC = () => {
           selection={experimentSidebar.selection}
           onSelectionChange={experimentSidebar.setSelection}
           onLoadContext={loadContextFromTask}
-          onSaveContext={maybeSaveState}
+          onSaveContext={saveStateToTask}
+          onReset={reset}
           isComputing={isComputing}
-          hasLoadedInitialSelection={experimentSidebar.hasLoadedInitialSelection}
         />
         <div className="flex-1 min-w-0 p-8">
           <div className="w-full">
