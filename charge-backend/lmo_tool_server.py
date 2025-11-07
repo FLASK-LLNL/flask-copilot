@@ -10,6 +10,8 @@ import sys
 
 from charge.servers.server_utils import update_mcp_network, get_hostname
 from tool_registration import register_tool_server
+from loguru import logger
+from rdkit import Chem
 
 
 @click.command()
@@ -104,35 +106,24 @@ def is_already_known(smiles: str) -> bool:
     return canonical_smiles in known_smiles
 
 
-@mcp.tool()
-def get_density(smiles: str) -> float:
-    """
-    Predict molecular properties using pre-trained Chemprop models.
-    This function returns property predictions from Chemprop models. It validates the requested property name,
-    constructs the appropriate model, and returns predictions for the provided SMILES input.
+@click.pass_context
+def main(ctx, port, host, name, copilot_port, copilot_host):
+    if host is None:
+        _, host = get_hostname()
 
-    Parameters
-    ----------
-    smiles : str
-        A SMILES string representing the molecule to be evaluated.
-    property : str
-        The property to predict. Must be one of the valid property names listed above.
+    register_tool_server(port, host, name, copilot_port, copilot_host)
 
-    Returns
-    -------
-    float
-        A float representing the predicted value for the specified property.
+    sys.argv = [sys.argv[0]] + ctx.args + [f"--port={port}", f"--host={host}"]
 
-    Raises
-    ------
-    ValueError
-        If the smiles string is invalid
-    """
-    return chemprop_preds_server(smiles, property="density")
+    import charge.servers.molecular_generation_server as LMO_MCP
+
+    mcp = LMO_MCP.mcp
+    mcp.tool()(is_already_known)
+
+    update_mcp_network(mcp, host, port)
+
+    mcp.run(transport="sse")
 
 
-mcp.tool()(log_progress)
-mcp.tool()(SMILES_utils.canonicalize_smiles)
-mcp.tool()(SMILES_utils.verify_smiles)
 if __name__ == "__main__":
     main()
