@@ -61,8 +61,9 @@ class ModelMessage:
 
 
 @dataclass
-class Tool:
-    name: str
+class ToolServer:
+    server: str
+    names: list[str]
     description: Optional[str] = None
 
     def json(self):

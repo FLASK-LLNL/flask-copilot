@@ -49,7 +49,7 @@ from backend_helper_funcs import (
     RetrosynthesisContext,
     Node,
     Edge,
-    Tool,
+    ToolServer,
     calculate_positions,
 )
 from retro_charge_backend_funcs import (
@@ -91,6 +91,13 @@ parser.add_argument(
 )
 parser.add_argument("--port", type=int, default=8001, help="Port to run the server on")
 parser.add_argument("--host", type=str, default=None, help="Host to run the server on")
+
+# parser.add_argument(
+#     "--active_tool_servers",
+#     type=str,
+#     default="active_tool_servers.json",
+#     help="Path to the JSON file containing current list of active MCP tool servers.",
+# )
 
 # Add standard CLI arguments
 Client.add_std_parser_arguments(parser)
@@ -290,10 +297,12 @@ async def websocket_endpoint(websocket: WebSocket):
             elif action == "list-tools":
                 tools = []
                 server_list = list_server_urls()
-                tool_list = await list_server_tools(server_list)
-
-                for (name, description) in tool_list:
-                    tools.append(Tool(name, description))
+                for server in server_list:
+                    tool_list = await list_server_tools([server])
+                    tool_names = []
+                    for (name, _) in tool_list:
+                        tool_names.append(name)
+                    tools.append(ToolServer(server, tool_names))
 
                 if tools == []:
                     await websocket.send_json({
