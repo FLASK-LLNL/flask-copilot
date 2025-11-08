@@ -57,14 +57,7 @@ const ChemistryTool: React.FC = () => {
 
   const [showToolSelectionModal, setShowToolSelectionModal] = useState<boolean>(false);
   const [selectedTools, setSelectedTools] = useState<number[]>([]);
-
-  const availableToolsMap: SelectableTool[] = [
-    { id: 1, name: "Tool 1" },
-    { id: 2, name: "Tool 2" },
-    { id: 3, name: "Tool 3" },
-    { id: 4, name: "Tool 4" },
-    { id: 5, name: "Tool 5" }
-  ];
+  const [availableToolsMap, setAvailableToolsMap] = useState<SelectableTool[]>([]);
 
   // Callback function to send selected tools to backend
   const handleToolSelectionConfirm = async (
@@ -315,6 +308,12 @@ const ChemistryTool: React.FC = () => {
         console.log('Server response:', data.message);
       } else if (data.type === 'available-tools-response') {
         setAvailableTools(data.tools || []);
+        availableToolsMap.splice(0, availableToolsMap.length);
+        setSelectedTools([]);
+        availableTools.forEach((server: Tool, index: number, array: Tool[]) => {
+          console.log(`Tool Server Element at index ${index}: ${server.server}`);
+          availableToolsMap.push({id: index, tool_server: server})
+        });
       } else if (data.type === 'error') {
         console.error(data.message);
         alert("Server error: " + data.message);
@@ -329,6 +328,8 @@ const ChemistryTool: React.FC = () => {
       setIsComputing(false);
       setWsError((error as any).message || 'Connection failed');
       setAvailableTools([]);
+      setSelectedTools([]);
+      setAvailableToolsMap([]);
     };
 
     socket.onclose = () => {
@@ -339,6 +340,8 @@ const ChemistryTool: React.FC = () => {
       setIsComputing(false);
       setWsReconnecting(false);
       setAvailableTools([]);
+      setSelectedTools([]);
+      setAvailableToolsMap([]);
     };
   };
 

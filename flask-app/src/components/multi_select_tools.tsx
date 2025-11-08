@@ -1,8 +1,10 @@
 import React from 'react';
 
+import { Tool } from './types';
+
 export interface SelectableTool {
   id: number;
-  name: string;
+  tool_server: Tool;
 }
 
 interface MultiSelectToolModalProps {
@@ -68,7 +70,7 @@ export const MultiSelectToolModal: React.FC<MultiSelectToolModalProps> = ({
                 onChange={() => toggleToolSelection(item.id)}
                 className="w-4 h-4 accent-purple-500"
               />
-              <span className="text-white">{item.name}</span>
+              <span className="text-white">{item.tool_server.server}: [{item.tool_server.names.join(", ")}]</span>
             </label>
           ))}
         </div>
