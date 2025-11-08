@@ -72,7 +72,8 @@ const ChemistryTool: React.FC = () => {
     selectedItemsData: SelectableTool[]
   ): Promise<void> => {
     if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) {
-      alert('WebSocket not connected');
+//      alert('WebSocket not connected');
+      console.log(`Need an open websocket`);
 //      return;
     }
     console.log(`Set Task Tool Selection`);
@@ -699,15 +700,15 @@ const ChemistryTool: React.FC = () => {
                         {wsConnected && availableTools.length > 0 && (
                           <div className="mt-3 pt-2 border-t border-purple-400/30">
                             <div className="text-purple-300 text-xs font-semibold mb-1.5">
-                              Available Tools ({availableTools.length})
+                              Available Tool Servers ({availableTools.length})
                             </div>
                             <div className="space-y-1 max-h-60 overflow-y-auto pr-1">
                               {availableTools.map((tool, idx) => (
                                 <div key={idx} className="text-xs bg-purple-900/30 rounded px-2 py-1">
-                                  <div className="text-purple-100 font-medium">{tool.name || tool as string}</div>
-                                  {tool.description && (
+                                  <div className="text-purple-100 font-medium">{tool.server || server as string}</div>
+                                  {tool.names && (
                                     <div className="text-purple-300 mt-0.5 text-[10px] leading-tight">
-                                      {tool.description}
+                                      {tool.names.join(", ")}
                                     </div>
                                   )}
                                 </div>

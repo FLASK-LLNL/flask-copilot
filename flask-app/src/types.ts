@@ -38,7 +38,8 @@ export interface SidebarMessage {
 }
 
 export interface Tool {
-  name?: string;
+  server?: string;
+  names?: string[];
   description?: string;
 }
 
