@@ -362,7 +362,7 @@ async def optimize_molecule_retro(
         retro_task = RetrosynthesisTask(
             user_prompt=user_prompt, server_urls=server_urls
         )
-        runner = experiment.create_agent_with_experiment_state(  # type: ignore
+        runner = experiment.create_agent_with_experiment_state(
             task=retro_task,
             agent_name=f"retrosynthesis_agent_{node_id}",
         )

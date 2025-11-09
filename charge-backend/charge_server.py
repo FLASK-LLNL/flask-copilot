@@ -172,7 +172,7 @@ async def websocket_endpoint(websocket: WebSocket):
                         args.json_file,
                         args.max_iterations,
                         data.get("depth", 3),
-                        list_server_urls(),
+                        list_server_urls(),  # TODO: This should be changed to available specified by the user
                         websocket,
                     )
                 elif data["problemType"] == "retrosynthesis":
@@ -285,10 +285,11 @@ async def websocket_endpoint(websocket: WebSocket):
                 await websocket.send_json({"type": "complete"})
 
             elif action == "reset":
+                experiment.reset()
 
                 if retro_synth_context is not None:
                     retro_synth_context.reset()
-                logger.info("Task state has been reset.")
+                logger.info("Experiment state has been reset.")
 
             elif action == "stop":
                 if CURRENT_TASK and not CURRENT_TASK.done():

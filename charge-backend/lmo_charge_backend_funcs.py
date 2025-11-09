@@ -132,7 +132,8 @@ async def generate_lead_molecule(
                 iteration += 1
                 await experiment.run_async()
                 finished_tasks = experiment.get_finished_tasks()
-                results = finished_tasks[-1]
+                completed_task, results = finished_tasks[-1]
+                results = MoleculeOutputSchema.model_validate_json(results)
                 results = results.as_list()  # Convert to list of strings
                 clogger.info(f"New molecules generated: {results}")
                 processed_mol = lmo_helper_funcs.post_process_smiles(
@@ -173,7 +174,7 @@ async def generate_lead_molecule(
                         cost=get_price(canonical_smiles),
                         # Not sure what to put here
                         hoverInfo=mol_hov,
-                        x=50 + node_id * 250,
+                        x=150 + node_id * 250,
                         y=100,
                     )
 
