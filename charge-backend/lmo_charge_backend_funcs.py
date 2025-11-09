@@ -4,7 +4,7 @@ import asyncio
 from loguru import logger
 import sys
 import os
-from charge.clients.autogen import AutoGenClient
+from charge.experiments.AutoGenExperiment import AutoGenExperiment
 from callback_logger import CallbackLogger
 from charge.tasks.LMOTask import (
     LMOTask as LeadMoleculeOptimization,
@@ -24,8 +24,7 @@ MOLECULE_HOVER_TEMPLATE = """**SMILES:** `{smiles}`\n
 
 async def lead_molecule(
     start_smiles: str,
-    task: LeadMoleculeOptimization,
-    lmo_runner: AutoGenClient,
+    experiment: AutoGenExperiment,
     mol_file_path: str,
     max_iterations: int,
     depth: int,
@@ -36,7 +35,10 @@ async def lead_molecule(
     lead_molecule_smiles = start_smiles
     clogger = CallbackLogger(websocket)
 
-    clogger.info(f"Starting task with lead molecule: {lead_molecule_smiles}", smiles=lead_molecule_smiles)
+    clogger.info(
+        f"Starting task with lead molecule: {lead_molecule_smiles}",
+        smiles=lead_molecule_smiles,
+    )
 
     parent_id = 0
     node_id = 0
@@ -111,7 +113,9 @@ async def lead_molecule(
 
             try:
                 iteration += 1
-                results: MoleculeOutputSchema = await lmo_runner.run()
+                await experiment.run_async()
+                finished_tasks = experiment.get_finished_tasks()
+                results = finished_tasks[-1]
                 results = results.as_list()  # Convert to list of strings
                 clogger.info(f"New molecules generated: {results}")
                 processed_mol = lmo_helper_funcs.post_process_smiles(
@@ -127,7 +131,10 @@ async def lead_molecule(
                     lmo_helper_funcs.save_list_to_json_file(
                         data=mol_data, file_path=mol_file_path
                     )
-                    clogger.info(f"New molecule added: {canonical_smiles}", smiles=canonical_smiles)
+                    clogger.info(
+                        f"New molecule added: {canonical_smiles}",
+                        smiles=canonical_smiles,
+                    )
                     mol_hov = MOLECULE_HOVER_TEMPLATE.format(
                         smiles=canonical_smiles,
                         bandgap=get_bandgap(canonical_smiles),
@@ -155,10 +162,8 @@ async def lead_molecule(
 
                     await websocket.send_json({"type": "node", "node": node.json()})
 
-                    task = LeadMoleculeOptimization(
-                        lead_molecule=canonical_smiles
-                    )
-                    lmo_runner.task = task
+                    task = LeadMoleculeOptimization(lead_molecule=canonical_smiles)
+                    experiment.add_task(task)
                     parent_id = node_id
 
                     break  # Exit while loop to proceed to next node
