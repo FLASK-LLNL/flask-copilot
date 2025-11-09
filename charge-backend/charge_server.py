@@ -37,7 +37,8 @@ from retro_charge_backend_funcs import (
 )
 from lmo_charge_backend_funcs import generate_lead_molecule
 from charge.clients.Client import Client
-
+from charge.experiments.AutoGenExperiment import AutoGenExperiment
+from charge.clients.autogen import AutoGenPool
 
 from tool_registration import (
     SERVERS,
@@ -124,12 +125,9 @@ async def websocket_endpoint(websocket: WebSocket):
     await websocket.accept()
 
     # set up an AutoGenAgent pool for tasks on this endpoint
-    from charge.clients.autogen import AutoGenPool
 
     autogen_pool = AutoGenPool(model=args.model, backend=args.backend)
     # Set up an experiment class for current endpoint
-    from charge.experiments.AutoGenExperiment import AutoGenExperiment
-
     experiment = AutoGenExperiment(task=None, agent_pool=autogen_pool)
 
     # Keep track of currently running task
