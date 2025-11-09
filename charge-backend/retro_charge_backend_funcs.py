@@ -20,6 +20,8 @@ from charge.tasks.RetrosynthesisTask import (
     TemplateFreeReactionOutputSchema as ReactionOutputSchema,
 )
 
+from charge.experiments.AutoGenExperiment import AutoGenExperiment
+
 RETROSYNTH_UNCONSTRAINED_USER_PROMPT_TEMPLATE = (
     "Provide a retrosynthetic pathway for the target molecule {target_molecule}. "
     + "The pathway should be provided as a tuple of reactants as SMILES and the product as SMILES. "
@@ -121,7 +123,7 @@ async def constrained_retro(
                 "source": "System",
                 "message": f"Finding synthesis pathway for {parent_smiles}...",
                 "smiles": parent_smiles,
-            }
+            },
         }
     )
     await websocket.send_json(
@@ -131,7 +133,7 @@ async def constrained_retro(
                 "source": "System",
                 "message": f"Searching for alternatives without {constraint_smiles}",
                 "smiles": constraint_smiles,
-            }
+            },
         }
     )
 
@@ -207,7 +209,7 @@ async def unconstrained_retro(
                 "source": "System",
                 "message": f"Finding synthesis pathway to {parent_smiles}...",
                 "smiles": parent_smiles,
-            }
+            },
         }
     )
 
@@ -222,7 +224,12 @@ async def unconstrained_retro(
     await websocket.send_json({"type": "complete"})
 
 
-async def generate_molecules(start_smiles: str, config_file: str, context: RetrosynthesisContext, websocket: WebSocket):
+async def generate_molecules(
+    start_smiles: str,
+    config_file: str,
+    context: RetrosynthesisContext,
+    websocket: WebSocket,
+):
     """Stream positioned nodes and edges"""
     logger.info(f"Planning retrosynthesis for: {start_smiles}")
 
@@ -253,7 +260,7 @@ async def generate_molecules(start_smiles: str, config_file: str, context: Retro
                     "source": "System",
                     "message": f"No synthesis routes found for {start_smiles}.",
                     "smiles": start_smiles,
-                }
+                },
             }
         )
         await websocket.send_json({"type": "complete"})
@@ -277,13 +284,15 @@ async def generate_molecules(start_smiles: str, config_file: str, context: Retro
         if edge:
             await websocket.send_json({"type": "edge", "edge": edge.json()})
 
-    await websocket.send_json({"type": "node_update", "node": {"id": root.id, "highlight": "normal"}})
+    await websocket.send_json(
+        {"type": "node_update", "node": {"id": root.id, "highlight": "normal"}}
+    )
     await websocket.send_json({"type": "complete"})
 
 
-
-
-async def constrained_opt(parent_smiles, constraint_smiles, planner, websocket: WebSocket):
+async def constrained_opt(
+    parent_smiles, constraint_smiles, planner, websocket: WebSocket
+):
     """Constrained optimization using retrosynthesis"""
 
     await websocket.send_json(
@@ -293,7 +302,7 @@ async def constrained_opt(parent_smiles, constraint_smiles, planner, websocket: 
                 "source": "System",
                 "message": f"Finding synthesis pathway for {parent_smiles}...",
                 "smiles": parent_smiles,
-            }
+            },
         }
     )
     await websocket.send_json(
@@ -303,7 +312,7 @@ async def constrained_opt(parent_smiles, constraint_smiles, planner, websocket: 
                 "source": "System",
                 "message": f"Searching for alternatives without {constraint_smiles}",
                 "smiles": constraint_smiles,
-            }
+            },
         }
     )
 
@@ -312,19 +321,20 @@ async def constrained_opt(parent_smiles, constraint_smiles, planner, websocket: 
     )
     retro_task = RetrosynthesisTask(user_prompt=user_prompt)
     planner.task = retro_task
-    logger.info(f"Optimizing {parent_smiles} without using {constraint_smiles} in the synthesis.")
+    logger.info(
+        f"Optimizing {parent_smiles} without using {constraint_smiles} in the synthesis."
+    )
     result = await planner.run()
     return result
 
 
-async def optimize_molecule_retro(node_id: str,
-                                  context: RetrosynthesisContext,
-                                  websocket: WebSocket,
-                                  model: str,
-                                  backend: str,
-                                  api_key: str,
-                                  model_kwargs: Optional[dict] = None,
-                                  server_urls: Optional[Union[str, list[str]]] = None):
+async def optimize_molecule_retro(
+    node_id: str,
+    context: RetrosynthesisContext,
+    websocket: WebSocket,
+    experiment: AutoGenExperiment,
+    server_urls: Optional[Union[str, list[str]]] = None,
+):
     """Optimize a molecule using retrosynthesis by node ID"""
     current_node = context.node_ids.get(node_id)
     assert current_node is not None, f"Node ID {node_id} not found"
@@ -336,7 +346,7 @@ async def optimize_molecule_retro(node_id: str,
                 "source": "System",
                 "message": f"Finding synthesis pathway to {current_node.smiles}...",
                 "smiles": current_node.smiles,
-            }
+            },
         }
     )
 
@@ -345,17 +355,16 @@ async def optimize_molecule_retro(node_id: str,
         runner = context.node_id_to_charge_client[node_id]
     else:
         # New context
-        user_prompt = RETROSYNTH_UNCONSTRAINED_USER_PROMPT_TEMPLATE.format(target_molecule=current_node.smiles)
+        user_prompt = RETROSYNTH_UNCONSTRAINED_USER_PROMPT_TEMPLATE.format(
+            target_molecule=current_node.smiles
+        )
         user_prompt += "\nDouble check the reactants with the `predict_reaction_products` tool to see if the products are equivalent to the given product. If there is any inconsistency (canonicalize both sides of the equation first), log it and try some other set of reactants."
-        retro_task = RetrosynthesisTask(user_prompt=user_prompt)
-        runner = AutoGenClient(
+        retro_task = RetrosynthesisTask(
+            user_prompt=user_prompt, server_urls=server_urls
+        )
+        runner = experiment.create_agent_with_experiment_state(  # type: ignore
             task=retro_task,
-            model=model,
-            backend=backend,
-            api_key=api_key,
-            model_kwargs=model_kwargs,
-            server_url=server_urls,
-            thoughts_callback=CallbackHandler(websocket),
+            agent_name=f"retrosynthesis_agent_{node_id}",
         )
         context.node_id_to_charge_client[node_id] = runner
 
@@ -372,7 +381,9 @@ async def optimize_molecule_retro(node_id: str,
     nodes: list[Node] = []
     edges: list[Edge] = []
     for i, smiles in enumerate(result.reactants_smiles_list):
-        node = Node(f"node_{num_nodes+i}", smiles, smiles, "Discovered", level, current_node.id)
+        node = Node(
+            f"node_{num_nodes+i}", smiles, smiles, "Discovered", level, current_node.id
+        )
         nodes.append(node)
         context.node_ids[node.id] = node
         edges.append(Edge(f"edge_{node_id}_{node.id}", node_id, node.id, "complete"))
