@@ -22,15 +22,28 @@ MOLECULE_HOVER_TEMPLATE = """**SMILES:** `{smiles}`\n
  - **Synthesizability (SA) Score:** {sascore:.3f}"""
 
 
-async def lead_molecule(
+async def generate_lead_molecule(
     start_smiles: str,
     experiment: AutoGenExperiment,
     mol_file_path: str,
     max_iterations: int,
     depth: int,
+    available_tools: list[str],
     websocket: WebSocket,
-):
-    """Stream positioned nodes and edges"""
+) -> None:
+    """Generate a lead molecule and stream its progress.
+    Args:
+        start_smiles (str): The starting SMILES string for the lead molecule.
+        experiment (AutoGenExperiment): The experiment instance to run tasks.
+        mol_file_path (str): Path to the file where molecules are stored.
+        max_iterations (int): Maximum iterations for molecule generation.
+        available_tools (list[str]): List of available tools for molecule generation.
+        depth (int): Depth of the generation tree.
+        websocket (WebSocket): WebSocket connection for streaming updates.
+
+    Returns:
+        None
+    """
 
     lead_molecule_smiles = start_smiles
     clogger = CallbackLogger(websocket)
@@ -90,6 +103,10 @@ async def lead_molecule(
     # Generate one node at a time
 
     mol_data = [lead_molecule_data]
+    task = LeadMoleculeOptimization(
+        lead_molecule=lead_molecule_smiles, server_urls=available_tools
+    )
+    experiment.add_task(task)
 
     for i in range(depth):
         logger.info(f"Iteration {i}")
