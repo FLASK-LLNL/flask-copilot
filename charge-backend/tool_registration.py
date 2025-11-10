@@ -5,7 +5,7 @@
 ## SPDX-License-Identifier: Apache-2.0
 ################################################################################
 
-from dataclasses import dataclass, asdict
+from dataclasses import dataclass
 from fastapi import Request
 import socket
 from loguru import logger
@@ -100,9 +100,7 @@ async def register_post(filename: str, request: Request, data: RegistrationReque
     if filename:
         try:
             with open(filename, "w") as f:
-                logger.info(f"BVE Writing servers state to file {filename} and {SERVERS}")
-                json_string = SERVERS.model_dump_json(indent=4)
-                f.write(json_string)
+                f.write(SERVERS.model_dump_json(indent=4))
         except Exception as e:
             logger.info(e)
             pass
