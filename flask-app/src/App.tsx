@@ -328,8 +328,8 @@ const ChemistryTool: React.FC = () => {
       setIsComputing(false);
       setWsError((error as any).message || 'Connection failed');
       setAvailableTools([]);
-      setSelectedTools([]);
-      setAvailableToolsMap([]);
+      //setSelectedTools([]);
+      //setAvailableToolsMap([]);
     };
 
     socket.onclose = () => {
@@ -340,8 +340,8 @@ const ChemistryTool: React.FC = () => {
       setIsComputing(false);
       setWsReconnecting(false);
       setAvailableTools([]);
-      setSelectedTools([]);
-      setAvailableToolsMap([]);
+      //setSelectedTools([]);
+      //setAvailableToolsMap([]);
     };
   };
 
