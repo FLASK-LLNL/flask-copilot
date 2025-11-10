@@ -749,15 +749,13 @@ const ChemistryTool: React.FC = () => {
                   <button onClick={() => setEditPromptsModal(true)} disabled={true} className="px-3 py-2.5 bg-white/10 text-purple-200 rounded-lg text-sm font-medium hover:bg-white/20 transition-all disabled:opacity-50 disabled:cursor-not-allowed">
                     Edit
                   </button>
-                  {/*
                   <button
                     onClick={() => setShowToolSelectionModal(true)}
                     disabled={isComputing}
-                    className="px-3 py-2.5 bg-white/10 text-purple-200 rounded-lg text-sm font-medium hover:bg-white/20 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                    className="px-5 py-2.5 bg-white/10 text-purple-200 rounded-lg text-sm font-medium hover:bg-white/20 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     Select Tools {selectedTools.length > 0 && `(${selectedTools.length})`}
                   </button>
-                  */}
                 </div>
 
                 <div className="flex gap-3 flex-1 flex-wrap justify-end">
