@@ -158,12 +158,12 @@ export interface MetricsDashboardProps extends MetricsDashboardState {
 }
 
 // Experiment types
-export interface Task {
+export interface Experiment {
   id: string;
   name: string;
   createdAt: string;
   lastModified: string;
-  isRunning?: boolean;  // Track if task is currently computing
+  isRunning?: boolean;  // Track if experiment is currently computing
 
   // System state
   smiles?: string;
@@ -183,15 +183,15 @@ export interface Task {
   experimentContext?: string;
 }
 
-export interface Experiment {
+export interface Project {
   id: string;
   name: string;
   createdAt: string;
   lastModified: string;
-  tasks: Task[];
+  experiments: Experiment[];
 }
 
-export interface ExperimentSelection {
+export interface ProjectSelection {
+  projectId: string | null;
   experimentId: string | null;
-  taskId: string | null;
 }

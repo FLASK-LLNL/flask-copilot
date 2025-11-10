@@ -3,13 +3,13 @@ import React, { useState, useRef, useEffect } from 'react';
 import { Loader2, FlaskConical, TestTubeDiagonal, Network, Play, RotateCcw, X, Send, RefreshCw, Sparkles } from 'lucide-react';
 
 import { WS_SERVER } from './config';
-import { TreeNode, Edge, ContextMenuState, SidebarMessage, Tool, WebSocketMessageToServer, WebSocketMessage, Experiment, Task } from './types';
+import { TreeNode, Edge, ContextMenuState, SidebarMessage, Tool, WebSocketMessageToServer, WebSocketMessage, Project, Experiment } from './types';
 
 import { loadRDKit } from './components/molecule';
 import { ReasoningSidebar, useSidebarState } from './components/sidebar';
 import { MoleculeGraph, useGraphState } from './components/graph';
 import { MultiSelectToolModal, SelectableTool } from './components/multi_select_tools';
-import { ExperimentSidebar, useExperimentSidebar, useExperimentManagement } from './components/project_sidebar';
+import { ProjectSidebar, useProjectSidebar, useProjectManagement } from './components/project_sidebar';
 
 import { findAllDescendants, hasDescendants, isRootNode, relayoutTree } from './tree_utils';
 import { copyToClipboard } from './utils';
@@ -45,15 +45,15 @@ const ChemistryTool: React.FC = () => {
   const [wsTooltipPinned, setWsTooltipPinned] = useState<boolean>(false);
 
   const wsRef = useRef<WebSocket | null>(null);
-  const getContextRef = useRef<() => Task>(() => {
+  const getContextRef = useRef<() => Experiment>(() => {
     throw new Error("getContext called before initialization");
   });
 
   const graphState = useGraphState();
   const sidebarState = useSidebarState();
   const metricsDashboardState = useMetricsDashboardState();
-  const experimentSidebar = useExperimentSidebar();
-  const experimentManagement = useExperimentManagement();
+  const projectSidebar = useProjectSidebar();
+  const projectManagement = useProjectManagement();
 
   const [showToolSelectionModal, setShowToolSelectionModal] = useState<boolean>(false);
   const [selectedTools, setSelectedTools] = useState<number[]>([]);
@@ -83,9 +83,9 @@ const ChemistryTool: React.FC = () => {
   const runComputation = async (): Promise<void> => {
     setSidebarOpen(true);
 
-    // Check if we need to create experiment and/or task
-    if (!experimentSidebar.selection.experimentId) {
-      // No experiment at all - create both experiment and task
+    // Check if we need to create project and/or experiment
+    if (!projectSidebar.selection.projectId) {
+      // No project at all - create both project and experiment
       const now = new Date();
       const month = String(now.getMonth() + 1).padStart(2, '0');
       const day = String(now.getDate()).padStart(2, '0');
@@ -94,38 +94,38 @@ const ChemistryTool: React.FC = () => {
       const minutes = String(now.getMinutes()).padStart(2, '0');
       const timestamp = `${month}/${day}/${year} ${hours}:${minutes}`;
       
-      const experimentName = `Experiment ${timestamp}`;
-      const taskName = `Task 1`;
+      const projectName = `Project ${timestamp}`;
+      const experimentName = `Experiment 1`;
       
       try {
-        const { experimentId, taskId } = await experimentManagement.createExperimentAndTask(
-          experimentName,
-          taskName
+        const { projectId, experimentId } = await projectManagement.createProjectAndExperiment(
+          projectName,
+          experimentName
         );
         
-        experimentSidebar.setSelection({ experimentId, taskId });
+        projectSidebar.setSelection({ projectId, experimentId });
+        await new Promise(resolve => setTimeout(resolve, 100));
+      } catch (error) {
+        console.error('Error creating project:', error);
+        alert('Failed to create project');
+        return;
+      }
+    } else if (!projectSidebar.selection.experimentId) {
+      // Project exists but no experiment - create just an experiment
+      const projectId = projectSidebar.selection.projectId;
+      
+      // Find the project to count existing experiments
+      const project = projectManagement.projects.find(p => p.id === projectId);
+      const experimentCount = project ? project.experiments.length + 1 : 1;
+      const experimentName = `Experiment ${experimentCount}`;
+      
+      try {
+        const experiment = await projectManagement.createExperiment(projectId, experimentName);
+        projectSidebar.setSelection({ projectId, experimentId: experiment.id });
         await new Promise(resolve => setTimeout(resolve, 100));
       } catch (error) {
         console.error('Error creating experiment:', error);
         alert('Failed to create experiment');
-        return;
-      }
-    } else if (!experimentSidebar.selection.taskId) {
-      // Experiment exists but no task - create just an task
-      const experimentId = experimentSidebar.selection.experimentId;
-      
-      // Find the experiment to count existing tasks
-      const experiment = experimentManagement.experiments.find(p => p.id === experimentId);
-      const taskCount = experiment ? experiment.tasks.length + 1 : 1;
-      const taskName = `Task ${taskCount}`;
-      
-      try {
-        const task = await experimentManagement.createTask(experimentId, taskName);
-        experimentSidebar.setSelection({ experimentId, taskId: task.id });
-        await new Promise(resolve => setTimeout(resolve, 100));
-      } catch (error) {
-        console.error('Error creating task:', error);
-        alert('Failed to create task');
         return;
       }
     }
@@ -164,7 +164,7 @@ const ChemistryTool: React.FC = () => {
       reset();  // Server state must match UI state
 
 
-      loadStateFromCurrentTask();
+      loadStateFromCurrentExperiment();
 
       socket.send(JSON.stringify({ action: 'list-tools' }));
     };
@@ -217,7 +217,7 @@ const ChemistryTool: React.FC = () => {
         ));
       } else if (data.type === 'complete') {
         setIsComputing(false);
-        saveStateToTask();  // Keep task up to date
+        saveStateToExperiment();  // Keep experiment up to date
       } else if (data.type === 'response') {
         addSidebarMessage(data.message!);
         console.log('Server response:', data.message);
@@ -286,14 +286,14 @@ const ChemistryTool: React.FC = () => {
 
   useEffect(() => {
     getContextRef.current = () => {
-      const experimentId = experimentSidebar.selection.experimentId;
-      const taskId = experimentSidebar.selection.taskId;
-      const experiment = experimentManagement.experiments.find(p => p.id === experimentId);
-      if (experiment) {
-        const task = experiment.tasks.find(e => e.id === taskId);
-        if (task) {
+      const projectId = projectSidebar.selection.projectId;
+      const experimentId = projectSidebar.selection.experimentId;
+      const project = projectManagement.projects.find(p => p.id === projectId);
+      if (project) {
+        const experiment = project.experiments.find(e => e.id === experimentId);
+        if (experiment) {
           return {
-            ...task,
+            ...experiment,
             smiles,
             problemType,
             problemName,
@@ -309,42 +309,42 @@ const ChemistryTool: React.FC = () => {
           };
         }
       }
-      throw "No task found";
+      throw "No experiment found";
     };
   });
 
   // State management
-  const getContext = (): Task => {
+  const getContext = (): Experiment => {
     return getContextRef.current();
   }
 
-  const saveStateToTask = (): void => {
-    const experimentId = experimentSidebar.selection.experimentId;
-    if (experimentId) {
-      experimentManagement.updateTask(experimentId, getContext());
+  const saveStateToExperiment = (): void => {
+    const projectId = projectSidebar.selection.projectId;
+    if (projectId) {
+      projectManagement.updateExperiment(projectId, getContext());
     }
   }
 
-  const loadContextFromTask = (experimentId: string, taskId: string | null): void => {
-    console.log('Loading context:', { experimentId, taskId });
-    const experiment = experimentManagement.experiments.find(p => p.id === experimentId);
-    if (experiment) {
-      const task = experiment.tasks.find(e => e.id === taskId);
-      if (task) {
-        loadContext(task);
+  const loadContextFromExperiment = (projectId: string, experimentId: string | null): void => {
+    console.log('Loading context:', { projectId, experimentId });
+    const project = projectManagement.projects.find(p => p.id === projectId);
+    if (project) {
+      const experiment = project.experiments.find(e => e.id === experimentId);
+      if (experiment) {
+        loadContext(experiment);
       }
     }
     return;
   }
 
-  const loadStateFromCurrentTask = (): void => {
-    const { experimentId, taskId } = experimentSidebar.selection;
-    if (experimentId && taskId) {
-      loadContextFromTask(experimentId, taskId);
+  const loadStateFromCurrentExperiment = (): void => {
+    const { projectId, experimentId } = projectSidebar.selection;
+    if (projectId && experimentId) {
+      loadContextFromExperiment(projectId, experimentId);
     }
   };
 
-  const loadContext = (data: Task): void => {
+  const loadContext = (data: Experiment): void => {
     // Conditionally set everything that is in the context
     data.smiles && setSmiles(data.smiles);
     data.problemType && setProblemType(data.problemType);
@@ -382,7 +382,7 @@ const ChemistryTool: React.FC = () => {
   };
 
   const requestSaveContext = (): void => {
-    // We need to request the up-to-date Experiment object from the server before saving
+    // We need to request the up-to-date Project object from the server before saving
     sendMessageToServer('save-context');
   };
 
@@ -392,7 +392,7 @@ const ChemistryTool: React.FC = () => {
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `experiment-${Date.now()}.json`;
+    a.download = `project-${Date.now()}.json`;
     a.click();
     URL.revokeObjectURL(url);
     setSaveDropdownOpen(false);
@@ -408,7 +408,7 @@ const ChemistryTool: React.FC = () => {
       const reader = new FileReader();
       reader.onload = (e: ProgressEvent<FileReader>) => {
         try {
-          const data = JSON.parse(e.target?.result as string) as Task;
+          const data = JSON.parse(e.target?.result as string) as Experiment;
           loadContext(data);
         } catch (error) {
           alert('Error loading file: ' + (error as Error).message);
@@ -525,13 +525,13 @@ const ChemistryTool: React.FC = () => {
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900">
       <div className="flex min-h-screen">
-        <ExperimentSidebar
-          isOpen={experimentSidebar.isOpen}
-          onToggle={experimentSidebar.toggleSidebar}
-          selection={experimentSidebar.selection}
-          onSelectionChange={experimentSidebar.setSelection}
-          onLoadContext={loadContextFromTask}
-          onSaveContext={saveStateToTask}
+        <ProjectSidebar
+          isOpen={projectSidebar.isOpen}
+          onToggle={projectSidebar.toggleSidebar}
+          selection={projectSidebar.selection}
+          onSelectionChange={projectSidebar.setSelection}
+          onLoadContext={loadContextFromExperiment}
+          onSaveContext={saveStateToExperiment}
           onReset={reset}
           isComputing={isComputing}
         />
@@ -1015,7 +1015,7 @@ const ChemistryTool: React.FC = () => {
         availableToolsMap={availableToolsMap}
         selectedTools={selectedTools}
         onSelectionChange={setSelectedTools}
-        title="Select Tools to use for Task" // Optional, defaults to "Select Tools"
+        title="Select Tools to use for Experiment" // Optional, defaults to "Select Tools"
       />
 
     </div>
