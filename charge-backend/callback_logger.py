@@ -4,7 +4,7 @@ from loguru import logger
 from typing import Optional
 
 # Define the callback function - will send message to the websocket if it is provided
-def handle_callback_log(message):
+async def handle_callback_log(message):
     record = message.record
     websocket = record["extra"].get("websocket", None)
     smiles = record["extra"].get("smiles", None)
@@ -16,7 +16,7 @@ def handle_callback_log(message):
         # timestamp = record["time"].isoformat(" ", timespec='seconds')
         msg = record["message"]
         level = record["level"].name,
-        websocket.send_json(
+        await websocket.send_json(
             {
                 "type": "response",
                 "message": {
