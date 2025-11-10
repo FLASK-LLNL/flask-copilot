@@ -66,7 +66,7 @@ from retro_charge_backend_funcs import (
     get_unconstrained_prompt,
 )
 
-from tool_registration import SERVERS, register_post, list_server_urls, list_server_tools
+from tool_registration import register_post, list_server_urls, list_server_tools, reload_server_list
 
 parser = argparse.ArgumentParser()
 
@@ -92,18 +92,17 @@ parser.add_argument(
 parser.add_argument("--port", type=int, default=8001, help="Port to run the server on")
 parser.add_argument("--host", type=str, default=None, help="Host to run the server on")
 
-# parser.add_argument(
-#     "--active_tool_servers",
-#     type=str,
-#     default="active_tool_servers.json",
-#     help="Path to the JSON file containing current list of active MCP tool servers.",
-# )
+parser.add_argument(
+    "--tool-server-cache",
+    type=str,
+    default="flask_copilot_active_tool_servers.json",
+    help="Path to the JSON file containing current list of active MCP tool servers.",
+)
 
 # Add standard CLI arguments
 Client.add_std_parser_arguments(parser)
 
 args = parser.parse_args()
-
 
 app = FastAPI()
 
@@ -122,7 +121,9 @@ else:
     DIST_PATH = os.path.join(os.path.dirname(__file__), "flask-app", "dist")
 ASSETS_PATH = os.path.join(DIST_PATH, "assets")
 
-app.post("/register")(register_post)
+reload_server_list(args.tool_server_cache)
+
+app.post("/register")(partial(register_post, args.tool_server_cache))
 
 (MODEL, BACKEND, API_KEY, MODEL_KWARGS) = AutoGenClient.configure(args.model, args.backend)
 

@@ -5,11 +5,13 @@
 ## SPDX-License-Identifier: Apache-2.0
 ################################################################################
 
-from dataclasses import dataclass
+from dataclasses import dataclass, asdict
 from fastapi import Request
 import socket
 from loguru import logger
 import requests
+from pydantic import BaseModel
+import json
 
 from charge.utils.system_utils import check_server_paths
 from autogen_ext.tools.mcp import McpWorkbench, SseServerParams
@@ -17,8 +19,7 @@ from charge.clients.autogen_utils import (
     _list_wb_tools,
 )
 
-@dataclass(frozen=True)
-class Server:
+class ToolServer(BaseModel):
     address: str
     port: int
     name: str
@@ -28,7 +29,10 @@ class Server:
     def long_name(self):
         return f"[{self.name}] http://{self.address}:{self.port}/sse"
 
-SERVERS: dict[str, Server] = {}
+class ToolServerDict(BaseModel):
+    servers: dict[str, ToolServer]
+
+SERVERS: ToolServerDict = ToolServerDict(servers={})
 
 def get_client_info(request: Request):
     """Get client IP and hostname with fallbacks"""
@@ -54,22 +58,55 @@ class RegistrationRequest:
     port: int
     name: str
 
-async def register_post(request: Request, data: RegistrationRequest):
+def reload_server_list(filename: str):
+    logger.info(f"BVE I am going to reload the server {filename}")
+    if filename:
+        try:
+            global SERVERS
+            data: ToolServerDict
+            with open(filename, "r") as f:
+                data = json.load(f)
+                SERVERS = ToolServerDict(servers=data["servers"])
+        except FileNotFoundError as e:
+            logger.info(e)
+            return
+        except json.JSONDecodeError as e:
+            logger.info(e)
+            return
+        except Exception as e:
+            logger.info(e)
+            return
+    else:
+        return
+
+async def register_post(filename: str, request: Request, data: RegistrationRequest):
+    global SERVERS
     hostname = data.host
     if not hostname:
         hostname = get_client_info(request)
 
     key = f"{hostname}:{data.port}"
-    new_server = Server(
+    new_server = ToolServer(
         address=hostname,
         port=data.port,
         name=data.name
     )
-    old_server = SERVERS.pop(key, None)
+
+    old_server = SERVERS.servers.pop(key, None)
     if old_server:
         logger.info(f"Replacing server at {key} with new registration: {old_server.long_name()} -> {new_server.long_name()}")
 
-    SERVERS[key] = new_server
+    SERVERS.servers[key] = new_server
+    if filename:
+        try:
+            with open(filename, "w") as f:
+                logger.info(f"BVE Writing servers state to file {filename} and {SERVERS}")
+                json_string = SERVERS.model_dump_json(indent=4)
+                f.write(json_string)
+        except Exception as e:
+            logger.info(e)
+            pass
+
     return {"status": f"registered MCP server {data.name} at {hostname}:{data.port}"}
 
 def register_tool_server(port, host, name, copilot_port, copilot_host):
@@ -85,7 +122,7 @@ def register_tool_server(port, host, name, copilot_port, copilot_host):
 def list_server_urls() -> list[str]:
     server_urls = []
     invalid_keys = []
-    for key, server in SERVERS.items():
+    for key, server in SERVERS.servers.items():
         validated_server = check_server_paths(f"{server}")
         if validated_server:
             server_urls.append(f"{server}")
