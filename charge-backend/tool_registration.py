@@ -59,7 +59,6 @@ class RegistrationRequest:
     name: str
 
 def reload_server_list(filename: str):
-    logger.info(f"BVE I am going to reload the server {filename}")
     if filename:
         try:
             global SERVERS
