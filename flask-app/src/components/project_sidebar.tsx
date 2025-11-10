@@ -417,8 +417,9 @@ export const ProjectSidebar: React.FC<ProjectSidebarProps> = ({
                   ) : (
                     <>
                       <button
+                        disabled={isComputing}
                         onClick={() => handleProjectClick(project)}
-                        className={`flex-1 px-3 py-2 text-left text-sm rounded-lg transition-all flex items-center gap-2 min-w-0 ${
+                        className={`flex-1 px-3 py-2 text-left text-sm rounded-lg transition-all flex items-center gap-2 min-w-0 disabled:cursor-not-allowed disabled:hover:bg-white/30 ${
                           selection.projectId === project.id
                             ? 'bg-purple-600/50 text-white font-medium'
                             : 'text-purple-200 hover:text-white hover:bg-purple-600/30'
@@ -502,11 +503,12 @@ export const ProjectSidebar: React.FC<ProjectSidebarProps> = ({
                         ) : (
                           <>
                             <button
+                              disabled={isComputing}
                               onClick={() => handleExperimentClick(project, experiment)}
                               className={`flex-1 px-3 py-1.5 text-left text-xs rounded transition-all flex items-center gap-2 min-w-0 ${
                                 selection.experimentId === experiment.id
                                   ? 'bg-purple-600/50 text-white font-medium'
-                                  : 'text-purple-200 hover:text-white hover:bg-purple-600/20'
+                                  : 'text-purple-200 hover:text-white hover:bg-purple-600/20 disabled:cursor-not-allowed disabled:hover:bg-white/0'
                               }`}
                             >
                               {experiment.isRunning ? (

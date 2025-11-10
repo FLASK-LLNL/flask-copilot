@@ -320,7 +320,8 @@ const ChemistryTool: React.FC = () => {
 
   const saveStateToExperiment = (): void => {
     const projectId = projectSidebar.selection.projectId;
-    if (projectId) {
+    const experimentId = projectSidebar.selection.experimentId;
+    if (projectId && experimentId) {
       projectManagement.updateExperiment(projectId, getContext());
     }
   }
