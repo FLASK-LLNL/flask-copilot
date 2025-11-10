@@ -3,6 +3,7 @@ from fastapi import WebSocket
 from loguru import logger
 from typing import Optional
 
+
 # Define the callback function - will send message to the websocket if it is provided
 async def handle_callback_log(message):
     record = message.record
@@ -15,20 +16,18 @@ async def handle_callback_log(message):
         # Timestamp is already included in the GUI window
         # timestamp = record["time"].isoformat(" ", timespec='seconds')
         msg = record["message"]
-        level = record["level"].name,
+        level = record["level"].name
         await websocket.send_json(
             {
                 "type": "response",
-                "message": {
-                    "source": f"Logger ({level})",
-                    "message": msg,
-                    **kwargs
-                }
+                "message": {"source": f"Logger ({level})", "message": msg, **kwargs},
             }
         )
     sys.stdout.write(message)
-        
+
+
 logger.add(handle_callback_log, filter=lambda record: record["level"].name == "INFO")
+
 
 # The Callback logger can hold a websocket that will allow the log message to be
 # copied to the websocket as well as the logger

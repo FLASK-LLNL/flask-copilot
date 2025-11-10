@@ -11,7 +11,7 @@ from charge.tasks.LMOTask import (
     MoleculeOutputSchema,
 )
 
-from backend_helper_funcs import Node, Edge
+from backend_helper_funcs import CallbackHandler, Node, Edge
 from backend_helper_funcs import get_bandgap, get_price
 
 # TODO: Convert this to a dataclass
@@ -108,6 +108,9 @@ async def generate_lead_molecule(
     )
     experiment.add_task(task)
 
+    canonical_smiles = lead_molecule_smiles
+    callback = CallbackHandler(websocket)
+
     for i in range(depth):
         logger.info(f"Iteration {i}")
         edge = Edge(
@@ -130,7 +133,13 @@ async def generate_lead_molecule(
 
             try:
                 iteration += 1
-                await experiment.run_async()
+
+                if experiment.remaining_tasks() == 0:
+                    task = LeadMoleculeOptimization(lead_molecule=canonical_smiles)
+                    experiment.add_task(task)
+                    parent_id = node_id
+
+                await experiment.run_async(callback=callback)
                 finished_tasks = experiment.get_finished_tasks()
                 completed_task, results = finished_tasks[-1]
                 results = MoleculeOutputSchema.model_validate_json(results)
@@ -194,6 +203,8 @@ async def generate_lead_molecule(
             except asyncio.CancelledError:
                 await websocket.send_json({"type": "stopped"})
                 raise  # re-raise so cancellation propagates
+            except IndexError:
+                logger.error("No finished tasks found.")
             except Exception as e:
                 logger.error(f"Error occurred: {e}")
         if i == depth - 1:
