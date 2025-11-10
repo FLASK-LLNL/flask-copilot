@@ -2,7 +2,6 @@ import sys
 from fastapi import WebSocket
 from loguru import logger
 from typing import Optional
-import asyncio
 
 # Define the callback function - will send message to the websocket if it is provided
 async def handle_callback_log(message):
