@@ -447,11 +447,12 @@ export const ProjectSidebar: React.FC<ProjectSidebarProps> = ({
                             <Edit2 className="w-3.5 h-3.5" />
                           </button>
                           <button
+                            disabled={isComputing}
                             onClick={(e) => {
                               e.stopPropagation();
                               setDeletingItem({ type: 'project', projectId: project.id });
                             }}
-                            className="p-1 text-purple-300 hover:text-red-400 hover:bg-red-500/30 rounded transition-all backdrop-blur-sm bg-slate-800/80"
+                            className="p-1 text-purple-300 hover:text-red-400 hover:bg-red-500/30 rounded transition-all backdrop-blur-sm bg-slate-800/80 disabled:opacity-50 disabled:cursor-not-allowed"
                             title="Delete project"
                           >
                             <Trash2 className="w-3.5 h-3.5" />
@@ -532,11 +533,12 @@ export const ProjectSidebar: React.FC<ProjectSidebarProps> = ({
                                   <Edit2 className="w-3 h-3" />
                                 </button>
                                 <button
+                                  disabled={isComputing}
                                   onClick={(e) => {
                                     e.stopPropagation();
                                     setDeletingItem({ type: 'experiment', projectId: project.id, experimentId: experiment.id });
                                   }}
-                                  className="p-0.5 text-purple-300 hover:text-red-400 hover:bg-red-500/30 rounded transition-all backdrop-blur-sm bg-slate-800/80"
+                                  className="p-0.5 text-purple-300 hover:text-red-400 hover:bg-red-500/30 rounded transition-all backdrop-blur-sm bg-slate-800/80 disabled:opacity-50 disabled:cursor-not-allowed"
                                   title="Delete experiment"
                                 >
                                   <Trash2 className="w-3 h-3" />
@@ -564,7 +566,7 @@ export const ProjectSidebar: React.FC<ProjectSidebarProps> = ({
                           value={newExperimentName}
                           onChange={(e) => setNewExperimentName(e.target.value)}
                           onKeyDown={(e) => {
-                            if (e.key === 'Enter') handleCreateExperiment(project.id);
+                            if (e.key === 'Enter' && !isComputing) handleCreateExperiment(project.id);
                             if (e.key === 'Escape') {
                               setCreatingExperimentFor(null);
                               setNewExperimentName('');
@@ -576,8 +578,9 @@ export const ProjectSidebar: React.FC<ProjectSidebarProps> = ({
                         />
                         <div className="flex gap-2">
                           <button
+                            disabled={isComputing}
                             onClick={() => handleCreateExperiment(project.id)}
-                            className="flex-1 px-2 py-1 bg-purple-600 hover:bg-purple-500 text-white text-xs rounded transition-colors"
+                            className="flex-1 px-2 py-1 bg-purple-600 hover:bg-purple-500 text-white text-xs rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                           >
                             Create
                           </button>
@@ -614,7 +617,7 @@ export const ProjectSidebar: React.FC<ProjectSidebarProps> = ({
                   value={newProjectName}
                   onChange={(e) => setNewProjectName(e.target.value)}
                   onKeyDown={(e) => {
-                    if (e.key === 'Enter') handleCreateProject();
+                    if (e.key === 'Enter' && !isComputing) handleCreateProject();
                     if (e.key === 'Escape') {
                       setCreatingProject(false);
                       setNewProjectName('');
@@ -626,8 +629,9 @@ export const ProjectSidebar: React.FC<ProjectSidebarProps> = ({
                 />
                 <div className="flex gap-2">
                   <button
+                    disabled={isComputing}
                     onClick={handleCreateProject}
-                    className="flex-1 px-2 py-1 bg-purple-600 hover:bg-purple-500 text-white text-xs rounded transition-colors"
+                    className="flex-1 px-2 py-1 bg-purple-600 hover:bg-purple-500 text-white text-xs rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     Create
                   </button>
