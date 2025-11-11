@@ -48,6 +48,7 @@ export interface WebSocketMessageToServer {
   problemType?: string;
   nodeId?: string;
   query?: string;
+  experimentContext?: string;
 }
 
 // Messages received from backend
@@ -58,6 +59,7 @@ export interface WebSocketMessage {
   edge?: Edge;
   message?: SidebarMessage;
   tools?: Tool[];
+  experimentContext?: string;
 
   withNode?: boolean;
 }
@@ -155,18 +157,30 @@ export interface MetricsDashboardProps extends MetricsDashboardState {
     treeNodes: TreeNode[];
 }
 
-// Project types
+// Experiment types
 export interface Experiment {
   id: string;
   name: string;
   createdAt: string;
   lastModified: string;
   isRunning?: boolean;  // Track if experiment is currently computing
-  // Add any experiment-specific data you need
+
+  // System state
   smiles?: string;
   problemType?: string;
-  nodes?: any[];
-  edges?: any[];
+  problemName?: string;
+  systemPrompt?: string;
+  problemPrompt?: string;
+  treeNodes?: TreeNode[];
+  edges?: Edge[];
+  metricsHistory?: MetricHistoryItem[];
+  visibleMetrics?: VisibleMetrics;
+  graphState?: MoleculeGraphState;
+  autoZoom?: boolean;
+  sidebarState?: SidebarState;
+
+  // Experiment state
+  experimentContext?: string;
 }
 
 export interface Project {
