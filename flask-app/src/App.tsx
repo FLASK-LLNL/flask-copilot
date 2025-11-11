@@ -154,16 +154,16 @@ const ChemistryTool: React.FC = () => {
       const hours = String(now.getHours()).padStart(2, '0');
       const minutes = String(now.getMinutes()).padStart(2, '0');
       const timestamp = `${month}/${day}/${year} ${hours}:${minutes}`;
-      
+
       const projectName = `Project ${timestamp}`;
       const experimentName = `Experiment 1`;
-      
+
       try {
         const { projectId, experimentId } = await projectManagement.createProjectAndExperiment(
           projectName,
           experimentName
         );
-        
+
         projectSidebar.setSelection({ projectId, experimentId });
         await new Promise(resolve => setTimeout(resolve, 100));
       } catch (error) {
@@ -179,7 +179,7 @@ const ChemistryTool: React.FC = () => {
       const project = projectManagement.projects.find(p => p.id === projectId);
       const experimentCount = project ? project.experiments.length + 1 : 1;
       const experimentName = `Experiment ${experimentCount}`;
-      
+
       try {
         const experiment = await projectManagement.createExperiment(projectId, experimentName);
         projectSidebar.setSelection({ projectId, experimentId: experiment.id });
@@ -238,6 +238,11 @@ const ChemistryTool: React.FC = () => {
       } else if (data.type === 'node_update') {
         const { id, ...restData } = data.node!;
 
+        if (restData) {
+           setIsComputing(true);
+        }else {
+           setIsComputing(false);
+        }
         setTreeNodes(prev => prev.map(n =>
           n.id === data.node!.id ? { ...n, ...restData } : n
         ));
@@ -853,7 +858,7 @@ const ChemistryTool: React.FC = () => {
               <MetricsDashboard {...metricsDashboardState} treeNodes={treeNodes} />
             )}
 
-          
+
           <div className="mt-8 pt-6 border-t border-purple-400/30 text-center text-purple-300 text-sm">
             <p>This work was performed under the auspices of the U.S. Department of Energy
             by Lawrence Livermore National Laboratory (LLNL) under Contract DE-AC52-07NA27344
