@@ -1,5 +1,5 @@
 /* eslint-disable react-hooks/exhaustive-deps */
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { Loader2, FlaskConical, TestTubeDiagonal, Network, Play, RotateCcw, X, Send, RefreshCw, Sparkles } from 'lucide-react';
 
 import { WS_SERVER } from './config';
@@ -80,11 +80,72 @@ const ChemistryTool: React.FC = () => {
     }
   }, [contextMenu, saveDropdownOpen, sidebarState, wsTooltipPinned]);
 
+
+  // State management
+  const getContext = (): Experiment => {
+    return getContextRef.current();
+  }
+
+  const loadContextFromExperiment = (projectId: string, experimentId: string | null): void => {
+    console.log('Loading context:', { projectId, experimentId });
+    const project = projectManagement.projects.find(p => p.id === projectId);
+    if (project) {
+      const experiment = project.experiments.find(e => e.id === experimentId);
+      if (experiment) {
+        loadContext(experiment);
+      }
+    }
+    return;
+  }
+
+  const loadStateFromCurrentExperiment = (): void => {
+    const { projectId, experimentId } = projectSidebar.selectionRef.current;
+    if (projectId && experimentId) {
+      loadContextFromExperiment(projectId, experimentId);
+    }
+  };
+
+  const loadContext = (data: Experiment): void => {
+    // Conditionally set everything that is in the context
+    data.smiles && setSmiles(data.smiles);
+    data.problemType && setProblemType(data.problemType);
+    data.problemName && setProblemName(data.problemName);
+    data.systemPrompt && setSystemPrompt(data.systemPrompt);
+    data.problemPrompt && setProblemPrompt(data.problemPrompt || '');
+    setPromptsModified(!!(systemPrompt || problemPrompt));
+    data.treeNodes && setTreeNodes(data.treeNodes);
+    data.edges && setEdges(data.edges);
+    data.metricsHistory && metricsDashboardState.setMetricsHistory(data.metricsHistory);
+    data.visibleMetrics && metricsDashboardState.setVisibleMetrics(data.visibleMetrics);
+    if (data.graphState) {
+      graphState.setZoom(data.graphState.zoom);
+      graphState.setOffset(data.graphState.offset);
+    }
+    data.autoZoom && setAutoZoom(data.autoZoom);
+    if (data.sidebarState) {
+      sidebarState.setMessages(data.sidebarState.messages);
+      sidebarState.setVisibleSources(data.sidebarState.visibleSources);
+    }
+    data.experimentContext && sendMessageToServer('load-context', {experimentContext: data.experimentContext});
+  }
+
+  const saveStateToExperiment = useCallback((): boolean => {   
+    // Use the ref directly to always get the latest selection
+    const projectId = projectSidebar.selectionRef.current.projectId;
+    const experimentId = projectSidebar.selectionRef.current.experimentId;
+    console.log("Saving experiments", projectId, experimentId);
+    if (projectId && experimentId) {
+      projectManagement.updateExperiment(projectId, getContext());
+      return true;
+    }
+    return false;
+  }, [projectSidebar.selectionRef, projectManagement, getContext]);
+
   const runComputation = async (): Promise<void> => {
     setSidebarOpen(true);
 
     // Check if we need to create project and/or experiment
-    if (!projectSidebar.selection.projectId) {
+    if (!projectSidebar.selectionRef.current.projectId) {
       // No project at all - create both project and experiment
       const now = new Date();
       const month = String(now.getMonth() + 1).padStart(2, '0');
@@ -110,9 +171,9 @@ const ChemistryTool: React.FC = () => {
         alert('Failed to create project');
         return;
       }
-    } else if (!projectSidebar.selection.experimentId) {
+    } else if (!projectSidebar.selectionRef.current.experimentId) {
       // Project exists but no experiment - create just an experiment
-      const projectId = projectSidebar.selection.projectId;
+      const projectId = projectSidebar.selectionRef.current.projectId!;
       
       // Find the project to count existing experiments
       const project = projectManagement.projects.find(p => p.id === projectId);
@@ -286,8 +347,8 @@ const ChemistryTool: React.FC = () => {
 
   useEffect(() => {
     getContextRef.current = () => {
-      const projectId = projectSidebar.selection.projectId;
-      const experimentId = projectSidebar.selection.experimentId;
+      const projectId = projectSidebar.selectionRef.current.projectId;
+      const experimentId = projectSidebar.selectionRef.current.experimentId;
       const project = projectManagement.projects.find(p => p.id === projectId);
       if (project) {
         const experiment = project.experiments.find(e => e.id === experimentId);
@@ -313,61 +374,6 @@ const ChemistryTool: React.FC = () => {
     };
   });
 
-  // State management
-  const getContext = (): Experiment => {
-    return getContextRef.current();
-  }
-
-  const saveStateToExperiment = (): void => {
-    const projectId = projectSidebar.selection.projectId;
-    const experimentId = projectSidebar.selection.experimentId;
-    if (projectId && experimentId) {
-      projectManagement.updateExperiment(projectId, getContext());
-    }
-  }
-
-  const loadContextFromExperiment = (projectId: string, experimentId: string | null): void => {
-    console.log('Loading context:', { projectId, experimentId });
-    const project = projectManagement.projects.find(p => p.id === projectId);
-    if (project) {
-      const experiment = project.experiments.find(e => e.id === experimentId);
-      if (experiment) {
-        loadContext(experiment);
-      }
-    }
-    return;
-  }
-
-  const loadStateFromCurrentExperiment = (): void => {
-    const { projectId, experimentId } = projectSidebar.selection;
-    if (projectId && experimentId) {
-      loadContextFromExperiment(projectId, experimentId);
-    }
-  };
-
-  const loadContext = (data: Experiment): void => {
-    // Conditionally set everything that is in the context
-    data.smiles && setSmiles(data.smiles);
-    data.problemType && setProblemType(data.problemType);
-    data.problemName && setProblemName(data.problemName);
-    data.systemPrompt && setSystemPrompt(data.systemPrompt);
-    data.problemPrompt && setProblemPrompt(data.problemPrompt || '');
-    setPromptsModified(!!(systemPrompt || problemPrompt));
-    data.treeNodes && setTreeNodes(data.treeNodes);
-    data.edges && setEdges(data.edges);
-    data.metricsHistory && metricsDashboardState.setMetricsHistory(data.metricsHistory);
-    data.visibleMetrics && metricsDashboardState.setVisibleMetrics(data.visibleMetrics);
-    if (data.graphState) {
-      graphState.setZoom(data.graphState.zoom);
-      graphState.setOffset(data.graphState.offset);
-    }
-    data.autoZoom && setAutoZoom(data.autoZoom);
-    if (data.sidebarState) {
-      sidebarState.setMessages(data.sidebarState.messages);
-      sidebarState.setVisibleSources(data.sidebarState.visibleSources);
-    }
-    data.experimentContext && sendMessageToServer('load-context', {experimentContext: data.experimentContext});
-  }
 
 
   const saveTree = (): void => {
