@@ -393,7 +393,7 @@ const ChemistryTool: React.FC = () => {
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `project-${Date.now()}.json`;
+    a.download = `experiment-${Date.now()}.json`;
     a.click();
     URL.revokeObjectURL(url);
     setSaveDropdownOpen(false);
