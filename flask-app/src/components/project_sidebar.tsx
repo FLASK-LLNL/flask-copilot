@@ -663,7 +663,7 @@ export const ProjectSidebar: React.FC<ProjectSidebarProps> = ({
               <button
                 disabled={isComputing}
                 onClick={handleCreateProject}
-                className="w-full px-3 py-2 text-left text-sm text-purple-300 hover:text-white hover:bg-purple-600/30 rounded-lg transition-all flex items-center gap-2 group"
+                className="w-full px-3 py-2 text-left text-sm text-purple-300 hover:text-white hover:bg-purple-600/30 rounded-lg transition-all flex items-center gap-2 group disabled:cursor-not-allowed disabled:hover:bg-white/30"
               >
                 <Plus className="w-4 h-4 group-hover:scale-110 transition-transform" />
                 <span>New Project</span>
