@@ -107,10 +107,10 @@ const ChemistryTool: React.FC = () => {
 
   const loadContext = (data: Experiment): void => {
     // Conditionally set everything that is in the context
-    data.smiles && setSmiles(data.smiles);
-    data.problemType && setProblemType(data.problemType);
-    data.problemName && setProblemName(data.problemName);
-    data.systemPrompt && setSystemPrompt(data.systemPrompt);
+    (data.smiles !== undefined) && setSmiles(data.smiles);
+    (data.problemType !== undefined) && setProblemType(data.problemType);
+    (data.problemName !== undefined) && setProblemName(data.problemName);
+    (data.systemPrompt !== undefined) && setSystemPrompt(data.systemPrompt);
     data.problemPrompt && setProblemPrompt(data.problemPrompt || '');
     setPromptsModified(!!(systemPrompt || problemPrompt));
     data.treeNodes && setTreeNodes(data.treeNodes);
@@ -121,7 +121,7 @@ const ChemistryTool: React.FC = () => {
       graphState.setZoom(data.graphState.zoom);
       graphState.setOffset(data.graphState.offset);
     }
-    data.autoZoom && setAutoZoom(data.autoZoom);
+    (data.autoZoom !== undefined) && setAutoZoom(data.autoZoom);
     if (data.sidebarState) {
       sidebarState.setMessages(data.sidebarState.messages);
       sidebarState.setVisibleSources(data.sidebarState.visibleSources);
@@ -372,7 +372,7 @@ const ChemistryTool: React.FC = () => {
       }
       throw "No experiment found";
     };
-  });
+  }, [smiles, problemName, problemType, graphState, sidebarState, treeNodes, edges, metricsDashboardState, autoZoom, systemPrompt, problemPrompt]);
 
 
 
