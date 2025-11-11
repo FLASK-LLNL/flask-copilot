@@ -61,11 +61,9 @@ class RegistrationRequest:
 def reload_server_list(filename: str):
     if filename:
         try:
-            global SERVERS
-            data: ToolServerDict
             with open(filename, "r") as f:
-                data = json.load(f)
-                SERVERS = ToolServerDict(servers=data["servers"])
+                data: ToolServerDict = json.load(f)
+                SERVERS.servers = data["servers"]
         except FileNotFoundError as e:
             logger.info(e)
             return
