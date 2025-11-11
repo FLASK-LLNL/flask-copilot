@@ -61,6 +61,9 @@ export const ProjectSidebar: React.FC<ProjectSidebarProps> = ({
   });
   const [isResizing, setIsResizing] = useState(false);
 
+  const editingProjectRef = React.useRef<HTMLDivElement>(null);
+  const editingExperimentRef = React.useRef<HTMLDivElement>(null);
+
   // Save width to localStorage when it changes
   React.useEffect(() => {
     localStorage.setItem(SIDEBAR_WIDTH_STORAGE_KEY, sidebarWidth.toString());
@@ -114,6 +117,32 @@ export const ProjectSidebar: React.FC<ProjectSidebarProps> = ({
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isComputing, selection.projectId, selection.experimentId]);
+
+  React.useEffect(() => {
+    const handleClickOutside = (event: MouseEvent): void => {
+      // Check if editing a project
+      if (editingProject && editingProjectRef.current) {
+        if (!editingProjectRef.current.contains(event.target as Node)) {
+          setEditingProject(null);
+          setEditProjectName('');
+        }
+      }
+      
+      // Check if editing an experiment
+      if (editingExperiment && editingExperimentRef.current) {
+        if (!editingExperimentRef.current.contains(event.target as Node)) {
+          setEditingExperiment(null);
+          setEditExperimentName('');
+        }
+      }
+    };
+
+    if (editingProject || editingExperiment) {
+      window.addEventListener('mousedown', handleClickOutside);
+      return () => window.removeEventListener('mousedown', handleClickOutside);
+    }
+  }, [editingProject, editingExperiment]);
+
 
   const toggleProjectExpanded = (projectId: string) => {
     const newExpanded = new Set(expandedProjects);
@@ -410,7 +439,7 @@ export const ProjectSidebar: React.FC<ProjectSidebarProps> = ({
                   </button>
                   
                   {editingProject === project.id ? (
-                    <div className="flex-1 flex items-center gap-1 px-2">
+                    <div ref={editingProjectRef} className="flex-1 flex items-center gap-1 px-2">
                       <input
                         type="text"
                         value={editProjectName}
@@ -497,7 +526,7 @@ export const ProjectSidebar: React.FC<ProjectSidebarProps> = ({
                     {project.experiments.map((experiment) => (
                       <div key={experiment.id} className="flex items-center group relative">
                         {editingExperiment?.experimentId === experiment.id ? (
-                          <div className="flex-1 flex items-center gap-1 px-2 py-1">
+                          <div ref={editingExperimentRef} className="flex-1 flex items-center gap-1 px-2 py-1">
                             <input
                               type="text"
                               value={editExperimentName}

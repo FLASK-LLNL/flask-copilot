@@ -78,7 +78,7 @@ const ChemistryTool: React.FC = () => {
       window.addEventListener('mousedown', handleClickOutside);
       return () => window.removeEventListener('mousedown', handleClickOutside);
     }
-  }, [contextMenu, saveDropdownOpen, sidebarState, wsTooltipPinned]);
+  }, [contextMenu, saveDropdownOpen, sidebarState, wsTooltipPinned, projectSidebar]);
 
 
   // State management
