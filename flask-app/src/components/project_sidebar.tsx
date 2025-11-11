@@ -9,8 +9,9 @@ interface ProjectSidebarProps {
   selection: ProjectSelection;
   onSelectionChange: (selection: ProjectSelection) => void;
   onLoadContext: (projectId: string, experimentId: string | null) => void;
+  onSaveContext: () => boolean;
+  onReset: () => void;
   isComputing?: boolean;  // Track if main app is currently computing
-  hasLoadedInitialSelection?: boolean;  // Track if initial selection from localStorage has been loaded
   onCreateProjectAndExperiment?: (projectName: string, experimentName: string) => Promise<{ projectId: string; experimentId: string }>;
 }
 
@@ -20,8 +21,9 @@ export const ProjectSidebar: React.FC<ProjectSidebarProps> = ({
   selection,
   onSelectionChange,
   onLoadContext,
+  onSaveContext,
+  onReset,
   isComputing = false,
-  hasLoadedInitialSelection = false,
   onCreateProjectAndExperiment
 }) => {
   const {
@@ -36,6 +38,12 @@ export const ProjectSidebar: React.FC<ProjectSidebarProps> = ({
     setExperimentRunning
   } = useProjectData();
 
+  const SIDEBAR_WIDTH_STORAGE_KEY = 'flask_copilot_sidebar_width';
+  const MIN_WIDTH = 200;
+  const MAX_WIDTH = 1600;
+  const DEFAULT_WIDTH = 320;
+  const COLLAPSE_THRESHOLD = 5;
+
   const [expandedProjects, setExpandedProjects] = useState<Set<string>>(new Set());
   const [creatingProject, setCreatingProject] = useState(false);
   const [newProjectName, setNewProjectName] = useState('');
@@ -47,22 +55,60 @@ export const ProjectSidebar: React.FC<ProjectSidebarProps> = ({
   const [editExperimentName, setEditExperimentName] = useState('');
   const [deletingItem, setDeletingItem] = useState<{ type: 'project' | 'experiment'; projectId: string; experimentId?: string } | null>(null);
   const [hasRestoredSelection, setHasRestoredSelection] = useState(false);
+  const [sidebarWidth, setSidebarWidth] = useState<number>(() => {
+    const saved = localStorage.getItem(SIDEBAR_WIDTH_STORAGE_KEY);
+    return saved ? parseInt(saved, 10) : DEFAULT_WIDTH;
+  });
+  const [isResizing, setIsResizing] = useState(false);
 
-  // Auto-expand and load context when initial selection is loaded from localStorage
+  const editingProjectRef = React.useRef<HTMLDivElement>(null);
+  const editingExperimentRef = React.useRef<HTMLDivElement>(null);
+
+  // Save width to localStorage when it changes
   React.useEffect(() => {
-    if (hasLoadedInitialSelection && !loading && !hasRestoredSelection && projects.length > 0 && selection.projectId) {
-      // Verify the selection still exists in the projects
-      const project = projects.find(p => p.id === selection.projectId);
-      if (project) {
-        // Auto-expand the project
-        setExpandedProjects(prev => new Set(prev).add(selection.projectId!));
-        
-        // Load the context
-        onLoadContext(selection.projectId, selection.experimentId);
-        setHasRestoredSelection(true);
+    localStorage.setItem(SIDEBAR_WIDTH_STORAGE_KEY, sidebarWidth.toString());
+  }, [sidebarWidth]);
+
+  // Handle resize
+  React.useEffect(() => {
+    if (!isResizing) return;
+
+    // Add cursor style to body
+    document.body.style.cursor = 'col-resize';
+    document.body.style.userSelect = 'none';
+
+    const handleMouseMove = (e: MouseEvent) => {
+      const newWidth = e.clientX;
+      
+      // Check if width falls below collapse threshold
+      if (newWidth < COLLAPSE_THRESHOLD) {
+        onToggle(); // Collapse the sidebar
+        setIsResizing(false);
+        return;
       }
-    }
-  }, [hasLoadedInitialSelection, loading, projects, selection, onLoadContext, hasRestoredSelection]);
+      
+      // Constrain width between min and max
+      if (newWidth >= MIN_WIDTH && newWidth <= MAX_WIDTH) {
+        setSidebarWidth(newWidth);
+      }
+    };
+
+    const handleMouseUp = () => {
+      setIsResizing(false);
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+    };
+
+    document.addEventListener('mousemove', handleMouseMove);
+    document.addEventListener('mouseup', handleMouseUp);
+
+    return () => {
+      document.removeEventListener('mousemove', handleMouseMove);
+      document.removeEventListener('mouseup', handleMouseUp);
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+    };
+  }, [isResizing, onToggle]);
 
   // Update experiment running status when isComputing changes
   React.useEffect(() => {
@@ -71,6 +117,32 @@ export const ProjectSidebar: React.FC<ProjectSidebarProps> = ({
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isComputing, selection.projectId, selection.experimentId]);
+
+  React.useEffect(() => {
+    const handleClickOutside = (event: MouseEvent): void => {
+      // Check if editing a project
+      if (editingProject && editingProjectRef.current) {
+        if (!editingProjectRef.current.contains(event.target as Node)) {
+          setEditingProject(null);
+          setEditProjectName('');
+        }
+      }
+      
+      // Check if editing an experiment
+      if (editingExperiment && editingExperimentRef.current) {
+        if (!editingExperimentRef.current.contains(event.target as Node)) {
+          setEditingExperiment(null);
+          setEditExperimentName('');
+        }
+      }
+    };
+
+    if (editingProject || editingExperiment) {
+      window.addEventListener('mousedown', handleClickOutside);
+      return () => window.removeEventListener('mousedown', handleClickOutside);
+    }
+  }, [editingProject, editingExperiment]);
+
 
   const toggleProjectExpanded = (projectId: string) => {
     const newExpanded = new Set(expandedProjects);
@@ -83,6 +155,15 @@ export const ProjectSidebar: React.FC<ProjectSidebarProps> = ({
   };
 
   const handleProjectClick = (project: Project) => {
+    // No change
+    if (project.id == selection.projectId) {
+      return;
+    }
+
+    // Save before selecting away
+    if (onSaveContext())
+      onReset();
+
     // Auto-select the last experiment if the project has any
     const lastExperiment = project.experiments.length > 0 
       ? project.experiments[project.experiments.length - 1] 
@@ -103,6 +184,15 @@ export const ProjectSidebar: React.FC<ProjectSidebarProps> = ({
   };
 
   const handleExperimentClick = (project: Project, experiment: Experiment) => {
+    // No change
+    if (project.id == selection.projectId && experiment.id == selection.experimentId) {
+      return;
+    }
+
+    // Save before selecting away
+    if (onSaveContext())
+      onReset();
+    
     const newSelection: ProjectSelection = {
       projectId: project.id,
       experimentId: experiment.id
@@ -112,8 +202,23 @@ export const ProjectSidebar: React.FC<ProjectSidebarProps> = ({
   };
 
   const handleCreateProject = async () => {
-    if (!newProjectName.trim()) return;
+    const now = new Date();
+    const month = String(now.getMonth() + 1).padStart(2, '0');
+    const day = String(now.getDate()).padStart(2, '0');
+    const year = String(now.getFullYear()).slice(-2);
+    const hours = String(now.getHours()).padStart(2, '0');
+    const minutes = String(now.getMinutes()).padStart(2, '0');
+    const timestamp = `${month}/${day}/${year} ${hours}:${minutes}`;
     
+    const newProjectName = `Project ${timestamp}`;
+    // if (!newProjectName.trim()) return;
+    
+    // Save before selecting away
+    if (onSaveContext()) {
+      // Reset UI state
+      onReset();
+    }
+
     try {
       const project = await createProject(newProjectName);
       setNewProjectName('');
@@ -128,7 +233,21 @@ export const ProjectSidebar: React.FC<ProjectSidebarProps> = ({
   };
 
   const handleCreateExperiment = async (projectId: string) => {
-    if (!newExperimentName.trim()) return;
+    const curProject = projects.find(p => p.id === projectId)!;
+
+    let i = curProject.experiments.length + 1;
+    let newExperimentName = `Experiment ${i}`
+    while (curProject.experiments.findIndex(e => e.name == newExperimentName) !== -1) {
+      i += 1;
+      newExperimentName = `Experiment ${i}`;
+    }
+    // if (!newExperimentName.trim()) return;
+
+    // Save before selecting away
+    if (onSaveContext()) {
+      // Reset UI state
+      onReset();
+    }
     
     try {
       const experiment = await createExperiment(projectId, newExperimentName);
@@ -263,7 +382,10 @@ export const ProjectSidebar: React.FC<ProjectSidebarProps> = ({
 
   return (
     <>
-    <div className="w-80 bg-slate-800/50 backdrop-blur-sm border-r border-purple-400/30 flex flex-col">
+    <div 
+      className="bg-slate-800/50 backdrop-blur-sm border-r border-purple-400/30 flex flex-col relative"
+      style={{ width: `${sidebarWidth}px` }}
+    >
       {/* Header */}
       <div className="p-4 border-b border-purple-400/30">
         <div className="flex items-center justify-between mb-2">
@@ -317,7 +439,7 @@ export const ProjectSidebar: React.FC<ProjectSidebarProps> = ({
                   </button>
                   
                   {editingProject === project.id ? (
-                    <div className="flex-1 flex items-center gap-1 px-2">
+                    <div ref={editingProjectRef} className="flex-1 flex items-center gap-1 px-2">
                       <input
                         type="text"
                         value={editProjectName}
@@ -351,8 +473,9 @@ export const ProjectSidebar: React.FC<ProjectSidebarProps> = ({
                   ) : (
                     <>
                       <button
+                        disabled={isComputing}
                         onClick={() => handleProjectClick(project)}
-                        className={`flex-1 px-3 py-2 text-left text-sm rounded-lg transition-all flex items-center gap-2 min-w-0 ${
+                        className={`flex-1 px-3 py-2 text-left text-sm rounded-lg transition-all flex items-center gap-2 min-w-0 disabled:cursor-not-allowed disabled:hover:bg-white/30 ${
                           selection.projectId === project.id
                             ? 'bg-purple-600/50 text-white font-medium'
                             : 'text-purple-200 hover:text-white hover:bg-purple-600/30'
@@ -380,11 +503,12 @@ export const ProjectSidebar: React.FC<ProjectSidebarProps> = ({
                             <Edit2 className="w-3.5 h-3.5" />
                           </button>
                           <button
+                            disabled={isComputing}
                             onClick={(e) => {
                               e.stopPropagation();
                               setDeletingItem({ type: 'project', projectId: project.id });
                             }}
-                            className="p-1 text-purple-300 hover:text-red-400 hover:bg-red-500/30 rounded transition-all backdrop-blur-sm bg-slate-800/80"
+                            className="p-1 text-purple-300 hover:text-red-400 hover:bg-red-500/30 rounded transition-all backdrop-blur-sm bg-slate-800/80 disabled:opacity-50 disabled:cursor-not-allowed"
                             title="Delete project"
                           >
                             <Trash2 className="w-3.5 h-3.5" />
@@ -402,7 +526,7 @@ export const ProjectSidebar: React.FC<ProjectSidebarProps> = ({
                     {project.experiments.map((experiment) => (
                       <div key={experiment.id} className="flex items-center group relative">
                         {editingExperiment?.experimentId === experiment.id ? (
-                          <div className="flex-1 flex items-center gap-1 px-2 py-1">
+                          <div ref={editingExperimentRef} className="flex-1 flex items-center gap-1 px-2 py-1">
                             <input
                               type="text"
                               value={editExperimentName}
@@ -436,11 +560,12 @@ export const ProjectSidebar: React.FC<ProjectSidebarProps> = ({
                         ) : (
                           <>
                             <button
+                              disabled={isComputing}
                               onClick={() => handleExperimentClick(project, experiment)}
                               className={`flex-1 px-3 py-1.5 text-left text-xs rounded transition-all flex items-center gap-2 min-w-0 ${
                                 selection.experimentId === experiment.id
                                   ? 'bg-purple-600/50 text-white font-medium'
-                                  : 'text-purple-200 hover:text-white hover:bg-purple-600/20'
+                                  : 'text-purple-200 hover:text-white hover:bg-purple-600/20 disabled:cursor-not-allowed disabled:hover:bg-white/0'
                               }`}
                             >
                               {experiment.isRunning ? (
@@ -464,11 +589,12 @@ export const ProjectSidebar: React.FC<ProjectSidebarProps> = ({
                                   <Edit2 className="w-3 h-3" />
                                 </button>
                                 <button
+                                  disabled={isComputing}
                                   onClick={(e) => {
                                     e.stopPropagation();
                                     setDeletingItem({ type: 'experiment', projectId: project.id, experimentId: experiment.id });
                                   }}
-                                  className="p-0.5 text-purple-300 hover:text-red-400 hover:bg-red-500/30 rounded transition-all backdrop-blur-sm bg-slate-800/80"
+                                  className="p-0.5 text-purple-300 hover:text-red-400 hover:bg-red-500/30 rounded transition-all backdrop-blur-sm bg-slate-800/80 disabled:opacity-50 disabled:cursor-not-allowed"
                                   title="Delete experiment"
                                 >
                                   <Trash2 className="w-3 h-3" />
@@ -483,8 +609,9 @@ export const ProjectSidebar: React.FC<ProjectSidebarProps> = ({
                     {/* Create New Experiment (at bottom) */}
                     {creatingExperimentFor !== project.id ? (
                       <button
-                        onClick={() => setCreatingExperimentFor(project.id)}
-                        className="w-full px-3 py-1.5 text-left text-xs text-purple-300 hover:text-white hover:bg-purple-600/20 rounded transition-all flex items-center gap-2 group"
+                        disabled={isComputing}
+                        onClick={() => handleCreateExperiment(project.id)}
+                        className="w-full px-3 py-1.5 text-left text-xs text-purple-300 hover:text-white hover:bg-purple-600/20 rounded transition-all flex items-center gap-2 group disabled:cursor-not-allowed disabled:hover:bg-white/30"
                       >
                         <Plus className="w-3 h-3 group-hover:scale-110 transition-transform" />
                         <span>New Experiment</span>
@@ -496,7 +623,7 @@ export const ProjectSidebar: React.FC<ProjectSidebarProps> = ({
                           value={newExperimentName}
                           onChange={(e) => setNewExperimentName(e.target.value)}
                           onKeyDown={(e) => {
-                            if (e.key === 'Enter') handleCreateExperiment(project.id);
+                            if (e.key === 'Enter' && !isComputing) handleCreateExperiment(project.id);
                             if (e.key === 'Escape') {
                               setCreatingExperimentFor(null);
                               setNewExperimentName('');
@@ -508,8 +635,9 @@ export const ProjectSidebar: React.FC<ProjectSidebarProps> = ({
                         />
                         <div className="flex gap-2">
                           <button
+                            disabled={isComputing}
                             onClick={() => handleCreateExperiment(project.id)}
-                            className="flex-1 px-2 py-1 bg-purple-600 hover:bg-purple-500 text-white text-xs rounded transition-colors"
+                            className="flex-1 px-2 py-1 bg-purple-600 hover:bg-purple-500 text-white text-xs rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                           >
                             Create
                           </button>
@@ -533,8 +661,9 @@ export const ProjectSidebar: React.FC<ProjectSidebarProps> = ({
             {/* Create New Project Button (at bottom) */}
             {!creatingProject ? (
               <button
-                onClick={() => setCreatingProject(true)}
-                className="w-full px-3 py-2 text-left text-sm text-purple-300 hover:text-white hover:bg-purple-600/30 rounded-lg transition-all flex items-center gap-2 group"
+                disabled={isComputing}
+                onClick={handleCreateProject}
+                className="w-full px-3 py-2 text-left text-sm text-purple-300 hover:text-white hover:bg-purple-600/30 rounded-lg transition-all flex items-center gap-2 group disabled:cursor-not-allowed disabled:hover:bg-white/30"
               >
                 <Plus className="w-4 h-4 group-hover:scale-110 transition-transform" />
                 <span>New Project</span>
@@ -546,7 +675,7 @@ export const ProjectSidebar: React.FC<ProjectSidebarProps> = ({
                   value={newProjectName}
                   onChange={(e) => setNewProjectName(e.target.value)}
                   onKeyDown={(e) => {
-                    if (e.key === 'Enter') handleCreateProject();
+                    if (e.key === 'Enter' && !isComputing) handleCreateProject();
                     if (e.key === 'Escape') {
                       setCreatingProject(false);
                       setNewProjectName('');
@@ -558,8 +687,9 @@ export const ProjectSidebar: React.FC<ProjectSidebarProps> = ({
                 />
                 <div className="flex gap-2">
                   <button
+                    disabled={isComputing}
                     onClick={handleCreateProject}
-                    className="flex-1 px-2 py-1 bg-purple-600 hover:bg-purple-500 text-white text-xs rounded transition-colors"
+                    className="flex-1 px-2 py-1 bg-purple-600 hover:bg-purple-500 text-white text-xs rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     Create
                   </button>
@@ -584,6 +714,27 @@ export const ProjectSidebar: React.FC<ProjectSidebarProps> = ({
             )}
           </div>
         )}
+      </div>
+
+      {/* Resize Handle */}
+      <div
+        className={`absolute top-0 right-0 bottom-0 w-2 cursor-col-resize group ${
+          isResizing ? 'bg-purple-400/30' : ''
+        }`}
+        onMouseDown={(e) => {
+          e.preventDefault();
+          setIsResizing(true);
+        }}
+        title="Drag to resize (drag left to collapse)"
+      >
+        {/* Visual indicator line */}
+        <div className="absolute top-0 bottom-0 right-0 w-0.5 bg-purple-400/20 group-hover:bg-purple-400/50 transition-colors" />
+        {/* Center grip indicator */}
+        <div className="absolute top-1/2 right-0.5 -translate-y-1/2 flex flex-col gap-1">
+          <div className="w-0.5 h-1 bg-purple-400/40 group-hover:bg-purple-400/70 transition-colors" />
+          <div className="w-0.5 h-1 bg-purple-400/40 group-hover:bg-purple-400/70 transition-colors" />
+          <div className="w-0.5 h-1 bg-purple-400/40 group-hover:bg-purple-400/70 transition-colors" />
+        </div>
       </div>
     </div>
 
@@ -637,21 +788,6 @@ export const useProjectSidebar = () => {
     projectId: null,
     experimentId: null
   });
-  const [hasLoadedInitialSelection, setHasLoadedInitialSelection] = useState(false);
-
-  // Load last selection from localStorage on mount
-  React.useEffect(() => {
-    const savedSelection = localStorage.getItem(SELECTION_STORAGE_KEY);
-    if (savedSelection) {
-      try {
-        const parsed = JSON.parse(savedSelection);
-        setSelectionState(parsed);
-      } catch (e) {
-        console.error('Error loading last selection:', e);
-      }
-    }
-    setHasLoadedInitialSelection(true);
-  }, []);
 
   // Save selection to localStorage whenever it changes
   const setSelection = React.useCallback((newSelection: ProjectSelection) => {
@@ -659,19 +795,24 @@ export const useProjectSidebar = () => {
     localStorage.setItem(SELECTION_STORAGE_KEY, JSON.stringify(newSelection));
   }, []);
 
+  const selectionRef = React.useRef(selection);
+  React.useEffect(() => {
+    selectionRef.current = selection;
+  }, [selection]);
+
   return {
     isOpen,
     setIsOpen,
     toggleSidebar: () => setIsOpen(prev => !prev),
     selection,
     setSelection,
-    hasLoadedInitialSelection
+    selectionRef
   };
 };
 
 // Separate hook for project management functions to be used in the main app
 export const useProjectManagement = () => {
-  const { projects, createProject, createExperiment } = useProjectData();
+  const { projects, createProject, createExperiment, updateExperiment } = useProjectData();
 
   const createProjectAndExperiment = React.useCallback(async (
     projectName: string, 
@@ -689,6 +830,7 @@ export const useProjectManagement = () => {
   return {
     projects,  // Expose projects list
     createProjectAndExperiment,
-    createExperiment  // Export this so it can be used separately
+    createExperiment,
+    updateExperiment
   };
 };
