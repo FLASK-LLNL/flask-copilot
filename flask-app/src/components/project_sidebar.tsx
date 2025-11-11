@@ -126,6 +126,11 @@ export const ProjectSidebar: React.FC<ProjectSidebarProps> = ({
   };
 
   const handleProjectClick = (project: Project) => {
+    // No change
+    if (project.id == selection.projectId) {
+      return;
+    }
+
     // Save before selecting away
     onSaveContext();
     onReset();
@@ -150,6 +155,11 @@ export const ProjectSidebar: React.FC<ProjectSidebarProps> = ({
   };
 
   const handleExperimentClick = (project: Project, experiment: Experiment) => {
+    // No change
+    if (project.id == selection.projectId && experiment.id == selection.experimentId) {
+      return;
+    }
+
     // Save before selecting away
     onSaveContext();
     onReset();
