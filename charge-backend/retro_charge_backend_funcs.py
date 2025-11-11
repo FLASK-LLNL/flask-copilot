@@ -1,5 +1,5 @@
 from fastapi import WebSocket
-from charge.clients.autogen import AutoGenClient
+from charge.clients.autogen import AutoGenClient, AutoGenAgent
 from charge.servers.AiZynthTools import RetroPlanner, ReactionPath
 from aizynth_backend_funcs import generate_tree_structure
 from loguru import logger
@@ -64,7 +64,7 @@ async def constrained_retro(
     parent_smiles: str,
     constraint_id: str,
     constraint_smiles: str,
-    charge_runner: AutoGenClient,
+    charge_runner: AutoGenAgent,
     aizynth_planner: RetroPlanner,
     retro_synth_context: RetrosynthesisContext,
     websocket: WebSocket,
@@ -88,7 +88,7 @@ async def constrained_retro(
             constraint_id (str): Identifier for the constrained substructure/fragment.
             constraint_smiles (str): SMILES string for the substructure/fragment to avoid
                     in proposed synthetic routes.
-            charge_runner (AutoGenClient): An asynchronous runner client that, when
+            charge_runner (AutoGenAgent): An asynchronous runner client that, when
                     awaited (charge_runner.run()), performs the retrosynthesis / optimization
                     and returns a result object with a to_dict() method. This object also wraps
                     the task in task, which contains the prompts
@@ -138,7 +138,8 @@ async def constrained_retro(
     )
 
     result = await charge_runner.run()
-    retro_results = result.to_dict()
+    result = ReactionOutputSchema.model_validate_json(result)
+    retro_results = result.as_dict()
 
     reactants = retro_results.get("reactants_smiles_list", [])
     products = retro_results.get("products_smiles_list", [])
@@ -150,7 +151,7 @@ async def constrained_retro(
 async def unconstrained_retro(
     parent_id: str,
     parent_smiles: str,
-    charge_runner: AutoGenClient,
+    charge_runner: AutoGenAgent,
     aizynth_planner: RetroPlanner,
     retro_synth_context: RetrosynthesisContext,
     websocket: WebSocket,
@@ -174,7 +175,7 @@ async def unconstrained_retro(
             constraint_id (str): Identifier for the constrained substructure/fragment.
             constraint_smiles (str): SMILES string for the substructure/fragment to avoid
                     in proposed synthetic routes.
-            charge_runner (AutoGenClient): An asynchronous runner client that, when
+            charge_runner (AutoGenAgent): An asynchronous runner client that, when
                     awaited (charge_runner.run()), performs the retrosynthesis / optimization
                     and returns a result object with a to_dict() method. This object also wraps
                     the task in task, which contains the prompts
@@ -214,7 +215,9 @@ async def unconstrained_retro(
     )
 
     result = await charge_runner.run()
-    retro_results = result.to_dict()
+
+    result = ReactionOutputSchema.model_validate_json(result)
+    retro_results = result.as_dict()
 
     reactants = retro_results.get("reactants_smiles_list", [])
     products = retro_results.get("products_smiles_list", [])
@@ -373,7 +376,9 @@ async def optimize_molecule_retro(
 
     # Run task
     await highlight_node(current_node, websocket, True)
-    result: ReactionOutputSchema = cast(ReactionOutputSchema, await runner.run())
+    output = await runner.run()
+    result = ReactionOutputSchema.model_validate_json(output)
+
     await highlight_node(current_node, websocket, False)
 
     level = current_node.level + 1
