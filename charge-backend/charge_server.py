@@ -330,6 +330,7 @@ async def websocket_endpoint(websocket: WebSocket):
 
     except WebSocketDisconnect:
         logger.info("WebSocket disconnected")
+        pass
     except httpx.ConnectError as e:
         logger.error(f"Connection error: {e}")
     except Exception as e:
