@@ -5,19 +5,28 @@
 ## SPDX-License-Identifier: Apache-2.0
 ################################################################################
 
-from dataclasses import dataclass
+from dataclasses import dataclass, asdict
 from fastapi import Request
 import socket
 from loguru import logger
 import requests
 from pydantic import BaseModel
 import json
+from typing import Optional
 
 from charge.utils.system_utils import check_server_paths
 from autogen_ext.tools.mcp import McpWorkbench, SseServerParams
 from charge.clients.autogen_utils import (
     _list_wb_tools,
 )
+
+@dataclass
+class ToolList:
+    server: str
+    names: Optional[str] = None
+
+    def json(self):
+        return asdict(self)
 
 class ToolServer(BaseModel):
     address: str

@@ -42,7 +42,7 @@ from charge.clients.Client import Client
 from charge.experiments.AutoGenExperiment import AutoGenExperiment
 from charge.clients.autogen import AutoGenPool
 
-from tool_registration import register_post, list_server_urls, list_server_tools, reload_server_list
+from tool_registration import ToolList, register_post, list_server_urls, list_server_tools, reload_server_list
 
 parser = argparse.ArgumentParser()
 
@@ -262,7 +262,7 @@ async def websocket_endpoint(websocket: WebSocket):
                     tool_names = []
                     for (name, _) in tool_list:
                         tool_names.append(name)
-                    tools.append(ToolServer(server, tool_names))
+                    tools.append(ToolList(server, tool_names))
 
                 if tools == []:
                     await websocket.send_json(
