@@ -256,6 +256,11 @@ const ChemistryTool: React.FC = () => {
       } else if (data.type === 'node_update') {
         const { id, ...restData } = data.node!;
 
+        if (restData) {
+           setIsComputing(true);
+        }else {
+           setIsComputing(false);
+        }
         setTreeNodes(prev => prev.map(n =>
           n.id === data.node!.id ? { ...n, ...restData } : n
         ));
