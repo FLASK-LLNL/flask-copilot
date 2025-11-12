@@ -384,6 +384,11 @@ async def optimize_molecule_retro(
     level = current_node.level + 1
     num_nodes = len(context.node_ids)
 
+    reasoning_summary = result.reasoning_summary
+    logger.info(
+        f"Retrosynthesis reasoning for {current_node.smiles}: {reasoning_summary}"
+    )
+
     nodes: list[Node] = []
     edges: list[Edge] = []
     for i, smiles in enumerate(result.reactants_smiles_list):

@@ -103,10 +103,6 @@ async def generate_lead_molecule(
     # Generate one node at a time
 
     mol_data = [lead_molecule_data]
-    task = LeadMoleculeOptimization(
-        lead_molecule=lead_molecule_smiles, server_urls=available_tools
-    )
-    experiment.add_task(task)
 
     canonical_smiles = lead_molecule_smiles
     callback = CallbackHandler(websocket)
@@ -183,15 +179,11 @@ async def generate_lead_molecule(
                         cost=get_price(canonical_smiles),
                         # Not sure what to put here
                         hoverInfo=mol_hov,
-                        x=150 + node_id * 250,
+                        x=150 + node_id * 350,
                         y=100,
                     )
 
                     await websocket.send_json({"type": "node", "node": node.json()})
-
-                    task = LeadMoleculeOptimization(lead_molecule=canonical_smiles)
-                    experiment.add_task(task)
-                    parent_id = node_id
 
                     break  # Exit while loop to proceed to next node
                 else:
