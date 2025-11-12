@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Project, Experiment } from '../types';
 
 const STORAGE_KEY = 'flask_copilot_projects';
@@ -14,6 +14,20 @@ interface ProjectDataSource {
   updateExperiment: (projectId: string, experiment: Experiment) => Promise<void>;
   deleteExperiment: (projectId: string, experimentId: string) => Promise<void>;
   setExperimentRunning: (projectId: string, experimentId: string, isRunning: boolean) => Promise<void>;
+}
+
+export interface ProjectData {
+  projectsRef: React.RefObject<Project[]>;
+  projects: Project[];
+  loading: boolean;
+  createProject: (name: string) => Promise<Project>;
+  updateProject: (project: Project) => Promise<void>;
+  deleteProject: (projectId: string) => Promise<void>;
+  createExperiment: (projectId: string, name: string) => Promise<Experiment>;
+  updateExperiment: (projectId: string, experiment: Experiment) => Promise<void>;
+  deleteExperiment: (projectId: string, experimentId: string) => Promise<void>;
+  setExperimentRunning: (projectId: string, experimentId: string, isRunning: boolean) => Promise<void>;
+  refreshProjects: () => Promise<void>;
 }
 
 // LocalStorage implementation
@@ -134,6 +148,11 @@ class LocalStorageDataSource implements ProjectDataSource {
 export const useProjectData = () => {
   const [projects, setProjects] = useState<Project[]>([]);
   const [loading, setLoading] = useState(true);
+
+  const projectsRef = useRef(projects);
+  useEffect(() => {
+    projectsRef.current = projects;
+  }, [projects]);
   
   // TODO(later): Swap this to use ServerDataSource
   const dataSource: ProjectDataSource = new LocalStorageDataSource();
@@ -147,6 +166,7 @@ export const useProjectData = () => {
     try {
       const data = await dataSource.loadProjects();
       setProjects(data);
+      projectsRef.current = data;
     } catch (error) {
       console.error('Error loading projects:', error);
     } finally {
@@ -192,6 +212,7 @@ export const useProjectData = () => {
   };
 
   return {
+    projectsRef,
     projects,
     loading,
     createProject,
