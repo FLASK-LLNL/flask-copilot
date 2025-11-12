@@ -33,7 +33,6 @@ const ChemistryTool: React.FC = () => {
   const [contextMenu, setContextMenu] = useState<ContextMenuState>({node: null, x: 0, y: 0});
   const [customQueryModal, setCustomQueryModal] = useState<TreeNode | null>(null);
   const [customQueryText, setCustomQueryText] = useState<string>('');
-  const [websocket, setWebsocket] = useState<WebSocket | null>(null);
   const [wsConnected, setWsConnected] = useState<boolean>(false);
   const [saveDropdownOpen, setSaveDropdownOpen] = useState<boolean>(false);
   const [wsError, setWsError] = useState<string>('');
@@ -224,7 +223,7 @@ const ChemistryTool: React.FC = () => {
       problemType: problemType
     };
 
-    websocket?.send(JSON.stringify(message));
+    wsRef.current?.send(JSON.stringify(message));
   };
 
   const reconnectWS = (): void => {
@@ -239,7 +238,6 @@ const ChemistryTool: React.FC = () => {
 
     socket.onopen = () => {
       console.log('WebSocket connected');
-      setWebsocket(socket);
       setWsConnected(true);
       setWsReconnecting(false);
       setWsError('');
@@ -365,20 +363,20 @@ const ChemistryTool: React.FC = () => {
     setSaveDropdownOpen(false);
     sidebarState.setSourceFilterOpen(false);
     setWsTooltipPinned(false);
-    if (websocket && websocket.readyState === WebSocket.OPEN) {
-      websocket.send(JSON.stringify({ action: 'reset' }));
+    if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+      wsRef.current.send(JSON.stringify({ action: 'reset' }));
     }
   };
 
   const stop = (): void => {
-    if (!websocket || websocket.readyState !== WebSocket.OPEN) {
+    if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) {
       // alert('WebSocket not connected');
       return;
     }
 
     console.log('Sending stop command to server');
     setIsComputing(false);
-    websocket.send(JSON.stringify({ action: 'stop' }));
+    wsRef.current.send(JSON.stringify({ action: 'stop' }));
   };
 
   useEffect(() => {
@@ -504,7 +502,7 @@ const ChemistryTool: React.FC = () => {
   };
 
   const sendMessageToServer = (message: string, data?: Omit<WebSocketMessageToServer, 'action'>): void => {
-    if (!websocket || websocket.readyState !== WebSocket.OPEN) {
+    if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) {
       alert('WebSocket not connected');
       return;
     }
@@ -512,7 +510,7 @@ const ChemistryTool: React.FC = () => {
       action: message,
       ...data
     };
-    websocket.send(JSON.stringify(msg));
+    wsRef.current.send(JSON.stringify(msg));
     setContextMenu({node: null, x: 0, y: 0});
   };
 
@@ -529,7 +527,7 @@ const ChemistryTool: React.FC = () => {
   };
 
   const submitCustomQuery = (): void => {
-    if (!websocket || websocket.readyState !== WebSocket.OPEN) {
+    if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) {
       alert('WebSocket not connected');
       return;
     }
@@ -540,7 +538,7 @@ const ChemistryTool: React.FC = () => {
       nodeId: customQueryModal?.id,
       query: customQueryText
     };
-    websocket.send(JSON.stringify(message));
+    wsRef.current.send(JSON.stringify(message));
 
     setCustomQueryModal(null);
     setCustomQueryText('');
