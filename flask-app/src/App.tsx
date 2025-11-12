@@ -16,6 +16,7 @@ import { copyToClipboard } from './utils';
 
 import './animations.css';
 import { MetricsDashboard, useMetricsDashboardState } from './components/metrics';
+import { useProjectData } from './hooks/useProjectData';
 
 
 const ChemistryTool: React.FC = () => {
@@ -52,7 +53,8 @@ const ChemistryTool: React.FC = () => {
   const sidebarState = useSidebarState();
   const metricsDashboardState = useMetricsDashboardState();
   const projectSidebar = useProjectSidebar();
-  const projectManagement = useProjectManagement();
+  const projectData = useProjectData();
+  const projectManagement = useProjectManagement(projectData);
 
   const [showToolSelectionModal, setShowToolSelectionModal] = useState<boolean>(false);
   const [selectedTools, setSelectedTools] = useState<number[]>([]);
@@ -108,7 +110,7 @@ const ChemistryTool: React.FC = () => {
 
   const loadContextFromExperiment = (projectId: string, experimentId: string | null): void => {
     console.log('Loading context:', { projectId, experimentId });
-    const project = projectManagement.projects.find(p => p.id === projectId);
+    const project = projectData.projectsRef.current.find(p => p.id === projectId);
     if (project) {
       const experiment = project.experiments.find(e => e.id === experimentId);
       if (experiment) {
@@ -196,7 +198,7 @@ const ChemistryTool: React.FC = () => {
       const projectId = projectSidebar.selectionRef.current.projectId!;
 
       // Find the project to count existing experiments
-      const project = projectManagement.projects.find(p => p.id === projectId);
+      const project = projectData.projectsRef.current.find(p => p.id === projectId);
       const experimentCount = project ? project.experiments.length + 1 : 1;
       const experimentName = `Experiment ${experimentCount}`;
 
@@ -387,7 +389,7 @@ const ChemistryTool: React.FC = () => {
     getContextRef.current = () => {
       const projectId = projectSidebar.selectionRef.current.projectId;
       const experimentId = projectSidebar.selectionRef.current.experimentId;
-      const project = projectManagement.projects.find(p => p.id === projectId);
+      const project = projectData.projectsRef.current.find(p => p.id === projectId);
       if (project) {
         const experiment = project.experiments.find(e => e.id === experimentId);
         if (experiment) {
@@ -410,7 +412,7 @@ const ChemistryTool: React.FC = () => {
       }
       throw "No experiment found";
     };
-  }, [smiles, problemName, problemType, graphState, sidebarState, treeNodes, edges, metricsDashboardState, autoZoom, systemPrompt, problemPrompt]);
+  }, [smiles, problemName, problemType, graphState, sidebarState, treeNodes, edges, metricsDashboardState, autoZoom, systemPrompt, problemPrompt, projectData, projectSidebar]);
 
 
 
@@ -571,6 +573,7 @@ const ChemistryTool: React.FC = () => {
     <div className="min-h-screen bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900">
       <div className="flex min-h-screen">
         <ProjectSidebar
+          projectData={projectData}
           isOpen={projectSidebar.isOpen}
           onToggle={projectSidebar.toggleSidebar}
           selection={projectSidebar.selection}
