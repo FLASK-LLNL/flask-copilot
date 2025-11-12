@@ -3,12 +3,12 @@ import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { Loader2, FlaskConical, TestTubeDiagonal, Network, Play, RotateCcw, X, Send, RefreshCw, Sparkles } from 'lucide-react';
 
 import { WS_SERVER } from './config';
-import { TreeNode, Edge, ContextMenuState, SidebarMessage, Tool, WebSocketMessageToServer, WebSocketMessage, Project, Experiment } from './types';
+import { TreeNode, Edge, ContextMenuState, SidebarMessage, Tool, WebSocketMessageToServer, WebSocketMessage, SelectableTool, Experiment } from './types';
 
 import { loadRDKit } from './components/molecule';
 import { ReasoningSidebar, useSidebarState } from './components/sidebar';
 import { MoleculeGraph, useGraphState } from './components/graph';
-import { MultiSelectToolModal, SelectableTool } from './components/multi_select_tools';
+import { MultiSelectToolModal } from './components/multi_select_tools';
 import { ProjectSidebar, useProjectSidebar, useProjectManagement } from './components/project_sidebar';
 
 import { findAllDescendants, hasDescendants, isRootNode, relayoutTree } from './tree_utils';
@@ -339,7 +339,6 @@ const ChemistryTool: React.FC = () => {
       // Only clear state if this is the current socket
       if (wsRef.current === socket) {
         wsRef.current = null;
-        setWebsocket(null);
         setWsConnected(false);
         setIsComputing(false);
         setWsReconnecting(false);
@@ -713,7 +712,7 @@ const ChemistryTool: React.FC = () => {
                             <div className="space-y-1 max-h-60 overflow-y-auto pr-1">
                               {availableTools.map((tool, idx) => (
                                 <div key={idx} className="text-xs bg-purple-900/30 rounded px-2 py-1">
-                                  <div className="text-purple-100 font-medium">{tool.server || server as string}</div>
+                                  <div className="text-purple-100 font-medium">{tool.server || "server" as string}</div>
                                   {tool.names && (
                                     <div className="text-purple-300 mt-0.5 text-[10px] leading-tight">
                                       {tool.names.join(", ")}
