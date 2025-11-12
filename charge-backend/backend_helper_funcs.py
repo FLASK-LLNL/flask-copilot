@@ -6,7 +6,7 @@ from typing import Dict, Optional, Literal, Tuple
 from dataclasses import dataclass, asdict
 from collections import defaultdict
 
-from charge.clients.autogen import AutoGenClient
+from charge.clients.autogen import AutoGenAgent
 import charge.servers.AiZynthTools as aizynth_funcs
 
 
@@ -86,8 +86,19 @@ def get_bandgap(smiles: str) -> float:
 
     return round(random.uniform(1.0, 5.0), 2)
 
+
 # Add a temporary blacklist until UI filtering of messages is added
-tool_callback_blacklist = ["verify_smiles", "canonicalize_smiles", "diagnose_smiles", "is_already_known", "get_density", "get_synthesizability", "is_molecule_synthesizable"]
+tool_callback_blacklist = [
+    "verify_smiles",
+    "canonicalize_smiles",
+    "diagnose_smiles",
+    "is_already_known",
+    "get_density",
+    "get_synthesizability",
+    "is_molecule_synthesizable",
+]
+
+
 class CallbackHandler:
     def __init__(self, websocket: WebSocket):
         self.websocket = websocket
@@ -117,7 +128,10 @@ class CallbackHandler:
                                 if "log_msg" in str_to_dict:
                                     _str = str_to_dict["log_msg"]
 
-                            msg = {"type": "response", "message": {"source": name, "message": _str}}
+                            msg = {
+                                "type": "response",
+                                "message": {"source": name, "message": _str},
+                            }
                             if "smiles" in item.arguments:
                                 str_to_dict = json.loads(item.arguments)
                                 if "smiles" in str_to_dict:
@@ -147,13 +161,13 @@ class CallbackHandler:
 
 class RetrosynthesisContext:
     """
-    Manages a retrosynthesis experiment
+    Manages a retrosynthesis task
     """
 
     def __init__(self):
         self.node_ids: dict[str, Node] = {}
         self.node_id_to_planner: dict[str, aizynth_funcs.RetroPlanner] = {}
-        self.node_id_to_charge_client: dict[str, AutoGenClient] = {}
+        self.node_id_to_charge_client: dict[str, AutoGenAgent] = {}
         self.azf_nodes: dict[str, aizynth_funcs.Node] = {}
         self.nodes_per_level: dict[int, int] = defaultdict(int)
         self.parents: dict[str, str] = {}

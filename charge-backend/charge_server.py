@@ -1,42 +1,31 @@
+################################################################################
+## Copyright 2025 Lawrence Livermore National Security, LLC. and Binghamton University.
+## See the top-level LICENSE file for details.
+##
+## SPDX-License-Identifier: Apache-2.0
+################################################################################
+
 from functools import partial
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 import asyncio
-from collections import defaultdict
-import json
 import os
 import argparse
-import sys
-from typing import Dict, cast
-
 import httpx
-
-from charge.tasks.LMOTask import (
-    LMOTask as LeadMoleculeOptimization,
-)
-from charge.tasks.RetrosynthesisTask import (
-    TemplateFreeRetrosynthesisTask as RetrosynthesisTask,
-    TemplateFreeReactionOutputSchema as ReactionOutputSchema,
-)
-
-import charge.utils.helper_funcs as lmo_helper_funcs
 from charge.servers.server_utils import try_get_public_hostname
-
 import os
-from charge.clients.Client import Client
-from charge.clients.autogen import AutoGenClient
-import charge.servers.AiZynthTools as aizynth_funcs
+
+
 import logging
 from aizynthfinder.utils.logging import setup_logger
 
 setup_logger(console_level=logging.INFO)
 
 from loguru import logger
-from callback_logger import callback_logger
+from callback_logger import CallbackLogger
 
-import sys
 from backend_helper_funcs import (
     CallbackHandler,
     RetrosynthesisContext,
@@ -48,16 +37,12 @@ from retro_charge_backend_funcs import (
     generate_molecules,
     optimize_molecule_retro,
 )
-import copy
-from lmo_charge_backend_funcs import lead_molecule
-from aizynth_backend_funcs import aizynth_retro
-from retro_charge_backend_funcs import (
-    unconstrained_retro,
-    constrained_retro,
-    get_constrained_prompt,
-    get_unconstrained_prompt,
-)
+from lmo_charge_backend_funcs import generate_lead_molecule
+from charge.clients.Client import Client
+from charge.experiments.AutoGenExperiment import AutoGenExperiment
+from charge.clients.autogen import AutoGenPool
 
+from tool_registration import ToolList, register_post, list_server_urls, list_server_tools, reload_server_list
 
 parser = argparse.ArgumentParser()
 
@@ -83,14 +68,17 @@ parser.add_argument(
 parser.add_argument("--port", type=int, default=8001, help="Port to run the server on")
 parser.add_argument("--host", type=str, default=None, help="Host to run the server on")
 
-parser.add_argument("--lmo-urls", nargs="*", type=str, default=[])
-parser.add_argument("--retro-urls", nargs="*", type=str, default=[])
+parser.add_argument(
+    "--tool-server-cache",
+    type=str,
+    default="flask_copilot_active_tool_servers.json",
+    help="Path to the JSON file containing current list of active MCP tool servers.",
+)
 
 # Add standard CLI arguments
 Client.add_std_parser_arguments(parser)
 
 args = parser.parse_args()
-
 
 app = FastAPI()
 
@@ -103,69 +91,54 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-if 'FLASK_APPDIR' in os.environ:
-    DIST_PATH = os.environ['FLASK_APPDIR']
+if "FLASK_APPDIR" in os.environ:
+    DIST_PATH = os.environ["FLASK_APPDIR"]
 else:
     DIST_PATH = os.path.join(os.path.dirname(__file__), "flask-app", "dist")
 ASSETS_PATH = os.path.join(DIST_PATH, "assets")
 
+reload_server_list(args.tool_server_cache)
 
-(MODEL, BACKEND, API_KEY, MODEL_KWARGS) = AutoGenClient.configure(args.model, args.backend)
-
-server_urls = args.server_urls
-assert server_urls is not None, "Server URLs must be provided"
-for url in server_urls + args.lmo_urls + args.retro_urls:
-    assert url.endswith("/sse"), f"Server URL {url} must end with /sse"
-
-LMO_URLS = args.lmo_urls + server_urls
-RETRO_URLS = args.retro_urls + server_urls
-
+app.post("/register")(partial(register_post, args.tool_server_cache))
 
 if os.path.exists(ASSETS_PATH):
     # Serve the frontend
     app.mount("/assets", StaticFiles(directory=ASSETS_PATH), name="assets")
-    app.mount("/rdkit", StaticFiles(directory=os.path.join(DIST_PATH, "rdkit")), name="rdkit")
+    app.mount(
+        "/rdkit", StaticFiles(directory=os.path.join(DIST_PATH, "rdkit")), name="rdkit"
+    )
 
     @app.get("/")
     async def root():
-        with open(os.path.join(DIST_PATH, "index.html"), 'r') as fp:
+        with open(os.path.join(DIST_PATH, "index.html"), "r") as fp:
             html = fp.read()
 
-        html = html.replace('<!-- APP CONFIG -->', f'''
+        html = html.replace(
+            "<!-- APP CONFIG -->",
+            f"""
            <script>
            window.APP_CONFIG = {{
                WS_SERVER: '{os.getenv("WS_SERVER", "ws://localhost:8001/ws")}'
            }};
-           </script>''')
+           </script>""",
+        )
         return HTMLResponse(html)
 
-
-def make_client(client, task, server_urls, websocket):
-    if client is None:
-        return AutoGenClient(
-            task=task,
-            model=MODEL,
-            backend=BACKEND,
-            api_key=API_KEY,
-            model_kwargs=MODEL_KWARGS,
-            server_url=server_urls,
-            thoughts_callback=CallbackHandler(websocket),
-        )
-    else:
-        client.task = task
-        return client
 
 @app.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket):
     await websocket.accept()
 
+    # set up an AutoGenAgent pool for tasks on this endpoint
+
+    autogen_pool = AutoGenPool(model=args.model, backend=args.backend)
+    # Set up an experiment class for current endpoint
+    experiment = AutoGenExperiment(task=None, agent_pool=autogen_pool)
+
     # Keep track of currently running task
     CURRENT_TASK: asyncio.Task | None = None
-    # Initialize Charge task with a dummy lead molecule
-    lmo_task = None
-    lmo_runner = None
 
-    clogger = callback_logger(websocket)
+    clogger = CallbackLogger(websocket)
 
     retro_synth_context: RetrosynthesisContext | None = None
     try:
@@ -197,28 +170,14 @@ async def websocket_endpoint(websocket: WebSocket):
                     clogger.info("Start Optimization action received")
                     logger.info(f"Data: {data}")
 
-                    lmo_task = LeadMoleculeOptimization(lead_molecule=data["smiles"])
-                    if lmo_runner is None:
-                        lmo_runner = AutoGenClient(
-                            task=lmo_task,
-                            model=MODEL,
-                            backend=BACKEND,
-                            api_key=API_KEY,
-                            model_kwargs=MODEL_KWARGS,
-                            server_url=LMO_URLS,
-                            thoughts_callback=CallbackHandler(websocket),
-                        )
-                    else:
-                        lmo_runner.task = lmo_task
-
                     run_func = partial(
-                        lead_molecule,
+                        generate_lead_molecule,
                         data["smiles"],
-                        lmo_task,
-                        lmo_runner,
+                        experiment,
                         args.json_file,
                         args.max_iterations,
                         data.get("depth", 3),
+                        list_server_urls(),  # TODO: This should be changed to available specified by the user
                         websocket,
                     )
                 elif data["problemType"] == "retrosynthesis":
@@ -253,7 +212,13 @@ async def websocket_endpoint(websocket: WebSocket):
                 # Leaf node optimization
                 logger.info("Synthesize tree leaf action received")
                 logger.info(f"Data: {data}")
-                await optimize_molecule_retro(data["nodeId"], retro_synth_context, websocket, MODEL, BACKEND, API_KEY, MODEL_KWARGS, RETRO_URLS)
+                await optimize_molecule_retro(
+                    data["nodeId"],
+                    retro_synth_context,
+                    websocket,
+                    experiment,
+                    list_server_urls(),
+                )
                 await websocket.send_json({"type": "complete"})
             elif action == "optimize-from":
                 # Leaf node optimization
@@ -265,7 +230,7 @@ async def websocket_endpoint(websocket: WebSocket):
                             "message": {
                                 "source": "System",
                                 "message": f"Processing optimization query: {data['query']} for node {data['nodeId']}",
-                            }
+                            },
                         }
                     )
                 logger.info("Optimize from action received")
@@ -281,7 +246,7 @@ async def websocket_endpoint(websocket: WebSocket):
                             "message": {
                                 "source": "System",
                                 "message": f"Processing reaction query: {data['query']} for node {data['nodeId']}",
-                            }
+                            },
                         }
                     )
 
@@ -289,6 +254,32 @@ async def websocket_endpoint(websocket: WebSocket):
                 logger.info(f"Data: {data}")
                 await websocket.send_json({"type": "complete"})
 
+            elif action == "list-tools":
+                tools = []
+                server_list = list_server_urls()
+                for server in server_list:
+                    tool_list = await list_server_tools([server])
+                    tool_names = []
+                    for (name, _) in tool_list:
+                        tool_names.append(name)
+                    tools.append(ToolList(server, tool_names))
+
+                if tools == []:
+                    await websocket.send_json(
+                        {
+                            "type": "available-tools-response",
+                            "tools": [],
+                        }
+                    )
+                else:
+                    await websocket.send_json({
+                        "type": "available-tools-response",
+                        "tools": [tool.json() for tool in tools],
+                    })
+            elif action == "select-tools-for-task":
+                query = data.get("query", None)
+                logger.info("Select tools for task")
+                logger.info(f"Data: {data}")
             elif action == "custom_query":
                 await websocket.send_json(
                     {
@@ -296,18 +287,18 @@ async def websocket_endpoint(websocket: WebSocket):
                         "message": {
                             "source": "System",
                             "message": f"Processing query: {data['query']} for node {data['nodeId']}",
-                        }
+                        },
                     }
                 )
                 await asyncio.sleep(3)
                 await websocket.send_json({"type": "complete"})
 
             elif action == "reset":
-                if lmo_runner:
-                    lmo_runner.reset()
+                experiment.reset()
+
                 if retro_synth_context is not None:
                     retro_synth_context.reset()
-                logger.info("Task state has been reset.")
+                logger.info("Experiment state has been reset.")
 
             elif action == "stop":
                 if CURRENT_TASK and not CURRENT_TASK.done():
@@ -331,6 +322,16 @@ async def websocket_endpoint(websocket: WebSocket):
         logger.error(f"Connection error: {e}")
     except Exception as e:
         logger.error(f"Error in WebSocket connection: {e}")
+    finally:
+        if CURRENT_TASK and not CURRENT_TASK.done():
+            logger.info("Stopping current task due to connection closure.")
+            CURRENT_TASK.cancel()
+            try:
+                await CURRENT_TASK
+            except asyncio.CancelledError:
+                logger.info("Current task cancelled successfully.")
+
+        clogger.unbind()
 
 
 if __name__ == "__main__":

@@ -4,14 +4,14 @@ import asyncio
 from loguru import logger
 import sys
 import os
-from charge.clients.autogen import AutoGenClient
-from callback_logger import callback_logger
+from charge.experiments.AutoGenExperiment import AutoGenExperiment
+from callback_logger import CallbackLogger
 from charge.tasks.LMOTask import (
     LMOTask as LeadMoleculeOptimization,
     MoleculeOutputSchema,
 )
 
-from backend_helper_funcs import Node, Edge
+from backend_helper_funcs import CallbackHandler, Node, Edge
 from backend_helper_funcs import get_bandgap, get_price
 
 # TODO: Convert this to a dataclass
@@ -22,21 +22,36 @@ MOLECULE_HOVER_TEMPLATE = """**SMILES:** `{smiles}`\n
  - **Synthesizability (SA) Score:** {sascore:.3f}"""
 
 
-async def lead_molecule(
+async def generate_lead_molecule(
     start_smiles: str,
-    task: LeadMoleculeOptimization,
-    lmo_runner: AutoGenClient,
+    experiment: AutoGenExperiment,
     mol_file_path: str,
     max_iterations: int,
     depth: int,
+    available_tools: list[str],
     websocket: WebSocket,
-):
-    """Stream positioned nodes and edges"""
+) -> None:
+    """Generate a lead molecule and stream its progress.
+    Args:
+        start_smiles (str): The starting SMILES string for the lead molecule.
+        experiment (AutoGenExperiment): The experiment instance to run tasks.
+        mol_file_path (str): Path to the file where molecules are stored.
+        max_iterations (int): Maximum iterations for molecule generation.
+        available_tools (list[str]): List of available tools for molecule generation.
+        depth (int): Depth of the generation tree.
+        websocket (WebSocket): WebSocket connection for streaming updates.
+
+    Returns:
+        None
+    """
 
     lead_molecule_smiles = start_smiles
-    clogger = callback_logger(websocket)
+    clogger = CallbackLogger(websocket)
 
-    clogger.info(f"Starting task with lead molecule: {lead_molecule_smiles}", smiles=lead_molecule_smiles)
+    clogger.info(
+        f"Starting task with lead molecule: {lead_molecule_smiles}",
+        smiles=lead_molecule_smiles,
+    )
 
     parent_id = 0
     node_id = 0
@@ -89,6 +104,9 @@ async def lead_molecule(
 
     mol_data = [lead_molecule_data]
 
+    canonical_smiles = lead_molecule_smiles
+    callback = CallbackHandler(websocket)
+
     for i in range(depth):
         logger.info(f"Iteration {i}")
         edge = Edge(
@@ -111,7 +129,16 @@ async def lead_molecule(
 
             try:
                 iteration += 1
-                results: MoleculeOutputSchema = await lmo_runner.run()
+
+                if experiment.remaining_tasks() == 0:
+                    task = LeadMoleculeOptimization(lead_molecule=canonical_smiles)
+                    experiment.add_task(task)
+                    parent_id = node_id
+
+                await experiment.run_async(callback=callback)
+                finished_tasks = experiment.get_finished_tasks()
+                completed_task, results = finished_tasks[-1]
+                results = MoleculeOutputSchema.model_validate_json(results)
                 results = results.as_list()  # Convert to list of strings
                 clogger.info(f"New molecules generated: {results}")
                 processed_mol = lmo_helper_funcs.post_process_smiles(
@@ -127,7 +154,10 @@ async def lead_molecule(
                     lmo_helper_funcs.save_list_to_json_file(
                         data=mol_data, file_path=mol_file_path
                     )
-                    clogger.info(f"New molecule added: {canonical_smiles}", smiles=canonical_smiles)
+                    clogger.info(
+                        f"New molecule added: {canonical_smiles}",
+                        smiles=canonical_smiles,
+                    )
                     mol_hov = MOLECULE_HOVER_TEMPLATE.format(
                         smiles=canonical_smiles,
                         bandgap=get_bandgap(canonical_smiles),
@@ -149,17 +179,11 @@ async def lead_molecule(
                         cost=get_price(canonical_smiles),
                         # Not sure what to put here
                         hoverInfo=mol_hov,
-                        x=50 + node_id * 250,
+                        x=150 + node_id * 350,
                         y=100,
                     )
 
                     await websocket.send_json({"type": "node", "node": node.json()})
-
-                    task = LeadMoleculeOptimization(
-                        lead_molecule=canonical_smiles
-                    )
-                    lmo_runner.task = task
-                    parent_id = node_id
 
                     break  # Exit while loop to proceed to next node
                 else:
@@ -171,6 +195,8 @@ async def lead_molecule(
             except asyncio.CancelledError:
                 await websocket.send_json({"type": "stopped"})
                 raise  # re-raise so cancellation propagates
+            except IndexError:
+                logger.error("No finished tasks found.")
             except Exception as e:
                 logger.error(f"Error occurred: {e}")
         if i == depth - 1:

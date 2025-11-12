@@ -26,6 +26,7 @@ import os
 import random
 from typing import Any, Optional, Literal
 import requests
+from datetime import datetime
 
 app = FastAPI()
 
@@ -379,6 +380,13 @@ async def websocket_endpoint(websocket: WebSocket):
                     "type": "available-tools-response",
                     "tools": [tool.json() for tool in tools],
                 })
+            elif data["action"] == "save-context":
+                await websocket.send_json({
+                    "type": "save-context-response",
+                    "experimentContext": f"this is some sample context we are saving at {datetime.now():%Y-%m-%d %H:%M:%S}",
+                })
+            elif data["action"] == "load-context":
+                print(f"LOADED CONTEXT: {data['experimentContext']}")
             else:
                 print("WARN: Unhandled message:", data)
     except WebSocketDisconnect:
