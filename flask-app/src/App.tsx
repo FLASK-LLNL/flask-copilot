@@ -65,13 +65,10 @@ const ChemistryTool: React.FC = () => {
     selectedItemsData: SelectableTool[]
   ): Promise<void> => {
     if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) {
-//      alert('WebSocket not connected');
-      console.log(`Need an open websocket`);
-//      return;
+      alert('WebSocket not connected');
+      return;
     }
     console.log(`Set Task Tool Selection`);
-    console.log('Selected IDs:', selectedIds);
-    console.log('Selected Items Data:', selectedItemsData);
 
     if (wsRef.current && wsRef.current.readyState == WebSocket.OPEN) {
       const message: WebSocketMessageToServer = {
