@@ -1,9 +1,10 @@
 import React, { useState } from 'react';
 import { ChevronRight, ChevronDown, ChevronLeft, Plus, FolderOpen, FileText, Loader2, Edit2, Trash2 } from 'lucide-react';
 import { Project, Experiment, ProjectSelection } from '../types';
-import { useProjectData } from '../hooks/useProjectData';
+import { ProjectData } from '../hooks/useProjectData';
 
 interface ProjectSidebarProps {
+  projectData: ProjectData;
   isOpen: boolean;
   onToggle: () => void;
   selection: ProjectSelection;
@@ -16,6 +17,7 @@ interface ProjectSidebarProps {
 }
 
 export const ProjectSidebar: React.FC<ProjectSidebarProps> = ({
+  projectData,
   isOpen,
   onToggle,
   selection,
@@ -27,6 +29,7 @@ export const ProjectSidebar: React.FC<ProjectSidebarProps> = ({
   onCreateProjectAndExperiment
 }) => {
   const {
+    projectsRef,
     projects,
     loading,
     createProject,
@@ -36,7 +39,7 @@ export const ProjectSidebar: React.FC<ProjectSidebarProps> = ({
     updateExperiment,
     deleteExperiment,
     setExperimentRunning
-  } = useProjectData();
+  } = projectData;
 
   const SIDEBAR_WIDTH_STORAGE_KEY = 'flask_copilot_sidebar_width';
   const MIN_WIDTH = 200;
@@ -233,7 +236,7 @@ export const ProjectSidebar: React.FC<ProjectSidebarProps> = ({
   };
 
   const handleCreateExperiment = async (projectId: string) => {
-    const curProject = projects.find(p => p.id === projectId)!;
+    const curProject = projectsRef.current.find(p => p.id === projectId)!;
 
     let i = curProject.experiments.length + 1;
     let newExperimentName = `Experiment ${i}`
@@ -251,6 +254,7 @@ export const ProjectSidebar: React.FC<ProjectSidebarProps> = ({
     
     try {
       const experiment = await createExperiment(projectId, newExperimentName);
+      const updatedProject = projectsRef.current.find(p => p.id === projectId)!;
       setNewExperimentName('');
       setCreatingExperimentFor(null);
       // Auto-select the new experiment
@@ -811,8 +815,8 @@ export const useProjectSidebar = () => {
 };
 
 // Separate hook for project management functions to be used in the main app
-export const useProjectManagement = () => {
-  const { projects, createProject, createExperiment, updateExperiment } = useProjectData();
+export const useProjectManagement = (projectData: ProjectData) => {
+  const { projectsRef, projects, createProject, createExperiment, updateExperiment } = projectData;
 
   const createProjectAndExperiment = React.useCallback(async (
     projectName: string, 
@@ -828,7 +832,8 @@ export const useProjectManagement = () => {
   }, [createProject, createExperiment]);
 
   return {
-    projects,  // Expose projects list
+    projectsRef,  // Expose projects list
+    projects,
     createProjectAndExperiment,
     createExperiment,
     updateExperiment
