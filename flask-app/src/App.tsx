@@ -248,7 +248,6 @@ const ChemistryTool: React.FC = () => {
       setWsError('');
       reset();  // Server state must match UI state
 
-
       loadStateFromCurrentExperiment();
 
       socket.send(JSON.stringify({ action: 'list-tools' }));
@@ -324,24 +323,30 @@ const ChemistryTool: React.FC = () => {
 
     socket.onerror = (error: Event) => {
       console.error('WebSocket error:', error);
-      setWsReconnecting(false);
-      setIsComputing(false);
-      setWsError((error as any).message || 'Connection failed');
-      setAvailableTools([]);
-      //setSelectedTools([]);
-      //setAvailableToolsMap([]);
+      // Only update state if this is the current socket
+      if (wsRef.current === socket) {
+        setWsReconnecting(false);
+        setIsComputing(false);
+        setWsError((error as any).message || 'Connection failed');
+        setAvailableTools([]);
+        setSelectedTools([]);
+        setAvailableToolsMap([]);
+      }
     };
 
     socket.onclose = () => {
       console.log('WebSocket closed');
-      wsRef.current = null;
-      setWebsocket(null);
-      setWsConnected(false);
-      setIsComputing(false);
-      setWsReconnecting(false);
-      setAvailableTools([]);
-      //setSelectedTools([]);
-      //setAvailableToolsMap([]);
+      // Only clear state if this is the current socket
+      if (wsRef.current === socket) {
+        wsRef.current = null;
+        setWebsocket(null);
+        setWsConnected(false);
+        setIsComputing(false);
+        setWsReconnecting(false);
+        setAvailableTools([]);
+        setSelectedTools([]);
+        setAvailableToolsMap([]);
+      }
     };
   };
 
