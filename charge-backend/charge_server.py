@@ -42,7 +42,12 @@ from charge.clients.Client import Client
 from charge.experiments.AutoGenExperiment import AutoGenExperiment
 from charge.clients.autogen import AutoGenPool
 
-from tool_registration import register_post, list_server_urls, list_server_tools, reload_server_list
+from tool_registration import (
+    register_post,
+    list_server_urls,
+    list_server_tools,
+    reload_server_list,
+)
 
 parser = argparse.ArgumentParser()
 
@@ -125,6 +130,25 @@ if os.path.exists(ASSETS_PATH):
         return HTMLResponse(html)
 
 
+async def _cancel_task_if_running(action, task: asyncio.Task | None):
+    if action not in [
+        "compute",
+        "optimize-from",
+        "compute-reaction-from",
+        "recompute-reaction",
+        "recompute-parent-reaction",
+    ]:
+        return
+
+    if task and not task.done():
+        logger.info("Cancelling existing compute task...")
+        task.cancel()
+        try:
+            await task
+        except asyncio.CancelledError:
+            logger.info("Previous compute task cancelled.")
+
+
 @app.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket):
     await websocket.accept()
@@ -141,26 +165,12 @@ async def websocket_endpoint(websocket: WebSocket):
     clogger = CallbackLogger(websocket)
 
     retro_synth_context: RetrosynthesisContext | None = None
-    try:
-        while True:
+
+    while True:
+        try:
             data = await websocket.receive_json()
             action = data.get("action")
-
-            if action in [
-                "compute",
-                "optimize-from",
-                "compute-reaction-from",
-                "recompute-reaction",
-                "recompute-parent-reaction",
-            ]:
-                # cancel any running task first
-                if CURRENT_TASK and not CURRENT_TASK.done():
-                    logger.info("Cancelling existing compute task...")
-                    CURRENT_TASK.cancel()
-                    try:
-                        await CURRENT_TASK
-                    except asyncio.CancelledError:
-                        logger.info("Previous compute task cancelled.")
+            await _cancel_task_if_running(action, CURRENT_TASK)
 
             if action == "compute":
 
@@ -260,7 +270,7 @@ async def websocket_endpoint(websocket: WebSocket):
                 for server in server_list:
                     tool_list = await list_server_tools([server])
                     tool_names = []
-                    for (name, _) in tool_list:
+                    for name, _ in tool_list:
                         tool_names.append(name)
                     tools.append(ToolServer(server, tool_names))
 
@@ -272,10 +282,12 @@ async def websocket_endpoint(websocket: WebSocket):
                         }
                     )
                 else:
-                    await websocket.send_json({
-                        "type": "available-tools-response",
-                        "tools": [tool.json() for tool in tools],
-                    })
+                    await websocket.send_json(
+                        {
+                            "type": "available-tools-response",
+                            "tools": [tool.json() for tool in tools],
+                        }
+                    )
             elif action == "select-tools-for-task":
                 query = data.get("query", None)
                 logger.info("Select tools for task")
@@ -316,20 +328,21 @@ async def websocket_endpoint(websocket: WebSocket):
             else:
                 logger.warning(f"Unknown action received: {action}")
 
-    except WebSocketDisconnect:
-        pass
-    except httpx.ConnectError as e:
-        logger.error(f"Connection error: {e}")
-    except Exception as e:
-        logger.error(f"Error in WebSocket connection: {e}")
-    finally:
-        if CURRENT_TASK and not CURRENT_TASK.done():
-            logger.info("Stopping current task due to connection closure.")
-            CURRENT_TASK.cancel()
-            try:
-                await CURRENT_TASK
-            except asyncio.CancelledError:
-                logger.info("Current task cancelled successfully.")
+        except WebSocketDisconnect:
+            logger.info("WebSocket disconnected")
+            break
+        except httpx.ConnectError as e:
+            logger.error(f"Connection error: {e}")
+        except Exception as e:
+            logger.error(f"Error in WebSocket connection: {e}")
+        finally:
+            if CURRENT_TASK and not CURRENT_TASK.done():
+                logger.info("Stopping current task due to connection closure.")
+                CURRENT_TASK.cancel()
+                try:
+                    await CURRENT_TASK
+                except asyncio.CancelledError:
+                    logger.info("Current task cancelled successfully.")
 
         clogger.unbind()
 
