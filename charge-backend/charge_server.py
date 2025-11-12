@@ -29,7 +29,9 @@ from callback_logger import CallbackLogger
 from backend_helper_funcs import (
     CallbackHandler,
     RetrosynthesisContext,
-    Tool,
+    Node,
+    Edge,
+    calculate_positions,
 )
 from retro_charge_backend_funcs import (
     generate_molecules,
@@ -40,12 +42,7 @@ from charge.clients.Client import Client
 from charge.experiments.AutoGenExperiment import AutoGenExperiment
 from charge.clients.autogen import AutoGenPool
 
-from tool_registration import (
-    SERVERS,
-    register_post,
-    list_server_urls,
-    list_server_tools,
-)
+from tool_registration import register_post, list_server_urls, list_server_tools, reload_server_list
 
 parser = argparse.ArgumentParser()
 
@@ -71,11 +68,17 @@ parser.add_argument(
 parser.add_argument("--port", type=int, default=8001, help="Port to run the server on")
 parser.add_argument("--host", type=str, default=None, help="Host to run the server on")
 
+parser.add_argument(
+    "--tool-server-cache",
+    type=str,
+    default="flask_copilot_active_tool_servers.json",
+    help="Path to the JSON file containing current list of active MCP tool servers.",
+)
+
 # Add standard CLI arguments
 Client.add_std_parser_arguments(parser)
 
 args = parser.parse_args()
-
 
 app = FastAPI()
 
@@ -94,7 +97,9 @@ else:
     DIST_PATH = os.path.join(os.path.dirname(__file__), "flask-app", "dist")
 ASSETS_PATH = os.path.join(DIST_PATH, "assets")
 
-app.post("/register")(register_post)
+reload_server_list(args.tool_server_cache)
+
+app.post("/register")(partial(register_post, args.tool_server_cache))
 
 if os.path.exists(ASSETS_PATH):
     # Serve the frontend
@@ -252,10 +257,12 @@ async def websocket_endpoint(websocket: WebSocket):
             elif action == "list-tools":
                 tools = []
                 server_list = list_server_urls()
-                tool_list = await list_server_tools(server_list)
-
-                for name, description in tool_list:
-                    tools.append(Tool(name, description))
+                for server in server_list:
+                    tool_list = await list_server_tools([server])
+                    tool_names = []
+                    for (name, _) in tool_list:
+                        tool_names.append(name)
+                    tools.append(ToolServer(server, tool_names))
 
                 if tools == []:
                     await websocket.send_json(
@@ -265,12 +272,14 @@ async def websocket_endpoint(websocket: WebSocket):
                         }
                     )
                 else:
-                    await websocket.send_json(
-                        {
-                            "type": "available-tools-response",
-                            "tools": [tool.json() for tool in tools],
-                        }
-                    )
+                    await websocket.send_json({
+                        "type": "available-tools-response",
+                        "tools": [tool.json() for tool in tools],
+                    })
+            elif action == "select-tools-for-task":
+                query = data.get("query", None)
+                logger.info("Select tools for task")
+                logger.info(f"Data: {data}")
             elif action == "custom_query":
                 await websocket.send_json(
                     {

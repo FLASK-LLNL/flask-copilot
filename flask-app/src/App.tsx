@@ -33,7 +33,6 @@ const ChemistryTool: React.FC = () => {
   const [contextMenu, setContextMenu] = useState<ContextMenuState>({node: null, x: 0, y: 0});
   const [customQueryModal, setCustomQueryModal] = useState<TreeNode | null>(null);
   const [customQueryText, setCustomQueryText] = useState<string>('');
-  const [websocket, setWebsocket] = useState<WebSocket | null>(null);
   const [wsConnected, setWsConnected] = useState<boolean>(false);
   const [saveDropdownOpen, setSaveDropdownOpen] = useState<boolean>(false);
   const [wsError, setWsError] = useState<string>('');
@@ -57,14 +56,35 @@ const ChemistryTool: React.FC = () => {
 
   const [showToolSelectionModal, setShowToolSelectionModal] = useState<boolean>(false);
   const [selectedTools, setSelectedTools] = useState<number[]>([]);
+  const [availableToolsMap, setAvailableToolsMap] = useState<SelectableTool[]>([]);
 
-  const availableToolsMap: SelectableTool[] = [
-    { id: 1, name: "Tool 1" },
-    { id: 2, name: "Tool 2" },
-    { id: 3, name: "Tool 3" },
-    { id: 4, name: "Tool 4" },
-    { id: 5, name: "Tool 5" }
-  ];
+  // Callback function to send selected tools to backend
+  const handleToolSelectionConfirm = async (
+    selectedIds: number[],
+    selectedItemsData: SelectableTool[]
+  ): Promise<void> => {
+    if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) {
+      alert('WebSocket not connected');
+      return;
+    }
+    console.log(`Set Task Tool Selection`);
+
+    if (wsRef.current && wsRef.current.readyState == WebSocket.OPEN) {
+      const message: WebSocketMessageToServer = {
+        action: "select-tools-for-task",
+          enabledTools: {
+            selectedIds: selectedIds,
+            selectedTools: selectedItemsData,
+          }
+      };
+
+      wsRef.current.send(JSON.stringify(message));
+      console.log('Sending data:', JSON.stringify(message));
+    }
+
+    // Optional: Add any additional processing or API calls here
+    // await fetch('/api/save-selection', { method: 'POST', body: JSON.stringify(payload) });
+  };
 
   useEffect(() => {
     const handleClickOutside = (): void => {
@@ -129,7 +149,7 @@ const ChemistryTool: React.FC = () => {
     data.experimentContext && sendMessageToServer('load-context', {experimentContext: data.experimentContext});
   }
 
-  const saveStateToExperiment = useCallback((): boolean => {   
+  const saveStateToExperiment = useCallback((): boolean => {
     // Use the ref directly to always get the latest selection
     const projectId = projectSidebar.selectionRef.current.projectId;
     const experimentId = projectSidebar.selectionRef.current.experimentId;
@@ -174,7 +194,7 @@ const ChemistryTool: React.FC = () => {
     } else if (!projectSidebar.selectionRef.current.experimentId) {
       // Project exists but no experiment - create just an experiment
       const projectId = projectSidebar.selectionRef.current.projectId!;
-      
+
       // Find the project to count existing experiments
       const project = projectManagement.projects.find(p => p.id === projectId);
       const experimentCount = project ? project.experiments.length + 1 : 1;
@@ -203,7 +223,7 @@ const ChemistryTool: React.FC = () => {
       problemType: problemType
     };
 
-    websocket?.send(JSON.stringify(message));
+    wsRef.current?.send(JSON.stringify(message));
   };
 
   const reconnectWS = (): void => {
@@ -218,12 +238,10 @@ const ChemistryTool: React.FC = () => {
 
     socket.onopen = () => {
       console.log('WebSocket connected');
-      setWebsocket(socket);
       setWsConnected(true);
       setWsReconnecting(false);
       setWsError('');
       reset();  // Server state must match UI state
-
 
       loadStateFromCurrentExperiment();
 
@@ -289,6 +307,12 @@ const ChemistryTool: React.FC = () => {
         console.log('Server response:', data.message);
       } else if (data.type === 'available-tools-response') {
         setAvailableTools(data.tools || []);
+        availableToolsMap.splice(0, availableToolsMap.length);
+        setSelectedTools([]);
+        availableTools.forEach((server: Tool, index: number, array: Tool[]) => {
+          console.log(`Tool Server Element at index ${index}: ${server.server}`);
+          availableToolsMap.push({id: index, tool_server: server})
+        });
       } else if (data.type === 'error') {
         console.error(data.message);
         alert("Server error: " + data.message);
@@ -299,20 +323,30 @@ const ChemistryTool: React.FC = () => {
 
     socket.onerror = (error: Event) => {
       console.error('WebSocket error:', error);
-      setWsReconnecting(false);
-      setIsComputing(false);
-      setWsError((error as any).message || 'Connection failed');
-      setAvailableTools([]);
+      // Only update state if this is the current socket
+      if (wsRef.current === socket) {
+        setWsReconnecting(false);
+        setIsComputing(false);
+        setWsError((error as any).message || 'Connection failed');
+        setAvailableTools([]);
+        setSelectedTools([]);
+        setAvailableToolsMap([]);
+      }
     };
 
     socket.onclose = () => {
       console.log('WebSocket closed');
-      wsRef.current = null;
-      setWebsocket(null);
-      setWsConnected(false);
-      setIsComputing(false);
-      setWsReconnecting(false);
-      setAvailableTools([]);
+      // Only clear state if this is the current socket
+      if (wsRef.current === socket) {
+        wsRef.current = null;
+        setWebsocket(null);
+        setWsConnected(false);
+        setIsComputing(false);
+        setWsReconnecting(false);
+        setAvailableTools([]);
+        setSelectedTools([]);
+        setAvailableToolsMap([]);
+      }
     };
   };
 
@@ -334,20 +368,20 @@ const ChemistryTool: React.FC = () => {
     setSaveDropdownOpen(false);
     sidebarState.setSourceFilterOpen(false);
     setWsTooltipPinned(false);
-    if (websocket && websocket.readyState === WebSocket.OPEN) {
-      websocket.send(JSON.stringify({ action: 'reset' }));
+    if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+      wsRef.current.send(JSON.stringify({ action: 'reset' }));
     }
   };
 
   const stop = (): void => {
-    if (!websocket || websocket.readyState !== WebSocket.OPEN) {
+    if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) {
       // alert('WebSocket not connected');
       return;
     }
 
     console.log('Sending stop command to server');
     setIsComputing(false);
-    websocket.send(JSON.stringify({ action: 'stop' }));
+    wsRef.current.send(JSON.stringify({ action: 'stop' }));
   };
 
   useEffect(() => {
@@ -473,7 +507,7 @@ const ChemistryTool: React.FC = () => {
   };
 
   const sendMessageToServer = (message: string, data?: Omit<WebSocketMessageToServer, 'action'>): void => {
-    if (!websocket || websocket.readyState !== WebSocket.OPEN) {
+    if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) {
       alert('WebSocket not connected');
       return;
     }
@@ -481,7 +515,7 @@ const ChemistryTool: React.FC = () => {
       action: message,
       ...data
     };
-    websocket.send(JSON.stringify(msg));
+    wsRef.current.send(JSON.stringify(msg));
     setContextMenu({node: null, x: 0, y: 0});
   };
 
@@ -498,7 +532,7 @@ const ChemistryTool: React.FC = () => {
   };
 
   const submitCustomQuery = (): void => {
-    if (!websocket || websocket.readyState !== WebSocket.OPEN) {
+    if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) {
       alert('WebSocket not connected');
       return;
     }
@@ -509,7 +543,7 @@ const ChemistryTool: React.FC = () => {
       nodeId: customQueryModal?.id,
       query: customQueryText
     };
-    websocket.send(JSON.stringify(message));
+    wsRef.current.send(JSON.stringify(message));
 
     setCustomQueryModal(null);
     setCustomQueryText('');
@@ -674,15 +708,15 @@ const ChemistryTool: React.FC = () => {
                         {wsConnected && availableTools.length > 0 && (
                           <div className="mt-3 pt-2 border-t border-purple-400/30">
                             <div className="text-purple-300 text-xs font-semibold mb-1.5">
-                              Available Tools ({availableTools.length})
+                              Available Tool Servers ({availableTools.length})
                             </div>
                             <div className="space-y-1 max-h-60 overflow-y-auto pr-1">
                               {availableTools.map((tool, idx) => (
                                 <div key={idx} className="text-xs bg-purple-900/30 rounded px-2 py-1">
-                                  <div className="text-purple-100 font-medium">{tool.name || tool as string}</div>
-                                  {tool.description && (
+                                  <div className="text-purple-100 font-medium">{tool.server || server as string}</div>
+                                  {tool.names && (
                                     <div className="text-purple-300 mt-0.5 text-[10px] leading-tight">
-                                      {tool.description}
+                                      {tool.names.join(", ")}
                                     </div>
                                   )}
                                 </div>
@@ -1025,7 +1059,8 @@ const ChemistryTool: React.FC = () => {
         availableToolsMap={availableToolsMap}
         selectedTools={selectedTools}
         onSelectionChange={setSelectedTools}
-        title="Select Tools to use for Experiment" // Optional, defaults to "Select Tools"
+        onConfirm={handleToolSelectionConfirm}
+        title="Select Tools to use for Task" // Optional, defaults to "Select Tools"
       />
 
     </div>

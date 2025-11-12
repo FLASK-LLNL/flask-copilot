@@ -60,15 +60,6 @@ class ModelMessage:
         return ret
 
 
-@dataclass
-class Tool:
-    name: str
-    description: Optional[str] = None
-
-    def json(self):
-        return asdict(self)
-
-
 def get_price(smiles: str) -> float:
     """Mock function to get price of a molecule given its SMILES string."""
     # In a real implementation, this would query a database or an API.
