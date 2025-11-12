@@ -62,8 +62,8 @@ def reload_server_list(filename: str):
     if filename:
         try:
             with open(filename, "r") as f:
-                data: ToolServerDict = json.load(f)
-                SERVERS.servers = data["servers"]
+                data: ToolServerDict = ToolServerDict.model_validate_json(f.read())
+                SERVERS.servers = data.servers
         except FileNotFoundError as e:
             logger.info(e)
             return
@@ -77,7 +77,6 @@ def reload_server_list(filename: str):
         return
 
 async def register_post(filename: str, request: Request, data: RegistrationRequest):
-    global SERVERS
     hostname = data.host
     if not hostname:
         hostname = get_client_info(request)
