@@ -42,7 +42,13 @@ from charge.clients.Client import Client
 from charge.experiments.AutoGenExperiment import AutoGenExperiment
 from charge.clients.autogen import AutoGenPool
 
-from tool_registration import ToolList, register_post, list_server_urls, list_server_tools, reload_server_list
+from tool_registration import (
+    ToolList,
+    register_post,
+    list_server_urls,
+    list_server_tools,
+    reload_server_list,
+)
 
 parser = argparse.ArgumentParser()
 
@@ -166,6 +172,8 @@ async def websocket_endpoint(websocket: WebSocket):
             try:
                 data = await websocket.receive_json()
                 action = data.get("action")
+
+                logger.info(f"Received action: {action} with data: {data}")
                 await _cancel_task_if_running(action, CURRENT_TASK)
 
                 if action == "compute":
@@ -218,13 +226,22 @@ async def websocket_endpoint(websocket: WebSocket):
                     # Leaf node optimization
                     logger.info("Synthesize tree leaf action received")
                     logger.info(f"Data: {data}")
-                    await optimize_molecule_retro(
+
+                    run_func = partial(
+                        optimize_molecule_retro,
                         data["nodeId"],
                         retro_synth_context,
                         websocket,
                         experiment,
                         list_server_urls(),
                     )
+
+                    async def run_task():
+                        await run_func()
+
+                    # start a new task
+                    CURRENT_TASK = asyncio.create_task(run_task())
+
                     await websocket.send_json({"type": "complete"})
                 elif action == "optimize-from":
                     # Leaf node optimization
