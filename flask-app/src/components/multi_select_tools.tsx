@@ -1,11 +1,7 @@
 import React from 'react';
 
-import { Tool } from './types';
+import { Tool, SelectableTool } from '../types';
 
-export interface SelectableTool {
-  id: number;
-  tool_server: Tool;
-}
 
 interface MultiSelectToolModalProps {
   isOpen: boolean;
@@ -13,7 +9,7 @@ interface MultiSelectToolModalProps {
   availableToolsMap: SelectableTool[];
   selectedTools: number[];
   onSelectionChange: (selectedIds: number[]) => void;
-  onConfirm?: (selectedIds: number[], selectedItemsData: SelectableItem[]) => void | Promise<void>;
+  onConfirm?: (selectedIds: number[], selectedItemsData: SelectableTool[]) => void | Promise<void>;
   title?: string;
 }
 
@@ -70,7 +66,7 @@ export const MultiSelectToolModal: React.FC<MultiSelectToolModalProps> = ({
                 onChange={() => toggleToolSelection(item.id)}
                 className="w-4 h-4 accent-purple-500"
               />
-              <span className="text-white">{item.tool_server.server}: [{item.tool_server.names.join(", ")}]</span>
+              <span className="text-white">{item.tool_server.server}: [{item.tool_server.names!.join(", ")}]</span>
             </label>
           ))}
         </div>
