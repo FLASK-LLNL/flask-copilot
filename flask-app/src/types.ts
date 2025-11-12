@@ -43,13 +43,18 @@ export interface Tool {
   description?: string;
 }
 
+export interface SelectableTool {
+  id: number;
+  tool_server: Tool;
+}
+
 export interface ToolMap {
   selectedIds?: number[];
-  selectedTools?: SelectableTool[]
+  selectedTools?: SelectableTool[];
 }
 
 export interface WebSocketMessageToServer {
-  action?: string;{
+  action?: string;
   smiles?: string;
   problemType?: string;
   nodeId?: string;
