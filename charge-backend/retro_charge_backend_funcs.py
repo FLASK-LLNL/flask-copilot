@@ -1,9 +1,9 @@
 from fastapi import WebSocket
-from charge.clients.autogen import AutoGenClient, AutoGenAgent
+from charge.clients.autogen import AutoGenAgent
 from charge.servers.AiZynthTools import RetroPlanner, ReactionPath
 from aizynth_backend_funcs import generate_tree_structure
 from loguru import logger
-from typing import Optional, Union, Dict, cast
+from typing import Optional, Union
 
 from backend_helper_funcs import (
     CallbackHandler,
