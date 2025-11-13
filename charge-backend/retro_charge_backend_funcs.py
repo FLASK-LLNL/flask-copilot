@@ -15,6 +15,7 @@ from backend_helper_funcs import (
     RetrosynthesisContext,
     Node,
     Edge,
+    loop_executor,
 )
 
 from charge.tasks.RetrosynthesisTask import (
@@ -229,13 +230,11 @@ async def unconstrained_retro(
     await websocket.send_json({"type": "complete"})
 
 
-def test_function(config_file, smiles):
-    logger.info(f"Retro charge backend functions are working! wihth smiles {smiles}")
-
+def run_retro_planner(config_file, smiles):
     planner = RetroPlanner(configfile=config_file)
 
     _, _, routes = planner.plan(smiles)
-    return ("", "", routes, planner)
+    return routes, planner
 
 
 async def generate_molecules(
@@ -265,15 +264,11 @@ async def generate_molecules(
         y=100,
     )
     await websocket.send_json({"type": "node", "node": root.json()})
-    # planner = context.node_id_to_planner[root.id] = RetroPlanner(configfile=config_file)
-    loop = asyncio.get_running_loop()
 
     logger.info("Starting planning in executor...")
 
-    # _, _, routes = await loop.run_in_executor(executor, planner.plan, start_smiles)
-
-    _, _, routes, planner = await loop.run_in_executor(
-        executor, test_function, config_file, start_smiles
+    routes, planner = await loop_executor(
+        executor, run_retro_planner, config_file, start_smiles
     )
 
     context.node_id_to_planner[root.id] = planner
