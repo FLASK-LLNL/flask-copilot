@@ -134,7 +134,7 @@ def list_server_urls() -> list[str]:
             invalid_keys.append(key)
 
     for key in invalid_keys:
-        SERVERS.pop(key)
+        SERVERS.servers.pop(key)
 
     assert server_urls is not None, "Server URLs must be registered"
     for url in server_urls:
