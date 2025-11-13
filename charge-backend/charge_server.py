@@ -5,6 +5,7 @@
 ## SPDX-License-Identifier: Apache-2.0
 ################################################################################
 
+from concurrent.futures import ProcessPoolExecutor
 from functools import partial
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Request
 from fastapi.responses import HTMLResponse
@@ -42,7 +43,13 @@ from charge.clients.Client import Client
 from charge.experiments.AutoGenExperiment import AutoGenExperiment
 from charge.clients.autogen import AutoGenPool
 
-from tool_registration import ToolList, register_post, list_server_urls, list_server_tools, reload_server_list
+from tool_registration import (
+    ToolList,
+    register_post,
+    list_server_urls,
+    list_server_tools,
+    reload_server_list,
+)
 
 parser = argparse.ArgumentParser()
 
@@ -126,6 +133,30 @@ if os.path.exists(ASSETS_PATH):
         return HTMLResponse(html)
 
 
+async def _cancel_task_if_running(
+    action, task: asyncio.Task | None, executor: ProcessPoolExecutor | None
+):
+    if action not in [
+        "compute",
+        "optimize-from",
+        "compute-reaction-from",
+        "recompute-reaction",
+        "recompute-parent-reaction",
+    ]:
+        return
+
+    if task and not task.done():
+        logger.info("Cancelling existing compute task...")
+        task.cancel()
+        try:
+            await task
+        except asyncio.CancelledError:
+            logger.info("Previous compute task cancelled.")
+
+    if executor:
+        executor.shutdown(wait=False, cancel_futures=True)
+
+
 @app.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket):
     logger.info(f"Request for websocket received. Headers: {str(websocket.headers)}")
@@ -143,182 +174,197 @@ async def websocket_endpoint(websocket: WebSocket):
     clogger = CallbackLogger(websocket)
 
     retro_synth_context: RetrosynthesisContext | None = None
+
+    executor = ProcessPoolExecutor(max_workers=4)
+
     try:
         while True:
-            data = await websocket.receive_json()
-            action = data.get("action")
+            try:
+                data = await websocket.receive_json()
+                action = data.get("action")
 
-            if action in [
-                "compute",
-                "optimize-from",
-                "compute-reaction-from",
-                "recompute-reaction",
-                "recompute-parent-reaction",
-            ]:
-                # cancel any running task first
-                if CURRENT_TASK and not CURRENT_TASK.done():
-                    logger.info("Cancelling existing compute task...")
-                    CURRENT_TASK.cancel()
-                    try:
-                        await CURRENT_TASK
-                    except asyncio.CancelledError:
-                        logger.info("Previous compute task cancelled.")
+                logger.info(f"Received action: {action} with data: {data}")
+                await _cancel_task_if_running(action, CURRENT_TASK, executor)
 
-            if action == "compute":
+                executor = ProcessPoolExecutor(max_workers=4)
 
-                if data["problemType"] == "optimization":
+                if action == "compute":
 
-                    # Task to optimize lead molecule using LMO
-                    clogger.info("Start Optimization action received")
-                    logger.info(f"Data: {data}")
+                    if data["problemType"] == "optimization":
 
-                    run_func = partial(
-                        generate_lead_molecule,
-                        data["smiles"],
-                        experiment,
-                        args.json_file,
-                        args.max_iterations,
-                        data.get("depth", 3),
-                        list_server_urls(),  # TODO: This should be changed to available specified by the user
-                        websocket,
-                    )
-                elif data["problemType"] == "retrosynthesis":
-                    # Set up retrosynthesis task to retrosynthesis
-                    # to ensure the reactant is not used in the synthesis
-                    clogger.info("Setting up retrosynthesis task...")
-                    logger.info(f"Data: {data}")
+                        # Task to optimize lead molecule using LMO
+                        clogger.info("Start Optimization action received")
+                        logger.info(f"Data: {data}")
 
-                    if retro_synth_context is None:
-                        retro_synth_context = RetrosynthesisContext()
+                        run_func = partial(
+                            generate_lead_molecule,
+                            data["smiles"],
+                            experiment,
+                            args.json_file,
+                            args.max_iterations,
+                            data.get("depth", 3),
+                            list_server_urls(),  # TODO: This should be changed to available specified by the user
+                            websocket,
+                        )
+                    elif data["problemType"] == "retrosynthesis":
+                        # Set up retrosynthesis task to retrosynthesis
+                        # to ensure the reactant is not used in the synthesis
+                        clogger.info("Setting up retrosynthesis task...")
+                        logger.info(f"Data: {data}")
 
+                        if retro_synth_context is None:
+                            retro_synth_context = RetrosynthesisContext()
+
+                        assert retro_synth_context is not None
+                        run_func = partial(
+                            generate_molecules,
+                            data["smiles"],
+                            args.config_file,
+                            retro_synth_context,
+                            executor,
+                            websocket,
+                        )
+                    else:
+                        raise ValueError(f"Unknown problem type: {data['problemType']}")
+
+                    async def run_task():
+                        await run_func()
+
+                    # start a new task
+                    CURRENT_TASK = asyncio.create_task(run_task())
+
+                elif action == "compute-reaction-from":
                     assert retro_synth_context is not None
+
+                    # Leaf node optimization
+                    logger.info("Synthesize tree leaf action received")
+                    logger.info(f"Data: {data}")
+
                     run_func = partial(
-                        generate_molecules,
-                        data["smiles"],
-                        args.config_file,
+                        optimize_molecule_retro,
+                        data["nodeId"],
                         retro_synth_context,
                         websocket,
+                        experiment,
+                        list_server_urls(),
                     )
-                else:
-                    raise ValueError(f"Unknown problem type: {data['problemType']}")
 
-                async def run_task():
-                    await run_func()
+                    async def run_task():
+                        await run_func()
 
-                # start a new task
-                CURRENT_TASK = asyncio.create_task(run_task())
+                    # start a new task
+                    CURRENT_TASK = asyncio.create_task(run_task())
 
-            elif action == "compute-reaction-from":
-                assert retro_synth_context is not None
+                    await websocket.send_json({"type": "complete"})
+                elif action == "optimize-from":
+                    # Leaf node optimization
+                    prompt = data.get("query", None)
+                    if prompt:
+                        await websocket.send_json(
+                            {
+                                "type": "response",
+                                "message": {
+                                    "source": "System",
+                                    "message": f"Processing optimization query: {data['query']} for node {data['nodeId']}",
+                                },
+                            }
+                        )
+                    logger.info("Optimize from action received")
+                    logger.info(f"Data: {data}")
 
-                # Leaf node optimization
-                logger.info("Synthesize tree leaf action received")
-                logger.info(f"Data: {data}")
-                await optimize_molecule_retro(
-                    data["nodeId"],
-                    retro_synth_context,
-                    websocket,
-                    experiment,
-                    list_server_urls(),
-                )
-                await websocket.send_json({"type": "complete"})
-            elif action == "optimize-from":
-                # Leaf node optimization
-                prompt = data.get("query", None)
-                if prompt:
+                    pass
+                elif action == "recompute-reaction":
+                    prompt = data.get("query", None)
+                    if prompt:
+                        await websocket.send_json(
+                            {
+                                "type": "response",
+                                "message": {
+                                    "source": "System",
+                                    "message": f"Processing reaction query: {data['query']} for node {data['nodeId']}",
+                                },
+                            }
+                        )
+
+                    logger.info("Recompute reaction action received")
+                    logger.info(f"Data: {data}")
+                    await websocket.send_json({"type": "complete"})
+
+                elif action == "list-tools":
+                    tools = []
+                    server_list = list_server_urls()
+                    for server in server_list:
+                        tool_list = await list_server_tools([server])
+                        tool_names = []
+                        for name, _ in tool_list:
+                            tool_names.append(name)
+                        tools.append(ToolList(server, tool_names))
+
+                    if tools == []:
+                        await websocket.send_json(
+                            {
+                                "type": "available-tools-response",
+                                "tools": [],
+                            }
+                        )
+                    else:
+                        await websocket.send_json(
+                            {
+                                "type": "available-tools-response",
+                                "tools": [tool.json() for tool in tools],
+                            }
+                        )
+                elif action == "select-tools-for-task":
+                    query = data.get("query", None)
+                    logger.info("Select tools for task")
+                    logger.info(f"Data: {data}")
+                elif action == "custom_query":
                     await websocket.send_json(
                         {
                             "type": "response",
                             "message": {
                                 "source": "System",
-                                "message": f"Processing optimization query: {data['query']} for node {data['nodeId']}",
+                                "message": f"Processing query: {data['query']} for node {data['nodeId']}",
                             },
                         }
                     )
-                logger.info("Optimize from action received")
-                logger.info(f"Data: {data}")
+                    await asyncio.sleep(3)
+                    await websocket.send_json({"type": "complete"})
 
-                pass
-            elif action == "recompute-reaction":
-                prompt = data.get("query", None)
-                if prompt:
-                    await websocket.send_json(
-                        {
-                            "type": "response",
-                            "message": {
-                                "source": "System",
-                                "message": f"Processing reaction query: {data['query']} for node {data['nodeId']}",
-                            },
-                        }
-                    )
+                elif action == "reset":
+                    experiment.reset()
 
-                logger.info("Recompute reaction action received")
-                logger.info(f"Data: {data}")
-                await websocket.send_json({"type": "complete"})
+                    if retro_synth_context is not None:
+                        retro_synth_context.reset()
+                    logger.info("Experiment state has been reset.")
 
-            elif action == "list-tools":
-                tools = []
-                server_list = list_server_urls()
-                for server in server_list:
-                    tool_list = await list_server_tools([server])
-                    tool_names = []
-                    for (name, _) in tool_list:
-                        tool_names.append(name)
-                    tools.append(ToolList(server, tool_names))
+                elif action == "stop":
+                    if CURRENT_TASK and not CURRENT_TASK.done():
+                        logger.info("Stopping current task as per user request.")
+                        CURRENT_TASK.cancel()
+                        try:
+                            await CURRENT_TASK
+                        except asyncio.CancelledError:
+                            logger.info("Current task cancelled successfully.")
 
-                if tools == []:
-                    await websocket.send_json(
-                        {
-                            "type": "available-tools-response",
-                            "tools": [],
-                        }
-                    )
+                    else:
+                        logger.info(f"Is Current task done: {CURRENT_TASK}")
+                        if CURRENT_TASK:
+                            logger.info(f"Current Task states: {CURRENT_TASK.done()}")
+
+                    executor.shutdown(wait=False, cancel_futures=True)
+
+                    executor = ProcessPoolExecutor(max_workers=4)
                 else:
-                    await websocket.send_json({
-                        "type": "available-tools-response",
-                        "tools": [tool.json() for tool in tools],
-                    })
-            elif action == "select-tools-for-task":
-                query = data.get("query", None)
-                logger.info("Select tools for task")
-                logger.info(f"Data: {data}")
-            elif action == "custom_query":
-                await websocket.send_json(
-                    {
-                        "type": "response",
-                        "message": {
-                            "source": "System",
-                            "message": f"Processing query: {data['query']} for node {data['nodeId']}",
-                        },
-                    }
-                )
-                await asyncio.sleep(3)
-                await websocket.send_json({"type": "complete"})
+                    logger.warning(f"Unknown action received: {action}")
 
-            elif action == "reset":
-                experiment.reset()
-
-                if retro_synth_context is not None:
-                    retro_synth_context.reset()
-                logger.info("Experiment state has been reset.")
-
-            elif action == "stop":
-                if CURRENT_TASK and not CURRENT_TASK.done():
-                    logger.info("Stopping current task as per user request.")
-                    CURRENT_TASK.cancel()
-                    try:
-                        await CURRENT_TASK
-                    except asyncio.CancelledError:
-                        logger.info("Current task cancelled successfully.")
-
-                else:
-                    logger.info(f"Is Current task done: {CURRENT_TASK}")
-                    if CURRENT_TASK:
-                        logger.info(f"Current Task states: {CURRENT_TASK.done()}")
-            else:
-                logger.warning(f"Unknown action received: {action}")
+            except ValueError as e:
+                logger.error(f"Error in internal loop connection: {e}")
+                await _cancel_task_if_running(action, CURRENT_TASK, executor)
+                continue
 
     except WebSocketDisconnect:
+        logger.info("WebSocket disconnected")
         pass
     except httpx.ConnectError as e:
         logger.error(f"Connection error: {e}")
@@ -332,8 +378,9 @@ async def websocket_endpoint(websocket: WebSocket):
                 await CURRENT_TASK
             except asyncio.CancelledError:
                 logger.info("Current task cancelled successfully.")
+        executor.shutdown(wait=False, cancel_futures=True)
 
-        clogger.unbind()
+    clogger.unbind()
 
 
 if __name__ == "__main__":
