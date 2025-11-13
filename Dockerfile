@@ -5,7 +5,7 @@ RUN . $HOME/.nvm/nvm.sh && nvm install 22
 
 WORKDIR /app
 COPY requirements.txt /app
-COPY flask-app /app
+COPY flask-app/. /app
 COPY charge-backend /app/charge-backend
 
 RUN . $HOME/.nvm/nvm.sh && \
