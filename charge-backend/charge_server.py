@@ -173,8 +173,10 @@ async def websocket_endpoint(websocket: WebSocket):
                 data = await websocket.receive_json()
                 action = data.get("action")
                 if action in action_handlers:
-                    if action != "stop":
-                        await task_manager.cancel_current_task()
+
+                    # Cancel any existing task before starting a new one
+                    await task_manager.cancel_current_task()
+
                     handler_func = action_handlers[action]
                     await handler_func(data)
                 else:

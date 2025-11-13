@@ -175,7 +175,7 @@ class ActionManager:
             }
         )
 
-    async def handle_list_tools(self) -> None:
+    async def handle_list_tools(self, *args, **kwargs) -> None:
         tools = []
         server_list = list_server_urls()
         for server in server_list:
@@ -189,13 +189,13 @@ class ActionManager:
             }
         )
 
-    async def handle_reset(self) -> None:
+    async def handle_reset(self, *args, **kwargs) -> None:
         """Handle reset action."""
         await self.task_manager.reset()
         self.experiment.reset()
         self.retro_synth_context = None
 
-    async def handle_stop(self) -> None:
+    async def handle_stop(self, *args, **kwargs) -> None:
         """Handle stop action."""
         if self.task_manager.current_task and not self.task_manager.current_task.done():
             logger.info("Stopping current task as per user request.")
@@ -204,8 +204,6 @@ class ActionManager:
             logger.info(
                 f"No active task to stop. Task done: {self.task_manager.current_task.done() if self.task_manager.current_task else 'N/A'}"
             )
-
-        await self.task_manager.restart_executor()
 
     async def handle_select_tools_for_task(self, data: dict) -> None:
         """Handle select-tools-for-task action."""
