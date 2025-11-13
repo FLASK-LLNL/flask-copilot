@@ -6,7 +6,6 @@ from callback_logger import CallbackLogger
 from concurrent.futures import ProcessPoolExecutor
 from charge.experiments.AutoGenExperiment import AutoGenExperiment
 from backend_helper_funcs import (
-    CallbackHandler,
     RetrosynthesisContext,
 )
 from lmo_charge_backend_funcs import generate_lead_molecule
@@ -46,11 +45,6 @@ class TaskManager:
         """Shutdown and recreate the process pool executor."""
         self.executor.shutdown(wait=False, cancel_futures=True)
         self.executor = ProcessPoolExecutor(max_workers=self.max_workers)
-
-    async def reset(self) -> None:
-        """Reset the task manager state for a new connection."""
-        await self.cancel_current_task()
-        await self.restart_executor()
 
     async def close(self) -> None:
         await self.cancel_current_task()
@@ -180,8 +174,8 @@ class ActionManager:
         server_list = list_server_urls()
         for server in server_list:
             tool_list = await list_server_tools([server])
-            tool_names = [name for name, _ in tool_list]
-            tools.append(ToolList(server=server, tools=tool_names))
+            tool_names = ",".join([name for name, _ in tool_list])
+            tools.append(ToolList(server=server, names=tool_names))
         await self.websocket.send_json(
             {
                 "type": "tool_list",
@@ -191,7 +185,7 @@ class ActionManager:
 
     async def handle_reset(self, *args, **kwargs) -> None:
         """Handle reset action."""
-        await self.task_manager.reset()
+        await self.task_manager.cancel_current_task()
         self.experiment.reset()
         self.retro_synth_context = None
 

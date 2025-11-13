@@ -183,7 +183,7 @@ async def websocket_endpoint(websocket: WebSocket):
                     logger.warning(f"Unknown action received: {action}")
             except ValueError as e:
                 logger.error(f"Error in internal loop connection: {e}")
-                await task_manager.reset()
+                await task_manager.cancel_current_task()
 
     except WebSocketDisconnect:
         logger.info("WebSocket disconnected")
