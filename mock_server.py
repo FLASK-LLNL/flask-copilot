@@ -27,6 +27,7 @@ import random
 from typing import Any, Optional, Literal
 import requests
 from datetime import datetime
+from loguru import logger
 
 app = FastAPI()
 
@@ -51,7 +52,8 @@ if os.path.exists(ASSETS_PATH):
     app.mount("/rdkit", StaticFiles(directory=os.path.join(DIST_PATH, "rdkit")), name="rdkit")
 
     @app.get("/")
-    async def root():
+    async def root(request: Request):
+        logger.info(f"Request for Web UI received. Headers: {str(request.headers)}")
         with open(os.path.join(DIST_PATH, "index.html"), 'r') as fp:
             html = fp.read()
 
@@ -332,6 +334,7 @@ async def lead_molecule(start_smiles: str, depth: int = 3, websocket: WebSocket 
 
 @app.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket):
+    logger.info(f"Request for websocket received. Headers: {str(websocket.headers)}")
     await websocket.accept()
     try:
         while True:

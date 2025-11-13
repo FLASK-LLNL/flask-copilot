@@ -6,7 +6,7 @@
 ################################################################################
 
 from functools import partial
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Request
 from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
@@ -109,7 +109,8 @@ if os.path.exists(ASSETS_PATH):
     )
 
     @app.get("/")
-    async def root():
+    async def root(request: Request):
+        logger.info(f"Request for Web UI received. Headers: {str(request.headers)}")
         with open(os.path.join(DIST_PATH, "index.html"), "r") as fp:
             html = fp.read()
 
@@ -127,6 +128,7 @@ if os.path.exists(ASSETS_PATH):
 
 @app.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket):
+    logger.info(f"Request for websocket received. Headers: {str(websocket.headers)}")
     await websocket.accept()
 
     # set up an AutoGenAgent pool for tasks on this endpoint
