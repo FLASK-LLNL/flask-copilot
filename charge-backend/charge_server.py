@@ -5,6 +5,7 @@
 ## SPDX-License-Identifier: Apache-2.0
 ################################################################################
 
+from concurrent.futures import ProcessPoolExecutor
 from functools import partial
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.responses import HTMLResponse
@@ -131,7 +132,9 @@ if os.path.exists(ASSETS_PATH):
         return HTMLResponse(html)
 
 
-async def _cancel_task_if_running(action, task: asyncio.Task | None):
+async def _cancel_task_if_running(
+    action, task: asyncio.Task | None, executor: ProcessPoolExecutor | None
+):
     if action not in [
         "compute",
         "optimize-from",
@@ -148,6 +151,9 @@ async def _cancel_task_if_running(action, task: asyncio.Task | None):
             await task
         except asyncio.CancelledError:
             logger.info("Previous compute task cancelled.")
+
+    if executor:
+        executor.shutdown(wait=False, cancel_futures=True)
 
 
 @app.websocket("/ws")
@@ -167,6 +173,8 @@ async def websocket_endpoint(websocket: WebSocket):
 
     retro_synth_context: RetrosynthesisContext | None = None
 
+    executor = ProcessPoolExecutor(max_workers=4)
+
     try:
         while True:
             try:
@@ -174,7 +182,9 @@ async def websocket_endpoint(websocket: WebSocket):
                 action = data.get("action")
 
                 logger.info(f"Received action: {action} with data: {data}")
-                await _cancel_task_if_running(action, CURRENT_TASK)
+                await _cancel_task_if_running(action, CURRENT_TASK, executor)
+
+                executor = ProcessPoolExecutor(max_workers=4)
 
                 if action == "compute":
 
@@ -209,6 +219,7 @@ async def websocket_endpoint(websocket: WebSocket):
                             data["smiles"],
                             args.config_file,
                             retro_synth_context,
+                            executor,
                             websocket,
                         )
                     else:
@@ -338,12 +349,16 @@ async def websocket_endpoint(websocket: WebSocket):
                         logger.info(f"Is Current task done: {CURRENT_TASK}")
                         if CURRENT_TASK:
                             logger.info(f"Current Task states: {CURRENT_TASK.done()}")
+
+                    executor.shutdown(wait=False, cancel_futures=True)
+
+                    executor = ProcessPoolExecutor(max_workers=4)
                 else:
                     logger.warning(f"Unknown action received: {action}")
 
             except ValueError as e:
                 logger.error(f"Error in internal loop connection: {e}")
-                await _cancel_task_if_running(action, CURRENT_TASK)
+                await _cancel_task_if_running(action, CURRENT_TASK, executor)
                 continue
 
     except WebSocketDisconnect:
@@ -361,6 +376,7 @@ async def websocket_endpoint(websocket: WebSocket):
                 await CURRENT_TASK
             except asyncio.CancelledError:
                 logger.info("Current task cancelled successfully.")
+        executor.shutdown(wait=False, cancel_futures=True)
 
     clogger.unbind()
 

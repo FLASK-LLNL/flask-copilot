@@ -1,3 +1,5 @@
+import asyncio
+from concurrent.futures import ProcessPoolExecutor
 from fastapi import WebSocket
 from charge.clients.autogen import AutoGenAgent
 from charge.servers.AiZynthTools import RetroPlanner, ReactionPath
@@ -227,10 +229,20 @@ async def unconstrained_retro(
     await websocket.send_json({"type": "complete"})
 
 
+def test_function(config_file, smiles):
+    logger.info(f"Retro charge backend functions are working! wihth smiles {smiles}")
+
+    planner = RetroPlanner(configfile=config_file)
+
+    _, _, routes = planner.plan(smiles)
+    return ("", "", routes, planner)
+
+
 async def generate_molecules(
     start_smiles: str,
     config_file: str,
     context: RetrosynthesisContext,
+    executor: ProcessPoolExecutor,
     websocket: WebSocket,
 ):
     """Stream positioned nodes and edges"""
@@ -253,8 +265,19 @@ async def generate_molecules(
         y=100,
     )
     await websocket.send_json({"type": "node", "node": root.json()})
-    planner = context.node_id_to_planner[root.id] = RetroPlanner(configfile=config_file)
-    _, _, routes = planner.plan(start_smiles)
+    # planner = context.node_id_to_planner[root.id] = RetroPlanner(configfile=config_file)
+    loop = asyncio.get_running_loop()
+
+    logger.info("Starting planning in executor...")
+
+    # _, _, routes = await loop.run_in_executor(executor, planner.plan, start_smiles)
+
+    _, _, routes, planner = await loop.run_in_executor(
+        executor, test_function, config_file, start_smiles
+    )
+
+    context.node_id_to_planner[root.id] = planner
+
     if not routes:
         await websocket.send_json(
             {
