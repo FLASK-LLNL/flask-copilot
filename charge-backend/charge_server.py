@@ -159,7 +159,6 @@ async def websocket_endpoint(websocket: WebSocket):
     await websocket.accept()
 
     # set up an AutoGenAgent pool for tasks on this endpoint
-
     autogen_pool = AutoGenPool(model=args.model, backend=args.backend)
     # Set up an experiment class for current endpoint
     experiment = AutoGenExperiment(task=None, agent_pool=autogen_pool)
@@ -180,21 +179,14 @@ async def websocket_endpoint(websocket: WebSocket):
         "stop": action_manager.handle_stop,
     }
 
-    # Keep track of currently running task
-    CURRENT_TASK: asyncio.Task | None = None
-
-    clogger = CallbackLogger(websocket)
-
-    retro_synth_context: RetrosynthesisContext | None = None
-
-    executor = ProcessPoolExecutor(max_workers=4)
-
     try:
         while True:
             try:
                 data = await websocket.receive_json()
                 action = data.get("action")
                 if action in action_handlers:
+                    if action != "stop":
+                        await task_manager.cancel_current_task()
                     handler_func = action_handlers[action]
                     await handler_func(data)
                 else:
