@@ -5,6 +5,7 @@
 ## SPDX-License-Identifier: Apache-2.0
 ################################################################################
 
+import asyncio
 from concurrent.futures import ProcessPoolExecutor
 from functools import partial
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Request
