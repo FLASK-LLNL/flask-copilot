@@ -11,7 +11,6 @@ from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Request
 from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
-import asyncio
 import os
 import argparse
 import httpx
@@ -25,27 +24,16 @@ from aizynthfinder.utils.logging import setup_logger
 setup_logger(console_level=logging.INFO)
 
 from loguru import logger
-from callback_logger import CallbackLogger
-
-from backend_helper_funcs import (
-    CallbackHandler,
-    RetrosynthesisContext,
-    Node,
-    Edge,
-    calculate_positions,
-)
-from retro_charge_backend_funcs import (
-    generate_molecules,
-    optimize_molecule_retro,
-)
-from lmo_charge_backend_funcs import generate_lead_molecule
 from charge.clients.Client import Client
 from charge.experiments.AutoGenExperiment import AutoGenExperiment
 from charge.clients.autogen import AutoGenPool
 
+from tool_registration import (
+    register_post,
+    reload_server_list,
+)
 
 from backend_manager import TaskManager, ActionManager
-
 
 parser = argparse.ArgumentParser()
 
