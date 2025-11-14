@@ -1,6 +1,7 @@
 /* eslint-disable react-hooks/exhaustive-deps */
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { Loader2, FlaskConical, TestTubeDiagonal, Network, Play, RotateCcw, X, Send, RefreshCw, Sparkles } from 'lucide-react';
+import 'recharts';
 
 import { WS_SERVER } from './config';
 import { TreeNode, Edge, ContextMenuState, SidebarMessage, Tool, WebSocketMessageToServer, WebSocketMessage, SelectableTool, Experiment } from './types';
