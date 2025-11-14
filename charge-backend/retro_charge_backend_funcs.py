@@ -423,3 +423,4 @@ async def optimize_molecule_retro(
     for node, edge in zip(nodes, edges):
         await websocket.send_json({"type": "node", "node": node.json()})
         await websocket.send_json({"type": "edge", "edge": edge.json()})
+    await websocket.send_json({"type": "complete"})
