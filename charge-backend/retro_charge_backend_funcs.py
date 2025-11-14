@@ -346,6 +346,8 @@ async def constrained_opt(
         f"Optimizing {parent_smiles} without using {constraint_smiles} in the synthesis."
     )
     result = await planner.run()
+
+    await websocket.send_json({"type": "complete"})
     return result
 
 
