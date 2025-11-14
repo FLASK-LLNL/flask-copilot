@@ -71,7 +71,7 @@ class ActionManager:
         return self.retro_synth_context
 
     async def handle_compute(self, data: dict) -> None:
-        problem_type = data.get("problem_type")
+        problem_type = data.get("problemType")
         if problem_type == "optimization":
             await self._handle_optimization(data)
         elif problem_type == "retrosynthesis":
