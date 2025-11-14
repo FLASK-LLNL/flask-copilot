@@ -409,6 +409,17 @@ async def optimize_molecule_retro(
         f"Retrosynthesis reasoning for {current_node.smiles}: {reasoning_summary}"
     )
 
+    await websocket.send_json(
+        {
+            "type": "response",
+            "message": {
+                "source": "System",
+                "message": f"Reasoning summary for {current_node.smiles}: "
+                + f"\n {reasoning_summary}",
+            },
+        }
+    )
+
     nodes: list[Node] = []
     edges: list[Edge] = []
     for i, smiles in enumerate(result.reactants_smiles_list):
