@@ -346,6 +346,8 @@ async def constrained_opt(
         f"Optimizing {parent_smiles} without using {constraint_smiles} in the synthesis."
     )
     result = await planner.run()
+
+    await websocket.send_json({"type": "complete"})
     return result
 
 
@@ -407,6 +409,17 @@ async def optimize_molecule_retro(
         f"Retrosynthesis reasoning for {current_node.smiles}: {reasoning_summary}"
     )
 
+    await websocket.send_json(
+        {
+            "type": "response",
+            "message": {
+                "source": "System",
+                "message": f"Reasoning summary for {current_node.smiles}: "
+                + f"\n {reasoning_summary}",
+            },
+        }
+    )
+
     nodes: list[Node] = []
     edges: list[Edge] = []
     for i, smiles in enumerate(result.reactants_smiles_list):
@@ -423,3 +436,4 @@ async def optimize_molecule_retro(
     for node, edge in zip(nodes, edges):
         await websocket.send_json({"type": "node", "node": node.json()})
         await websocket.send_json({"type": "edge", "edge": edge.json()})
+    await websocket.send_json({"type": "complete"})
