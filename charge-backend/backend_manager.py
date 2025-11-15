@@ -79,6 +79,24 @@ class ActionManager:
         else:
             raise ValueError(f"Unknown problem type: {problem_type}")
 
+    async def handle_save_state(self, *args, **kwargs) -> None:
+        """Handle save state action."""
+        logger.info("Save state action received")
+
+        experiment_context = await self.experiment.save_state()
+        await self.websocket.send_json(
+            {"type": "save-context-response", "experimentContext": experiment_context}
+        )
+
+    async def handle_load_state(self, data, *args, **kwargs) -> None:
+        """Handle load state action."""
+        logger.info("Load state action received")
+        experiment_context = data.get("experimentContext")
+        if not experiment_context:
+            logger.error("No experiment context provided for loading state")
+            return
+        await self.experiment.load_state(experiment_context)
+
     async def _handle_optimization(self, data: dict) -> None:
         """Handle optimization problem type."""
         self.task_manager.clogger.info("Start Optimization action received")

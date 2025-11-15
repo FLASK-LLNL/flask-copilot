@@ -165,6 +165,8 @@ async def websocket_endpoint(websocket: WebSocket):
         "select-tools-for-task": action_manager.handle_select_tools_for_task,
         "custom_query": action_manager.handle_custom_query,
         "reset": action_manager.handle_reset,
+        "save-context": action_manager.handle_save_state,
+        "load-context": action_manager.handle_load_state,
         "stop": action_manager.handle_stop,
     }
 
