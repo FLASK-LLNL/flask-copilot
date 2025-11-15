@@ -174,11 +174,11 @@ class ActionManager:
         server_list = list_server_urls()
         for server in server_list:
             tool_list = await list_server_tools([server])
-            tool_names = ",".join([name for name, _ in tool_list])
+            tool_names = [name for name, _ in tool_list]
             tools.append(ToolList(server=server, names=tool_names))
         await self.websocket.send_json(
             {
-                "type": "tool_list",
+                "type": "available-tools-response",
                 "tools": [tool.json() for tool in tools] if tools else [],
             }
         )
