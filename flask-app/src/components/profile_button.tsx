@@ -1,3 +1,4 @@
+
 import React from 'react';
 import { User } from 'lucide-react';
 
@@ -6,14 +7,33 @@ interface ProfileButtonProps {
   className?: string;
 }
 
+interface ProfileSettings {
+  backend: string;
+  customUrl?: string;
+  model: string;
+  apiKey: string;
+}
+
+const BACKEND_OPTIONS = [
+  { value: 'openai', label: 'OpenAI' },
+  { value: 'gemini', label: 'Google Gemini' },
+  { value: 'livai', label: 'LivAI (LivChat)' },
+  { value: 'ollama', label: 'Ollama' },
+  { value: 'huggingface', label: 'HuggingFace Local' },
+  { value: 'vllm', label: 'vLLM' },
+  { value: 'custom', label: 'Custom URL' },
+];
+
+const BACKENDS_REQUIRING_URL = ['livai', 'vllm', 'ollama', 'custom'];
+
 export const ProfileButton: React.FC<ProfileButtonProps> = ({
   onClick,
   className = ''
 }) => {
   const [isModalOpen, setIsModalOpen] = React.useState(false);
   const [settings, setSettings] = React.useState<ProfileSettings>({
-    url: 'http://localhost:8000',
-    orchestrator: 'default',
+    backend: 'openai',
+    customUrl: '',
     model: 'claude-sonnet-4-20250514',
     apiKey: ''
   });
@@ -36,6 +56,17 @@ export const ProfileButton: React.FC<ProfileButtonProps> = ({
     setTempSettings(settings);
     setIsModalOpen(false);
   };
+
+  const handleBackendChange = (newBackend: string) => {
+    setTempSettings({
+      ...tempSettings,
+      backend: newBackend,
+      // Clear custom URL if switching away from a backend that needs it
+      customUrl: BACKENDS_REQUIRING_URL.includes(newBackend) ? tempSettings.customUrl : ''
+    });
+  };
+
+  const showUrlField = BACKENDS_REQUIRING_URL.includes(tempSettings.backend);
 
   return (
     <>
@@ -67,38 +98,59 @@ export const ProfileButton: React.FC<ProfileButtonProps> = ({
             </div>
 
             <div className="space-y-4">
-              {/* URL Field */}
+              {/* Backend Selector */}
               <div>
                 <label className="block text-sm font-medium text-purple-200 mb-2">
-                  Server URL
+                  Backend
                 </label>
-                <input
-                  type="text"
-                  value={tempSettings.url}
-                  onChange={(e) => setTempSettings({...tempSettings, url: e.target.value})}
-                  placeholder="http://localhost:8000"
-                  className="w-full px-4 py-3 bg-white/10 border-2 border-purple-400/50 rounded-lg focus:border-purple-400 focus:outline-none text-white placeholder-purple-300/50"
-                />
+                <select
+                  value={tempSettings.backend}
+                  onChange={(e) => handleBackendChange(e.target.value)}
+                  className="w-full px-4 py-3 bg-white/10 border-2 border-purple-400/50 rounded-lg focus:border-purple-400 focus:outline-none text-white cursor-pointer"
+                >
+                  {BACKEND_OPTIONS.map(option => (
+                    <option key={option.value} value={option.value} className="bg-slate-800">
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
               </div>
 
-              {/* Orchestrator Field */}
-              <div>
-                <label className="block text-sm font-medium text-purple-200 mb-2">
-                  Orchestrator
-                </label>
-                <input
-                  type="text"
-                  value={tempSettings.orchestrator}
-                  onChange={(e) => setTempSettings({...tempSettings, orchestrator: e.target.value})}
-                  placeholder="default"
-                  className="w-full px-4 py-3 bg-white/10 border-2 border-purple-400/50 rounded-lg focus:border-purple-400 focus:outline-none text-white placeholder-purple-300/50"
-                />
-              </div>
+              {/* Custom URL Field (conditional) */}
+              {showUrlField && (
+                <div>
+                  <label className="block text-sm font-medium text-purple-200 mb-2">
+                    {tempSettings.backend === 'custom' ? 'Custom URL' : 'Server URL'}
+                    <span className="text-purple-400 text-xs ml-2">
+                      {tempSettings.backend === 'vllm' && '(vLLM endpoint)'}
+                      {tempSettings.backend === 'ollama' && '(Ollama endpoint)'}
+                      {(tempSettings.backend === 'livai' || tempSettings.backend === 'livchat') && '(LivAI base URL)'}
+                    </span>
+                  </label>
+                  <input
+                    type="text"
+                    value={tempSettings.customUrl || ''}
+                    onChange={(e) => setTempSettings({...tempSettings, customUrl: e.target.value})}
+                    placeholder={
+                      tempSettings.backend === 'vllm' ? 'http://localhost:8000/v1' :
+                      tempSettings.backend === 'ollama' ? 'http://localhost:11434' :
+                      'http://localhost:8000'
+                    }
+                    className="w-full px-4 py-3 bg-white/10 border-2 border-purple-400/50 rounded-lg focus:border-purple-400 focus:outline-none text-white placeholder-purple-300/50"
+                  />
+                </div>
+              )}
 
               {/* Model Field */}
               <div>
                 <label className="block text-sm font-medium text-purple-200 mb-2">
                   Model
+                  <span className="text-purple-400 text-xs ml-2">
+                    {tempSettings.backend === 'openai' && '(e.g., gpt-4, gpt-5)'}
+                    {tempSettings.backend === 'gemini' && '(e.g., gemini-flash-latest)'}
+                    {tempSettings.backend === 'ollama' && '(e.g., gpt-oss:latest)'}
+                    {tempSettings.backend === 'vllm' && '(e.g., gpt-oss)'}
+                  </span>
                 </label>
                 <input
                   type="text"
@@ -113,6 +165,11 @@ export const ProfileButton: React.FC<ProfileButtonProps> = ({
               <div>
                 <label className="block text-sm font-medium text-purple-200 mb-2">
                   API Key
+                  <span className="text-purple-400 text-xs ml-2">
+                    {(tempSettings.backend === 'ollama' || tempSettings.backend === 'huggingface' || tempSettings.backend === 'vllm') && '(Optional for local backends)'}
+                    {(tempSettings.backend === 'openai' || tempSettings.backend === 'livai' || tempSettings.backend === 'livchat') && '(OPENAI_API_KEY)'}
+                    {tempSettings.backend === 'gemini' && '(GOOGLE_API_KEY)'}
+                  </span>
                 </label>
                 <input
                   type="password"
