@@ -34,7 +34,7 @@ export const ProfileButton: React.FC<ProfileButtonProps> = ({
   const [settings, setSettings] = React.useState<ProfileSettings>({
     backend: 'openai',
     customUrl: '',
-    model: 'claude-sonnet-4-20250514',
+    model: 'gpt-5-nano',
     apiKey: ''
   });
 
