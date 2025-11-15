@@ -11,6 +11,7 @@ import { ReasoningSidebar, useSidebarState } from './components/sidebar';
 import { MoleculeGraph, useGraphState } from './components/graph';
 import { MultiSelectToolModal } from './components/multi_select_tools';
 import { ProjectSidebar, useProjectSidebar, useProjectManagement } from './components/project_sidebar';
+import { ProfileButton } from './components/profile_button';
 
 import { findAllDescendants, hasDescendants, isRootNode, relayoutTree } from './tree_utils';
 import { copyToClipboard } from './utils';
@@ -638,7 +639,7 @@ const ChemistryTool: React.FC = () => {
                   <span className="bg-pink-500 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center font-bold">{sidebarMessages.length}</span>
                 ) */}
               </button>
-
+              <ProfileButton />
               {/* WebSocket Status Indicator */}
                 <div
                   className="absolute top-10 group"
@@ -729,7 +730,7 @@ const ChemistryTool: React.FC = () => {
                         )}
                         {wsConnected && availableTools.length === 0 && (
                           <div className="mt-2 text-purple-300 text-xs italic">
-                            Loading tools...
+                            No MCP tool servers detected!
                           </div>
                         )}
                       </div>
