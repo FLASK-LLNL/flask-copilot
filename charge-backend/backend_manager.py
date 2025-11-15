@@ -83,23 +83,19 @@ class ActionManager:
         """Handle save state action."""
         logger.info("Save state action received")
 
-        experiment_context = self.experiment.save_state()
+        experiment_context = await self.experiment.save_state()
         await self.websocket.send_json(
             {"type": "save-context-response", "experimentContext": experiment_context}
         )
-        await self.websocket.send_json({"type": "complete"})
 
     async def handle_load_state(self, data, *args, **kwargs) -> None:
         """Handle load state action."""
         logger.info("Load state action received")
         experiment_context = data.get("experimentContext")
         if not experiment_context:
-            await self.websocket.send_json(
-                {"type": "error", "message": "No experiment context provided"}
-            )
+            logger.error("No experiment context provided for loading state")
             return
         await self.experiment.load_state(experiment_context)
-        await self.websocket.send_json({"type": "complete"})
 
     async def _handle_optimization(self, data: dict) -> None:
         """Handle optimization problem type."""
