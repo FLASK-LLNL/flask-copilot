@@ -124,7 +124,7 @@ export const ProfileButton: React.FC<ProfileButtonProps> = ({
                     <span className="text-purple-400 text-xs ml-2">
                       {tempSettings.backend === 'vllm' && '(vLLM endpoint)'}
                       {tempSettings.backend === 'ollama' && '(Ollama endpoint)'}
-                      {(tempSettings.backend === 'livai' || tempSettings.backend === 'livchat') && '(LivAI base URL)'}
+                      {(tempSettings.backend === 'livai') && '(LivAI base URL)'}
                     </span>
                   </label>
                   <input
@@ -167,7 +167,7 @@ export const ProfileButton: React.FC<ProfileButtonProps> = ({
                   API Key
                   <span className="text-purple-400 text-xs ml-2">
                     {(tempSettings.backend === 'ollama' || tempSettings.backend === 'huggingface' || tempSettings.backend === 'vllm') && '(Optional for local backends)'}
-                    {(tempSettings.backend === 'openai' || tempSettings.backend === 'livai' || tempSettings.backend === 'livchat') && '(OPENAI_API_KEY)'}
+                    {(tempSettings.backend === 'openai' || tempSettings.backend === 'livai') && '(OPENAI_API_KEY)'}
                     {tempSettings.backend === 'gemini' && '(GOOGLE_API_KEY)'}
                   </span>
                 </label>
