@@ -4,6 +4,7 @@ import { User } from 'lucide-react';
 
 interface ProfileButtonProps {
   onClick?: () => void;
+  onSettingsChange?: (settings: ProfileSettings) => void;
   className?: string;
 }
 
@@ -28,6 +29,7 @@ const BACKENDS_REQUIRING_URL = ['livai', 'vllm', 'ollama', 'custom'];
 
 export const ProfileButton: React.FC<ProfileButtonProps> = ({
   onClick,
+  onSettingsChange,
   className = ''
 }) => {
   const [isModalOpen, setIsModalOpen] = React.useState(false);
@@ -50,6 +52,11 @@ export const ProfileButton: React.FC<ProfileButtonProps> = ({
     setSettings(tempSettings);
     setIsModalOpen(false);
     console.log('Settings saved:', tempSettings);
+
+    // Call the callback with the saved settings
+    if (onSettingsChange) {
+      onSettingsChange(tempSettings);
+    }
   };
 
   const handleCancel = () => {

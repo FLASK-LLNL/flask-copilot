@@ -90,6 +90,28 @@ const ChemistryTool: React.FC = () => {
     // await fetch('/api/save-selection', { method: 'POST', body: JSON.stringify(payload) });
   };
 
+  // Callback function to send updated profile to backend
+  const handleProfileUpdateConfirm = async (
+    settings,
+  ): Promise<void> => {
+    if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) {
+      alert('WebSocket not connected');
+      return;
+    }
+    console.log(`Updated Profile Saved`);
+
+    if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+      const message = {
+        action: 'update-profile-settings',
+        backend: settings.backend,
+        customUrl: settings.customUrl,
+        model: settings.model,
+        hasApiKey: settings.apiKey !== ''
+      };
+      wsRef.current.send(JSON.stringify(message));
+     }
+  };
+
   useEffect(() => {
     const handleClickOutside = (): void => {
       setContextMenu({node: null, x:0, y:0});
@@ -639,7 +661,9 @@ const ChemistryTool: React.FC = () => {
                   <span className="bg-pink-500 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center font-bold">{sidebarMessages.length}</span>
                 ) */}
               </button>
-              <ProfileButton />
+              <ProfileButton
+                onSettingsChange={handleProfileUpdateConfirm}
+              />
               {/* WebSocket Status Indicator */}
                 <div
                   className="absolute top-10 group"
