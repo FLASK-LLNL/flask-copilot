@@ -3,7 +3,7 @@ import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { Loader2, FlaskConical, TestTubeDiagonal, Network, Play, RotateCcw, X, Send, RefreshCw, Sparkles } from 'lucide-react';
 import 'recharts';
 
-import { WS_SERVER } from './config';
+import { WS_SERVER, VERSION } from './config';
 import { TreeNode, Edge, ContextMenuState, SidebarMessage, Tool, WebSocketMessageToServer, WebSocketMessage, SelectableTool, Experiment, ProfileSettings } from './types';
 
 import { loadRDKit } from './components/molecule';
@@ -960,6 +960,9 @@ const ChemistryTool: React.FC = () => {
             <p>This work was performed under the auspices of the U.S. Department of Energy
             by Lawrence Livermore National Laboratory (LLNL) under Contract DE-AC52-07NA27344
             (LLNL-CODE-2006345).</p>
+            {VERSION && (
+              <p>Server version: {VERSION}</p>
+            )}
           </div>
           </div>
         </div>

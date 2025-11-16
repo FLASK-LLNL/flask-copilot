@@ -115,6 +115,7 @@ if os.path.exists(ASSETS_PATH):
            <script>
            window.APP_CONFIG = {{
                WS_SERVER: '{os.getenv("WS_SERVER", "ws://localhost:8001/ws")}'
+               VERSION: '{os.getenv("SERVER_VERSION", "")}'
            }};
            </script>""",
         )

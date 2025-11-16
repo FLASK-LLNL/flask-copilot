@@ -38,5 +38,6 @@ export default defineConfig({
   ],
   define: {
     'window.APP_CONFIG.WS_SERVER': JSON.stringify(process.env.WS_SERVER || 'ws://localhost:8001/ws')
+    'window.APP_CONFIG.VERSION': JSON.stringify(process.env.SERVER_VERSION || '')
   }
 });
