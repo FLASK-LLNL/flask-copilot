@@ -183,6 +183,27 @@ class ActionManager:
             }
         )
 
+    async def handle_profile_update(self, data: dict) -> None:
+        from charge.experiments.AutoGenExperiment import AutoGenExperiment
+        from charge.clients.autogen import AutoGenPool
+        backend = data["backend"]
+        model = data["model"]
+        await self.handle_reset()
+        logger.info(f"Experiment is reset with model {model} and backend {backend}")
+        autogen_pool = AutoGenPool(model=model, backend=backend)
+        # Set up an experiment class for current endpoint
+        self.experiment = AutoGenExperiment(task=None, agent_pool=autogen_pool)
+
+        await self.websocket.send_json(
+            {
+                "type": "response",
+                "message": {
+                    "source": "System",
+                    "message": f"Experiment is reset with model {model} and backend {backend}",
+                },
+            }
+        )
+
     async def handle_reset(self, *args, **kwargs) -> None:
         """Handle reset action."""
         await self.task_manager.cancel_current_task()
