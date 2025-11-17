@@ -90,6 +90,13 @@ const ChemistryTool: React.FC = () => {
     // await fetch('/api/save-selection', { method: 'POST', body: JSON.stringify(payload) });
   };
 
+  const profileSettings = {
+    backend: 'openai',
+    customUrl: '',
+    model: 'gpt-4',
+    apiKey: ''
+  }
+
   // Callback function to send updated profile to backend
   const handleProfileUpdateConfirm = async (
     settings,
@@ -662,6 +669,7 @@ const ChemistryTool: React.FC = () => {
                 ) */}
               </button>
               <ProfileButton
+                initialSettings={profileSettings}
                 onSettingsChange={handleProfileUpdateConfirm}
               />
               {/* WebSocket Status Indicator */}

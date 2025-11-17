@@ -5,6 +5,7 @@ import { User } from 'lucide-react';
 interface ProfileButtonProps {
   onClick?: () => void;
   onSettingsChange?: (settings: ProfileSettings) => void;
+  initialSettings?: Partial<ProfileSettings>;
   className?: string;
 }
 
@@ -30,17 +31,34 @@ const BACKENDS_REQUIRING_URL = ['livai', 'vllm', 'ollama', 'custom'];
 export const ProfileButton: React.FC<ProfileButtonProps> = ({
   onClick,
   onSettingsChange,
+  initialSettings,
   className = ''
 }) => {
   const [isModalOpen, setIsModalOpen] = React.useState(false);
-  const [settings, setSettings] = React.useState<ProfileSettings>({
+
+  // Merge provided initial settings with defaults
+  const defaultSettings: ProfileSettings = {
     backend: 'openai',
     customUrl: '',
     model: 'gpt-5-nano',
-    apiKey: ''
-  });
+    apiKey: '',
+    ...initialSettings
+  };
 
+  const [settings, setSettings] = React.useState<ProfileSettings>(defaultSettings);
   const [tempSettings, setTempSettings] = React.useState<ProfileSettings>(settings);
+
+  // Update settings when initialSettings prop changes
+  React.useEffect(() => {
+    if (initialSettings) {
+      const updatedSettings = {
+        ...settings,
+        ...initialSettings
+      };
+      setSettings(updatedSettings);
+      setTempSettings(updatedSettings);
+    }
+  }, [initialSettings]);
 
   const handleOpenModal = () => {
     setTempSettings(settings);
