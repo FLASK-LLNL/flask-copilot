@@ -1,3 +1,5 @@
+import asyncio
+from concurrent.futures import ProcessPoolExecutor
 from fastapi import WebSocket
 from charge.clients.autogen import AutoGenAgent
 from charge.servers.AiZynthTools import RetroPlanner, ReactionPath
@@ -13,6 +15,7 @@ from backend_helper_funcs import (
     RetrosynthesisContext,
     Node,
     Edge,
+    loop_executor,
 )
 
 from charge.tasks.RetrosynthesisTask import (
@@ -227,10 +230,18 @@ async def unconstrained_retro(
     await websocket.send_json({"type": "complete"})
 
 
+def run_retro_planner(config_file, smiles):
+    planner = RetroPlanner(configfile=config_file)
+
+    _, _, routes = planner.plan(smiles)
+    return routes, planner
+
+
 async def generate_molecules(
     start_smiles: str,
     config_file: str,
     context: RetrosynthesisContext,
+    executor: ProcessPoolExecutor,
     websocket: WebSocket,
 ):
     """Stream positioned nodes and edges"""
@@ -253,8 +264,15 @@ async def generate_molecules(
         y=100,
     )
     await websocket.send_json({"type": "node", "node": root.json()})
-    planner = context.node_id_to_planner[root.id] = RetroPlanner(configfile=config_file)
-    _, _, routes = planner.plan(start_smiles)
+
+    logger.info("Starting planning in executor...")
+
+    routes, planner = await loop_executor(
+        executor, run_retro_planner, config_file, start_smiles
+    )
+
+    context.node_id_to_planner[root.id] = planner
+
     if not routes:
         await websocket.send_json(
             {
@@ -328,6 +346,8 @@ async def constrained_opt(
         f"Optimizing {parent_smiles} without using {constraint_smiles} in the synthesis."
     )
     result = await planner.run()
+
+    await websocket.send_json({"type": "complete"})
     return result
 
 
@@ -389,6 +409,17 @@ async def optimize_molecule_retro(
         f"Retrosynthesis reasoning for {current_node.smiles}: {reasoning_summary}"
     )
 
+    await websocket.send_json(
+        {
+            "type": "response",
+            "message": {
+                "source": "System",
+                "message": f"Reasoning summary for {current_node.smiles}: "
+                + f"\n {reasoning_summary}",
+            },
+        }
+    )
+
     nodes: list[Node] = []
     edges: list[Edge] = []
     for i, smiles in enumerate(result.reactants_smiles_list):
@@ -405,3 +436,4 @@ async def optimize_molecule_retro(
     for node, edge in zip(nodes, edges):
         await websocket.send_json({"type": "node", "node": node.json()})
         await websocket.send_json({"type": "edge", "edge": edge.json()})
+    await websocket.send_json({"type": "complete"})

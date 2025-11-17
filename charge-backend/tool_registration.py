@@ -20,6 +20,7 @@ from charge.clients.autogen_utils import (
     _list_wb_tools,
 )
 
+
 @dataclass
 class ToolList:
     server: str
@@ -28,6 +29,7 @@ class ToolList:
     def json(self):
         return asdict(self)
 
+
 class ToolServer(BaseModel):
     address: str
     port: int
@@ -35,13 +37,17 @@ class ToolServer(BaseModel):
 
     def __str__(self):
         return f"http://{self.address}:{self.port}/sse"
+
     def long_name(self):
         return f"[{self.name}] http://{self.address}:{self.port}/sse"
+
 
 class ToolServerDict(BaseModel):
     servers: dict[str, ToolServer]
 
+
 SERVERS: ToolServerDict = ToolServerDict(servers={})
+
 
 def get_client_info(request: Request):
     """Get client IP and hostname with fallbacks"""
@@ -52,20 +58,22 @@ def get_client_info(request: Request):
     else:
         # Fallback to direct connection IP
         client_ip = request.client.host
-    
+
     # Try to resolve hostname
     try:
         hostname = socket.gethostbyaddr(client_ip)[0]
     except (socket.herror, socket.gaierror, OSError):
         hostname = client_ip  # Use IP if resolution fails
-    
+
     return hostname
+
 
 @dataclass
 class RegistrationRequest:
     host: str
     port: int
     name: str
+
 
 def reload_server_list(filename: str):
     if filename:
@@ -85,21 +93,20 @@ def reload_server_list(filename: str):
     else:
         return
 
+
 async def register_post(filename: str, request: Request, data: RegistrationRequest):
     hostname = data.host
     if not hostname:
         hostname = get_client_info(request)
 
     key = f"{hostname}:{data.port}"
-    new_server = ToolServer(
-        address=hostname,
-        port=data.port,
-        name=data.name
-    )
+    new_server = ToolServer(address=hostname, port=data.port, name=data.name)
 
     old_server = SERVERS.servers.pop(key, None)
     if old_server:
-        logger.info(f"Replacing server at {key} with new registration: {old_server.long_name()} -> {new_server.long_name()}")
+        logger.info(
+            f"Replacing server at {key} with new registration: {old_server.long_name()} -> {new_server.long_name()}"
+        )
 
     SERVERS.servers[key] = new_server
     if filename:
@@ -112,6 +119,7 @@ async def register_post(filename: str, request: Request, data: RegistrationReque
 
     return {"status": f"registered MCP server {data.name} at {hostname}:{data.port}"}
 
+
 def register_tool_server(port, host, name, copilot_port, copilot_host):
     try:
         url = f"https://{copilot_host}:{copilot_port}/register"
@@ -122,6 +130,7 @@ def register_tool_server(port, host, name, copilot_port, copilot_host):
 
     logger.info(response.json())
 
+
 def list_server_urls() -> list[str]:
     server_urls = []
     invalid_keys = []
@@ -130,17 +139,20 @@ def list_server_urls() -> list[str]:
         if validated_server:
             server_urls.append(f"{server}")
         else:
-            logger.info(f"Previously cached URL is no longer valid - removing {server.long_name()} from cache")
+            logger.info(
+                f"Previously cached URL is no longer valid - removing {server.long_name()} from cache"
+            )
             invalid_keys.append(key)
 
     for key in invalid_keys:
-        SERVERS.pop(key)
+        SERVERS.servers.pop(key)
 
     assert server_urls is not None, "Server URLs must be registered"
     for url in server_urls:
         assert url.endswith("/sse"), f"Server URL {url} must end with /sse"
 
     return server_urls
+
 
 async def list_server_tools(urls: list[str]):
     workbenches = [McpWorkbench(SseServerParams(url=server)) for server in urls]

@@ -218,3 +218,8 @@ async def highlight_node(node: Node, websocket: WebSocket, highlight: bool):
             },
         }
     )
+
+
+async def loop_executor(executor, func, *args, **kwargs):
+    loop = asyncio.get_event_loop()
+    return await loop.run_in_executor(executor, func, *args, **kwargs)
