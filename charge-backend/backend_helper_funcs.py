@@ -100,19 +100,21 @@ tool_callback_blacklist = [
 
 
 class CallbackHandler:
-    def __init__(self, websocket: WebSocket):
+    def __init__(self, websocket: WebSocket, name: Optional[str] = None):
         self.websocket = websocket
+        self.name = name
 
-    async def send(self, model_family, assistant_message):
+    async def send(self, assistant_message):
         send = self.websocket.send_json
+        source = self.name if self.name else "FLASK-Generic"
         if assistant_message.type == "UserMessage":
-            message = f"[{model_family}] User: {assistant_message.content}"
+            message = f"[{source}] User: {assistant_message.content}"
             logger.info(message)
             await send({"type": "response", "message": {"message": message}})
         elif assistant_message.type == "AssistantMessage":
 
             if assistant_message.thought is not None:
-                _str = f"[{model_family}] Model thought: {assistant_message.thought}"
+                _str = f"[{source}] Model thought: {assistant_message.thought}"
                 output = ModelMessage(message=_str, smiles=None)
                 logger.info(_str)
                 await send({"type": "response", "message": output.json()})
@@ -120,7 +122,7 @@ class CallbackHandler:
                 for item in assistant_message.content:
                     if hasattr(item, "name") and hasattr(item, "arguments"):
                         name = item.name
-                        _str = f"[{model_family}] Function call: {item.name} with args {item.arguments}"
+                        _str = f"[{source}] Function call: {item.name} with args {item.arguments}"
                         logger.info(_str)
                         if name not in tool_callback_blacklist:
                             if "log_msg" in item.arguments:
@@ -139,24 +141,24 @@ class CallbackHandler:
                             await send(msg)
                     else:
 
-                        logger.info(f"[{model_family}] Model: {item}")
+                        logger.info(f"[{source}] Model: {item}")
         elif assistant_message.type == "FunctionExecutionResultMessage":
 
             for result in assistant_message.content:
                 if result.is_error:
                     message = (
-                        f"[{model_family}] Function {result.name} errored with output: {result.content}"
+                        f"[{source}] Function {result.name} errored with output: {result.content}"
                     )
                     logger.error(message)
                 else:
-                    message = f"[{model_family}] Function {result.name} returned: {result.content}"
+                    message = f"[{source}] Function {result.name} returned: {result.content}"
                     logger.info(message)
         else:
-            message = f"[{model_family}] Model: {assistant_message.message.content}"
+            message = f"[{source}] Model: {assistant_message.message.content}"
             logger.info(message)
 
-    def __call__(self, model_family, assistant_message):
-        asyncio.create_task(self.send(model_family, assistant_message))
+    def __call__(self, assistant_message):
+        asyncio.create_task(self.send(assistant_message))
 
 
 class RetrosynthesisContext:
