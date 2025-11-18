@@ -1,19 +1,13 @@
 
 import React from 'react';
 import { User } from 'lucide-react';
+import { ProfileSettings } from '../types';
 
 interface ProfileButtonProps {
   onClick?: () => void;
   onSettingsChange?: (settings: ProfileSettings) => void;
   initialSettings?: Partial<ProfileSettings>;
   className?: string;
-}
-
-interface ProfileSettings {
-  backend: string;
-  customUrl?: string;
-  model: string;
-  apiKey: string;
 }
 
 const BACKEND_OPTIONS = [

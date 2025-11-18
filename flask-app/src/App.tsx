@@ -4,7 +4,7 @@ import { Loader2, FlaskConical, TestTubeDiagonal, Network, Play, RotateCcw, X, S
 import 'recharts';
 
 import { WS_SERVER } from './config';
-import { TreeNode, Edge, ContextMenuState, SidebarMessage, Tool, WebSocketMessageToServer, WebSocketMessage, SelectableTool, Experiment } from './types';
+import { TreeNode, Edge, ContextMenuState, SidebarMessage, Tool, WebSocketMessageToServer, WebSocketMessage, SelectableTool, Experiment, ProfileSettings } from './types';
 
 import { loadRDKit } from './components/molecule';
 import { ReasoningSidebar, useSidebarState } from './components/sidebar';
@@ -62,6 +62,25 @@ const ChemistryTool: React.FC = () => {
   const [selectedTools, setSelectedTools] = useState<number[]>([]);
   const [availableToolsMap, setAvailableToolsMap] = useState<SelectableTool[]>([]);
 
+  // Load initial settings from localStorage
+  const getInitialSettings = () => {
+    const saved = localStorage.getItem('profileSettings');
+    if (saved) {
+      try {
+        return JSON.parse(saved);
+      } catch (e) {
+        console.error('Error parsing settings:', e);
+      }
+    }
+    return {
+      backend: 'vllm',
+      customUrl: 'http://localhost:8000/v1',
+      model: 'gpt-oss',
+      apiKey: ''
+    };
+  };
+  const [profileSettings, setProfileSettings] = useState(getInitialSettings());
+
   // Callback function to send selected tools to backend
   const handleToolSelectionConfirm = async (
     selectedIds: number[],
@@ -89,13 +108,6 @@ const ChemistryTool: React.FC = () => {
     // Optional: Add any additional processing or API calls here
     // await fetch('/api/save-selection', { method: 'POST', body: JSON.stringify(payload) });
   };
-
-  const profileSettings = {
-    backend: 'openai',
-    customUrl: '',
-    model: 'gpt-5-nano',
-    apiKey: ''
-  }
 
   // Callback function to send updated profile to backend
   const handleProfileUpdateConfirm = async (
@@ -347,7 +359,15 @@ const ChemistryTool: React.FC = () => {
           availableToolsMap.push({id: index, tool_server: server})
         });
       } else if (data.type === 'update-orchestrator-profile') {
-        console.log('Server setup: ', data.profileSettings)
+        // Handle profile settings updates from server
+        const newSettings = {
+          backend: data.profileSettings.backend,
+          customUrl: data.profileSettings.customUrl,
+          model: data.profileSettings.model,
+          apiKey: data.profileSettings.apiKey,
+        };
+        setProfileSettings(newSettings);
+        localStorage.setItem('profileSettings', JSON.stringify(newSettings));
       } else if (data.type === 'error') {
         console.error(data.message);
         alert("Server error: " + data.message);
