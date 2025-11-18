@@ -151,6 +151,17 @@ async def websocket_endpoint(websocket: WebSocket):
     autogen_pool = AutoGenPool(model=args.model, backend=args.backend)
     # Set up an experiment class for current endpoint
     experiment = AutoGenExperiment(task=None, agent_pool=autogen_pool)
+    await websocket.send_json(
+        {
+            "type": "update-orchestrator-profile",
+            "profileSettings": {
+                "backend": args.backend,
+                "customUrl": '',
+                "model": args.model,
+                "apiKey": ''
+            },
+        }
+    )
 
     task_manager = TaskManager(websocket)
 

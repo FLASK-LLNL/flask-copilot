@@ -93,7 +93,7 @@ const ChemistryTool: React.FC = () => {
   const profileSettings = {
     backend: 'openai',
     customUrl: '',
-    model: 'gpt-4',
+    model: 'gpt-5-nano',
     apiKey: ''
   }
 
@@ -346,6 +346,8 @@ const ChemistryTool: React.FC = () => {
           console.log(`Tool Server Element at index ${index}: ${server.server}`);
           availableToolsMap.push({id: index, tool_server: server})
         });
+      } else if (data.type === 'update-orchestrator-profile') {
+        console.log('Server setup: ', data.profileSettings)
       } else if (data.type === 'error') {
         console.error(data.message);
         alert("Server error: " + data.message);
