@@ -151,6 +151,17 @@ async def websocket_endpoint(websocket: WebSocket):
     autogen_pool = AutoGenPool(model=args.model, backend=args.backend)
     # Set up an experiment class for current endpoint
     experiment = AutoGenExperiment(task=None, agent_pool=autogen_pool)
+    await websocket.send_json(
+        {
+            "type": "update-orchestrator-profile",
+            "profileSettings": {
+                "backend": args.backend,
+                "customUrl": '',
+                "model": args.model,
+                "apiKey": ''
+            },
+        }
+    )
 
     task_manager = TaskManager(websocket)
 
@@ -163,6 +174,7 @@ async def websocket_endpoint(websocket: WebSocket):
         "recompute-reaction": action_manager.handle_recompute_reaction,
         "list-tools": action_manager.handle_list_tools,
         "select-tools-for-task": action_manager.handle_select_tools_for_task,
+        "update-profile-settings": action_manager.handle_profile_update,
         "custom_query": action_manager.handle_custom_query,
         "reset": action_manager.handle_reset,
         "save-context": action_manager.handle_save_state,
@@ -183,7 +195,7 @@ async def websocket_endpoint(websocket: WebSocket):
                     handler_func = action_handlers[action]
                     await handler_func(data)
                 else:
-                    logger.warning(f"Unknown action received: {action}")
+                    logger.warning(f"Unknown action received: {action} with data {data}")
             except ValueError as e:
                 logger.error(f"Error in internal loop connection: {e}")
                 await task_manager.cancel_current_task()

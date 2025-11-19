@@ -4,13 +4,14 @@ import { Loader2, FlaskConical, TestTubeDiagonal, Network, Play, RotateCcw, X, S
 import 'recharts';
 
 import { WS_SERVER } from './config';
-import { TreeNode, Edge, ContextMenuState, SidebarMessage, Tool, WebSocketMessageToServer, WebSocketMessage, SelectableTool, Experiment } from './types';
+import { TreeNode, Edge, ContextMenuState, SidebarMessage, Tool, WebSocketMessageToServer, WebSocketMessage, SelectableTool, Experiment, ProfileSettings } from './types';
 
 import { loadRDKit } from './components/molecule';
 import { ReasoningSidebar, useSidebarState } from './components/sidebar';
 import { MoleculeGraph, useGraphState } from './components/graph';
 import { MultiSelectToolModal } from './components/multi_select_tools';
 import { ProjectSidebar, useProjectSidebar, useProjectManagement } from './components/project_sidebar';
+import { ProfileButton } from './components/profile_button';
 
 import { findAllDescendants, hasDescendants, isRootNode, relayoutTree } from './tree_utils';
 import { copyToClipboard } from './utils';
@@ -61,6 +62,25 @@ const ChemistryTool: React.FC = () => {
   const [selectedTools, setSelectedTools] = useState<number[]>([]);
   const [availableToolsMap, setAvailableToolsMap] = useState<SelectableTool[]>([]);
 
+  // Load initial settings from localStorage
+  const getInitialSettings = () => {
+    const saved = localStorage.getItem('profileSettings');
+    if (saved) {
+      try {
+        return JSON.parse(saved);
+      } catch (e) {
+        console.error('Error parsing settings:', e);
+      }
+    }
+    return {
+      backend: 'vllm',
+      customUrl: 'http://localhost:8000/v1',
+      model: 'gpt-oss',
+      apiKey: ''
+    };
+  };
+  const [profileSettings, setProfileSettings] = useState(getInitialSettings());
+
   // Callback function to send selected tools to backend
   const handleToolSelectionConfirm = async (
     selectedIds: number[],
@@ -87,6 +107,28 @@ const ChemistryTool: React.FC = () => {
 
     // Optional: Add any additional processing or API calls here
     // await fetch('/api/save-selection', { method: 'POST', body: JSON.stringify(payload) });
+  };
+
+  // Callback function to send updated profile to backend
+  const handleProfileUpdateConfirm = async (
+    settings,
+  ): Promise<void> => {
+    if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) {
+      alert('WebSocket not connected');
+      return;
+    }
+    console.log(`Updated Profile Saved`);
+
+    if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+      const message = {
+        action: 'update-profile-settings',
+        backend: settings.backend,
+        customUrl: settings.customUrl,
+        model: settings.model,
+        hasApiKey: settings.apiKey !== ''
+      };
+      wsRef.current.send(JSON.stringify(message));
+     }
   };
 
   useEffect(() => {
@@ -316,6 +358,16 @@ const ChemistryTool: React.FC = () => {
           console.log(`Tool Server Element at index ${index}: ${server.server}`);
           availableToolsMap.push({id: index, tool_server: server})
         });
+      } else if (data.type === 'update-orchestrator-profile') {
+        // Handle profile settings updates from server
+        const newSettings = {
+          backend: data.profileSettings.backend,
+          customUrl: data.profileSettings.customUrl,
+          model: data.profileSettings.model,
+          apiKey: data.profileSettings.apiKey,
+        };
+        setProfileSettings(newSettings);
+        localStorage.setItem('profileSettings', JSON.stringify(newSettings));
       } else if (data.type === 'error') {
         console.error(data.message);
         alert("Server error: " + data.message);
@@ -638,7 +690,10 @@ const ChemistryTool: React.FC = () => {
                   <span className="bg-pink-500 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center font-bold">{sidebarMessages.length}</span>
                 ) */}
               </button>
-
+              <ProfileButton
+                initialSettings={profileSettings}
+                onSettingsChange={handleProfileUpdateConfirm}
+              />
               {/* WebSocket Status Indicator */}
                 <div
                   className="absolute top-10 group"
@@ -729,7 +784,7 @@ const ChemistryTool: React.FC = () => {
                         )}
                         {wsConnected && availableTools.length === 0 && (
                           <div className="mt-2 text-purple-300 text-xs italic">
-                            Loading tools...
+                            No MCP tool servers detected!
                           </div>
                         )}
                       </div>
