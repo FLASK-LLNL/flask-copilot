@@ -53,6 +53,13 @@ export interface ToolMap {
   selectedTools?: SelectableTool[];
 }
 
+export interface ProfileSettings {
+  backend: string;
+  customUrl?: string;
+  model: string;
+  apiKey: string;
+}
+
 export interface WebSocketMessageToServer {
   action?: string;
   smiles?: string;
