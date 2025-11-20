@@ -147,8 +147,18 @@ async def websocket_endpoint(websocket: WebSocket):
     logger.info(f"Request for websocket received. Headers: {str(websocket.headers)}")
     await websocket.accept()
 
+    API_KEY = os.getenv("FLASK_ORCHESTRATOR_API_KEY", None)
+    model = os.getenv("FLASK_ORCHESTRATOR_MODEL", None)
+    backend = os.getenv("FLASK_ORCHESTRATOR_BACKEND", None)
+    BASE_URL = os.getenv("FLASK_ORCHESTRATOR_URL", None)
+
+    if not model:
+        model = args.model
+    if not backend:
+        backend = args.backend
+
     # set up an AutoGenAgent pool for tasks on this endpoint
-    autogen_pool = AutoGenPool(model=args.model, backend=args.backend)
+    autogen_pool = AutoGenPool(model=model, backend=backend, api_key=API_KEY, base_url=BASE_URL)
     # Set up an experiment class for current endpoint
     experiment = AutoGenExperiment(task=None, agent_pool=autogen_pool)
     await websocket.send_json(
