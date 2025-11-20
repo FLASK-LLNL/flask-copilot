@@ -19,12 +19,15 @@ RUN git clone --recursive https://github.com/FLASK-LLNL/ChARGe.git charge && \
     charge-install --extras aizynthfinder --extras autogen --extras rdkit --extras chemprice
 
 COPY mock_server.py /app
+COPY dockerscripts/launch_servers.sh /app
 
 RUN chmod -R g+rx /app
 
 ENV FLASK_APPDIR=/app/dist
 
-EXPOSE 8001
-CMD ["--host", "0.0.0.0", "--port", "8001", "--workers", "8", "mock_server:app"]
-ENTRYPOINT ["uvicorn"]
+ARG AZF_PATH=./aizynth
+COPY ${AZF_PATH}/. /aizynth
 
+EXPOSE 8001
+CMD ["--host", "0.0.0.0", "--port", "8001", "--workers", "8", "charge_server:app", "--json_file", "known_molecules.json", "--config", "/aizynth/config.yml", "--backend", "openai", "--model", "gpt-5-nano"]
+ENTRYPOINT ["/app/launch_servers.sh"]

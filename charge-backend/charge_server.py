@@ -70,7 +70,7 @@ parser.add_argument(
 # Add standard CLI arguments
 Client.add_std_parser_arguments(parser)
 
-args = parser.parse_args()
+args = parser.parse_known_args()
 
 app = FastAPI()
 

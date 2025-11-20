@@ -13,6 +13,7 @@ import requests
 from pydantic import BaseModel
 import json
 from typing import Optional
+import time
 
 from charge.utils.system_utils import check_server_paths
 from autogen_ext.tools.mcp import McpWorkbench, SseServerParams
@@ -121,14 +122,23 @@ async def register_post(filename: str, request: Request, data: RegistrationReque
 
 
 def register_tool_server(port, host, name, copilot_port, copilot_host):
-    try:
-        url = f"https://{copilot_host}:{copilot_port}/register"
-        response = requests.post(url, json={"host": host, "port": port, "name": name})
-    except:
-        url = f"http://{copilot_host}:{copilot_port}/register"
-        response = requests.post(url, json={"host": host, "port": port, "name": name})
-
-    logger.info(response.json())
+    for i in range(5):
+        try:
+            try:
+                url = f"https://{copilot_host}:{copilot_port}/register"
+                response = requests.post(url, json={"host": host, "port": port, "name": name})
+            except:
+                url = f"http://{copilot_host}:{copilot_port}/register"
+                response = requests.post(url, json={"host": host, "port": port, "name": name})
+            logger.info(response.json())
+            break
+        except:
+            if i == 4:
+                logger.error("Could not connect to server for registration! Exiting")
+                raise
+            logger.info("Could not connect to server for registration, retrying in 10 seconds")
+            time.sleep(10)
+            continue
 
 
 def list_server_urls() -> list[str]:
@@ -139,9 +149,7 @@ def list_server_urls() -> list[str]:
         if validated_server:
             server_urls.append(f"{server}")
         else:
-            logger.info(
-                f"Previously cached URL is no longer valid - removing {server.long_name()} from cache"
-            )
+            logger.info(f"Previously cached URL is no longer valid - removing {server.long_name()} from cache")
             invalid_keys.append(key)
 
     for key in invalid_keys:
