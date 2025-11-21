@@ -54,7 +54,7 @@ parser.add_argument(
 parser.add_argument(
     "--config-file",
     type=str,
-    default="config.yml",
+    default="/aizynth/config.yml",
     help="Path to the configuration file for AiZynthFinder.",
 )
 parser.add_argument("--port", type=int, default=8001, help="Port to run the server on")
@@ -68,9 +68,9 @@ parser.add_argument(
 )
 
 # Add standard CLI arguments
-Client.add_std_parser_arguments(parser)
+Client.add_std_parser_arguments(parser, defaults=dict(backend="openai", model="gpt-5-nano"))
 
-args = parser.parse_known_args()
+args, _ = parser.parse_known_args()
 
 app = FastAPI()
 
