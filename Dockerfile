@@ -29,5 +29,5 @@ ARG AZF_PATH=./aizynth
 COPY ${AZF_PATH}/. /aizynth
 
 EXPOSE 8001
-CMD ["--host", "0.0.0.0", "--port", "8001", "--workers", "8", "charge_server:app", "--json_file", "known_molecules.json", "--config", "/aizynth/config.yml", "--backend", "openai", "--model", "gpt-5-nano"]
+CMD ["--host", "0.0.0.0", "--port", "8001", "--workers", "8", "charge_server:app"]
 ENTRYPOINT ["/app/launch_servers.sh"]

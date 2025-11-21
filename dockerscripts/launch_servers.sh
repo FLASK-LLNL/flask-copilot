@@ -1,7 +1,7 @@
 #!/bin/sh
 
 # Launch main server
-uvicorn $@ &
+uvicorn $@ -- --json_file known_molecules.json --config /aizynth/config.yml --backend openai --model gpt-5-nano &
 
 # Wait for server to start up
 sleep 10
