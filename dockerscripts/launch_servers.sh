@@ -1,7 +1,8 @@
 #!/bin/sh
 
 # Launch main server
-uvicorn $@ -- --json_file known_molecules.json --config /aizynth/config.yml --backend openai --model gpt-5-nano &
+export PYTHONPATH=$PYTHONPATH:/app/charge-backend
+uvicorn --host 0.0.0.0 --port 8001 --workers 8 charge_server:app &
 
 # Wait for server to start up
 sleep 10
