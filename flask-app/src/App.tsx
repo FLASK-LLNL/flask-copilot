@@ -362,6 +362,7 @@ const ChemistryTool: React.FC = () => {
         // Handle profile settings updates from server
         const newSettings = {
           backend: data.profileSettings.backend,
+          useCustomUrl: data.profileSettings.useCustomUrl,
           customUrl: data.profileSettings.customUrl,
           model: data.profileSettings.model,
           apiKey: data.profileSettings.apiKey,

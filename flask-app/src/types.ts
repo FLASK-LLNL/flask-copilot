@@ -55,6 +55,7 @@ export interface ToolMap {
 
 export interface ProfileSettings {
   backend: string;
+  useCustomUrl: boolean;
   customUrl?: string;
   model: string;
   apiKey: string;

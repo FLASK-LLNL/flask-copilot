@@ -11,16 +11,14 @@ interface ProfileButtonProps {
 }
 
 const BACKEND_OPTIONS = [
-  { value: 'openai', label: 'OpenAI' },
-  { value: 'gemini', label: 'Google Gemini' },
-  { value: 'livai', label: 'LivAI (LivChat)' },
-  { value: 'ollama', label: 'Ollama' },
-  { value: 'huggingface', label: 'HuggingFace Local' },
-  { value: 'vllm', label: 'vLLM' },
-  { value: 'custom', label: 'Custom URL' },
+  { value: 'openai', label: 'OpenAI', defaultUrl: 'https://api.openai.com/v1' },
+  { value: 'gemini', label: 'Google Gemini', defaultUrl: 'https://generativelanguage.googleapis.com/v1' },
+  { value: 'livai', label: 'LivAI', defaultUrl: '' },
+  { value: 'ollama', label: 'Ollama', defaultUrl: '' },
+  { value: 'huggingface', label: 'HuggingFace Local', defaultUrl: '' },
+  { value: 'vllm', label: 'vLLM', defaultUrl: '' },
+  { value: 'custom', label: 'Custom URL', defaultUrl: 'http://localhost:8000' },
 ];
-
-const BACKENDS_REQUIRING_URL = ['livai', 'vllm', 'ollama', 'custom'];
 
 export const ProfileButton: React.FC<ProfileButtonProps> = ({
   onClick,
@@ -33,6 +31,7 @@ export const ProfileButton: React.FC<ProfileButtonProps> = ({
   // Merge provided initial settings with defaults
   const defaultSettings: ProfileSettings = {
     backend: 'openai',
+    useCustomUrl: false,
     customUrl: '',
     model: 'gpt-5-nano',
     apiKey: '',
@@ -80,12 +79,20 @@ export const ProfileButton: React.FC<ProfileButtonProps> = ({
     setTempSettings({
       ...tempSettings,
       backend: newBackend,
-      // Clear custom URL if switching away from a backend that needs it
-      customUrl: BACKENDS_REQUIRING_URL.includes(newBackend) ? tempSettings.customUrl : ''
+      // Set default URL for the new backend if custom URL is enabled
+      customUrl: tempSettings.useCustomUrl && backendOption ? backendOption.defaultUrl : tempSettings.customUrl
     });
   };
 
-  const showUrlField = BACKENDS_REQUIRING_URL.includes(tempSettings.backend);
+  const handleCustomUrlToggle = (enabled: boolean) => {
+    const backendOption = BACKEND_OPTIONS.find(opt => opt.value === tempSettings.backend);
+    setTempSettings({
+      ...tempSettings,
+      useCustomUrl: enabled,
+      // Set default URL when enabling custom URL
+      customUrl: enabled && backendOption ? backendOption.defaultUrl : tempSettings.customUrl
+    });
+  };
 
   return (
     <>
@@ -135,28 +142,45 @@ export const ProfileButton: React.FC<ProfileButtonProps> = ({
                 </select>
               </div>
 
+              {/* Use Custom URL Checkbox */}
+              <div>
+                <label className="flex items-center gap-2 text-sm text-purple-200 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={tempSettings.useCustomUrl}
+                    onChange={(e) => handleCustomUrlToggle(e.target.checked)}
+                    className="w-4 h-4 rounded border-purple-400/50 bg-white/20 text-purple-600 focus:ring-purple-500 focus:ring-offset-0"
+                  />
+                  <span>Use custom URL for this backend</span>
+                </label>
+                <p className="text-xs text-purple-400 mt-1 ml-6">
+                  Override the default endpoint with a custom server URL
+                </p>
+              </div>
+
               {/* Custom URL Field (conditional) */}
-              {showUrlField && (
-                <div>
+              {tempSettings.useCustomUrl && (
+                <div className="animate-fadeIn">
                   <label className="block text-sm font-medium text-purple-200 mb-2">
-                    {tempSettings.backend === 'custom' ? 'Custom URL' : 'Server URL'}
+                    Custom URL
                     <span className="text-purple-400 text-xs ml-2">
                       {tempSettings.backend === 'vllm' && '(vLLM endpoint)'}
                       {tempSettings.backend === 'ollama' && '(Ollama endpoint)'}
                       {(tempSettings.backend === 'livai') && '(LivAI base URL)'}
+                      {tempSettings.backend === 'openai' && '(OpenAI-compatible endpoint)'}
+                      {tempSettings.backend === 'gemini' && '(Gemini API endpoint)'}
                     </span>
                   </label>
                   <input
                     type="text"
                     value={tempSettings.customUrl || ''}
                     onChange={(e) => setTempSettings({...tempSettings, customUrl: e.target.value})}
-                    placeholder={
-                      tempSettings.backend === 'vllm' ? 'http://localhost:8000/v1' :
-                      tempSettings.backend === 'ollama' ? 'http://localhost:11434' :
-                      'http://localhost:8000'
-                    }
+                    placeholder={BACKEND_OPTIONS.find(opt => opt.value === tempSettings.backend)?.defaultUrl || 'http://localhost:8000'}
                     className="w-full px-4 py-3 bg-white/10 border-2 border-purple-400/50 rounded-lg focus:border-purple-400 focus:outline-none text-white placeholder-purple-300/50"
                   />
+                  <p className="text-xs text-purple-400 mt-1">
+                    Default: {BACKEND_OPTIONS.find(opt => opt.value === tempSettings.backend)?.defaultUrl || 'Not set'}
+                  </p>
                 </div>
               )}
 
