@@ -8,19 +8,20 @@ COPY requirements.txt /app
 COPY flask-app/. /app
 COPY charge-backend /app/charge-backend
 
+ARG AZF_PATH=./aizynth
+COPY ${AZF_PATH}/. /aizynth
+
 RUN . $HOME/.nvm/nvm.sh && \
     npm install && \
     npm run build
 
-RUN pip install -r requirements.txt
-RUN git clone --recursive https://github.com/FLASK-LLNL/ChARGe.git charge && \
-    cd /app/charge && \
+RUN python -m venv /venv
+RUN . /venv/bin/activate && \
+    pip install -r requirements.txt && \
+    git clone --recursive https://github.com/FLASK-LLNL/ChARGe.git charge.git && \
+    cd /app/charge.git && \
     pip install . && \
     charge-install --extras aizynthfinder --extras autogen --extras rdkit --extras chemprice
-
-
-ARG AZF_PATH=./aizynth
-COPY ${AZF_PATH}/. /aizynth
 
 COPY mock_server.py /app
 COPY dockerscripts/launch_servers.sh /app
