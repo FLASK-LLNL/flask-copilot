@@ -10,7 +10,7 @@ build:
     - dane
     - batch
   script:
-    - enable-podman.sh
+    - /usr/bin/enable-podman
     - echo "${CI_REGISTRY_PASSWORD}" | podman login -u="$CI_REGISTRY_USER" --password-stdin $CI_REGISTRY
     - mkdir -p aizynth
     # adding AZF_PATH into current podman build context
