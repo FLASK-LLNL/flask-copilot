@@ -38,5 +38,10 @@ deploy:
   script:
     - echo "Deploying FLASK-Copilot App in K8s server"
     - /usr/global/openshift/bin/oc login --server=$K8S_SERVER_API --token=$FLASK_DEPLOYER_TOKEN
+    # Restart Dev Deployment
     - /usr/global/openshift/bin/oc rollout restart deployment $DEPLOYMENT_NAME
-  when: manual
+    # Restart Prod Deployment
+    - /usr/global/openshift/bin/oc rollout restart deployment $DEPLOYMENT_NAME_PROD
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "main"'
+      when: on_success
