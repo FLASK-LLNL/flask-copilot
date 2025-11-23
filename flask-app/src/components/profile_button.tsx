@@ -27,7 +27,7 @@ export const ProfileButton: React.FC<ProfileButtonProps> = ({
   className = ''
 }) => {
   const [isModalOpen, setIsModalOpen] = React.useState(false);
-  const [urlCache, setUrlCache] = React.useState<Record<string, string>>({});
+  const [backendCache, setBackendCache] = React.useState<Record<string, { customUrl: string; model: string }>>({});
 
   // Merge provided initial settings with defaults
   const defaultSettings: ProfileSettings = {
@@ -80,36 +80,77 @@ export const ProfileButton: React.FC<ProfileButtonProps> = ({
     const currentBackendOption = BACKEND_OPTIONS.find(opt => opt.value === tempSettings.backend);
     const newBackendOption = BACKEND_OPTIONS.find(opt => opt.value === newBackend);
 
-    // Cache the current customUrl before switching backends
+    // Cache the current customUrl and model before switching backends
     const updatedCache = {
-      ...urlCache,
-      [tempSettings.backend]: tempSettings.customUrl
+      ...backendCache,
+      [tempSettings.backend]: {
+        customUrl: tempSettings.customUrl,
+        model: tempSettings.model
+      }
     };
-    setUrlCache(updatedCache);
+    setBackendCache(updatedCache);
 
-    // Restore cached URL for new backend, or use default
-    const cachedUrl = updatedCache[newBackend];
+    // Restore cached URL and model for new backend, or use defaults
+    const cached = updatedCache[newBackend];
     const urlToUse = tempSettings.useCustomUrl
-      ? (cachedUrl || newBackendOption?.defaultUrl || '')
+      ? (cached?.customUrl || newBackendOption?.defaultUrl || '')
       : (newBackendOption?.defaultUrl || '');
+    const modelToUse = cached?.model || tempSettings.model;
 
     setTempSettings({
       ...tempSettings,
       backend: newBackend,
-      customUrl: urlToUse
+      customUrl: urlToUse,
+      model: modelToUse
     });
   };
 
   const handleCustomUrlToggle = (enabled: boolean) => {
     const backendOption = BACKEND_OPTIONS.find(opt => opt.value === tempSettings.backend);
+    const cached = backendCache[tempSettings.backend];
+
     setTempSettings({
       ...tempSettings,
       useCustomUrl: enabled,
       // When enabling: check cache first, then current value, then default
       // When disabling: preserve the customUrl value
       customUrl: enabled
-        ? (urlCache[tempSettings.backend] || tempSettings.customUrl || (backendOption?.defaultUrl || ''))
+        ? (cached?.customUrl || tempSettings.customUrl || (backendOption?.defaultUrl || ''))
         : tempSettings.customUrl
+    });
+  };
+
+  const handleModelChange = (newModel: string) => {
+    // Update the cache with the new model
+    const updatedCache = {
+      ...backendCache,
+      [tempSettings.backend]: {
+        customUrl: tempSettings.customUrl,
+        model: newModel
+      }
+    };
+    setBackendCache(updatedCache);
+
+    setTempSettings({
+      ...tempSettings,
+      model: newModel
+    });
+  };
+
+  const handleCustomUrlChange = (newUrl: string) => {
+    // Update the cache with the new custom URL
+    const updatedCache = {
+      ...backendCache,
+      [tempSettings.backend]: {
+        customUrl: newUrl,
+        model: tempSettings.model
+      }
+    };
+    setBackendCache(updatedCache);
+
+    setTempSettings({
+      ...tempSettings,
+      customUrl: newUrl
     });
   };
 
@@ -193,7 +234,7 @@ export const ProfileButton: React.FC<ProfileButtonProps> = ({
                   <input
                     type="text"
                     value={tempSettings.customUrl || ''}
-                    onChange={(e) => setTempSettings({...tempSettings, customUrl: e.target.value})}
+                    onChange={(e) => handleCustomUrlChange(e.target.value)}
                     placeholder={BACKEND_OPTIONS.find(opt => opt.value === tempSettings.backend)?.defaultUrl || 'http://localhost:8000'}
                     className="w-full px-4 py-3 bg-white/10 border-2 border-purple-400/50 rounded-lg focus:border-purple-400 focus:outline-none text-white placeholder-purple-300/50"
                   />
@@ -217,7 +258,7 @@ export const ProfileButton: React.FC<ProfileButtonProps> = ({
                 <input
                   type="text"
                   value={tempSettings.model}
-                  onChange={(e) => setTempSettings({...tempSettings, model: e.target.value})}
+                  onChange={(e) => handleModelChange(e.target.value)}
                   placeholder="claude-sonnet-4-20250514"
                   className="w-full px-4 py-3 bg-white/10 border-2 border-purple-400/50 rounded-lg focus:border-purple-400 focus:outline-none text-white placeholder-purple-300/50 font-mono text-sm"
                 />
