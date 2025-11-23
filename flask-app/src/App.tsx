@@ -368,6 +368,7 @@ const ChemistryTool: React.FC = () => {
           apiKey: data.profileSettings.apiKey,
         };
         setProfileSettings(newSettings);
+        console.log('Updating the profile settings ', newSettings);
         localStorage.setItem('profileSettings', JSON.stringify(newSettings));
       } else if (data.type === 'error') {
         console.error(data.message);

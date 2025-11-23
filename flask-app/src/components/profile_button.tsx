@@ -27,6 +27,7 @@ export const ProfileButton: React.FC<ProfileButtonProps> = ({
   className = ''
 }) => {
   const [isModalOpen, setIsModalOpen] = React.useState(false);
+  const [urlCache, setUrlCache] = React.useState<Record<string, string>>({});
 
   // Merge provided initial settings with defaults
   const defaultSettings: ProfileSettings = {
@@ -76,11 +77,26 @@ export const ProfileButton: React.FC<ProfileButtonProps> = ({
   };
 
   const handleBackendChange = (newBackend: string) => {
+    const currentBackendOption = BACKEND_OPTIONS.find(opt => opt.value === tempSettings.backend);
+    const newBackendOption = BACKEND_OPTIONS.find(opt => opt.value === newBackend);
+
+    // Cache the current customUrl before switching backends
+    const updatedCache = {
+      ...urlCache,
+      [tempSettings.backend]: tempSettings.customUrl
+    };
+    setUrlCache(updatedCache);
+
+    // Restore cached URL for new backend, or use default
+    const cachedUrl = updatedCache[newBackend];
+    const urlToUse = tempSettings.useCustomUrl
+      ? (cachedUrl || newBackendOption?.defaultUrl || '')
+      : (newBackendOption?.defaultUrl || '');
+
     setTempSettings({
       ...tempSettings,
       backend: newBackend,
-      // Set default URL for the new backend if custom URL is enabled
-      customUrl: tempSettings.useCustomUrl && backendOption ? backendOption.defaultUrl : tempSettings.customUrl
+      customUrl: urlToUse
     });
   };
 
@@ -89,8 +105,11 @@ export const ProfileButton: React.FC<ProfileButtonProps> = ({
     setTempSettings({
       ...tempSettings,
       useCustomUrl: enabled,
-      // Set default URL when enabling custom URL
-      customUrl: enabled && backendOption ? backendOption.defaultUrl : tempSettings.customUrl
+      // When enabling: check cache first, then current value, then default
+      // When disabling: preserve the customUrl value
+      customUrl: enabled
+        ? (urlCache[tempSettings.backend] || tempSettings.customUrl || (backendOption?.defaultUrl || ''))
+        : tempSettings.customUrl
     });
   };
 
