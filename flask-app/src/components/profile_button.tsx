@@ -338,7 +338,7 @@ export const ProfileButton: React.FC<ProfileButtonProps> = ({
                       {tempSettings.backend === 'vllm' && '(vLLM endpoint)'}
                       {tempSettings.backend === 'ollama' && '(Ollama endpoint)'}
                       {(tempSettings.backend === 'livai') && '(LivAI base URL)'}
-                      {(tempSettings.backend === 'livai') && '(LLamaMe base URL)'}
+                      {(tempSettings.backend === 'llamame') && '(LLamaMe base URL)'}
                       {tempSettings.backend === 'openai' && '(OpenAI-compatible endpoint)'}
                       {tempSettings.backend === 'gemini' && '(Gemini API endpoint)'}
                     </span>
