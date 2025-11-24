@@ -75,6 +75,7 @@ export const ProfileButton: React.FC<ProfileButtonProps> = ({
     useCustomUrl: false,
     customUrl: '',
     model: 'gpt-5-nano',
+    useCustomModel: false,
     apiKey: '',
     ...initialSettings
   };
@@ -85,9 +86,19 @@ export const ProfileButton: React.FC<ProfileButtonProps> = ({
   // Update settings when initialSettings prop changes
   React.useEffect(() => {
     if (initialSettings) {
+      const backendOption = BACKEND_OPTIONS.find(opt => opt.value === initialSettings.backend);
+
+      // Check if the model is in the predefined list for this backend
+      const modelInList = backendOption?.models?.includes(initialSettings.model || '');
+
       const updatedSettings = {
         ...settings,
-        ...initialSettings
+        ...initialSettings,
+        // If model is not in the predefined list, automatically set useCustomModel to true
+        // Unless useCustomModel is explicitly provided in initialSettings
+        useCustomModel: initialSettings.useCustomModel !== undefined
+          ? initialSettings.useCustomModel
+          : !modelInList
       };
       setSettings(updatedSettings);
       setTempSettings(updatedSettings);

@@ -365,6 +365,9 @@ const ChemistryTool: React.FC = () => {
           useCustomUrl: data.profileSettings.useCustomUrl,
           customUrl: data.profileSettings.customUrl,
           model: data.profileSettings.model,
+          // Don't take the use custom model field from the backend
+          // Check the model against the list of models in copilot
+          // useCustomModel: data.profileSettings.useCustomModel,
           apiKey: data.profileSettings.apiKey,
         };
         setProfileSettings(newSettings);
