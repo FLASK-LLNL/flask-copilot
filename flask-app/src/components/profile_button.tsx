@@ -18,16 +18,16 @@ const BACKEND_OPTIONS = [
     models: ['gpt-5', 'gpt-5-mini', 'gpt-5-nano']
   },
   {
-    value: 'gemini',
-    label: 'Google Gemini',
-    defaultUrl: 'https://generativelanguage.googleapis.com/v1',
-    models: ['gemini-2.0-flash-exp', 'gemini-1.5-pro', 'gemini-1.5-flash', 'gemini-1.0-pro']
-  },
-  {
     value: 'livai',
     label: 'LivAI',
     defaultUrl: '',
     models: ['gpt-5', 'gpt-5-mini', 'gpt-5-nano', 'claude-sonnet-3.7']
+  },
+  {
+    value: 'gemini',
+    label: 'Google Gemini',
+    defaultUrl: 'https://generativelanguage.googleapis.com/v1',
+    models: ['gemini-2.0-flash-exp', 'gemini-1.5-pro', 'gemini-1.5-flash', 'gemini-1.0-pro']
   },
   {
     value: 'ollama',
@@ -36,16 +36,16 @@ const BACKEND_OPTIONS = [
     models: ['gpt-oss:latest', 'gpt-oss-120b', 'gpt-oss-20b']
   },
   {
-    value: 'huggingface',
-    label: 'HuggingFace Local',
-    defaultUrl: '',
-    models: ['']
-  },
-  {
     value: 'vllm',
     label: 'vLLM',
     defaultUrl: '',
     models: ['gpt-oss-120b', 'gpt-oss-20b']
+  },
+  {
+    value: 'huggingface',
+    label: 'HuggingFace Local',
+    defaultUrl: '',
+    models: ['']
   },
   {
     value: 'custom',
@@ -146,9 +146,11 @@ export const ProfileButton: React.FC<ProfileButtonProps> = ({
     const urlToUse = tempSettings.useCustomUrl
       ? (cached?.customUrl || newBackendOption?.defaultUrl || '')
       : (newBackendOption?.defaultUrl || '');
-    const modelToUse = cached?.useCustomModel
-      ? (cached?.model ||  tempSettings.model || '')
-      : (newBackendOption?.model || '');
+    const modelToUse = cached?.model
+      ? cached?.model
+      : (cached?.useCustomModel
+        ? (tempSettings.model || '')
+        : (newBackendOption?.models[0] || ''));
     const useCustomModelToUse = cached?.useCustomModel || false;
 
     setTempSettings({
