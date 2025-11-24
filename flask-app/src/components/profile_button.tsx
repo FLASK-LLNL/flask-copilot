@@ -146,7 +146,9 @@ export const ProfileButton: React.FC<ProfileButtonProps> = ({
     const urlToUse = tempSettings.useCustomUrl
       ? (cached?.customUrl || newBackendOption?.defaultUrl || '')
       : (newBackendOption?.defaultUrl || '');
-    const modelToUse = cached?.model || tempSettings.model;
+    const modelToUse = cached?.useCustomModel
+      ? (cached?.model ||  tempSettings.model || '')
+      : (newBackendOption?.model || '');
     const useCustomModelToUse = cached?.useCustomModel || false;
 
     setTempSettings({
