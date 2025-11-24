@@ -125,7 +125,7 @@ const ChemistryTool: React.FC = () => {
         backend: settings.backend,
         customUrl: settings.customUrl,
         model: settings.model,
-        hasApiKey: settings.apiKey !== ''
+        apiKey: settings.apiKey !== ''
       };
       wsRef.current.send(JSON.stringify(message));
      }
@@ -362,11 +362,16 @@ const ChemistryTool: React.FC = () => {
         // Handle profile settings updates from server
         const newSettings = {
           backend: data.profileSettings.backend,
+          useCustomUrl: data.profileSettings.useCustomUrl,
           customUrl: data.profileSettings.customUrl,
           model: data.profileSettings.model,
+          // Don't take the use custom model field from the backend
+          // Check the model against the list of models in copilot
+          // useCustomModel: data.profileSettings.useCustomModel,
           apiKey: data.profileSettings.apiKey,
         };
         setProfileSettings(newSettings);
+        console.log('Updating the profile settings ', newSettings);
         localStorage.setItem('profileSettings', JSON.stringify(newSettings));
       } else if (data.type === 'error') {
         console.error(data.message);
