@@ -176,6 +176,7 @@ async def websocket_endpoint(websocket: WebSocket):
                 "useCustomUrl": False,
                 "customUrl": base_url if base_url else '',
                 "model": model,
+                "useCustomModel": False,
                 "apiKey": ''
             },
         }
