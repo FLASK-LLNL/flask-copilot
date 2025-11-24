@@ -24,6 +24,12 @@ const BACKEND_OPTIONS = [
     models: ['gpt-5', 'gpt-5-mini', 'gpt-5-nano', 'claude-sonnet-3.7']
   },
   {
+    value: 'llamame',
+    label: 'LLamaMe',
+    defaultUrl: '',
+    models: ['openai/gpt-oss-120b', 'meta-llama/Llama-3.3-70B-Instruct']
+  },
+  {
     value: 'gemini',
     label: 'Google Gemini',
     defaultUrl: 'https://generativelanguage.googleapis.com/v1',
