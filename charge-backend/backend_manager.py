@@ -1,4 +1,4 @@
-from typing import Optional
+from typing import Optional, Tuple
 from fastapi import WebSocket
 import asyncio
 from loguru import logger
@@ -201,31 +201,67 @@ class ActionManager:
             }
         )
 
+    async def report_orchestrator_config(self) -> Tuple[str, str, str]:
+        agent_pool = self.experiment.agent_pool
+        # Access the raw config
+        raw_config = agent_pool.model_client._raw_config
+        # Access specific fields
+        base_url = raw_config.get('base_url')
+        model = raw_config.get('model')
+        api_key = raw_config.get('api_key')
+        await self.websocket.send_json(
+            {
+                "type": "update-orchestrator-profile",
+                "profileSettings": {
+                    "backend": agent_pool.backend,
+                    "useCustomUrl": False,
+                    "customUrl": base_url if base_url else '',
+                    "model": model,
+                    "useCustomModel": False,
+                    "apiKey": ''
+                },
+            }
+        )
+        return agent_pool.backend, model, base_url
+
     async def handle_profile_update(self, data: dict) -> None:
         from charge.experiments.AutoGenExperiment import AutoGenExperiment
         from charge.clients.autogen import AutoGenPool
 
         backend = data["backend"]
         model = data["model"]
-        base_url = data["customUrl"]
-        api_key = data["apiKey"]
+        base_url = data["customUrl"] if data["customUrl"] else None
+        api_key = data["apiKey"] if data["apiKey"] else None
         await self.handle_reset()
-        logger.info(f"Experiment is reset with model {model} and backend {backend}")
-        autogen_pool = AutoGenPool(
-            model=model, backend=backend, api_key=api_key, base_url=base_url
-        )
-        # Set up an experiment class for current endpoint
-        self.experiment = AutoGenExperiment(task=None, agent_pool=autogen_pool)
+        try:
+            logger.info(f"Experiment is reset with model {model} and backend {backend}")
+            autogen_pool = AutoGenPool(
+                model=model, backend=backend, api_key=api_key, base_url=base_url
+            )
+            # Set up an experiment class for current endpoint
+            self.experiment = AutoGenExperiment(task=None, agent_pool=autogen_pool)
 
-        await self.websocket.send_json(
-            {
-                "type": "response",
-                "message": {
-                    "source": "System",
-                    "message": f"Experiment is reset with model {model} and backend {backend}",
-                },
-            }
-        )
+            await self.websocket.send_json(
+                {
+                    "type": "response",
+                    "message": {
+                        "source": "System",
+                        "message": f"Experiment is reset with model {model} and backend {backend}",
+                    },
+                }
+            )
+        except ValueError as e:
+            logger.error(f"Orchestrator Profile Error: Unable to restart experiment: {e}")
+            backend, model, base_url = await self.report_orchestrator_config()
+            await self.websocket.send_json(
+                {
+                    "type": "response",
+                    "message": {
+                        "source": "System",
+                        "message": f"Orchestrator Profile Error: Unable to restart experiment: {e}. Experiment is still using backend {backend} with model {model} at {base_url}",
+                    },
+                }
+            )
 
     async def handle_reset(self, *args, **kwargs) -> None:
         """Handle reset action."""
