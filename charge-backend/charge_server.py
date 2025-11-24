@@ -28,6 +28,7 @@ from loguru import logger
 from charge.clients.Client import Client
 from charge.experiments.AutoGenExperiment import AutoGenExperiment
 from charge.clients.autogen import AutoGenPool
+from charge.clients.autogen_utils import chargeConnectionError
 
 from tool_registration import (
     register_post,
@@ -68,7 +69,9 @@ parser.add_argument(
 )
 
 # Add standard CLI arguments
-Client.add_std_parser_arguments(parser, defaults=dict(backend="openai", model="gpt-5-nano"))
+Client.add_std_parser_arguments(
+    parser, defaults=dict(backend="openai", model="gpt-5-nano")
+)
 
 args, _ = parser.parse_known_args()
 
@@ -158,7 +161,10 @@ async def websocket_endpoint(websocket: WebSocket):
         backend = args.backend
 
     # set up an AutoGenAgent pool for tasks on this endpoint
-    autogen_pool = AutoGenPool(model=model, backend=backend, api_key=API_KEY, base_url=BASE_URL)
+
+    autogen_pool = AutoGenPool(
+        model=model, backend=backend, api_key=API_KEY, base_url=BASE_URL
+    )
 
     # Set up an experiment class for current endpoint
     experiment = AutoGenExperiment(task=None, agent_pool=autogen_pool)
@@ -196,9 +202,14 @@ async def websocket_endpoint(websocket: WebSocket):
                     handler_func = action_handlers[action]
                     await handler_func(data)
                 else:
-                    logger.warning(f"Unknown action received: {action} with data {data}")
+                    logger.warning(
+                        f"Unknown action received: {action} with data {data}"
+                    )
             except ValueError as e:
                 logger.error(f"Error in internal loop connection: {e}")
+                await task_manager.cancel_current_task()
+            except chargeConnectionError as e:
+                logger.error(f"Charge connection error: {e}")
                 await task_manager.cancel_current_task()
 
     except WebSocketDisconnect:
