@@ -58,6 +58,7 @@ export interface ProfileSettings {
   useCustomUrl: boolean;
   customUrl?: string;
   model: string;
+  useCustomModel?: boolean;
   apiKey: string;
 }
 

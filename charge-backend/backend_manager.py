@@ -204,13 +204,16 @@ class ActionManager:
     async def handle_profile_update(self, data: dict) -> None:
         from charge.experiments.AutoGenExperiment import AutoGenExperiment
         from charge.clients.autogen import AutoGenPool
+
         backend = data["backend"]
         model = data["model"]
-        base_url = data["customeUrl"]
+        base_url = data["customUrl"]
         api_key = data["apiKey"]
         await self.handle_reset()
         logger.info(f"Experiment is reset with model {model} and backend {backend}")
-        autogen_pool = AutoGenPool(model=model, backend=backend, api_key=api_key, base_url=base_url)
+        autogen_pool = AutoGenPool(
+            model=model, backend=backend, api_key=api_key, base_url=base_url
+        )
         # Set up an experiment class for current endpoint
         self.experiment = AutoGenExperiment(task=None, agent_pool=autogen_pool)
 
