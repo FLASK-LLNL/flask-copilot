@@ -125,7 +125,7 @@ const ChemistryTool: React.FC = () => {
         backend: settings.backend,
         customUrl: settings.customUrl,
         model: settings.model,
-        apiKey: settings.apiKey !== ''
+        apiKey: settings.apiKey
       };
       wsRef.current.send(JSON.stringify(message));
      }
