@@ -11,16 +11,55 @@ interface ProfileButtonProps {
 }
 
 const BACKEND_OPTIONS = [
-  { value: 'openai', label: 'OpenAI' },
-  { value: 'gemini', label: 'Google Gemini' },
-  { value: 'livai', label: 'LivAI (LivChat)' },
-  { value: 'ollama', label: 'Ollama' },
-  { value: 'huggingface', label: 'HuggingFace Local' },
-  { value: 'vllm', label: 'vLLM' },
-  { value: 'custom', label: 'Custom URL' },
+  {
+    value: 'openai',
+    label: 'OpenAI',
+    defaultUrl: 'https://api.openai.com/v1',
+    models: ['gpt-5', 'gpt-5-mini', 'gpt-5-nano']
+  },
+  {
+    value: 'livai',
+    label: 'LivAI',
+    defaultUrl: '',
+    models: ['gpt-5', 'gpt-5-mini', 'gpt-5-nano', 'claude-sonnet-3.7']
+  },
+  {
+    value: 'llamame',
+    label: 'LLamaMe',
+    defaultUrl: '',
+    models: ['openai/gpt-oss-120b', 'meta-llama/Llama-3.3-70B-Instruct']
+  },
+  {
+    value: 'gemini',
+    label: 'Google Gemini',
+    defaultUrl: 'https://generativelanguage.googleapis.com/v1',
+    models: ['gemini-2.0-flash-exp', 'gemini-1.5-pro', 'gemini-1.5-flash', 'gemini-1.0-pro']
+  },
+  {
+    value: 'ollama',
+    label: 'Ollama',
+    defaultUrl: '',
+    models: ['gpt-oss:latest', 'gpt-oss-120b', 'gpt-oss-20b']
+  },
+  {
+    value: 'vllm',
+    label: 'vLLM',
+    defaultUrl: '',
+    models: ['gpt-oss-120b', 'gpt-oss-20b']
+  },
+  {
+    value: 'huggingface',
+    label: 'HuggingFace Local',
+    defaultUrl: '',
+    models: ['']
+  },
+  {
+    value: 'custom',
+    label: 'Custom URL',
+    defaultUrl: 'http://localhost:8000',
+    models: ['']
+  },
 ];
-
-const BACKENDS_REQUIRING_URL = ['livai', 'vllm', 'ollama', 'custom'];
 
 export const ProfileButton: React.FC<ProfileButtonProps> = ({
   onClick,
@@ -29,12 +68,20 @@ export const ProfileButton: React.FC<ProfileButtonProps> = ({
   className = ''
 }) => {
   const [isModalOpen, setIsModalOpen] = React.useState(false);
+  // Cache for storing backend-specific settings
+  const [backendCache, setBackendCache] = React.useState<Record<string, {
+    customUrl: string;
+    model: string;
+    useCustomModel: boolean;
+  }>>({});
 
   // Merge provided initial settings with defaults
   const defaultSettings: ProfileSettings = {
     backend: 'openai',
+    useCustomUrl: false,
     customUrl: '',
     model: 'gpt-5-nano',
+    useCustomModel: false,
     apiKey: '',
     ...initialSettings
   };
@@ -45,9 +92,19 @@ export const ProfileButton: React.FC<ProfileButtonProps> = ({
   // Update settings when initialSettings prop changes
   React.useEffect(() => {
     if (initialSettings) {
+      const backendOption = BACKEND_OPTIONS.find(opt => opt.value === initialSettings.backend);
+
+      // Check if the model is in the predefined list for this backend
+      const modelInList = backendOption?.models?.includes(initialSettings.model || '');
+
       const updatedSettings = {
         ...settings,
-        ...initialSettings
+        ...initialSettings,
+        // If model is not in the predefined list, automatically set useCustomModel to true
+        // Unless useCustomModel is explicitly provided in initialSettings
+        useCustomModel: initialSettings.useCustomModel !== undefined
+          ? initialSettings.useCustomModel
+          : !modelInList
       };
       setSettings(updatedSettings);
       setTempSettings(updatedSettings);
@@ -77,15 +134,136 @@ export const ProfileButton: React.FC<ProfileButtonProps> = ({
   };
 
   const handleBackendChange = (newBackend: string) => {
+    const newBackendOption = BACKEND_OPTIONS.find(opt => opt.value === newBackend);
+
+    // Cache the current settings before switching backends
+    const updatedCache = {
+      ...backendCache,
+      [tempSettings.backend]: {
+        customUrl: tempSettings.customUrl,
+        model: tempSettings.model,
+        useCustomModel: tempSettings.useCustomModel || false
+      }
+    };
+    setBackendCache(updatedCache);
+
+    // Restore cached URL and model for new backend, or use defaults
+    const cached = updatedCache[newBackend];
+    const urlToUse = tempSettings.useCustomUrl
+      ? (cached?.customUrl || newBackendOption?.defaultUrl || '')
+      : (newBackendOption?.defaultUrl || '');
+    const modelToUse = cached?.model
+      ? cached?.model
+      : (cached?.useCustomModel
+        ? (tempSettings.model || '')
+        : (newBackendOption?.models[0] || ''));
+    const useCustomModelToUse = cached?.useCustomModel || false;
+
     setTempSettings({
       ...tempSettings,
       backend: newBackend,
-      // Clear custom URL if switching away from a backend that needs it
-      customUrl: BACKENDS_REQUIRING_URL.includes(newBackend) ? tempSettings.customUrl : ''
+      customUrl: urlToUse,
+      model: modelToUse,
+      useCustomModel: useCustomModelToUse
     });
   };
 
-  const showUrlField = BACKENDS_REQUIRING_URL.includes(tempSettings.backend);
+  const handleCustomUrlToggle = (enabled: boolean) => {
+    const backendOption = BACKEND_OPTIONS.find(opt => opt.value === tempSettings.backend);
+    const cached = backendCache[tempSettings.backend];
+
+    setTempSettings({
+      ...tempSettings,
+      useCustomUrl: enabled,
+      // When enabling: check cache first, then current value, then default
+      // When disabling: preserve the customUrl value
+      customUrl: enabled
+        ? (cached?.customUrl || tempSettings.customUrl || (backendOption?.defaultUrl || ''))
+        : tempSettings.customUrl
+    });
+  };
+
+  const handleCustomUrlChange = (newUrl: string) => {
+    // Update the cache with the new custom URL
+    const updatedCache = {
+      ...backendCache,
+      [tempSettings.backend]: {
+        customUrl: newUrl,
+        model: tempSettings.model,
+        useCustomModel: tempSettings.useCustomModel || false
+      }
+    };
+    setBackendCache(updatedCache);
+
+    setTempSettings({
+      ...tempSettings,
+      customUrl: newUrl
+    });
+  };
+
+  const handleModelSelect = (selectedModel: string) => {
+    // Update the cache with the selected model
+    const updatedCache = {
+      ...backendCache,
+      [tempSettings.backend]: {
+        customUrl: tempSettings.customUrl,
+        model: selectedModel,
+        useCustomModel: tempSettings.useCustomModel || false
+      }
+    };
+    setBackendCache(updatedCache);
+
+    setTempSettings({
+      ...tempSettings,
+      model: selectedModel
+    });
+  };
+
+  const handleCustomModelToggle = (enabled: boolean) => {
+    const backendOption = BACKEND_OPTIONS.find(opt => opt.value === tempSettings.backend);
+    const cached = backendCache[tempSettings.backend];
+
+    // When toggling off, restore the first model from the list or cached model
+    const modelToUse = enabled
+      ? tempSettings.model
+      : (cached?.model || backendOption?.models?.[0] || tempSettings.model);
+
+    const updatedCache = {
+      ...backendCache,
+      [tempSettings.backend]: {
+        customUrl: tempSettings.customUrl,
+        model: modelToUse,
+        useCustomModel: enabled
+      }
+    };
+    setBackendCache(updatedCache);
+
+    setTempSettings({
+      ...tempSettings,
+      useCustomModel: enabled,
+      model: modelToUse
+    });
+  };
+
+  const handleCustomModelChange = (newModel: string) => {
+    // Update the cache with the custom model
+    const updatedCache = {
+      ...backendCache,
+      [tempSettings.backend]: {
+        customUrl: tempSettings.customUrl,
+        model: newModel,
+        useCustomModel: tempSettings.useCustomModel || false
+      }
+    };
+    setBackendCache(updatedCache);
+
+    setTempSettings({
+      ...tempSettings,
+      model: newModel
+    });
+  };
+
+  const currentBackendOption = BACKEND_OPTIONS.find(opt => opt.value === tempSettings.backend);
 
   return (
     <>
@@ -135,49 +313,100 @@ export const ProfileButton: React.FC<ProfileButtonProps> = ({
                 </select>
               </div>
 
+              {/* Use Custom URL Checkbox */}
+              <div>
+                <label className="flex items-center gap-2 text-sm text-purple-200 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={tempSettings.useCustomUrl}
+                    onChange={(e) => handleCustomUrlToggle(e.target.checked)}
+                    className="w-4 h-4 rounded border-purple-400/50 bg-white/20 text-purple-600 focus:ring-purple-500 focus:ring-offset-0"
+                  />
+                  <span>Use custom URL for this backend</span>
+                </label>
+                <p className="text-xs text-purple-400 mt-1 ml-6">
+                  Override the default endpoint with a custom server URL
+                </p>
+              </div>
+
               {/* Custom URL Field (conditional) */}
-              {showUrlField && (
-                <div>
+              {tempSettings.useCustomUrl && (
+                <div className="animate-fadeIn">
                   <label className="block text-sm font-medium text-purple-200 mb-2">
-                    {tempSettings.backend === 'custom' ? 'Custom URL' : 'Server URL'}
+                    Custom URL
                     <span className="text-purple-400 text-xs ml-2">
                       {tempSettings.backend === 'vllm' && '(vLLM endpoint)'}
                       {tempSettings.backend === 'ollama' && '(Ollama endpoint)'}
                       {(tempSettings.backend === 'livai') && '(LivAI base URL)'}
+                      {(tempSettings.backend === 'llamame') && '(LLamaMe base URL)'}
+                      {tempSettings.backend === 'openai' && '(OpenAI-compatible endpoint)'}
+                      {tempSettings.backend === 'gemini' && '(Gemini API endpoint)'}
                     </span>
                   </label>
                   <input
                     type="text"
                     value={tempSettings.customUrl || ''}
-                    onChange={(e) => setTempSettings({...tempSettings, customUrl: e.target.value})}
-                    placeholder={
-                      tempSettings.backend === 'vllm' ? 'http://localhost:8000/v1' :
-                      tempSettings.backend === 'ollama' ? 'http://localhost:11434' :
-                      'http://localhost:8000'
-                    }
+                    onChange={(e) => handleCustomUrlChange(e.target.value)}
+                    placeholder={currentBackendOption?.defaultUrl || 'http://localhost:8000'}
                     className="w-full px-4 py-3 bg-white/10 border-2 border-purple-400/50 rounded-lg focus:border-purple-400 focus:outline-none text-white placeholder-purple-300/50"
                   />
+                  <p className="text-xs text-purple-400 mt-1">
+                    Default: {currentBackendOption?.defaultUrl || 'Not set'}
+                  </p>
                 </div>
               )}
 
-              {/* Model Field */}
+              {/* Model Selection */}
               <div>
                 <label className="block text-sm font-medium text-purple-200 mb-2">
                   Model
                   <span className="text-purple-400 text-xs ml-2">
-                    {tempSettings.backend === 'openai' && '(e.g., gpt-4, gpt-5)'}
-                    {tempSettings.backend === 'gemini' && '(e.g., gemini-flash-latest)'}
-                    {tempSettings.backend === 'ollama' && '(e.g., gpt-oss:latest)'}
-                    {tempSettings.backend === 'vllm' && '(e.g., gpt-oss)'}
+                    {tempSettings.backend === 'openai' && '(GPT models)'}
+                    {tempSettings.backend === 'livai' && '(Internal models)'}
+                    {tempSettings.backend === 'llamame' && '(Internal models)'}
+                    {tempSettings.backend === 'gemini' && '(Gemini models)'}
+                    {tempSettings.backend === 'ollama' && '(Local models)'}
+                    {tempSettings.backend === 'vllm' && '(vLLM models)'}
                   </span>
                 </label>
-                <input
-                  type="text"
-                  value={tempSettings.model}
-                  onChange={(e) => setTempSettings({...tempSettings, model: e.target.value})}
-                  placeholder="claude-sonnet-4-20250514"
-                  className="w-full px-4 py-3 bg-white/10 border-2 border-purple-400/50 rounded-lg focus:border-purple-400 focus:outline-none text-white placeholder-purple-300/50 font-mono text-sm"
-                />
+
+                {!tempSettings.useCustomModel ? (
+                  <select
+                    value={tempSettings.model}
+                    onChange={(e) => handleModelSelect(e.target.value)}
+                    className="w-full px-4 py-3 bg-white/10 border-2 border-purple-400/50 rounded-lg focus:border-purple-400 focus:outline-none text-white cursor-pointer font-mono text-sm"
+                  >
+                    {currentBackendOption?.models?.map(model => (
+                      <option key={model} value={model} className="bg-slate-800">
+                        {model}
+                      </option>
+                    ))}
+                  </select>
+                ) : (
+                  <input
+                    type="text"
+                    value={tempSettings.model}
+                    onChange={(e) => handleCustomModelChange(e.target.value)}
+                    placeholder="Enter custom model name"
+                    className="w-full px-4 py-3 bg-white/10 border-2 border-purple-400/50 rounded-lg focus:border-purple-400 focus:outline-none text-white placeholder-purple-300/50 font-mono text-sm"
+                  />
+                )}
+              </div>
+
+              {/* Use Custom Model Checkbox */}
+              <div>
+                <label className="flex items-center gap-2 text-sm text-purple-200 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={tempSettings.useCustomModel || false}
+                    onChange={(e) => handleCustomModelToggle(e.target.checked)}
+                    className="w-4 h-4 rounded border-purple-400/50 bg-white/20 text-purple-600 focus:ring-purple-500 focus:ring-offset-0"
+                  />
+                  <span>Use custom model name</span>
+                </label>
+                <p className="text-xs text-purple-400 mt-1 ml-6">
+                  Enter a custom model identifier not in the preset list
+                </p>
               </div>
 
               {/* API Key Field */}
@@ -186,7 +415,9 @@ export const ProfileButton: React.FC<ProfileButtonProps> = ({
                   API Key
                   <span className="text-purple-400 text-xs ml-2">
                     {(tempSettings.backend === 'ollama' || tempSettings.backend === 'huggingface' || tempSettings.backend === 'vllm') && '(Optional for local backends)'}
-                    {(tempSettings.backend === 'openai' || tempSettings.backend === 'livai') && '(OPENAI_API_KEY)'}
+                    {tempSettings.backend === 'openai' && '(OPENAI_API_KEY)'}
+                    {tempSettings.backend === 'livai' && '(LIVAI_API_KEY)'}
+                    {tempSettings.backend === 'llamame' && '(LLAMAME_API_KEY)'}
                     {tempSettings.backend === 'gemini' && '(GOOGLE_API_KEY)'}
                   </span>
                 </label>
