@@ -338,6 +338,7 @@ export const ProfileButton: React.FC<ProfileButtonProps> = ({
                       {tempSettings.backend === 'vllm' && '(vLLM endpoint)'}
                       {tempSettings.backend === 'ollama' && '(Ollama endpoint)'}
                       {(tempSettings.backend === 'livai') && '(LivAI base URL)'}
+                      {(tempSettings.backend === 'livai') && '(LLamaMe base URL)'}
                       {tempSettings.backend === 'openai' && '(OpenAI-compatible endpoint)'}
                       {tempSettings.backend === 'gemini' && '(Gemini API endpoint)'}
                     </span>
@@ -361,6 +362,8 @@ export const ProfileButton: React.FC<ProfileButtonProps> = ({
                   Model
                   <span className="text-purple-400 text-xs ml-2">
                     {tempSettings.backend === 'openai' && '(GPT models)'}
+                    {tempSettings.backend === 'livai' && '(Internal models)'}
+                    {tempSettings.backend === 'llamame' && '(Internal models)'}
                     {tempSettings.backend === 'gemini' && '(Gemini models)'}
                     {tempSettings.backend === 'ollama' && '(Local models)'}
                     {tempSettings.backend === 'vllm' && '(vLLM models)'}
@@ -412,7 +415,9 @@ export const ProfileButton: React.FC<ProfileButtonProps> = ({
                   API Key
                   <span className="text-purple-400 text-xs ml-2">
                     {(tempSettings.backend === 'ollama' || tempSettings.backend === 'huggingface' || tempSettings.backend === 'vllm') && '(Optional for local backends)'}
-                    {(tempSettings.backend === 'openai' || tempSettings.backend === 'livai') && '(OPENAI_API_KEY)'}
+                    {tempSettings.backend === 'openai' && '(OPENAI_API_KEY)'}
+                    {tempSettings.backend === 'livai' && '(LIVAI_API_KEY)'}
+                    {tempSettings.backend === 'llamame' && '(LLAMAME_API_KEY)'}
                     {tempSettings.backend === 'gemini' && '(GOOGLE_API_KEY)'}
                   </span>
                 </label>
