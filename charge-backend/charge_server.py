@@ -28,7 +28,7 @@ from loguru import logger
 from charge.clients.Client import Client
 from charge.experiments.AutoGenExperiment import AutoGenExperiment
 from charge.clients.autogen import AutoGenPool
-from charge.clients.autogen_utils import chargeConnectionError
+
 
 from tool_registration import (
     register_post,
@@ -207,9 +207,6 @@ async def websocket_endpoint(websocket: WebSocket):
                     )
             except ValueError as e:
                 logger.error(f"Error in internal loop connection: {e}")
-                await task_manager.cancel_current_task()
-            except chargeConnectionError as e:
-                logger.error(f"Charge connection error: {e}")
                 await task_manager.cancel_current_task()
 
     except WebSocketDisconnect:

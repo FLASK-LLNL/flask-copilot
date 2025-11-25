@@ -198,6 +198,8 @@ async def generate_lead_molecule(
                 raise  # re-raise so cancellation propagates
             except chargeConnectionError as e:
                 logger.error(f"Charge connection error: {e}")
+                await websocket.send_json({"type": "stopped"})
+
                 raise  # re-raise so higher-level handler can deal with it
             except IndexError:
                 logger.error("No finished tasks found.")

@@ -5,6 +5,7 @@ from loguru import logger
 from callback_logger import CallbackLogger
 from concurrent.futures import ProcessPoolExecutor
 from charge.experiments.AutoGenExperiment import AutoGenExperiment
+from charge.clients.autogen_utils import chargeConnectionError
 from backend_helper_funcs import (
     RetrosynthesisContext,
 )
@@ -30,6 +31,43 @@ class TaskManager:
         self.clogger = CallbackLogger(websocket)
         self.max_workers = max_workers
         self.executor = ProcessPoolExecutor(max_workers=max_workers)
+
+    def _attach_done_callback(self, task: asyncio.Task) -> None:
+        """Attach a done-callback to a background task so exceptions are observed.
+
+        The callback forwards useful error metadata to the websocket and logs
+        the exception type/module so class-identity mismatches (multiple
+        installations of `charge`) can be diagnosed.
+        """
+        if task is None:
+            return
+        task.add_done_callback(lambda t: asyncio.create_task(self._handle_task_done(t)))
+
+    async def _handle_task_done(self, task: asyncio.Task) -> None:
+        try:
+            exc = task.exception()
+        except asyncio.CancelledError:
+            logger.info("Background task was cancelled")
+            return
+
+        if exc is None:
+            return
+
+        if type(exc) == chargeConnectionError:
+            logger.error(f"Charge connection error in background task: {exc}")
+
+        # Send a stopped message with error details to the websocket so the UI can react
+        try:
+            await self.websocket.send_json({"type": "complete"})
+        except Exception:
+            logger.exception("Failed to send task error to websocket")
+
+        raise exc
+
+    async def run_task(self, coro) -> None:
+        await self.cancel_current_task()
+        self.current_task = asyncio.create_task(coro)
+        self._attach_done_callback(self.current_task)
 
     async def cancel_current_task(self) -> None:
         if self.current_task and not self.current_task.done():
@@ -113,7 +151,7 @@ class ActionManager:
             self.task_manager.websocket,
         )
 
-        self.task_manager.current_task = asyncio.create_task(run_func())
+        await self.task_manager.run_task(run_func())
 
     async def _handle_retrosynthesis(self, data: dict) -> None:
         """Handle retrosynthesis problem type."""
@@ -129,7 +167,7 @@ class ActionManager:
             self.task_manager.websocket,
         )
 
-        self.task_manager.current_task = asyncio.create_task(run_func())
+        await self.task_manager.run_task(run_func())
 
     async def handle_compute_reaction_from(self, data: dict) -> None:
         """Handle compute-reaction-from action."""
@@ -148,7 +186,8 @@ class ActionManager:
             list_server_urls(),
         )
 
-        self.task_manager.current_task = asyncio.create_task(run_func())
+        await self.task_manager.run_task(run_func())
+
         await self.websocket.send_json({"type": "complete"})
 
     async def handle_optimize_from(self, data: dict) -> None:
@@ -206,19 +245,19 @@ class ActionManager:
         # Access the raw config
         raw_config = agent_pool.model_client._raw_config
         # Access specific fields
-        base_url = raw_config.get('base_url')
-        model = raw_config.get('model')
-        api_key = raw_config.get('api_key')
+        base_url = raw_config.get("base_url")
+        model = raw_config.get("model")
+        api_key = raw_config.get("api_key")
         await self.websocket.send_json(
             {
                 "type": "update-orchestrator-profile",
                 "profileSettings": {
                     "backend": agent_pool.backend,
                     "useCustomUrl": False,
-                    "customUrl": base_url if base_url else '',
+                    "customUrl": base_url if base_url else "",
                     "model": model,
                     "useCustomModel": False,
-                    "apiKey": ''
+                    "apiKey": "",
                 },
             }
         )
@@ -251,7 +290,9 @@ class ActionManager:
                 }
             )
         except ValueError as e:
-            logger.error(f"Orchestrator Profile Error: Unable to restart experiment: {e}")
+            logger.error(
+                f"Orchestrator Profile Error: Unable to restart experiment: {e}"
+            )
             backend, model, base_url = await self.report_orchestrator_config()
             await self.websocket.send_json(
                 {
