@@ -54,15 +54,16 @@ class TaskManager:
             return
 
         if type(exc) == chargeConnectionError:
-            logger.error(f"Charge connection error in background task: {exc}")
+            # logger.error(f"Charge connection error in background task: {exc}")
+            self.clogger.info(
+                f"Unsupported model was selected.  \n Server encountered error: {exc}"
+            )
 
         # Send a stopped message with error details to the websocket so the UI can react
         try:
             await self.websocket.send_json({"type": "complete"})
         except Exception:
             logger.exception("Failed to send task error to websocket")
-
-        raise exc
 
     async def run_task(self, coro) -> None:
         await self.cancel_current_task()
