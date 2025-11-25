@@ -5,6 +5,7 @@ from loguru import logger
 import sys
 import os
 from charge.experiments.AutoGenExperiment import AutoGenExperiment
+from charge.clients.autogen_utils import chargeConnectionError
 from callback_logger import CallbackLogger
 from charge.tasks.LMOTask import (
     LMOTask as LeadMoleculeOptimization,
@@ -195,6 +196,11 @@ async def generate_lead_molecule(
             except asyncio.CancelledError:
                 await websocket.send_json({"type": "stopped"})
                 raise  # re-raise so cancellation propagates
+            except chargeConnectionError as e:
+                logger.error(f"Charge connection error: {e}")
+                await websocket.send_json({"type": "stopped"})
+
+                raise  # re-raise so higher-level handler can deal with it
             except IndexError:
                 logger.error("No finished tasks found.")
             except Exception as e:
