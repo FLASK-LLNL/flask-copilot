@@ -81,6 +81,7 @@ export interface WebSocketMessage {
   message?: SidebarMessage;
   tools?: Tool[];
   experimentContext?: string;
+  profileSettings?: ProfileSettings;
 
   withNode?: boolean;
   username?: string;

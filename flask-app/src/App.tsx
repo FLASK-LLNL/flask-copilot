@@ -112,7 +112,7 @@ const ChemistryTool: React.FC = () => {
 
   // Callback function to send updated profile to backend
   const handleProfileUpdateConfirm = async (
-    settings,
+    settings: ProfileSettings,
   ): Promise<void> => {
     if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) {
       alert('WebSocket not connected');
@@ -372,15 +372,15 @@ const ChemistryTool: React.FC = () => {
         });
       } else if (data.type === 'update-orchestrator-profile') {
         // Handle profile settings updates from server
-        const newSettings = {
-          backend: data.profileSettings.backend,
-          useCustomUrl: data.profileSettings.useCustomUrl,
-          customUrl: data.profileSettings.customUrl,
-          model: data.profileSettings.model,
+        const newSettings: ProfileSettings = {
+          backend: data.profileSettings!.backend,
+          useCustomUrl: data.profileSettings!.useCustomUrl,
+          customUrl: data.profileSettings!.customUrl,
+          model: data.profileSettings!.model,
           // Don't take the use custom model field from the backend
           // Check the model against the list of models in copilot
           // useCustomModel: data.profileSettings.useCustomModel,
-          apiKey: data.profileSettings.apiKey,
+          apiKey: data.profileSettings!.apiKey,
         };
         setProfileSettings(newSettings);
         console.log('Updating the profile settings ', newSettings);
