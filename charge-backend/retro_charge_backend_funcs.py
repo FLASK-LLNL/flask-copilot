@@ -394,7 +394,7 @@ async def optimize_molecule_retro(
             user_prompt=user_prompt, server_urls=server_urls
         )
 
-        if os.getenv("CHARGE_DISABLE_STRUCTURE_VALIDATION", "0") == "1":
+        if os.getenv("CHARGE_DISABLE_OUTPUT_VALIDATION", "0") == "1":
             retro_task.structured_output_schema = None
             logger.warning(
                 "Structure validation disabled for RetrosynthesisTask output schema."
@@ -415,7 +415,7 @@ async def optimize_molecule_retro(
     await highlight_node(current_node, websocket, True)
     output = await runner.run()
 
-    if os.getenv("CHARGE_DISABLE_STRUCTURE_VALIDATION", "0") == "1":
+    if os.getenv("CHARGE_DISABLE_OUTPUT_VALIDATION", "0") == "1":
         logger.warning(
             "Structure validation disabled for RetrosynthesisTask output schema."
             "Returning text results without validation first before post-processing."
