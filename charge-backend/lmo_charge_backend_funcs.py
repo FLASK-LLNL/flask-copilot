@@ -11,10 +11,15 @@ from charge.tasks.LMOTask import (
     LMOTask as LeadMoleculeOptimization,
     MoleculeOutputSchema,
 )
-from charge.tasks.LMOTask import LMOTask, MoleculeOutputSchema
 
-from backend_helper_funcs import Node, Edge
-from backend_helper_funcs import get_bandgap, post_process_lmo_smiles, get_price
+from backend_helper_funcs import (
+    Node,
+    Edge,
+    get_bandgap,
+    post_process_lmo_smiles,
+    get_price,
+    CallbackHandler,
+)
 
 # TODO: Convert this to a dataclass
 MOLECULE_HOVER_TEMPLATE = """**SMILES:** `{smiles}`\n
@@ -116,22 +121,19 @@ async def generate_lead_molecule(
 
     canonical_smiles = lead_molecule_smiles
     callback = CallbackHandler(websocket)
-    density_experiment = LeadMoleculeOptimization(
+    lmo_task = LeadMoleculeOptimization(
         lead_molecule=lead_molecule_smiles,
-        user_prompt=DENSITY_USER_PROMPT.format(lead_molecule_smiles)
-        + "\n"
-        + SCHEMA_PROMPT,
+        user_prompt=DENSITY_USER_PROMPT.format(lead_molecule_smiles) + "\n",
     )
-    lmo_runner.experiment_type = density_experiment
 
+    if os.getenv("CHARGE_DISABLE_OUTPUT_VALIDATION", "0") == "1":
+        lmo_task.structured_output_schema = None
+        logger.warning("Structure validation disabled for LMOTask output schema.")
+
+    experiment.add_task(lmo_task)
     for i in range(depth):
         logger.info(f"Iteration {i}")
 
-        edge_data = {
-            "type": "edge",
-            "edge": edge.json(),
-        }
-        await websocket.send_json(edge_data)
         # Generate new molecule
 
         iteration = 0
@@ -140,20 +142,9 @@ async def generate_lead_molecule(
             try:
                 iteration += 1
 
-                if experiment.remaining_tasks() == 0:
-                    task = LeadMoleculeOptimization(lead_molecule=canonical_smiles)
-
-                    if os.getenv("CHARGE_DISABLE_OUTPUT_VALIDATION", "0") == "1":
-                        task.structured_output_schema = None
-                        logger.warning(
-                            "Structure validation disabled for LMOTask output schema."
-                        )
-                    experiment.add_task(task)
-                    parent_id = node_id
-
                 await experiment.run_async(callback=callback)
                 finished_tasks = experiment.get_finished_tasks()
-                completed_task, results = finished_tasks[-1]
+                _, results = finished_tasks[-1]
 
                 if os.getenv("CHARGE_DISABLE_OUTPUT_VALIDATION", "0") == "1":
                     logger.warning(
@@ -224,16 +215,27 @@ async def generate_lead_molecule(
                     # Continue the while loop to try generating again
                 if len(generated_smiles_list) > 0:
 
-                    density_experiment = LeadMoleculeOptimization(
+                    lmo_task = LeadMoleculeOptimization(
                         lead_molecule=lead_molecule_smiles,
                         user_prompt=FURTHER_REFINE_PROMPT.format(
                             ", ".join(map(str, generated_densities)),
                             ", ".join(generated_smiles_list),
                         )
-                        + "\n"
-                        + SCHEMA_PROMPT,
+                        + "\n",
                     )
-                    lmo_runner.experiment_type = density_experiment
+
+                    if os.getenv("CHARGE_DISABLE_OUTPUT_VALIDATION", "0") == "1":
+                        lmo_task.structured_output_schema = None
+                        logger.warning(
+                            "Structure validation disabled for LMOTask output schema."
+                        )
+                    experiment.add_task(lmo_task)
+                else:
+                    logger.info("No new molecules generated in this iteration.")
+                    # Re-use the same task
+                    experiment.add_task(lmo_task)
+                    parent_id = node_id
+
             except WebSocketDisconnect:
                 logger.info("WebSocket disconnected")
                 raise
