@@ -392,9 +392,10 @@ async def optimize_molecule_retro(
         retro_task = RetrosynthesisTask(
             user_prompt=user_prompt, server_urls=server_urls
         )
+        agent_name=experiment.agent_pool.create_agent_name(prefix=f"retrosynth_{node_id}_")
         runner = experiment.create_agent_with_experiment_state(
             task=retro_task,
-            agent_name=f"retrosynthesis_agent_{node_id}",
+            agent_name=agent_name,
             callback=CallbackHandler(websocket),
         )
         context.node_id_to_charge_client[node_id] = runner
