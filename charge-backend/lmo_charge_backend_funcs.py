@@ -132,7 +132,9 @@ async def generate_lead_molecule(
                 iteration += 1
 
                 if experiment.remaining_tasks() == 0:
-                    task = LeadMoleculeOptimization(lead_molecule=canonical_smiles)
+                    task = LeadMoleculeOptimization(
+                        lead_molecule=canonical_smiles, server_urls=available_tools
+                    )
 
                     if os.getenv("CHARGE_DISABLE_OUTPUT_VALIDATION", "0") == "1":
                         task.structured_output_schema = None
