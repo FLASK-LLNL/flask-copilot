@@ -115,6 +115,7 @@ if os.path.exists(ASSETS_PATH):
            <script>
            window.APP_CONFIG = {{
                WS_SERVER: '{os.getenv("WS_SERVER", "ws://localhost:8001/ws")}'
+               VERSION: '{os.getenv("SERVER_VERSION", "")}'
            }};
            </script>""",
         )
@@ -148,6 +149,11 @@ async def _cancel_task_if_running(
 @app.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket):
     logger.info(f"Request for websocket received. Headers: {str(websocket.headers)}")
+
+    username = "nobody"
+    if "x-forwarded-user" in websocket.headers:
+        username = websocket.headers["x-forwarded-user"]
+
     await websocket.accept()
 
     API_KEY = os.getenv("FLASK_ORCHESTRATOR_API_KEY", None)
@@ -171,7 +177,7 @@ async def websocket_endpoint(websocket: WebSocket):
 
     task_manager = TaskManager(websocket)
 
-    action_manager = ActionManager(task_manager, experiment, args)
+    action_manager = ActionManager(task_manager, experiment, args, username)
     await action_manager.report_orchestrator_config()
 
     action_handlers = {
@@ -187,6 +193,7 @@ async def websocket_endpoint(websocket: WebSocket):
         "save-context": action_manager.handle_save_state,
         "load-context": action_manager.handle_load_state,
         "stop": action_manager.handle_stop,
+        "get-username": action_manager.handle_get_username,
     }
 
     try:

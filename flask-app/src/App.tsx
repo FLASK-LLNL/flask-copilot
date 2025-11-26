@@ -3,7 +3,7 @@ import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { Loader2, FlaskConical, TestTubeDiagonal, Network, Play, RotateCcw, X, Send, RefreshCw, Sparkles } from 'lucide-react';
 import 'recharts';
 
-import { WS_SERVER } from './config';
+import { WS_SERVER, VERSION } from './config';
 import { TreeNode, Edge, ContextMenuState, SidebarMessage, Tool, WebSocketMessageToServer, WebSocketMessage, SelectableTool, Experiment, ProfileSettings } from './types';
 
 import { loadRDKit } from './components/molecule';
@@ -45,6 +45,7 @@ const ChemistryTool: React.FC = () => {
   const [copiedField, setCopiedField] = useState<string | null>(null);
   const [availableTools, setAvailableTools] = useState<Tool[]>([]);
   const [wsTooltipPinned, setWsTooltipPinned] = useState<boolean>(false);
+  const [username, setUsername] = useState<string>('<LOCAL USER>');
 
   const wsRef = useRef<WebSocket | null>(null);
   const getContextRef = useRef<() => Experiment>(() => {
@@ -291,6 +292,7 @@ const ChemistryTool: React.FC = () => {
       loadStateFromCurrentExperiment();
 
       socket.send(JSON.stringify({ action: 'list-tools' }));
+      socket.send(JSON.stringify({ action: 'get-username' }));
     };
 
     socket.onmessage = (event: MessageEvent) => {
@@ -378,6 +380,8 @@ const ChemistryTool: React.FC = () => {
         alert("Server error: " + data.message);
       } else if (data.type === 'save-context-response') {
         saveFullContext(data.experimentContext!);
+      } else if (data.type === 'get-username-response') {
+        setUsername(data.username!);
       }
     };
 
@@ -698,6 +702,7 @@ const ChemistryTool: React.FC = () => {
               <ProfileButton
                 initialSettings={profileSettings}
                 onSettingsChange={handleProfileUpdateConfirm}
+                username={username}
               />
               {/* WebSocket Status Indicator */}
                 <div
@@ -748,6 +753,7 @@ const ChemistryTool: React.FC = () => {
                           {wsReconnecting ? '● Reconnecting...' :
                           wsConnected ? '● Connected' :
                           '● Disconnected'}
+                          {wsConnected && username !== "<LOCAL USER>" && ` as ${username}`}
                         </div>
                         {wsTooltipPinned && (
                           <button
@@ -960,6 +966,9 @@ const ChemistryTool: React.FC = () => {
             <p>This work was performed under the auspices of the U.S. Department of Energy
             by Lawrence Livermore National Laboratory (LLNL) under Contract DE-AC52-07NA27344
             (LLNL-CODE-2006345).</p>
+            {VERSION && (
+              <p>Server version: {VERSION}</p>
+            )}
           </div>
           </div>
         </div>

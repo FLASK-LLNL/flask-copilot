@@ -16,7 +16,7 @@ Supported messages from frontend to server:
 """
 
 from fastapi import FastAPI, Request, WebSocket, WebSocketDisconnect
-from fastapi.responses import StreamingResponse, HTMLResponse
+from fastapi.responses import JSONResponse, HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 from dataclasses import dataclass, asdict
@@ -40,8 +40,8 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-if 'FLASK_APPDIR' in os.environ:
-    DIST_PATH = os.environ['FLASK_APPDIR']
+if "FLASK_APPDIR" in os.environ:
+    DIST_PATH = os.environ["FLASK_APPDIR"]
 else:
     DIST_PATH = os.path.join(os.path.dirname(__file__), "flask-app", "dist")
 ASSETS_PATH = os.path.join(DIST_PATH, "assets")
@@ -54,18 +54,24 @@ if os.path.exists(ASSETS_PATH):
     @app.get("/")
     async def root(request: Request):
         logger.info(f"Request for Web UI received. Headers: {str(request.headers)}")
-        with open(os.path.join(DIST_PATH, "index.html"), 'r') as fp:
+        with open(os.path.join(DIST_PATH, "index.html"), "r") as fp:
             html = fp.read()
 
-        html = html.replace('<!-- APP CONFIG -->', f'''
+        html = html.replace(
+            "<!-- APP CONFIG -->",
+            f"""
            <script>
            window.APP_CONFIG = {{
-               WS_SERVER: '{os.getenv("WS_SERVER", "ws://localhost:8001/ws")}'
+               WS_SERVER: '{os.getenv("WS_SERVER", "ws://localhost:8001/ws")}',
+               VERSION: '{os.getenv("SERVER_VERSION", "")}'
            }};
-           </script>''')
+           </script>""",
+        )
         return HTMLResponse(html)
 
+
 CACTUS = "https://cactus.nci.nih.gov/chemical/structure/{0}/{1}"
+
 
 def smiles_to_iupac(smiles):
     return smiles
@@ -79,6 +85,7 @@ def smiles_to_iupac(smiles):
         return response.text
     except requests.exceptions.HTTPError:
         return smiles
+
 
 @dataclass
 class Node:
@@ -124,6 +131,7 @@ class SidebarMessage:
     def json(self):
         return asdict(self)
 
+
 @dataclass
 class Tool:
     name: str
@@ -159,7 +167,7 @@ def generate_tree_structure(start_smiles: str, depth: int = 3):
             node = Node(
                 id=node_id,
                 smiles=child_smiles,
-                label=child_smiles,#smiles_to_iupac(child_smiles),
+                label=child_smiles,  # smiles_to_iupac(child_smiles),
                 cost=random.uniform(10, 110),
                 bandgap=random.uniform(100, 600),
                 yield_=random.uniform(0, 100),
@@ -274,7 +282,7 @@ async def generate_molecules(start_smiles: str, depth: int = 3, websocket: WebSo
                     "id": edge.id,
                     "status": "complete",
                     "label": edge.label,
-                }
+                },
             }
             await websocket.send_json(edge_complete)
 
@@ -299,7 +307,7 @@ async def lead_molecule(start_smiles: str, depth: int = 3, websocket: WebSocket 
                     "label": "",
                     "fromNode": {"id": f"node_{i-1}", "x": 0, "y": 0},
                     "toNode": {"id": f"node_{i}", "x": 0, "y": 0},
-                }
+                },
             }
             await websocket.send_json(edge_complete)
         node = dict(
@@ -323,7 +331,7 @@ async def lead_molecule(start_smiles: str, depth: int = 3, websocket: WebSocket 
                 "label": "Optimizing",
                 "fromNode": {"id": f"node_{i}", "x": 0, "y": 0},
                 "toNode": {"id": f"node_{i+1}", "x": 0, "y": 0},
-            }
+            },
         }
         await websocket.send_json(edge_data)
         # TODO: Compute here
@@ -335,6 +343,11 @@ async def lead_molecule(start_smiles: str, depth: int = 3, websocket: WebSocket 
 @app.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket):
     logger.info(f"Request for websocket received. Headers: {str(websocket.headers)}")
+
+    username = "nobody"
+    if "x-forwarded-user" in websocket.headers:
+        username = websocket.headers["x-forwarded-user"]
+
     await websocket.accept()
     try:
         while True:
@@ -351,12 +364,15 @@ async def websocket_endpoint(websocket: WebSocket):
                     )
             elif data["action"] == "compute-reaction-from":
                 await websocket.send_json(
-                    {"type": "subtree_update", "node": {"id": data['nodeId'], "highlight": "yellow"}, "withNode": True}
+                    {"type": "subtree_update", "node": {"id": data["nodeId"], "highlight": "yellow"}, "withNode": True}
                 )
             elif data["action"] == "recompute-reaction" and "query" not in data:
                 await websocket.send_json(
-                        {"type": "response", "message": { "source": "Some custom source", "message": f"Hi from server", "smiles": "CCO"} }
-                    )
+                    {
+                        "type": "response",
+                        "message": {"source": "Some custom source", "message": f"Hi from server", "smiles": "CCO"},
+                    }
+                )
                 await websocket.send_json({"type": "complete"})
             elif data["action"] == "recompute-reaction":
                 if "water" in data["query"].lower():
@@ -367,29 +383,43 @@ async def websocket_endpoint(websocket: WebSocket):
                                 "source": "System",
                                 "message": f"Processing query: {data['query']} for node {data['nodeId']}",
                                 "smiles": "O",
-                            }
+                            },
                         }
                     )
                 else:
                     await websocket.send_json(
-                        {"type": "response", "message": {"message": f"Processing query: {data['query']} for node {data['nodeId']}"}}
+                        {
+                            "type": "response",
+                            "message": {"message": f"Processing query: {data['query']} for node {data['nodeId']}"},
+                        }
                     )
                 await asyncio.sleep(3)  # Random wait
                 await websocket.send_json({"type": "complete"})
             elif data["action"] == "list-tools":
                 tools = [Tool(f"tool_{i}", f"Does what tool {i} does") for i in range(1, 16)]
                 tools.append(Tool("a_tool_with_no_desc"))
-                await websocket.send_json({
-                    "type": "available-tools-response",
-                    "tools": [tool.json() for tool in tools],
-                })
+                await websocket.send_json(
+                    {
+                        "type": "available-tools-response",
+                        "tools": [tool.json() for tool in tools],
+                    }
+                )
             elif data["action"] == "save-context":
-                await websocket.send_json({
-                    "type": "save-context-response",
-                    "experimentContext": f"this is some sample context we are saving at {datetime.now():%Y-%m-%d %H:%M:%S}",
-                })
+                await websocket.send_json(
+                    {
+                        "type": "save-context-response",
+                        "experimentContext": f"this is some sample context we are saving at {datetime.now():%Y-%m-%d %H:%M:%S}",
+                    }
+                )
             elif data["action"] == "load-context":
                 print(f"LOADED CONTEXT: {data['experimentContext']}")
+            elif data["action"] == "get-username":
+                await websocket.send_json(
+                    {
+                        "type": "get-username-response",
+                        "username": username,
+                    }
+                )
             else:
                 print("WARN: Unhandled message:", data)
     except WebSocketDisconnect:
