@@ -1,28 +1,28 @@
 TASK:
-Using quantum simulations, I have determined the densities of those one molecule to be
- {}, respectively, for molecules {}.
+Using quantum simulations, I have determined the {property} of those one molecule to be
+ {previous_values}, respectively, for molecules {previous_mols}.
 
 Goal:
 Propose up to 1 **new**, **valid** organic molecules (SMILES) that:
   1. Contain only elements C, H, O, and N.
   2. Are not already known (as determined by calling known_smiles(smiles)).
-  3. Have a **density strictly greater** than that of the lead molecules.
+  3. Have a **{property} {condition}** than that of the lead molecules.
   4. Are chemically valid and syntactically correct SMILES.
 
 You must stop as soon as you have found 1 valid new molecule with higher density than the lead.
 
 PROCEDURE (must be followed deterministically):
-1. Store the given density value as LEAD_DENSITY.
+1. Store the given density value as LEAD_{property}.
 2. Generate up to 10 candidate SMILES containing only C,H,O,N.
 3. For each candidate:
    a. Validate that the SMILES is syntactically correct and contains only allowed elements.
    b. Call known_smiles(smiles). If True, skip this candidate.
-   c. If valid and new, call calculate_density(smiles) and record the density.
-   d. Keep only candidates with density > LEAD_DENSITY.
+   c. If valid and new, call calculate_{property}(smiles) and record the {property}.
+   d. Keep only candidates with density > LEAD_{property}.
 4. Rank the valid new candidates by density (highest first).
 5. Return the top 1 or repeat steps 2-4 until you have found 3 valid new molecules.
 
 CONSTRAINTS:
-- Do not estimate or guess density without calling calculate_density(smiles).
+- Do not estimate or guess {property} without calling calculate_{proeprty}(smiles).
 - Do not claim global novelty. Use only known_smiles(smiles) for novelty checking.
 - Do not compute density for invalid or known SMILES.

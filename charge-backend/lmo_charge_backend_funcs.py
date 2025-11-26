@@ -124,6 +124,7 @@ async def generate_lead_molecule(
     lmo_task = LeadMoleculeOptimization(
         lead_molecule=lead_molecule_smiles,
         user_prompt=DENSITY_USER_PROMPT.format(lead_molecule_smiles) + "\n",
+        server_urls=available_tools,
     )
 
     if os.getenv("CHARGE_DISABLE_OUTPUT_VALIDATION", "0") == "1":
@@ -222,6 +223,7 @@ async def generate_lead_molecule(
                             ", ".join(generated_smiles_list),
                         )
                         + "\n",
+                        server_urls=available_tools,
                     )
 
                     if os.getenv("CHARGE_DISABLE_OUTPUT_VALIDATION", "0") == "1":
