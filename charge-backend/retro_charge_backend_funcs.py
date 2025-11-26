@@ -5,6 +5,7 @@ from charge.clients.autogen import AutoGenAgent
 from charge.servers.AiZynthTools import RetroPlanner, ReactionPath
 from aizynth_backend_funcs import generate_tree_structure
 from loguru import logger
+from callback_logger import CallbackLogger
 from typing import Optional, Union
 
 from backend_helper_funcs import (
@@ -246,7 +247,8 @@ async def generate_molecules(
     websocket: WebSocket,
 ):
     """Stream positioned nodes and edges"""
-    logger.info(f"Planning retrosynthesis for: {start_smiles}")
+    clogger = CallbackLogger(websocket)
+    clogger.info(f"Planning retrosynthesis for: {start_smiles}")
 
     # Generate and position entire tree upfront
 
@@ -266,7 +268,7 @@ async def generate_molecules(
     )
     await websocket.send_json({"type": "node", "node": root.json()})
 
-    logger.info("Starting planning in executor...")
+    clogger.info("Starting planning in executor...")
 
     # Disable executor for now due to bad interaction with task_done callbacks
     # routes, planner = await loop_executor(
@@ -274,7 +276,7 @@ async def generate_molecules(
     # )
 
     routes, planner = run_retro_planner(config_file, start_smiles)
-    logger.info(f"Running RetroPlanner for SMILES: {start_smiles}")
+    clogger.info(f"Running RetroPlanner for SMILES: {start_smiles}")
 
     context.node_id_to_planner[root.id] = planner
 
@@ -291,7 +293,7 @@ async def generate_molecules(
         )
         await websocket.send_json({"type": "complete"})
         return
-    logger.info(f"Found {len(routes)} routes for {start_smiles}.")
+    clogger.info(f"Found {len(routes)} routes for {start_smiles}.")
 
     planner.last_route_used = 0
     reaction_path = ReactionPath(route=routes[0])
