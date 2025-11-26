@@ -1,5 +1,6 @@
 import asyncio
 from concurrent.futures import ProcessPoolExecutor
+import os
 from fastapi import WebSocket
 from charge.clients.autogen import AutoGenAgent
 from charge.servers.AiZynthTools import RetroPlanner, ReactionPath
@@ -392,7 +393,15 @@ async def optimize_molecule_retro(
         retro_task = RetrosynthesisTask(
             user_prompt=user_prompt, server_urls=server_urls
         )
-        agent_name=experiment.agent_pool.create_agent_name(prefix=f"retrosynth_{node_id}_")
+
+        if os.getenv("CHARGE_DISABLE_OUTPUT_VALIDATION", "0") == "1":
+            retro_task.structured_output_schema = None
+            logger.warning(
+                "Structure validation disabled for RetrosynthesisTask output schema."
+            )
+        agent_name = experiment.agent_pool.create_agent_name(
+            prefix=f"retrosynth_{node_id}_"
+        )
         runner = experiment.create_agent_with_experiment_state(
             task=retro_task,
             agent_name=agent_name,
@@ -405,6 +414,15 @@ async def optimize_molecule_retro(
     # Run task
     await highlight_node(current_node, websocket, True)
     output = await runner.run()
+
+    if os.getenv("CHARGE_DISABLE_OUTPUT_VALIDATION", "0") == "1":
+        logger.warning(
+            "Structure validation disabled for RetrosynthesisTask output schema."
+            "Returning text results without validation first before post-processing."
+        )
+        clogger = CallbackLogger(websocket)
+        clogger.info(f"Results: {output}")
+
     result = ReactionOutputSchema.model_validate_json(output)
 
     await highlight_node(current_node, websocket, False)
