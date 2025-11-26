@@ -380,7 +380,7 @@ const ChemistryTool: React.FC = () => {
         alert("Server error: " + data.message);
       } else if (data.type === 'save-context-response') {
         saveFullContext(data.experimentContext!);
-      } else if (data.type === 'get-user-response') {
+      } else if (data.type === 'get-username-response') {
         setUsername(data.username!);
       }
     };
@@ -753,6 +753,7 @@ const ChemistryTool: React.FC = () => {
                           {wsReconnecting ? '● Reconnecting...' :
                           wsConnected ? '● Connected' :
                           '● Disconnected'}
+                          {wsConnected && username !== "<LOCAL USER>" && ` as ${username}`}
                         </div>
                         {wsTooltipPinned && (
                           <button
