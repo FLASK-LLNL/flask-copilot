@@ -27,6 +27,10 @@ async def handle_callback_log(message):
 
 
 logger.add(handle_callback_log, filter=lambda record: record["level"].name == "INFO")
+logger.add(handle_callback_log, filter=lambda record: record["level"].name == "Info")
+logger.add(handle_callback_log, filter=lambda record: record["level"].name == "Warning")
+logger.add(handle_callback_log, filter=lambda record: record["level"].name == "Debug")
+logger.add(handle_callback_log, filter=lambda record: record["level"].name == "Error")
 
 
 # The Callback logger can hold a websocket that will allow the log message to be
@@ -41,6 +45,24 @@ class CallbackLogger:
             logger.bind(websocket=self.websocket, **kwargs).info(message)
         else:
             self.logger.info(message)
+
+    def warning(self, message, **kwargs):
+        if kwargs:
+            logger.bind(websocket=self.websocket, **kwargs).warning(message)
+        else:
+            self.logger.warning(message)
+
+    def debug(self, message, **kwargs):
+        if kwargs:
+            logger.bind(websocket=self.websocket, **kwargs).debug(message)
+        else:
+            self.logger.debug(message)
+
+    def error(self, message, **kwargs):
+        if kwargs:
+            logger.bind(websocket=self.websocket, **kwargs).error(message)
+        else:
+            self.logger.error(message)
 
     def unbind(self):
         self.websocket = None
