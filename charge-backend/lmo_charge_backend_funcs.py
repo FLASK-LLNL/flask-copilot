@@ -115,7 +115,7 @@ async def generate_lead_molecule(
         status="computing",
         label="Optimizing",
     )
-    # await websocket.send_json({"type": "edge", **edge_data.json()})
+    await websocket.send_json({"type": "edge", "edge": edge_data.json()})
     logger.info(f"Sending initial edge: {edge_data}")
 
     # Generate one node at a time
@@ -218,7 +218,7 @@ async def generate_lead_molecule(
                             y=100,
                         )
 
-                        await websocket.send_json({"type": "node", **node.json()})
+                        await websocket.send_json({"type": "node", "node": node.json()})
 
                     break  # Exit while loop to proceed to next node
                 else:
@@ -285,7 +285,7 @@ async def generate_lead_molecule(
         label="Completed",
     )
 
-    # await websocket.send_json({"type": "edge_update", **edge_data.json()})
+    await websocket.send_json({"type": "edge_update", "edge": edge_data.json()})
     logger.info(f"Sending initial edge: {edge_data}")
 
     await websocket.send_json({"type": "complete"})
