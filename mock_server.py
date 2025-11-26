@@ -426,18 +426,6 @@ async def websocket_endpoint(websocket: WebSocket):
         pass
 
 
-@app.get("/api/user")
-async def user(request: Request):
-    username = "nobody"
-    if "x-forwarded-user" in request.headers:
-        username = request.headers["x-forwarded-user"]
-
-    if username is None:
-        return JSONResponse(content={"message": "ERROR GETTING USERNAME"})
-
-    return JSONResponse(content={"user": username})
-
-
 if __name__ == "__main__":
     import uvicorn
 
