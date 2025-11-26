@@ -233,7 +233,7 @@ async def generate_lead_molecule(
                 if len(generated_smiles_list) > 0:
 
                     formatted_refine_prompt = FURTHER_REFINE_PROMPT.format(
-                        previous_valus=", ".join(map(str, generated_densities)),
+                        previous_values=", ".join(map(str, generated_densities)),
                         previous_smiles=", ".join(generated_smiles_list),
                         property=property,
                         condition=condition,
