@@ -64,6 +64,7 @@ class TaskManager:
             await self.websocket.send_json({"type": "complete"})
         except Exception:
             logger.exception("Failed to send task error to websocket")
+        raise exc
 
     async def run_task(self, coro) -> None:
         await self.cancel_current_task()
@@ -94,7 +95,13 @@ class TaskManager:
 class ActionManager:
     """Handles action state for a websocket connection."""
 
-    def __init__(self, task_manager: TaskManager, experiment: AutoGenExperiment, args, username: str):
+    def __init__(
+        self,
+        task_manager: TaskManager,
+        experiment: AutoGenExperiment,
+        args,
+        username: str,
+    ):
         self.task_manager = task_manager
         self.experiment = experiment
         self.args = args
