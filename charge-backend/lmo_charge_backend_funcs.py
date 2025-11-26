@@ -133,12 +133,25 @@ async def generate_lead_molecule(
 
                 if experiment.remaining_tasks() == 0:
                     task = LeadMoleculeOptimization(lead_molecule=canonical_smiles)
+
+                    if os.getenv("CHARGE_DISABLE_STRUCTURE_VALIDATION", "0") == "1":
+                        task.structured_output_schema = None
+                        logger.warning(
+                            "Structure validation disabled for LMOTask output schema."
+                        )
                     experiment.add_task(task)
                     parent_id = node_id
 
                 await experiment.run_async(callback=callback)
                 finished_tasks = experiment.get_finished_tasks()
                 completed_task, results = finished_tasks[-1]
+
+                if os.getenv("CHARGE_DISABLE_STRUCTURE_VALIDATION", "0") == "1":
+                    logger.warning(
+                        "Structure validation disabled for LMOTask output schema."
+                        "Returning text results without validation first before post-processing."
+                    )
+                    clogger.info(f"Results: {results}")
                 results = MoleculeOutputSchema.model_validate_json(results)
                 results = results.as_list()  # Convert to list of strings
                 clogger.info(f"New molecules generated: {results}")
