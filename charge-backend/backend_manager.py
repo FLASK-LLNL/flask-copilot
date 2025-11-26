@@ -158,6 +158,9 @@ class ActionManager:
             data.get("depth", 3),
             list_server_urls(),
             self.task_manager.websocket,
+            data.get("property", "density"),
+            data.get("condition", ">"),
+            data.get("custom_prompt", None),
         )
 
         await self.task_manager.run_task(run_func())
