@@ -343,6 +343,11 @@ async def lead_molecule(start_smiles: str, depth: int = 3, websocket: WebSocket 
 @app.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket):
     logger.info(f"Request for websocket received. Headers: {str(websocket.headers)}")
+
+    username = "nobody"
+    if "x-forwarded-user" in websocket.headers:
+        username = websocket.headers["x-forwarded-user"]
+
     await websocket.accept()
     try:
         while True:
@@ -408,6 +413,13 @@ async def websocket_endpoint(websocket: WebSocket):
                 )
             elif data["action"] == "load-context":
                 print(f"LOADED CONTEXT: {data['experimentContext']}")
+            elif data["action"] == "get-username":
+                await websocket.send_json(
+                    {
+                        "type": "get-username-response",
+                        "username": username,
+                    }
+                )
             else:
                 print("WARN: Unhandled message:", data)
     except WebSocketDisconnect:

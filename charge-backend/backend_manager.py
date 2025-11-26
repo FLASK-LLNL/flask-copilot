@@ -94,10 +94,11 @@ class TaskManager:
 class ActionManager:
     """Handles action state for a websocket connection."""
 
-    def __init__(self, task_manager: TaskManager, experiment: AutoGenExperiment, args):
+    def __init__(self, task_manager: TaskManager, experiment: AutoGenExperiment, args, username: str):
         self.task_manager = task_manager
         self.experiment = experiment
         self.args = args
+        self.username = username
         self.websocket = task_manager.websocket
 
     def setup_retro_synth_context(self) -> None:
@@ -335,3 +336,11 @@ class ActionManager:
         )
         await asyncio.sleep(3)
         await self.websocket.send_json({"type": "complete"})
+
+    async def handle_get_username(self, _: dict) -> None:
+        await self.websocket.send_json(
+            {
+                "type": "get-username-response",
+                "username": self.username,
+            }
+        )

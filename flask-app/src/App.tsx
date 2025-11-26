@@ -45,6 +45,7 @@ const ChemistryTool: React.FC = () => {
   const [copiedField, setCopiedField] = useState<string | null>(null);
   const [availableTools, setAvailableTools] = useState<Tool[]>([]);
   const [wsTooltipPinned, setWsTooltipPinned] = useState<boolean>(false);
+  const [username, setUsername] = useState<string>('<LOCAL USER>');
 
   const wsRef = useRef<WebSocket | null>(null);
   const getContextRef = useRef<() => Experiment>(() => {
@@ -291,6 +292,7 @@ const ChemistryTool: React.FC = () => {
       loadStateFromCurrentExperiment();
 
       socket.send(JSON.stringify({ action: 'list-tools' }));
+      socket.send(JSON.stringify({ action: 'get-username' }));
     };
 
     socket.onmessage = (event: MessageEvent) => {
@@ -378,6 +380,8 @@ const ChemistryTool: React.FC = () => {
         alert("Server error: " + data.message);
       } else if (data.type === 'save-context-response') {
         saveFullContext(data.experimentContext!);
+      } else if (data.type === 'get-user-response') {
+        setUsername(data.username!);
       }
     };
 
@@ -698,6 +702,7 @@ const ChemistryTool: React.FC = () => {
               <ProfileButton
                 initialSettings={profileSettings}
                 onSettingsChange={handleProfileUpdateConfirm}
+                username={username}
               />
               {/* WebSocket Status Indicator */}
                 <div
