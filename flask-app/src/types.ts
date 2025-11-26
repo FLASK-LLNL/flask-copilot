@@ -83,6 +83,7 @@ export interface WebSocketMessage {
   experimentContext?: string;
 
   withNode?: boolean;
+  username?: string;
 }
 
 

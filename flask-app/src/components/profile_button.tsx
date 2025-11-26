@@ -7,6 +7,7 @@ interface ProfileButtonProps {
   onClick?: () => void;
   onSettingsChange?: (settings: ProfileSettings) => void;
   initialSettings?: Partial<ProfileSettings>;
+  username?: string;
   className?: string;
 }
 
@@ -65,6 +66,7 @@ export const ProfileButton: React.FC<ProfileButtonProps> = ({
   onClick,
   onSettingsChange,
   initialSettings,
+  username,
   className = ''
 }) => {
   const [isModalOpen, setIsModalOpen] = React.useState(false);
@@ -284,7 +286,7 @@ export const ProfileButton: React.FC<ProfileButtonProps> = ({
           <div className="bg-gradient-to-br from-slate-800 to-purple-900 border-2 border-purple-400 rounded-2xl shadow-2xl max-w-2xl w-full p-6">
             <div className="flex items-center justify-between mb-6">
               <div>
-                <h2 className="text-xl font-bold text-white">Profile Settings</h2>
+                <h2 className="text-xl font-bold text-white">{username}'s Profile Settings</h2>
                 <p className="text-sm text-purple-300">Configure your connection and model settings</p>
               </div>
               <button
