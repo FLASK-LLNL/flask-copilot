@@ -559,6 +559,37 @@ const ChemistryTool: React.FC = () => {
     }
   };
 
+  const createNewRetrosynthesisExperiment = async (startingSmiles: string): Promise<void> => {
+    // Close context menu
+    setContextMenu({node: null, x: 0, y: 0});
+
+    saveStateToExperiment();
+
+    // Find the project to create a new experiment in
+    const projectId = projectSidebar.selectionRef.current.projectId!;
+    const experimentName = `Synthesizing ${startingSmiles}`;
+
+    let experiment = undefined;
+    try {
+      experiment = await projectManagement.createExperiment(projectId, experimentName);
+      projectSidebar.setSelection({ projectId, experimentId: experiment.id });
+      await new Promise(resolve => setTimeout(resolve, 100));
+    } catch (error) {
+      console.error('Error creating experiment:', error);
+      alert('Failed to create experiment');
+      return;
+    }
+
+    reset();
+    setSmiles(startingSmiles);
+    setProblemType("retrosynthesis");
+    setProblemName("retro-safranal");  // TODO remove
+    setSystemPrompt('');
+    setProblemPrompt('');
+    setPromptsModified(false);
+    saveStateToExperiment();
+  }
+
   const handleNodeClick = (e: React.MouseEvent<HTMLDivElement>, node: TreeNode): void => {
       e.stopPropagation();
       if (isComputing) return; // Don't open menu while computing
@@ -997,6 +1028,10 @@ const ChemistryTool: React.FC = () => {
             }}  className="w-full px-4 py-2 text-left text-sm text-white hover:bg-purple-600/50 transition-colors flex items-center gap-2">
             <RotateCcw className="w-4 h-4" />
             Restart from here
+            </button>
+            <button onClick={() => { createNewRetrosynthesisExperiment(contextMenu.node!.smiles); }}  className="w-full px-4 py-2 text-left text-sm text-white hover:bg-purple-600/50 transition-colors flex items-center gap-2">
+            <FlaskConical className="w-4 h-4" />
+            Plan synthesis pathway
             </button>
             <button
               onClick={() => copyToClipboard(contextMenu.node!.smiles, 'smiles', setCopiedField)}
