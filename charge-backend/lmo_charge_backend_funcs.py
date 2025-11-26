@@ -28,11 +28,11 @@ MOLECULE_HOVER_TEMPLATE = """**SMILES:** `{smiles}`\n
  - **Density:** {density:.3f}
  - **Synthesizability (SA) Score:** {sascore:.3f}"""
 
-with open("prompts/lmo_density_user_prompt.txt", "r") as f:
+with open("prompts/lmo_user_prompt.txt", "r") as f:
     DENSITY_USER_PROMPT = f.read()
 
 
-with open("prompts/lmo_refine_prompt.txt", "r") as f:
+with open("prompts/lmo_prompt.txt", "r") as f:
     FURTHER_REFINE_PROMPT = f.read()
 
 
