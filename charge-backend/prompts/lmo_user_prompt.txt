@@ -7,7 +7,7 @@ Propose a **new**, **valid** organic molecule (SMILES) that:
   1. Contain only elements C, H, O, and N.
   2. Are not already known (as determined by calling known_smiles(smiles)).
   3. Have a **{property} strictly {condition}** than that of the lead molecule.
-  4. Are chemically valid and syntactically correct SMILES.
+  4. Are chemically valid, synthesizable, and syntactically correct SMILES.
 
 Where {property} is defined as {property_description}
 
