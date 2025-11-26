@@ -26,7 +26,7 @@ RUN . /venv/bin/activate && \
 COPY mock_server.py /app
 COPY dockerscripts/launch_servers.sh /app
 
-RUN chmod -R g+rx /app /aizynth
+RUN chmod -R g+rwx /app /aizynth
 
 ENV FLASK_APPDIR=/app/dist
 
