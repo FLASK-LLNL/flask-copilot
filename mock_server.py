@@ -415,7 +415,7 @@ async def websocket_endpoint(websocket: WebSocket):
 
 
 @app.get("/api/user")
-async def root(request: Request):
+async def user(request: Request):
     username = "nobody"
     if "x-forwarded-user" in request.headers:
         username = request.headers["x-forwarded-user"]

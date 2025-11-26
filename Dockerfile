@@ -30,5 +30,8 @@ RUN chmod -R g+rx /app /aizynth
 
 ENV FLASK_APPDIR=/app/dist
 
+ARG SERVER_VERSION=""
+ENV SERVER_VERSION=${SERVER_VERSION}
+
 EXPOSE 8001
 ENTRYPOINT ["/app/launch_servers.sh"]
