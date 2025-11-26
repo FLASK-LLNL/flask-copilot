@@ -12,6 +12,7 @@ ARG AZF_PATH=./aizynth
 COPY ${AZF_PATH}/. /aizynth
 
 RUN . $HOME/.nvm/nvm.sh && \
+    npm install -g npm@latest && \
     npm install && \
     npm run build
 
