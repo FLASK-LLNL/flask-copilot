@@ -62,8 +62,6 @@ async def generate_lead_molecule(
         None
     """
 
-    breakpoint()
-
     lead_molecule_smiles = start_smiles
     clogger = CallbackLogger(websocket)
 
@@ -83,16 +81,12 @@ async def generate_lead_molecule(
         data=[lead_molecule_data], file_path=mol_file_path
     )
 
-    breakpoint()
-
     clogger.info(f"Storing found molecules in {mol_file_path}")
 
     # Run the task in a loop
     new_molecules = lmo_helper_funcs.get_list_from_json_file(
         file_path=mol_file_path
     )  # Start with known molecules
-
-    breakpoint()
 
     leader_hov = MOLECULE_HOVER_TEMPLATE.format(
         smiles=lead_molecule_smiles,
@@ -291,7 +285,7 @@ async def generate_lead_molecule(
         label="Completed",
     )
 
-    await websocket.send_json({"type": "edge_update", **edge_data.json()})
+    # await websocket.send_json({"type": "edge_update", **edge_data.json()})
     logger.info(f"Sending initial edge: {edge_data}")
 
     await websocket.send_json({"type": "complete"})
