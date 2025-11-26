@@ -14,42 +14,6 @@ from loguru import logger
 from rdkit import Chem
 
 
-def is_already_known(smiles: str) -> bool:
-    """
-    Check if a SMILES string provided is already known. Only provide
-    valid SMILES strings. Returns True if the SMILES string is valid, and
-    already in the database, False otherwise.
-    Args:
-        smiles (str): The input SMILES string.
-    Returns:
-        bool: True if the SMILES string is valid and known, False otherwise.
-
-    Raises:
-        ValueError: If the SMILES string is invalid.
-    """
-    if not Chem.MolFromSmiles(smiles):
-        raise ValueError("Invalid SMILES string.")
-
-    try:
-        canonical_smiles = SMILES_utils.canonicalize_smiles(smiles)
-
-        try:
-            with open(JSON_FILE_PATH) as f:
-                known_mols = json.load(f)
-                known_smiles = [mol["smiles"] for mol in known_mols]
-
-        except FileNotFoundError:
-            logger.warning(f"{JSON_FILE_PATH} not found. Creating a new one.")
-            known_mols = []
-
-    except Exception as e:
-        raise ValueError("Error in canonicalizing SMILES string.") from e
-
-    # Check if the SMILES string is already known (in the database)
-    # This is a placeholder for the actual database check
-    return canonical_smiles in known_smiles
-
-
 @click.command()
 @click.option("--port", type=int, default=8124, help="Port to run the server on")
 @click.option("--host", type=str, default=None, help="Host to run the server on")
@@ -78,9 +42,25 @@ def is_already_known(smiles: str) -> bool:
 @click.option(
     "--base-url", type=str, default=None, help="Base URL for the LMO tool server"
 )
+@click.option(
+    "--json-file",
+    type=str,
+    default="known_molecules.json",
+    help="Path to known molecules JSON",
+)
 @click.pass_context
 def main(
-    ctx, port, host, name, copilot_port, copilot_host, api_key, base_url, model, backend
+    ctx,
+    port,
+    host,
+    name,
+    copilot_port,
+    copilot_host,
+    api_key,
+    base_url,
+    model,
+    backend,
+    json_file,
 ):
     if host is None:
         _, host = get_hostname()
@@ -98,8 +78,9 @@ def main(
         backend=backend,
     )
 
+    LMO_MCP.JSON_FILE_PATH = json_file
+
     mcp = LMO_MCP.mcp
-    mcp.tool()(is_already_known)
 
     update_mcp_network(mcp, host, port)
 
