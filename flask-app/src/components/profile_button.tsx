@@ -31,6 +31,12 @@ const BACKEND_OPTIONS = [
     models: ['openai/gpt-oss-120b', 'meta-llama/Llama-3.3-70B-Instruct']
   },
   {
+    value: 'alcf',
+    label: 'ALCF Sophia',
+    defaultUrl: '',
+    models: ['openai/gpt-oss-120b', 'openai/gpt-oss-20b', 'meta-llama/Llama-4-Scout-17B-16E-Instruct']
+  },
+  {
     value: 'gemini',
     label: 'Google Gemini',
     defaultUrl: 'https://generativelanguage.googleapis.com/v1',
@@ -360,6 +366,7 @@ export const ProfileButton: React.FC<ProfileButtonProps> = ({
                       {tempSettings.backend === 'ollama' && '(Ollama endpoint)'}
                       {(tempSettings.backend === 'livai') && '(LivAI base URL)'}
                       {(tempSettings.backend === 'llamame') && '(LLamaMe base URL)'}
+                      {(tempSettings.backend === 'alcf') && '(ALCF Sophia base URL)'}
                       {tempSettings.backend === 'openai' && '(OpenAI-compatible endpoint)'}
                       {tempSettings.backend === 'gemini' && '(Gemini API endpoint)'}
                     </span>
@@ -383,8 +390,9 @@ export const ProfileButton: React.FC<ProfileButtonProps> = ({
                   Model
                   <span className="text-purple-400 text-xs ml-2">
                     {tempSettings.backend === 'openai' && '(GPT models)'}
-                    {tempSettings.backend === 'livai' && '(Internal models)'}
-                    {tempSettings.backend === 'llamame' && '(Internal models)'}
+                    {tempSettings.backend === 'livai' && '(LLNL Enterprise models)'}
+                    {tempSettings.backend === 'llamame' && '(LLNL Internal models)'}
+                    {tempSettings.backend === 'alcf' && '(ACLF Internal models)'}
                     {tempSettings.backend === 'gemini' && '(Gemini models)'}
                     {tempSettings.backend === 'ollama' && '(Local models)'}
                     {tempSettings.backend === 'vllm' && '(vLLM models)'}
@@ -439,6 +447,7 @@ export const ProfileButton: React.FC<ProfileButtonProps> = ({
                     {tempSettings.backend === 'openai' && '(OPENAI_API_KEY)'}
                     {tempSettings.backend === 'livai' && '(LIVAI_API_KEY)'}
                     {tempSettings.backend === 'llamame' && '(LLAMAME_API_KEY)'}
+                    {tempSettings.backend === 'alcf' && '(ALCF_API_KEY)'}
                     {tempSettings.backend === 'gemini' && '(GOOGLE_API_KEY)'}
                   </span>
                 </label>
