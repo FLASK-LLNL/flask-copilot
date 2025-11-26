@@ -231,6 +231,7 @@ async def unconstrained_retro(
 
 
 def run_retro_planner(config_file, smiles):
+    logger.info(f"Running RetroPlanner for SMILES: {smiles}")
     planner = RetroPlanner(configfile=config_file)
 
     _, _, routes = planner.plan(smiles)
@@ -267,9 +268,13 @@ async def generate_molecules(
 
     logger.info("Starting planning in executor...")
 
-    routes, planner = await loop_executor(
-        executor, run_retro_planner, config_file, start_smiles
-    )
+    # Disable executor for now due to bad interaction with task_done callbacks
+    # routes, planner = await loop_executor(
+    #     executor, run_retro_planner, config_file, start_smiles
+    # )
+
+    routes, planner = run_retro_planner(config_file, start_smiles)
+    logger.info(f"Running RetroPlanner for SMILES: {start_smiles}")
 
     context.node_id_to_planner[root.id] = planner
 
