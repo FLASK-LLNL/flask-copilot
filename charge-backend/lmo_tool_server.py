@@ -5,13 +5,12 @@
 ## SPDX-License-Identifier: Apache-2.0
 ################################################################################
 
+import os
 import click
 import sys
 
 from charge.servers.server_utils import update_mcp_network, get_hostname
 from tool_registration import register_tool_server
-from loguru import logger
-from rdkit import Chem
 
 
 @click.command()
@@ -77,6 +76,10 @@ def main(
         model=model,
         backend=backend,
     )
+
+    assert os.path.exists(
+        json_file
+    ), f"Known molecules JSON file not found at: {json_file}"
 
     LMO_MCP.JSON_FILE_PATH = json_file
 
