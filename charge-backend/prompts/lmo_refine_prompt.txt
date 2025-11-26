@@ -1,6 +1,6 @@
 TASK:
 Using quantum simulations, I have determined the {property} of those one molecule to be
- {previous_values}, respectively, for molecules {previous_mols}.
+ {previous_values}, respectively, for molecules {previous_smiles}.
 
 Goal:
 Propose up to 1 **new**, **valid** organic molecules (SMILES) that:

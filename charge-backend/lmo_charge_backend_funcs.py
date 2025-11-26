@@ -11,7 +11,7 @@ from charge.tasks.LMOTask import (
     LMOTask as LeadMoleculeOptimization,
     MoleculeOutputSchema,
 )
-
+from typing import Optional
 from backend_helper_funcs import (
     Node,
     Edge,
@@ -44,6 +44,9 @@ async def generate_lead_molecule(
     depth: int,
     available_tools: list[str],
     websocket: WebSocket,
+    property: str = "density",
+    condition: str = ">",
+    custom_prompt: Optional[str] = None,
 ) -> None:
     """Generate a lead molecule and stream its progress.
     Args:
@@ -119,11 +122,21 @@ async def generate_lead_molecule(
 
     mol_data = [lead_molecule_data]
 
+    formatted_user_prompt = (
+        custom_prompt
+        if custom_prompt is not None
+        else DENSITY_USER_PROMPT.format(
+            smiles=lead_molecule_smiles,
+            property=property,
+            condition=condition,
+        )
+    )
+
     canonical_smiles = lead_molecule_smiles
     callback = CallbackHandler(websocket)
     lmo_task = LeadMoleculeOptimization(
         lead_molecule=lead_molecule_smiles,
-        user_prompt=DENSITY_USER_PROMPT.format(lead_molecule_smiles) + "\n",
+        user_prompt=formatted_user_prompt + "\n",
         server_urls=available_tools,
     )
 
@@ -132,6 +145,10 @@ async def generate_lead_molecule(
         logger.warning("Structure validation disabled for LMOTask output schema.")
 
     experiment.add_task(lmo_task)
+
+    generated_smiles_list = []
+    generated_densities = []
+
     for i in range(depth):
         logger.info(f"Iteration {i}")
 
@@ -156,13 +173,6 @@ async def generate_lead_molecule(
                 results = MoleculeOutputSchema.model_validate_json(results)
                 results = results.as_list()  # Convert to list of strings
                 clogger.info(f"New molecules generated: {results}")
-                processed_mol = lmo_helper_funcs.post_process_smiles(
-                    smiles=results[0], parent_id=parent_id, node_id=node_id
-                )
-                canonical_smiles = processed_mol["smiles"]
-
-                generated_smiles_list = []
-                generated_densities = []
 
                 logger.info(f"New molecules generated: {results}")
                 for result in results:
@@ -216,13 +226,22 @@ async def generate_lead_molecule(
                     # Continue the while loop to try generating again
                 if len(generated_smiles_list) > 0:
 
+                    formatted_refine_prompt = FURTHER_REFINE_PROMPT.format(
+                        previous_valus=", ".join(map(str, generated_densities)),
+                        previous_smiles=", ".join(generated_smiles_list),
+                        property=property,
+                        condition=condition,
+                    )
+
+                    formatted_refine_prompt = (
+                        custom_prompt
+                        if custom_prompt is not None
+                        else formatted_refine_prompt
+                    )
+
                     lmo_task = LeadMoleculeOptimization(
                         lead_molecule=lead_molecule_smiles,
-                        user_prompt=FURTHER_REFINE_PROMPT.format(
-                            ", ".join(map(str, generated_densities)),
-                            ", ".join(generated_smiles_list),
-                        )
-                        + "\n",
+                        user_prompt=formatted_refine_prompt + "\n",
                         server_urls=available_tools,
                     )
 
