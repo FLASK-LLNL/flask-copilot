@@ -239,8 +239,8 @@ async def generate_lead_molecule(
                         property=property,
                         property_description=property_description,
                         condition=condition,
-                        direction="higher" if condition == "greater" else "lower",
-                        ranking="highest" if condition == "greater" else "lowest",
+                        direction=direction,
+                        ranking=ranking,
                     )
 
                     formatted_refine_prompt = (
