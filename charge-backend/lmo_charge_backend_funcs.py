@@ -11,7 +11,7 @@ from charge.tasks.LMOTask import (
     LMOTask as LeadMoleculeOptimization,
     MoleculeOutputSchema,
 )
-from charge.experiments.LMOExperiment import MoleculeOutputSchema, SCHEMA_PROMPT
+from charge.tasks.LMOTask import LMOTask, MoleculeOutputSchema
 
 from backend_helper_funcs import Node, Edge
 from backend_helper_funcs import get_bandgap, post_process_lmo_smiles, get_price
