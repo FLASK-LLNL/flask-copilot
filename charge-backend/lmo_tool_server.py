@@ -77,6 +77,8 @@ def main(
         backend=backend,
     )
 
+    # This should be convierted to a shared database instance
+    # to ensure the MCP and the backend use the same known molecules
     assert os.path.exists(
         json_file
     ), f"Known molecules JSON file not found at: {json_file}"
