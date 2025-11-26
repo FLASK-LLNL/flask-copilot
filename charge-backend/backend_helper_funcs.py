@@ -87,18 +87,6 @@ def get_bandgap(smiles: str) -> float:
     return round(random.uniform(1.0, 5.0), 2)
 
 
-# Add a temporary blacklist until UI filtering of messages is added
-tool_callback_blacklist = [
-    "verify_smiles",
-    "canonicalize_smiles",
-    "diagnose_smiles",
-    "is_already_known",
-    "get_density",
-    "get_synthesizability",
-    "is_molecule_synthesizable",
-]
-
-
 class CallbackHandler:
     def __init__(self, websocket: WebSocket, name: Optional[str] = None):
         self.websocket = websocket
@@ -124,23 +112,21 @@ class CallbackHandler:
                         name = item.name
                         _str = f"[{source}] Function call: {item.name} with args {item.arguments}"
                         logger.info(_str)
-                        if name not in tool_callback_blacklist:
-                            if "log_msg" in item.arguments:
-                                str_to_dict = json.loads(item.arguments)
-                                if "log_msg" in str_to_dict:
-                                    _str = str_to_dict["log_msg"]
+                        if "log_msg" in item.arguments:
+                            str_to_dict = json.loads(item.arguments)
+                            if "log_msg" in str_to_dict:
+                                _str = str_to_dict["log_msg"]
 
-                            msg = {
-                                "type": "response",
-                                "message": {"source": name, "message": _str},
-                            }
-                            if "smiles" in item.arguments:
-                                str_to_dict = json.loads(item.arguments)
-                                if "smiles" in str_to_dict:
-                                    msg["smiles"] = str_to_dict["smiles"]
-                            await send(msg)
+                        msg = {
+                            "type": "response",
+                            "message": {"source": name, "message": _str},
+                        }
+                        if "smiles" in item.arguments:
+                            str_to_dict = json.loads(item.arguments)
+                            if "smiles" in str_to_dict:
+                                msg["smiles"] = str_to_dict["smiles"]
+                        await send(msg)
                     else:
-
                         logger.info(f"[{source}] Model: {item}")
         elif assistant_message.type == "FunctionExecutionResultMessage":
 
