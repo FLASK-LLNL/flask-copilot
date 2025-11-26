@@ -194,6 +194,8 @@ export interface Experiment {
   problemName?: string;
   systemPrompt?: string;
   problemPrompt?: string;
+  propertyType?: string;
+  customProperty?: string;
   treeNodes?: TreeNode[];
   edges?: Edge[];
   metricsHistory?: MetricHistoryItem[];
