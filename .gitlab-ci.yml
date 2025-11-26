@@ -30,6 +30,9 @@ build:
     - echo $NEXUS_PASS | podman login -u "$NEXUS_USER" --password-stdin $NEXUS_REGISTRY
     - podman tag "$CI_REGISTRY_IMAGE:latest" "${NEXUS_REGISTRY_IMAGE}:${VERSION}"
     - podman push "${NEXUS_REGISTRY_IMAGE}:${VERSION}"
+    # Explicitly create the demo tag
+    - podman tag "$CI_REGISTRY_IMAGE:latest" ${NEXUS_REGISTRY_IMAGE}:demo
+    - podman push ${NEXUS_REGISTRY_IMAGE}:demo
     - podman logout $NEXUS_REGISTRY
     - podman logout $CI_REGISTRY
     
