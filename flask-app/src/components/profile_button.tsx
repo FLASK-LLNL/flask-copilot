@@ -225,10 +225,29 @@ export const ProfileButton: React.FC<ProfileButtonProps> = ({
     const backendOption = BACKEND_OPTIONS.find(opt => opt.value === tempSettings.backend);
     const cached = backendCache[tempSettings.backend];
 
-    // When toggling off, restore the first model from the list or cached model
-    const modelToUse = enabled
-      ? tempSettings.model
-      : (cached?.model || backendOption?.models?.[0] || tempSettings.model);
+    let modelToUse: string;
+
+    if (enabled) {
+      // When enabling custom model, keep current model
+      modelToUse = tempSettings.model;
+    } else {
+      // When disabling custom model, find a valid preset model
+      // First check if cached model is in the preset list
+      const cachedModelInList = cached?.model && backendOption?.models?.includes(cached.model);
+      // Then check if current temp model is in the preset list
+      const tempModelInList = backendOption?.models?.includes(tempSettings.model);
+
+      if (cachedModelInList) {
+        // Use cached model if it's a valid preset
+        modelToUse = cached.model;
+      } else if (tempModelInList) {
+        // Use current temp model if it's a valid preset
+        modelToUse = tempSettings.model;
+      } else {
+        // Fall back to first model in the preset list
+        modelToUse = backendOption?.models?.[0] || tempSettings.model;
+      }
+    }
 
     const updatedCache = {
       ...backendCache,
