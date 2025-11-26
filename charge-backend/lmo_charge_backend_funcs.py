@@ -227,9 +227,9 @@ async def generate_lead_molecule(
 
                         await websocket.send_json({"type": "node", "node": node.json()})
 
-                    break  # Exit while loop to proceed to next node
-                else:
-                    logger.info(f"Duplicate molecule found: {canonical_smiles}")
+                    else:
+                        logger.info(f"Duplicate molecule found: {canonical_smiles}")
+
                     # Continue the while loop to try generating again
                 if len(generated_smiles_list) > 0:
 
