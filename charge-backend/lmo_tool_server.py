@@ -25,7 +25,7 @@ from tool_registration import register_tool_server
 @click.option(
     "--model",
     type=str,
-    default="gpt-5",
+    default="gpt-5-nano",
     help="Model to use for the LMO tool server diagnose functions",
 )
 @click.option(
