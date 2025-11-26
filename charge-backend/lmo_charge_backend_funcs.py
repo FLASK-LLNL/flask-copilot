@@ -123,6 +123,9 @@ async def generate_lead_molecule(
 
     mol_data = [lead_molecule_data]
 
+    direction = "higher" if condition == "greater" else "lower"
+    ranking = "highest" if condition == "greater" else "lowest"
+
     formatted_user_prompt = (
         custom_prompt
         if custom_prompt is not None
@@ -131,6 +134,8 @@ async def generate_lead_molecule(
             property=property,
             property_description=property_description,
             condition=condition,
+            direction=direction,
+            ranking=ranking,
         )
     )
 
@@ -234,6 +239,8 @@ async def generate_lead_molecule(
                         property=property,
                         property_description=property_description,
                         condition=condition,
+                        direction="higher" if condition == "greater" else "lower",
+                        ranking="highest" if condition == "greater" else "lowest",
                     )
 
                     formatted_refine_prompt = (
