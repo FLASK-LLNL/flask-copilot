@@ -272,8 +272,15 @@ const ChemistryTool: React.FC = () => {
     wsRef.current?.send(JSON.stringify(message));
   };
 
+  const reconnectingRef = useRef(false);
+
   const reconnectWS = (): void => {
-    if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+    if (reconnectingRef.current) return; // Prevent overlapping reconnects
+    reconnectingRef.current = true;
+
+    if (wsRef.current &&
+        (wsRef.current.readyState === WebSocket.OPEN ||
+         wsRef.current.readyState === WebSocket.CONNECTING)) {
       wsRef.current.close();
     }
 
@@ -283,6 +290,7 @@ const ChemistryTool: React.FC = () => {
     wsRef.current = socket;
 
     socket.onopen = () => {
+      reconnectingRef.current = false; // Clear guard
       console.log('WebSocket connected');
       setWsConnected(true);
       setWsReconnecting(false);
@@ -296,6 +304,8 @@ const ChemistryTool: React.FC = () => {
     };
 
     socket.onmessage = (event: MessageEvent) => {
+      if (wsRef.current !== socket) return; // Ignore messages from old sockets
+
       const data: WebSocketMessage = JSON.parse(event.data);
 
       if (data.type === 'node') {
@@ -386,6 +396,7 @@ const ChemistryTool: React.FC = () => {
     };
 
     socket.onerror = (error: Event) => {
+      reconnectingRef.current = false; // Clear guard on error
       console.error('WebSocket error:', error);
       // Only update state if this is the current socket
       if (wsRef.current === socket) {
@@ -399,6 +410,7 @@ const ChemistryTool: React.FC = () => {
     };
 
     socket.onclose = () => {
+      reconnectingRef.current = false; // Clear guard on close
       console.log('WebSocket closed');
       // Only clear state if this is the current socket
       if (wsRef.current === socket) {
@@ -416,6 +428,13 @@ const ChemistryTool: React.FC = () => {
   // Connect WebSocket on mount
   useEffect(() => {
     reconnectWS();
+
+    return () => {
+      if (wsRef.current) {
+        wsRef.current.close();
+        wsRef.current = null;
+      }
+    };
   }, []);
 
   const reset = (): void => {
