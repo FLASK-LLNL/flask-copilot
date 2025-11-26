@@ -6,25 +6,27 @@ Goal:
 Propose a **new**, **valid** organic molecule (SMILES) that:
   1. Contain only elements C, H, O, and N.
   2. Are not already known (as determined by calling known_smiles(smiles)).
-  3. Have a **{property} strictly greater** than that of the lead molecule.
+  3. Have a **{property} strictly {condition}** than that of the lead molecule.
   4. Are chemically valid and syntactically correct SMILES.
 
-You must stop as soon as you have found a valid new molecule with higher density than the lead.
+Where {property} is defined as {property_description}
+
+You must stop as soon as you have found a valid new molecule with {'higher' if condition == 'greater' else 'lower'} {property} than the lead.
 
 PROCEDURE (must be followed deterministically):
 1. Compute the lead molecule {property}:
-   - Use calculate_{property}(LEAD_SMILES).
-   - Store the value as LEAD_{property}.
+   - Use calculate_property(LEAD_SMILES, "{property}").
+   - Store the value as LEAD_PROPERTY.
 2. Generate up to 10 candidate SMILES containing only C,H,O,N.
 3. For each candidate:
    a. Validate that the SMILES is syntactically correct and contains only allowed elements.
    b. Call known_smiles(smiles). If True, skip this candidate.
-   c. If valid and new, call calculate_{property}(smiles) and record the {property}.
-   d. Keep only candidates with {property} {condition} LEAD_{property}.
-4. Rank the valid new candidates by density (highest first).
+   c. If valid and new, call calculate_property(smiles, "{property}") and record the {property}.
+   d. Keep only candidates with {property} {condition} LEAD_PROPERTY.
+4. Rank the valid new candidates by {property} ({'highest' if condition == 'greater' else 'lowest'} first).
 5. Return the top 1 or repeat steps 2-4 until you have found 3 valid new molecules.
 
 CONSTRAINTS:
-- Do not estimate or guess {property} without calling calculate_{property}(smiles).
+- Do not estimate or guess {property} without calling calculate_property(smiles, "{property}").
 - Do not claim global novelty. Use only known_smiles(smiles) for novelty checking.
 - Do not compute {property} for invalid or known SMILES.

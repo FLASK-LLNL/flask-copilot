@@ -29,7 +29,7 @@ MOLECULE_HOVER_TEMPLATE = """**SMILES:** `{smiles}`\n
  - **Synthesizability (SA) Score:** {sascore:.3f}"""
 
 with open("prompts/lmo_user_prompt.txt", "r") as f:
-    DENSITY_USER_PROMPT = f.read()
+    PROPERTY_USER_PROMPT = f.read()
 
 
 with open("prompts/lmo_refine_prompt.txt", "r") as f:
@@ -45,7 +45,8 @@ async def generate_lead_molecule(
     available_tools: list[str],
     websocket: WebSocket,
     property: str = "density",
-    condition: str = ">",
+    condition: str = "greater",
+    property_description: str = "molecular density (g/cc)",
     custom_prompt: Optional[str] = None,
 ) -> None:
     """Generate a lead molecule and stream its progress.
@@ -125,9 +126,10 @@ async def generate_lead_molecule(
     formatted_user_prompt = (
         custom_prompt
         if custom_prompt is not None
-        else DENSITY_USER_PROMPT.format(
+        else PROPERTY_USER_PROMPT.format(
             smiles=lead_molecule_smiles,
             property=property,
+            property_description=property_description,
             condition=condition,
         )
     )
@@ -230,6 +232,7 @@ async def generate_lead_molecule(
                         previous_values=", ".join(map(str, generated_densities)),
                         previous_smiles=", ".join(generated_smiles_list),
                         property=property,
+                        property_description=property_description,
                         condition=condition,
                     )
 

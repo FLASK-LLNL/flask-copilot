@@ -159,7 +159,8 @@ class ActionManager:
             list_server_urls(),
             self.task_manager.websocket,
             data.get("property", "density"),
-            data.get("condition", ">"),
+            data.get("property_description", "molecular density (g/cc)"),
+            data.get("condition", "greater"),
             data.get("custom_prompt", None),
         )
 
