@@ -31,7 +31,7 @@ from tool_registration import register_tool_server
 @click.option(
     "--backend",
     type=str,
-    default="autogen",
+    default="openai",
     help="Backend to use for the LMO tool server diagnose functions",
 )
 @click.option(
