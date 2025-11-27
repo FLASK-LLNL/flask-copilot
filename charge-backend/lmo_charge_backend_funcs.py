@@ -4,6 +4,7 @@ import asyncio
 from loguru import logger
 import sys
 import os
+from pathlib import Path 
 from charge.experiments.AutoGenExperiment import AutoGenExperiment
 from charge.clients.autogen_utils import chargeConnectionError
 from callback_logger import CallbackLogger
@@ -28,11 +29,14 @@ MOLECULE_HOVER_TEMPLATE = """**SMILES:** `{smiles}`\n
  - **Density:** {density:.3f}
  - **Synthesizability (SA) Score:** {sascore:.3f}"""
 
-with open("prompts/lmo_user_prompt.txt", "r") as f:
+BASE_DIR = Path(__file__).resolve().parent
+PROMPTS_DIR = BASE_DIR / "prompts"
+
+with open(PROMPTS_DIR / "lmo_user_prompt.txt", "r") as f:
     PROPERTY_USER_PROMPT = f.read()
 
 
-with open("prompts/lmo_refine_prompt.txt", "r") as f:
+with open(PROMPTS_DIR / "lmo_refine_prompt.txt", "r") as f:
     FURTHER_REFINE_PROMPT = f.read()
 
 
