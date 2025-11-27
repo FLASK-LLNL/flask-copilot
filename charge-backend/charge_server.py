@@ -31,6 +31,7 @@ from charge.clients.autogen import AutoGenPool
 
 
 from tool_registration import (
+    register_url,
     register_post,
     reload_server_list,
 )
@@ -95,6 +96,16 @@ ASSETS_PATH = os.path.join(DIST_PATH, "assets")
 reload_server_list(args.tool_server_cache)
 
 app.post("/register")(partial(register_post, args.tool_server_cache))
+
+manual_mcp_servers_env = os.getenv("FLASK_MCP_SERVERS", "")
+if manual_mcp_servers_env:
+    manual_mcp_servers = manual_mcp_servers_env.split(",")
+    count = 0
+    for url in manual_mcp_servers:
+        host, port = url.split(":")
+        status = register_url(args.tool_server_cache, host, port, f"m{count}")
+        logger.info(f"{status}")
+        count += 1
 
 if os.path.exists(ASSETS_PATH):
     # Serve the frontend

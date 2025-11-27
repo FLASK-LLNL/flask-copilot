@@ -7,6 +7,7 @@
 
 import click
 import sys
+from loguru import logger
 
 import charge.servers.FLASKv2_reactions as flask
 from charge.servers.server_utils import update_mcp_network, get_hostname
@@ -23,7 +24,10 @@ def main(ctx, port, host, name, copilot_port, copilot_host):
     if host is None:
         _, host = get_hostname()
 
-    register_tool_server(port, host, name, copilot_port, copilot_host)
+    try:
+        register_tool_server(port, host, name, copilot_port, copilot_host)
+    except:
+        logger.info(f"{name} could not connect to server for registration -- requires manual registration")
 
     sys.argv = [sys.argv[0]] + ctx.args + [f"--port={port}", f"--host={host}"]
     flask.main()

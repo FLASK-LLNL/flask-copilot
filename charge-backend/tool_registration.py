@@ -95,13 +95,9 @@ def reload_server_list(filename: str):
         return
 
 
-async def register_post(filename: str, request: Request, data: RegistrationRequest):
-    hostname = data.host
-    if not hostname:
-        hostname = get_client_info(request)
-
-    key = f"{hostname}:{data.port}"
-    new_server = ToolServer(address=hostname, port=data.port, name=data.name)
+def register_url(filename: str, hostname: str, port: int, name: Optional[str] = ""):
+    key = f"{hostname}:{port}"
+    new_server = ToolServer(address=hostname, port=port, name=name)
 
     old_server = SERVERS.servers.pop(key, None)
     if old_server:
@@ -118,8 +114,13 @@ async def register_post(filename: str, request: Request, data: RegistrationReque
             logger.info(e)
             pass
 
-    return {"status": f"registered MCP server {data.name} at {hostname}:{data.port}"}
+    return {"status": f"registered MCP server {name} at {hostname}:{port}"}
 
+async def register_post(filename: str, request: Request, data: RegistrationRequest):
+    hostname = data.host
+    if not hostname:
+        hostname = get_client_info(request)
+    return register_url(filename, hostname, data.port, data.name)
 
 def register_tool_server(port, host, name, copilot_port, copilot_host):
     for i in range(5):
