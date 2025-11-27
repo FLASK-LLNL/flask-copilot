@@ -70,6 +70,16 @@ export interface WebSocketMessageToServer {
   query?: string;
   experimentContext?: string;
   enabledTools?: ToolMap;
+
+  // Lead molecule optimization
+  propertyType?: string;
+  customPropertyName?: string;
+  customPropertyDesc?: string;
+  customPropertyAscending?: boolean;
+
+  // Custom problem
+  systemPrompt?: string;
+  userPrompt?: string;
 }
 
 // Messages received from backend
@@ -81,6 +91,7 @@ export interface WebSocketMessage {
   message?: SidebarMessage;
   tools?: Tool[];
   experimentContext?: string;
+  profileSettings?: ProfileSettings;
 
   withNode?: boolean;
   username?: string;
@@ -193,6 +204,10 @@ export interface Experiment {
   problemName?: string;
   systemPrompt?: string;
   problemPrompt?: string;
+  propertyType?: string;
+  customPropertyName?: string;
+  customPropertyDesc?: string;
+  customPropertyAscending?: boolean;
   treeNodes?: TreeNode[];
   edges?: Edge[];
   metricsHistory?: MetricHistoryItem[];
