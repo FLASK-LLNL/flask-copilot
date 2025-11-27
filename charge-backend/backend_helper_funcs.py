@@ -9,8 +9,7 @@ from collections import defaultdict
 from charge.clients.autogen import AutoGenAgent
 import charge.servers.AiZynthTools as aizynth_funcs
 from charge.servers import SMILES_utils
-from charge.servers.molecular_property_utils import chemprop_preds_server
-
+from charge.servers.molecular_property_utils import get_density
 
 # TODO: Put this on the top level package and make it reusable
 @dataclass
@@ -218,7 +217,7 @@ async def loop_executor(executor, func, *args, **kwargs):
 def post_process_lmo_smiles(smiles: str, parent_id: int, node_id: int) -> Dict:
     """Post-process LMO SMILES to add properties like density and SAScore."""
     canonical_smiles = SMILES_utils.canonicalize_smiles(smiles)
-    density = chemprop_preds_server(canonical_smiles, "density")
+    density = get_density(canonical_smiles)
     sa_score = SMILES_utils.get_synthesizability(canonical_smiles)
     return {
         "smiles": canonical_smiles,
