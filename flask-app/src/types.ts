@@ -70,10 +70,16 @@ export interface WebSocketMessageToServer {
   query?: string;
   experimentContext?: string;
   enabledTools?: ToolMap;
+
+  // Lead molecule optimization
   propertyType?: string;
   customPropertyName?: string;
   customPropertyDesc?: string;
   customPropertyAscending?: boolean;
+
+  // Custom problem
+  systemPrompt?: string;
+  userPrompt?: string;
 }
 
 // Messages received from backend

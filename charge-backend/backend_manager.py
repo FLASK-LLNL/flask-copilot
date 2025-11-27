@@ -10,6 +10,7 @@ from backend_helper_funcs import (
     RetrosynthesisContext,
 )
 from lmo_charge_backend_funcs import generate_lead_molecule
+from charge_backend_custom import run_custom_problem
 from functools import partial
 from tool_registration import (
     ToolList,
@@ -121,6 +122,8 @@ class ActionManager:
             await self._handle_optimization(data)
         elif problem_type == "retrosynthesis":
             await self._handle_retrosynthesis(data)
+        elif problem_type == "custom":
+            await self._handle_custom_problem(data)
         else:
             raise ValueError(f"Unknown problem type: {problem_type}")
 
@@ -190,6 +193,23 @@ class ActionManager:
             self.args.config_file,
             self.get_retro_synth_context(),
             self.task_manager.executor,
+            self.task_manager.websocket,
+        )
+
+        await self.task_manager.run_task(run_func())
+
+    async def _handle_custom_problem(self, data: dict) -> None:
+        """Handle custom problem type."""
+        self.task_manager.clogger.info("Setting up custom task...")
+        logger.info(f"Data: {data}")
+
+        run_func = partial(
+            run_custom_problem,
+            data["smiles"],
+            data["systemPrompt"],
+            data["userPrompt"],
+            self.experiment,
+            list_server_urls(),
             self.task_manager.websocket,
         )
 

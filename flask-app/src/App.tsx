@@ -277,7 +277,9 @@ const ChemistryTool: React.FC = () => {
       propertyType,
       customPropertyName,
       customPropertyDesc,
-      customPropertyAscending
+      customPropertyAscending,
+      systemPrompt,
+      userPrompt: problemPrompt
     };
 
     wsRef.current?.send(JSON.stringify(message));
