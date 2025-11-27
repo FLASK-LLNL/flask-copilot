@@ -13,7 +13,7 @@ from charge.servers.server_utils import update_mcp_network, get_hostname
 from tool_registration import register_tool_server
 from mcp.server.fastmcp import FastMCP
 
-from charge.servers.molecular_property_utils import chemprop_preds_server
+from charge.servers.molecular_property_utils import calculate_property_hf
 
 
 @click.command()
@@ -45,7 +45,7 @@ def main(
     mcp = FastMCP(
         "Computationally expensive surrogate models for molecular properties MCP Server",
     )
-    mcp.tool()(chemprop_preds_server)
+    mcp.tool()(calculate_property_hf)
     
     update_mcp_network(mcp, host, port)
 
