@@ -18,7 +18,7 @@ async def run_custom_problem(
 ):
     task = Task(
         system_prompt=system_prompt + "\n\n" + LOG_PROGRESS_SYSTEM_PROMPT,
-        user_prompt=user_prompt + "\n\nInitial SMILES STRING: " + start_smiles,
+        user_prompt=user_prompt + "\n\nInitial SMILES string: " + start_smiles,
         server_urls=available_tools,
     )
     agent = experiment.create_agent_with_experiment_state(
