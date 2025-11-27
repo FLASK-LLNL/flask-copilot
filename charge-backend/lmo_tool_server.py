@@ -5,6 +5,7 @@
 ## SPDX-License-Identifier: Apache-2.0
 ################################################################################
 
+import os
 import click
 import sys
 
@@ -40,9 +41,25 @@ from tool_registration import register_tool_server
 @click.option(
     "--base-url", type=str, default=None, help="Base URL for the LMO tool server"
 )
+@click.option(
+    "--json-file",
+    type=str,
+    default="known_molecules.json",
+    help="Path to known molecules JSON",
+)
 @click.pass_context
 def main(
-    ctx, port, host, name, copilot_port, copilot_host, api_key, base_url, model, backend
+    ctx,
+    port,
+    host,
+    name,
+    copilot_port,
+    copilot_host,
+    api_key,
+    base_url,
+    model,
+    backend,
+    json_file,
 ):
     if host is None:
         _, host = get_hostname()
@@ -59,6 +76,14 @@ def main(
         model=model,
         backend=backend,
     )
+
+    # This should be convierted to a shared database instance
+    # to ensure the MCP and the backend use the same known molecules
+    assert os.path.exists(
+        json_file
+    ), f"Known molecules JSON file not found at: {json_file}"
+
+    LMO_MCP.JSON_FILE_PATH = json_file
 
     mcp = LMO_MCP.mcp
 
