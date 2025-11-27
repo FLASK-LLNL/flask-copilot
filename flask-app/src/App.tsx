@@ -1,6 +1,6 @@
 /* eslint-disable react-hooks/exhaustive-deps */
 import React, { useState, useRef, useEffect, useCallback } from 'react';
-import { Loader2, FlaskConical, TestTubeDiagonal, Network, Play, RotateCcw, X, Send, RefreshCw, Sparkles } from 'lucide-react';
+import { Loader2, FlaskConical, TestTubeDiagonal, Network, Play, RotateCcw, X, Send, RefreshCw, Sparkles, MessageCircleQuestion } from 'lucide-react';
 import 'recharts';
 
 import { WS_SERVER, VERSION } from './config';
@@ -40,6 +40,7 @@ const ChemistryTool: React.FC = () => {
   const [contextMenu, setContextMenu] = useState<ContextMenuState>({node: null, x: 0, y: 0});
   const [customQueryModal, setCustomQueryModal] = useState<TreeNode | null>(null);
   const [customQueryText, setCustomQueryText] = useState<string>('');
+  const [customQueryType, setCustomQueryType] = useState<string | null>(null);
   const [wsConnected, setWsConnected] = useState<boolean>(false);
   const [saveDropdownOpen, setSaveDropdownOpen] = useState<boolean>(false);
   const [wsError, setWsError] = useState<string>('');
@@ -647,17 +648,14 @@ const ChemistryTool: React.FC = () => {
     setContextMenu({node: null, x: 0, y: 0});
   };
 
-  const handleCustomQuery = (node: TreeNode): void => {
-    if (problemType === "optimization") {
-      // Invalidate all nodes below this one
-      setTreeNodes(prev => {
-        return prev.filter(n => n.y <= node.y);
-      });
-    }
+  const handleCustomQuery = (node: TreeNode, queryType: string | null): void => {
     setCustomQueryModal(node);
     setCustomQueryText('');
+    setCustomQueryType(queryType);
     setContextMenu({node: null, x: 0, y: 0});
   };
+
+
 
   const submitCustomQuery = (): void => {
     if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) {
@@ -667,7 +665,7 @@ const ChemistryTool: React.FC = () => {
     console.log(`Custom query for ${customQueryModal?.label}: ${customQueryText}`);
 
     const message: WebSocketMessageToServer = {
-      action: problemType === "optimization" ? "optimize-from" : "recompute-reaction",
+      action: customQueryType ?? (problemType === "optimization" ? "optimize-from" : "recompute-reaction"),
       nodeId: customQueryModal?.id,
       query: customQueryText
     };
@@ -675,6 +673,7 @@ const ChemistryTool: React.FC = () => {
 
     setCustomQueryModal(null);
     setCustomQueryText('');
+    setCustomQueryType(null);
     setIsComputing(true); // If expecting new nodes
   };
 
@@ -1134,23 +1133,39 @@ const ChemistryTool: React.FC = () => {
 
           { (problemType === "retrosynthesis" && hasDescendants(contextMenu.node.id, treeNodes)) && (
             <>
-            <button onClick={() => {sendMessageToServer("recompute-reaction", {nodeId: contextMenu.node!.id});}} className="w-full px-4 py-2 text-left text-sm text-white hover:bg-purple-600/50 transition-colors flex items-center gap-2">
+            <button disabled={true} onClick={() => {sendMessageToServer("recompute-reaction", {nodeId: contextMenu.node!.id});}} className="w-full px-4 py-2 text-left text-sm text-white hover:bg-purple-600/50 transition-colors flex items-center gap-2 disabled:text-gray-400 disabled:cursor-not-allowed disabled:hover:bg-transparent">
               <RefreshCw className="w-4 h-4" />Find Another Reaction
             </button>
             </>
           )}
           { (problemType === "retrosynthesis" && !isRootNode(contextMenu.node.id, treeNodes)) && (
             <>
-            <button onClick={() => {sendMessageToServer("recompute-parent-reaction", {nodeId: contextMenu.node!.id});}} className="w-full px-4 py-2 text-left text-sm text-white hover:bg-purple-600/50 transition-colors flex items-center gap-2">
+            <button disabled={true} onClick={() => {sendMessageToServer("recompute-parent-reaction", {nodeId: contextMenu.node!.id});}} className="w-full px-4 py-2 text-left text-sm text-white hover:bg-purple-600/50 transition-colors flex items-center gap-2 disabled:text-gray-400 disabled:cursor-not-allowed disabled:hover:bg-transparent">
               <Network className="w-4 h-4" />Substitute Molecule
             </button>
             </>
           )}
 
           { (problemType === "retrosynthesis" && hasDescendants(contextMenu.node.id, treeNodes)) && (
-          <button onClick={() => handleCustomQuery(contextMenu.node!)} className="w-full px-4 py-2 text-left text-sm text-white hover:bg-purple-600/50 transition-colors flex items-center gap-2 border-t border-purple-400/30">
+          <button disabled={true} onClick={() => handleCustomQuery(contextMenu.node!, null)} className="w-full px-4 py-2 text-left text-sm text-white hover:bg-purple-600/50 transition-colors flex items-center gap-2 border-t border-purple-400/30 disabled:text-gray-400 disabled:cursor-not-allowed disabled:hover:bg-transparent">
             <Send className="w-4 h-4" />
             { (problemType === "retrosynthesis" && hasDescendants(contextMenu.node.id, treeNodes)) ? (<>Find Another Reaction with Custom Prompt...</>) : (<>Custom Query...</>) }
+          </button>
+          )}
+
+          { (problemType === "retrosynthesis" && contextMenu.node) && (
+          <button onClick={() => handleCustomQuery(contextMenu.node!, "query-retro-molecule")} className="w-full px-4 py-2 text-left text-sm text-white hover:bg-purple-600/50 transition-colors flex items-center gap-2 border-t border-purple-400/30">
+            <MessageCircleQuestion className="w-4 h-4" /> Ask about molecule...
+          </button>
+          )}
+          { (problemType === "retrosynthesis" && hasDescendants(contextMenu.node.id, treeNodes)) && (
+          <button onClick={() => handleCustomQuery(contextMenu.node!, "query-retro-product")} className="w-full px-4 py-2 text-left text-sm text-white hover:bg-purple-600/50 transition-colors flex items-center gap-2 border-t border-purple-400/30">
+            <MessageCircleQuestion className="w-4 h-4" /> Ask about reaction product...
+          </button>
+          )}
+          { (problemType === "retrosynthesis" && !isRootNode(contextMenu.node.id, treeNodes)) && (
+          <button onClick={() => handleCustomQuery(contextMenu.node!, "query-retro-reactant")} className="w-full px-4 py-2 text-left text-sm text-white hover:bg-purple-600/50 transition-colors flex items-center gap-2 border-t border-purple-400/30">
+            <MessageCircleQuestion className="w-4 h-4" /> Ask about reactant...
           </button>
           )}
         </div>
