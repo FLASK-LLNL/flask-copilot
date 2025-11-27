@@ -453,13 +453,12 @@ async def optimize_molecule_retro(
 
     nodes: list[Node] = []
     edges: list[Edge] = []
-    for i, smiles in enumerate(reactants_smiles_list):
+    for i, smiles in enumerate(result.reactants_smiles_list):
         node = Node(
             f"node_{num_nodes+i}", smiles, smiles, "Discovered", level, current_node.id
         )
         # nodes.append(node)
         context.node_ids[node.id] = node
-        # edges.append(Edge(f"edge_{node_id}_{node.id}", node_id, node.id, "complete"))
 
         # Find paths for the leaf nodes
         routes, planner = run_retro_planner(config_file, smiles)
