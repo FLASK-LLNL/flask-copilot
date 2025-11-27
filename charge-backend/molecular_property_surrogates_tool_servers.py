@@ -19,7 +19,7 @@ from charge.servers.molecular_property_utils import chemprop_preds_server
 @click.command()
 @click.option("--port", type=int, default=8126, help="Port to run the server on")
 @click.option("--host", type=str, default=None, help="Host to run the server on")
-@click.option("--name", type=str, default="lmo_tools", help="Name of the MCP server")
+@click.option("--name", type=str, default="mol_prop_surrogates", help="Name of the MCP server")
 @click.option(
     "--copilot-port", type=int, default=8001, help="Port to the running copilot backend"
 )
