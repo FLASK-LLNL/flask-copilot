@@ -79,9 +79,11 @@ def main(
 
     # This should be convierted to a shared database instance
     # to ensure the MCP and the backend use the same known molecules
-    assert os.path.exists(
-        json_file
-    ), f"Known molecules JSON file not found at: {json_file}"
+
+    if not os.path.exists(json_file):
+        abs_path = os.path.abspath(json_file)
+        with open(abs_path, "w") as f:
+            pass
 
     LMO_MCP.JSON_FILE_PATH = json_file
 
