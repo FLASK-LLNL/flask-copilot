@@ -23,7 +23,7 @@ async def run_custom_problem(
     )
     agent = experiment.create_agent_with_experiment_state(
         task=task,
-        agent_name="Custom Problem Agent",
+        agent_name="Custom_Problem_Agent",
         callback=CallbackHandler(websocket),
     )
 
