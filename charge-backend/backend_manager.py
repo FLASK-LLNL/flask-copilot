@@ -6,10 +6,13 @@ from callback_logger import CallbackLogger
 from concurrent.futures import ProcessPoolExecutor
 from charge.experiments.AutoGenExperiment import AutoGenExperiment
 from charge.clients.autogen_utils import chargeConnectionError
+from charge.tasks.Task import Task
 from backend_helper_funcs import (
     RetrosynthesisContext,
+    CallbackHandler,
 )
 from lmo_charge_backend_funcs import generate_lead_molecule
+from charge_backend_custom import run_custom_problem
 from functools import partial
 from tool_registration import (
     ToolList,
@@ -55,9 +58,7 @@ class TaskManager:
 
         if type(exc) == chargeConnectionError:
             # logger.error(f"Charge connection error in background task: {exc}")
-            self.clogger.info(
-                f"Unsupported model was selected.  \n Server encountered error: {exc}"
-            )
+            self.clogger.info(f"Unsupported model was selected.  \n Server encountered error: {exc}")
 
         # Send a stopped message with error details to the websocket so the UI can react
         try:
@@ -123,6 +124,8 @@ class ActionManager:
             await self._handle_optimization(data)
         elif problem_type == "retrosynthesis":
             await self._handle_retrosynthesis(data)
+        elif problem_type == "custom":
+            await self._handle_custom_problem(data)
         else:
             raise ValueError(f"Unknown problem type: {problem_type}")
 
@@ -131,9 +134,7 @@ class ActionManager:
         logger.info("Save state action received")
 
         experiment_context = await self.experiment.save_state()
-        await self.websocket.send_json(
-            {"type": "save-context-response", "experimentContext": experiment_context}
-        )
+        await self.websocket.send_json({"type": "save-context-response", "experimentContext": experiment_context})
 
     async def handle_load_state(self, data, *args, **kwargs) -> None:
         """Handle load state action."""
@@ -149,6 +150,25 @@ class ActionManager:
         self.task_manager.clogger.info("Start Optimization action received")
         logger.info(f"Data: {data}")
 
+        # Property attributes for prompting
+        if data["propertyType"] == "custom":
+            property_attributes = (
+                data["customPropertyName"],
+                data["customPropertyDesc"],
+                "greater" if data["customPropertyAscending"] else "less",
+            )
+        else:
+            property_name = data["propertyType"]
+            DEFAULT_PROPERTIES = {
+                "density": ("density", "crystalline density (g/cm^3)", "greater"),
+                "hof": ("heat of formation", "Heat of formation (kcal/mol)", "greater"),
+                "bandgap": ("band gap", "HOMO-LUMO energy gap (Hartree)", "greater"),
+            }
+            if property_name not in DEFAULT_PROPERTIES:
+                logger.error(f"Property {property_name} not found in default properties")
+                return
+            property_attributes = DEFAULT_PROPERTIES[property_name]
+
         run_func = partial(
             generate_lead_molecule,
             data["smiles"],
@@ -158,9 +178,7 @@ class ActionManager:
             data.get("depth", 3),
             list_server_urls(),
             self.task_manager.websocket,
-            data.get("property", "density"),
-            data.get("property_description", "molecular density (g/cc)"),
-            data.get("condition", "greater"),
+            *property_attributes,
             data.get("custom_prompt", None),
         )
 
@@ -177,6 +195,23 @@ class ActionManager:
             self.args.config_file,
             self.get_retro_synth_context(),
             self.task_manager.executor,
+            self.task_manager.websocket,
+        )
+
+        await self.task_manager.run_task(run_func())
+
+    async def _handle_custom_problem(self, data: dict) -> None:
+        """Handle custom problem type."""
+        self.task_manager.clogger.info("Setting up custom task...")
+        logger.info(f"Data: {data}")
+
+        run_func = partial(
+            run_custom_problem,
+            data["smiles"],
+            data["systemPrompt"],
+            data["userPrompt"],
+            self.experiment,
+            list_server_urls(),
             self.task_manager.websocket,
         )
 
@@ -207,9 +242,7 @@ class ActionManager:
         """Handle optimize-from action."""
         prompt = data.get("query")
         if prompt:
-            await self._send_processing_message(
-                f"Processing optimization query: {prompt} for node {data['nodeId']}"
-            )
+            await self._send_processing_message(f"Processing optimization query: {prompt} for node {data['nodeId']}")
 
         logger.info("Optimize from action received")
         logger.info(f"Data: {data}")
@@ -219,23 +252,22 @@ class ActionManager:
         """Handle recompute-reaction action."""
         prompt = data.get("query")
         if prompt:
-            await self._send_processing_message(
-                f"Processing reaction query: {prompt} for node {data['nodeId']}"
-            )
+            await self._send_processing_message(f"Processing reaction query: {prompt} for node {data['nodeId']}")
 
         logger.info("Recompute reaction action received")
         logger.info(f"Data: {data}")
         await self.websocket.send_json({"type": "complete"})
 
-    async def _send_processing_message(self, message: str) -> None:
+    async def _send_processing_message(self, message: str, source: str | None = None, **kwargs) -> None:
         """Send a processing message to the client."""
         await self.websocket.send_json(
             {
                 "type": "response",
                 "message": {
-                    "source": "System",
+                    "source": source or "System",
                     "message": message,
                 },
+                **kwargs,
             }
         )
 
@@ -287,9 +319,7 @@ class ActionManager:
         await self.handle_reset()
         try:
             logger.info(f"Experiment is reset with model {model} and backend {backend}")
-            autogen_pool = AutoGenPool(
-                model=model, backend=backend, api_key=api_key, base_url=base_url
-            )
+            autogen_pool = AutoGenPool(model=model, backend=backend, api_key=api_key, base_url=base_url)
             # Set up an experiment class for current endpoint
             self.experiment = AutoGenExperiment(task=None, agent_pool=autogen_pool)
 
@@ -303,9 +333,7 @@ class ActionManager:
                 }
             )
         except ValueError as e:
-            logger.error(
-                f"Orchestrator Profile Error: Unable to restart experiment: {e}"
-            )
+            logger.error(f"Orchestrator Profile Error: Unable to restart experiment: {e}")
             backend, model, base_url = await self.report_orchestrator_config()
             await self.websocket.send_json(
                 {
@@ -335,17 +363,108 @@ class ActionManager:
 
     async def handle_select_tools_for_task(self, data: dict) -> None:
         """Handle select-tools-for-task action."""
-        query = data.get("query")
         logger.info("Select tools for task")
         logger.info(f"Data: {data}")
         # TODO: Implement tool selection logic
 
-    async def handle_custom_query(self, data: dict) -> None:
-        """Handle custom_query action."""
-        await self._send_processing_message(
-            f"Processing query: {data['query']} for node {data['nodeId']}"
+    async def handle_custom_query_retro_molecule(self, data: dict) -> None:
+        """Handle a query on the given molecule. First try to ask about the molecule as a reactant. If that is not available, ask about it in the context of it being a product."""
+        assert self.retro_synth_context is not None
+
+        await self._send_processing_message(f"Processing molecule query: {data['query']} for node {data['nodeId']}")
+        node = self.retro_synth_context.node_ids[data["nodeId"]]
+
+        task = Task(
+            system_prompt=f"You are a helpful chemical assistant who answers in concise but factual responses. Answer the following query about the molecule `{node.smiles}`.",
+            user_prompt=data["query"],
         )
-        await asyncio.sleep(3)
+
+        # First try finding the parent
+        agent = None
+        if data["nodeId"] in self.retro_synth_context.parents:
+            parent = self.retro_synth_context.parents[data["nodeId"]]
+
+            if parent in self.retro_synth_context.node_id_to_charge_client:
+                agent = self.retro_synth_context.node_id_to_charge_client[parent]
+
+        # If we could not find an agent, try as a product
+        if agent is None and data["nodeId"] in self.retro_synth_context.node_id_to_charge_client:
+            agent = self.retro_synth_context.node_id_to_charge_client[data["nodeId"]]
+
+        # Otherwise, use the full experiment context
+        if agent is None:
+            agent = self.experiment.create_agent_with_experiment_state(
+                task=task,
+                agent_name=f"Query agent for {data['nodeId']}",
+                callback=CallbackHandler(self.websocket),
+            )
+        else:
+            agent.task = task
+
+        async def run_and_report():
+            result = await agent.run()
+            # Report answer
+            await self._send_processing_message(result, source="Agent")
+
+        await self.task_manager.run_task(run_and_report())
+        await self.websocket.send_json({"type": "complete"})
+
+    async def handle_custom_query_retro_product(self, data: dict) -> None:
+        """Handle a query on the reaction (from nodeId to its reactants)."""
+        assert self.retro_synth_context is not None
+
+        await self._send_processing_message(f"Processing reaction query: {data['query']} for node {data['nodeId']} (as product)")
+        node = self.retro_synth_context.node_ids[data["nodeId"]]
+        if data["nodeId"] not in self.retro_synth_context.node_id_to_charge_client:
+            await self._send_processing_message(f"Molecule `{node.smiles}` has no reaction to query.")
+            await self.websocket.send_json({"type": "complete"})
+            return
+
+        agent = self.retro_synth_context.node_id_to_charge_client[data["nodeId"]]
+        agent.task = Task(
+            system_prompt="You are a helpful chemical assistant who answers in concise but factual responses. Answer the following query about the reaction.",
+            user_prompt=data["query"],
+        )
+
+        async def run_and_report():
+            result = await agent.run()
+            # Report answer
+            await self._send_processing_message(result, source="Agent")
+
+        await self.task_manager.run_task(run_and_report())
+        await self.websocket.send_json({"type": "complete"})
+
+    async def handle_custom_query_retro_reactant(self, data: dict) -> None:
+        """Handle a query on the reaction (from nodeId to its product)."""
+        assert self.retro_synth_context is not None
+
+        await self._send_processing_message(f"Processing reaction query: {data['query']} for node {data['nodeId']} (as reactant)")
+
+        node = self.retro_synth_context.node_ids[data["nodeId"]]
+
+        agent = None
+        if data["nodeId"] in self.retro_synth_context.parents:
+            parent = self.retro_synth_context.parents[data["nodeId"]]
+
+            if parent in self.retro_synth_context.node_id_to_charge_client:
+                agent = self.retro_synth_context.node_id_to_charge_client[parent]
+
+        if agent is None:
+            await self._send_processing_message(f"Molecule `{node.smiles}` has no reaction to query.")
+            await self.websocket.send_json({"type": "complete"})
+            return
+
+        agent.task = Task(
+            system_prompt=f"You are a helpful chemical assistant who answers in concise but factual responses. Answer the following query about the reaction in the context of reactant `{node.smiles}`.",
+            user_prompt=data["query"],
+        )
+
+        async def run_and_report():
+            result = await agent.run()
+            # Report answer
+            await self._send_processing_message(result, source="Agent")
+
+        await self.task_manager.run_task(run_and_report())
         await self.websocket.send_json({"type": "complete"})
 
     async def handle_get_username(self, _: dict) -> None:

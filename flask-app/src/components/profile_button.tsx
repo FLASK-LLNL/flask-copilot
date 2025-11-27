@@ -148,8 +148,8 @@ export const ProfileButton: React.FC<ProfileButtonProps> = ({
     const updatedCache = {
       ...backendCache,
       [tempSettings.backend]: {
-        customUrl: tempSettings.customUrl,
-        model: tempSettings.model,
+        customUrl: tempSettings.customUrl || '',
+        model: tempSettings.model || '',
         useCustomModel: tempSettings.useCustomModel || false
       }
     };
@@ -214,7 +214,7 @@ export const ProfileButton: React.FC<ProfileButtonProps> = ({
     const updatedCache = {
       ...backendCache,
       [tempSettings.backend]: {
-        customUrl: tempSettings.customUrl,
+        customUrl: tempSettings.customUrl || '',
         model: selectedModel,
         useCustomModel: tempSettings.useCustomModel || false
       }
@@ -258,7 +258,7 @@ export const ProfileButton: React.FC<ProfileButtonProps> = ({
     const updatedCache = {
       ...backendCache,
       [tempSettings.backend]: {
-        customUrl: tempSettings.customUrl,
+        customUrl: tempSettings.customUrl || '',
         model: modelToUse,
         useCustomModel: enabled
       }
@@ -277,7 +277,7 @@ export const ProfileButton: React.FC<ProfileButtonProps> = ({
     const updatedCache = {
       ...backendCache,
       [tempSettings.backend]: {
-        customUrl: tempSettings.customUrl,
+        customUrl: tempSettings.customUrl || '',
         model: newModel,
         useCustomModel: tempSettings.useCustomModel || false
       }
