@@ -196,6 +196,7 @@ class ActionManager:
             self.retro_synth_context,
             self.task_manager.websocket,
             self.experiment,
+            self.args.config_file,
             list_server_urls(),
         )
 

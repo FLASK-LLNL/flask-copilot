@@ -364,6 +364,7 @@ async def optimize_molecule_retro(
     context: RetrosynthesisContext,
     websocket: WebSocket,
     experiment: AutoGenExperiment,
+    config_file: str,
     server_urls: Optional[Union[str, list[str]]] = None,
 ):
     """Optimize a molecule using retrosynthesis by node ID"""
@@ -455,6 +456,26 @@ async def optimize_molecule_retro(
         nodes.append(node)
         context.node_ids[node.id] = node
         edges.append(Edge(f"edge_{node_id}_{node.id}", node_id, node.id, "complete"))
+
+        # Find paths for the leaf nodes
+        routes, planner = run_retro_planner(config_file, smiles)
+
+        if not routes:
+            logger.warning(f"No routes found for {smiles}. Skipping...")
+            continue
+
+        context.node_id_to_planner[node.id] = planner
+        planner.last_route_used = 0
+        reaction_path = ReactionPath(route=routes[0])
+        child_nodes, child_edges = generate_tree_structure(
+            reaction_path.nodes, context, start_level=level
+        )
+
+        # Stream child nodes and edges
+        nodes.extend(child_nodes)
+        edges.extend(child_edges)
+
+        # if routes:
 
     calculate_positions(nodes, context.nodes_per_level[level])
     context.nodes_per_level[level] += len(nodes)
