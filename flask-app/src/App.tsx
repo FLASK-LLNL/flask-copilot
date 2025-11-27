@@ -30,7 +30,9 @@ const ChemistryTool: React.FC = () => {
   const [promptsModified, setPromptsModified] = useState<boolean>(false);
   const [editPromptsModal, setEditPromptsModal] = useState<boolean>(false);
   const [editPropertyModal, setEditPropertyModal] = useState<boolean>(false);
-  const [customProperty, setCustomProperty] = useState<string>('');
+  const [customPropertyName, setCustomPropertyName] = useState<string>('');
+  const [customPropertyDesc, setCustomPropertyDesc] = useState<string>('');
+  const [customPropertyAscending, setCustomPropertyAscending] = useState<boolean>(true);
   const [isComputing, setIsComputing] = useState<boolean>(false);
   const [autoZoom, setAutoZoom] = useState<boolean>(true);
   const [treeNodes, setTreeNodes] = useState<TreeNode[]>([]);
@@ -180,7 +182,9 @@ const ChemistryTool: React.FC = () => {
     (data.systemPrompt !== undefined) && setSystemPrompt(data.systemPrompt);
     (data.problemPrompt !== undefined) && setProblemPrompt(data.problemPrompt);
     (data.propertyType !== undefined) && setPropertyType(data.propertyType);
-    (data.customProperty !== undefined) && setCustomProperty(data.customProperty);
+    (data.customPropertyName !== undefined) && setCustomPropertyName(data.customPropertyName);
+    (data.customPropertyDesc !== undefined) && setCustomPropertyDesc(data.customPropertyDesc);
+    (data.customPropertyAscending !== undefined) && setCustomPropertyAscending(data.customPropertyAscending);
     setPromptsModified(!!(systemPrompt || problemPrompt));
     data.treeNodes && setTreeNodes(data.treeNodes);
     data.edges && setEdges(data.edges);
@@ -268,8 +272,12 @@ const ChemistryTool: React.FC = () => {
 
     const message: WebSocketMessageToServer = {
       action: 'compute',
-      smiles: smiles,
-      problemType: problemType
+      smiles,
+      problemType,
+      propertyType,
+      customPropertyName,
+      customPropertyDesc,
+      customPropertyAscending
     };
 
     wsRef.current?.send(JSON.stringify(message));
@@ -467,6 +475,7 @@ const ChemistryTool: React.FC = () => {
     console.log('Sending stop command to server');
     setIsComputing(false);
     wsRef.current.send(JSON.stringify({ action: 'stop' }));
+    saveStateToExperiment();
   };
 
   useEffect(() => {
@@ -484,7 +493,9 @@ const ChemistryTool: React.FC = () => {
             systemPrompt,
             problemPrompt,
             propertyType,
-            customProperty,
+            customPropertyName,
+            customPropertyDesc,
+            customPropertyAscending,
             treeNodes,
             edges,
             metricsHistory: metricsDashboardState.metricsHistory,
@@ -497,7 +508,8 @@ const ChemistryTool: React.FC = () => {
       }
       throw "No experiment found";
     };
-  }, [smiles, problemType, graphState, sidebarState, treeNodes, edges, metricsDashboardState, autoZoom, systemPrompt, problemPrompt, propertyType, customProperty, projectData, projectSidebar]);
+  }, [smiles, problemType, graphState, sidebarState, treeNodes, edges, metricsDashboardState, autoZoom, 
+      systemPrompt, problemPrompt, propertyType, customPropertyName, customPropertyDesc, customPropertyAscending, projectData, projectSidebar]);
 
 
 
@@ -519,7 +531,8 @@ const ChemistryTool: React.FC = () => {
   };
 
   const saveFullContext = (experimentContext: string): void => {
-    const data = { lastModified: new Date().toISOString(), smiles, problemType, systemPrompt, problemPrompt, propertyType, customProperty, treeNodes, edges, graphState, metricsDashboardState, sidebarState, experimentContext };
+    const data = { lastModified: new Date().toISOString(), smiles, problemType, systemPrompt, problemPrompt, propertyType, customPropertyName, 
+                   customPropertyDesc, customPropertyAscending, treeNodes, edges, graphState, metricsDashboardState, sidebarState, experimentContext };
     const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -558,8 +571,10 @@ const ChemistryTool: React.FC = () => {
     setEditPromptsModal(false);
   };
 
-  const saveCustomProperty = (newProperty: string): void => {
-    setCustomProperty(newProperty);
+  const saveCustomProperty = (newPropertyName: string, newPropertyDesc: string, newPropertyAscending: boolean): void => {
+    setCustomPropertyName(newPropertyName);
+    setCustomPropertyDesc(newPropertyDesc);
+    setCustomPropertyAscending(newPropertyAscending);
     setEditPropertyModal(false);
   };
 
@@ -603,11 +618,7 @@ const ChemistryTool: React.FC = () => {
 
     reset();
     setSmiles(startingSmiles);
-    setProblemType("retrosynthesis");
-    setProblemName("retro-safranal");  // TODO remove
-    setSystemPrompt('');
-    setProblemPrompt('');
-    setPromptsModified(false);
+    resetProblemType("retrosynthesis");
     saveStateToExperiment();
   }
 
@@ -924,12 +935,12 @@ const ChemistryTool: React.FC = () => {
                     <div>
                       <label className="block text-sm font-medium text-purple-200 mb-2">
                         Property
-                        {propertyType === "custom" && !customProperty && (
+                        {propertyType === "custom" && (!customPropertyName || !customPropertyDesc) && (
                           <span className="ml-2 text-amber-400 cursor-help relative group inline-block">
                             ⚠️
                           <div className="absolute bottom-full mb-2 left-1/2 transform -translate-x-1/2 opacity-0 group-hover:opacity-90 transition-opacity pointer-events-none">
                             <div className="bg-slate-800 border-2 border-purple-400 rounded-lg px-4 py-2 text-sm whitespace-nowrap shadow-xl text-purple-200">
-                              Property description not given
+                              Property name or description not given
                             </div>
                           </div>
                           </span>
@@ -947,12 +958,12 @@ const ChemistryTool: React.FC = () => {
                     <button onClick={() => setEditPropertyModal(true)} disabled={isComputing} className="px-3 py-2.5 bg-white/10 text-purple-200 rounded-lg text-sm font-medium hover:bg-white/20 transition-all disabled:opacity-50 disabled:cursor-not-allowed">
                       Property...
                     </button>
-                  }                  
+                  }
                   {problemType === "custom" &&
                     <button onClick={() => setEditPromptsModal(true)} disabled={isComputing || problemType !== "custom"} className="px-3 py-2.5 bg-white/10 text-purple-200 rounded-lg text-sm font-medium hover:bg-white/20 transition-all disabled:opacity-50 disabled:cursor-not-allowed">
                       Edit
                     </button>
-                  }                  
+                  }
                   <button
                     onClick={() => setShowToolSelectionModal(true)}
                     disabled={isComputing}
@@ -1232,16 +1243,38 @@ const ChemistryTool: React.FC = () => {
             </div>
             <div className="space-y-4">
               <div>
+                <label className="block text-sm font-medium text-purple-200 mb-2">Property Name</label>
+                <input
+                    type="text"
+                    value={customPropertyName}
+                    onChange={(e) => setCustomPropertyName(e.target.value)}
+                    placeholder="Enter a name for the property"
+                    className="w-full px-4 py-3 bg-white/10 border-2 border-purple-400/50 rounded-lg focus:border-purple-400 focus:outline-none text-white placeholder-purple-300/50"
+                  />
+              </div>
+              <div>
                 <label className="block text-sm font-medium text-purple-200 mb-2">Property Description</label>
-                <textarea value={customProperty} onChange={(e) => setCustomProperty(e.target.value)} placeholder="Enter a description of the property and its units..." className="w-full h-32 px-4 py-3 bg-white/10 border-2 border-purple-400/50 rounded-lg focus:border-purple-400 focus:outline-none text-white placeholder-purple-300/50 resize-none" />
+                <textarea value={customPropertyDesc} onChange={(e) => setCustomPropertyDesc(e.target.value)} placeholder="Enter a description of the property and its units..." className="w-full h-32 px-4 py-3 bg-white/10 border-2 border-purple-400/50 rounded-lg focus:border-purple-400 focus:outline-none text-white placeholder-purple-300/50 resize-none" />
               </div>
             </div>
+            <div className="py-4 flex items-center justify-center gap-3">
+              <span className="text-sm text-purple-200">Higher is better</span>
+              <button
+                onClick={() => setCustomPropertyAscending(!customPropertyAscending)}
+                className={`relative w-14 h-7 rounded-full transition-colors ${customPropertyAscending ? 'bg-purple-400/30' : 'bg-purple-600'}`}
+              >
+                <div
+                  className={`absolute top-1 left-1 w-5 h-5 bg-white rounded-full transition-transform ${customPropertyAscending ? 'translate-x-0' : 'translate-x-7'}`}
+                />
+              </button>
+              <span className="text-sm text-purple-200">Lower is better</span>
+            </div>
             <div className="flex gap-3 mt-4">
-              <button onClick={() => { saveCustomProperty(''); }} className="px-4 py-3 bg-white/10 text-purple-200 rounded-lg font-medium hover:bg-white/20 transition-all flex items-center gap-2">
+              <button onClick={() => { saveCustomProperty('', '', true); }} className="px-4 py-3 bg-white/10 text-purple-200 rounded-lg font-medium hover:bg-white/20 transition-all flex items-center gap-2">
                 <RotateCcw className="w-4 h-4" />
                 Reset
               </button>
-              <button onClick={() => {saveCustomProperty(customProperty);}} className="flex-1 px-6 py-3 bg-gradient-to-r from-purple-600 to-pink-600 text-white rounded-lg font-semibold shadow-lg hover:shadow-xl transform hover:-translate-y-0.5 transition-all flex items-center justify-center gap-2">
+              <button onClick={() => {saveCustomProperty(customPropertyName, customPropertyDesc, customPropertyAscending);}} className="flex-1 px-6 py-3 bg-gradient-to-r from-purple-600 to-pink-600 text-white rounded-lg font-semibold shadow-lg hover:shadow-xl transform hover:-translate-y-0.5 transition-all flex items-center justify-center gap-2">
                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                 </svg>

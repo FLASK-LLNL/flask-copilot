@@ -45,8 +45,8 @@ async def generate_lead_molecule(
     available_tools: list[str],
     websocket: WebSocket,
     property: str = "density",
-    condition: str = "greater",
     property_description: str = "molecular density (g/cc)",
+    condition: str = "greater",
     custom_prompt: Optional[str] = None,
 ) -> None:
     """Generate a lead molecule and stream its progress.

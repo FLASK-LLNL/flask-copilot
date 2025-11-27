@@ -70,6 +70,10 @@ export interface WebSocketMessageToServer {
   query?: string;
   experimentContext?: string;
   enabledTools?: ToolMap;
+  propertyType?: string;
+  customPropertyName?: string;
+  customPropertyDesc?: string;
+  customPropertyAscending?: boolean;
 }
 
 // Messages received from backend
@@ -195,7 +199,9 @@ export interface Experiment {
   systemPrompt?: string;
   problemPrompt?: string;
   propertyType?: string;
-  customProperty?: string;
+  customPropertyName?: string;
+  customPropertyDesc?: string;
+  customPropertyAscending?: boolean;
   treeNodes?: TreeNode[];
   edges?: Edge[];
   metricsHistory?: MetricHistoryItem[];

@@ -55,9 +55,7 @@ class TaskManager:
 
         if type(exc) == chargeConnectionError:
             # logger.error(f"Charge connection error in background task: {exc}")
-            self.clogger.info(
-                f"Unsupported model was selected.  \n Server encountered error: {exc}"
-            )
+            self.clogger.info(f"Unsupported model was selected.  \n Server encountered error: {exc}")
 
         # Send a stopped message with error details to the websocket so the UI can react
         try:
@@ -131,9 +129,7 @@ class ActionManager:
         logger.info("Save state action received")
 
         experiment_context = await self.experiment.save_state()
-        await self.websocket.send_json(
-            {"type": "save-context-response", "experimentContext": experiment_context}
-        )
+        await self.websocket.send_json({"type": "save-context-response", "experimentContext": experiment_context})
 
     async def handle_load_state(self, data, *args, **kwargs) -> None:
         """Handle load state action."""
@@ -149,6 +145,25 @@ class ActionManager:
         self.task_manager.clogger.info("Start Optimization action received")
         logger.info(f"Data: {data}")
 
+        # Property attributes for prompting
+        if data["propertyType"] == "custom":
+            property_attributes = (
+                data["customPropertyName"],
+                data["customPropertyDesc"],
+                "greater" if data["customPropertyAscending"] else "less",
+            )
+        else:
+            property_name = data["propertyType"]
+            DEFAULT_PROPERTIES = {
+                "density": ("density", "crystalline density (g/cm^3)", "greater"),
+                "hof": ("heat of formation", "Heat of formation (kcal/mol)", "greater"),
+                "bandgap": ("band gap", "HOMO-LUMO energy gap (Hartree)", "greater"),
+            }
+            if property_name not in DEFAULT_PROPERTIES:
+                logger.error(f"Property {property_name} not found in default properties")
+                return
+            property_attributes = DEFAULT_PROPERTIES[property_name]
+
         run_func = partial(
             generate_lead_molecule,
             data["smiles"],
@@ -158,9 +173,7 @@ class ActionManager:
             data.get("depth", 3),
             list_server_urls(),
             self.task_manager.websocket,
-            data.get("property", "density"),
-            data.get("property_description", "molecular density (g/cc)"),
-            data.get("condition", "greater"),
+            *property_attributes,
             data.get("custom_prompt", None),
         )
 
@@ -207,9 +220,7 @@ class ActionManager:
         """Handle optimize-from action."""
         prompt = data.get("query")
         if prompt:
-            await self._send_processing_message(
-                f"Processing optimization query: {prompt} for node {data['nodeId']}"
-            )
+            await self._send_processing_message(f"Processing optimization query: {prompt} for node {data['nodeId']}")
 
         logger.info("Optimize from action received")
         logger.info(f"Data: {data}")
@@ -219,23 +230,22 @@ class ActionManager:
         """Handle recompute-reaction action."""
         prompt = data.get("query")
         if prompt:
-            await self._send_processing_message(
-                f"Processing reaction query: {prompt} for node {data['nodeId']}"
-            )
+            await self._send_processing_message(f"Processing reaction query: {prompt} for node {data['nodeId']}")
 
         logger.info("Recompute reaction action received")
         logger.info(f"Data: {data}")
         await self.websocket.send_json({"type": "complete"})
 
-    async def _send_processing_message(self, message: str) -> None:
+    async def _send_processing_message(self, message: str, source: str | None = None, **kwargs) -> None:
         """Send a processing message to the client."""
         await self.websocket.send_json(
             {
                 "type": "response",
                 "message": {
-                    "source": "System",
+                    "source": source or "System",
                     "message": message,
                 },
+                **kwargs,
             }
         )
 
@@ -287,9 +297,7 @@ class ActionManager:
         await self.handle_reset()
         try:
             logger.info(f"Experiment is reset with model {model} and backend {backend}")
-            autogen_pool = AutoGenPool(
-                model=model, backend=backend, api_key=api_key, base_url=base_url
-            )
+            autogen_pool = AutoGenPool(model=model, backend=backend, api_key=api_key, base_url=base_url)
             # Set up an experiment class for current endpoint
             self.experiment = AutoGenExperiment(task=None, agent_pool=autogen_pool)
 
@@ -303,9 +311,7 @@ class ActionManager:
                 }
             )
         except ValueError as e:
-            logger.error(
-                f"Orchestrator Profile Error: Unable to restart experiment: {e}"
-            )
+            logger.error(f"Orchestrator Profile Error: Unable to restart experiment: {e}")
             backend, model, base_url = await self.report_orchestrator_config()
             await self.websocket.send_json(
                 {
