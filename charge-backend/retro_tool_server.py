@@ -29,7 +29,10 @@ def main(port, host, name, copilot_port, copilot_host, config):
     if host is None:
         _, host = get_hostname()
 
-    register_tool_server(port, host, name, copilot_port, copilot_host)
+    try:
+        register_tool_server(port, host, name, copilot_port, copilot_host)
+    except:
+        logger.info(f"{name} could not connect to server for registration -- requires manual registration")
 
     mcp = RETRO_MCP.template_free_mcp
 
