@@ -369,7 +369,11 @@ async def optimize_molecule_retro(
 ):
     """Optimize a molecule using retrosynthesis by node ID"""
     current_node = context.node_ids.get(node_id)
+    cur_node_id = context.azf_nodes.get(node_id)
     assert current_node is not None, f"Node ID {node_id} not found"
+    assert cur_node_id is not None, f"AZF Node ID {node_id} not found"
+
+    cur_node_id = cur_node_id.node_id
 
     await websocket.send_json(
         {
@@ -449,13 +453,13 @@ async def optimize_molecule_retro(
 
     nodes: list[Node] = []
     edges: list[Edge] = []
-    for i, smiles in enumerate(result.reactants_smiles_list):
+    for i, smiles in enumerate(reactants_smiles_list):
         node = Node(
             f"node_{num_nodes+i}", smiles, smiles, "Discovered", level, current_node.id
         )
-        nodes.append(node)
+        # nodes.append(node)
         context.node_ids[node.id] = node
-        edges.append(Edge(f"edge_{node_id}_{node.id}", node_id, node.id, "complete"))
+        # edges.append(Edge(f"edge_{node_id}_{node.id}", node_id, node.id, "complete"))
 
         # Find paths for the leaf nodes
         routes, planner = run_retro_planner(config_file, smiles)
@@ -464,9 +468,16 @@ async def optimize_molecule_retro(
             logger.warning(f"No routes found for {smiles}. Skipping...")
             continue
 
+        logger.info(f"Found {len(routes)} routes for {smiles}.")
+
         context.node_id_to_planner[node.id] = planner
         planner.last_route_used = 0
-        reaction_path = ReactionPath(route=routes[0])
+
+        reaction_path = ReactionPath(
+            route=routes[0],
+            cur_num_nodes=num_nodes,
+            root_parent_node_id=cur_node_id,
+        )
         child_nodes, child_edges = generate_tree_structure(
             reaction_path.nodes, context, start_level=level
         )
@@ -475,9 +486,13 @@ async def optimize_molecule_retro(
         nodes.extend(child_nodes)
         edges.extend(child_edges)
 
-        # if routes:
+        num_nodes = reaction_path.num_nodes
 
     calculate_positions(nodes, context.nodes_per_level[level])
+
+    for node in nodes:
+        print(node)
+
     context.nodes_per_level[level] += len(nodes)
 
     for node, edge in zip(nodes, edges):
