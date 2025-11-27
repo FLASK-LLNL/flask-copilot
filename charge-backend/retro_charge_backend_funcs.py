@@ -489,11 +489,6 @@ async def optimize_molecule_retro(
 
     calculate_positions(nodes, context.nodes_per_level[level])
 
-    for node in nodes:
-        print(node)
-
-    context.nodes_per_level[level] += len(nodes)
-
     for node, edge in zip(nodes, edges):
         await websocket.send_json({"type": "node", "node": node.json()})
         await websocket.send_json({"type": "edge", "edge": edge.json()})
