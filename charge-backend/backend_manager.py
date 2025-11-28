@@ -402,6 +402,7 @@ class ActionManager:
             result = await agent.run()
             # Report answer
             await self._send_processing_message(result, source="Agent")
+            await self.websocket.send_json({"type": "complete"})
 
         await self.task_manager.run_task(run_and_report())
 
@@ -435,6 +436,8 @@ class ActionManager:
             result = await agent.run()
             # Report answer
             await self._send_processing_message(result, source="Agent")
+            await self.websocket.send_json({"type": "complete"})
+
 
         await self.task_manager.run_task(run_and_report())
 
@@ -453,6 +456,8 @@ class ActionManager:
         agent = None
         if data["nodeId"] in self.retro_synth_context.parents:
             parent = self.retro_synth_context.parents[data["nodeId"]]
+            parent_node = self.retro_synth_context.node_ids[parent]
+
 
             if parent in self.retro_synth_context.node_id_to_charge_client:
                 # Context already exists
@@ -462,7 +467,7 @@ class ActionManager:
                 child_nodes = [nid for nid, p in self.retro_synth_context.parents.items() if p == parent]
                 reactants = [self.retro_synth_context.node_ids[nid] for nid in child_nodes]
                 reactants_str = '\n'.join(reactant.smiles for reactant in reactants)
-                task.system_prompt += f"\n\nThe reaction in question is:\nProduct: {node.smiles}\nReactants:\n{reactants_str}"
+                task.system_prompt += f"\n\nThe reaction in question is:\nProduct: {parent_node.smiles}\nReactants:\n{reactants_str}"
                 agent = self.experiment.create_agent_with_experiment_state(
                     task=task,
                     callback=CallbackHandler(self.websocket),
@@ -478,6 +483,7 @@ class ActionManager:
             result = await agent.run()
             # Report answer
             await self._send_processing_message(result, source="Agent")
+            await self.websocket.send_json({"type": "complete"})
 
         await self.task_manager.run_task(run_and_report())
 
