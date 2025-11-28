@@ -65,7 +65,7 @@ parser.add_argument("--host", type=str, default=None, help="Host to run the serv
 parser.add_argument(
     "--tool-server-cache",
     type=str,
-    default="app/flask_copilot_active_tool_servers.json",
+    default="flask_copilot_active_tool_servers.json",
     help="Path to the JSON file containing current list of active MCP tool servers.",
 )
 
