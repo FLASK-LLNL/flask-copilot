@@ -8,6 +8,7 @@
 import os
 import click
 import sys
+from loguru import logger
 
 from charge.servers.server_utils import update_mcp_network, get_hostname
 from tool_registration import register_tool_server

@@ -6,6 +6,7 @@
 ################################################################################
 
 import click
+from loguru import logger
 
 from charge.servers.AiZynthTools import is_molecule_synthesizable, RetroPlanner
 
