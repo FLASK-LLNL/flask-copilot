@@ -14,6 +14,7 @@ from pydantic import BaseModel
 import json
 from typing import Optional
 import time
+import os
 
 from charge.utils.system_utils import check_server_paths
 from autogen_ext.tools.mcp import McpWorkbench, SseServerParams
@@ -78,6 +79,26 @@ class RegistrationRequest:
 
 def reload_server_list(filename: str):
     if filename:
+        # Check if file exists
+        if not os.path.exists(filename):
+            logger.info(f"Server list file does not exist: {filename}")
+            return
+
+        # Check if file is readable
+        if not os.access(filename, os.R_OK):
+            logger.error(f"Server list file is not readable: {filename}")
+            return
+
+        # Check if file has non-zero size
+        try:
+            file_size = os.path.getsize(filename)
+            if file_size == 0:
+                logger.info(f"Server list file is empty (0 bytes): {filename}")
+                return
+        except OSError as e:
+            logger.error(f"Error getting file size for {filename}: {e}")
+            return
+
         try:
             with open(filename, "r") as f:
                 data: ToolServerDict = ToolServerDict.model_validate_json(f.read())
@@ -107,14 +128,36 @@ def register_url(filename: str, hostname: str, port: int, name: Optional[str] = 
 
     SERVERS.servers[key] = new_server
     if filename:
+        # Check if file exists
+        file_exists = os.path.exists(filename)
+
+        msg_base = f"registered MCP server {name} at {hostname}:{port}"
+        # Check if file is writable (or parent directory is writable for new files)
+        if file_exists:
+            if not os.access(filename, os.W_OK):
+                logger.error(f"Server list file is not writable: {filename}")
+                return {"status": f"{msg_base} (warning: could not save to disk - file not writable)"}
+        else:
+            # For new files, check if parent directory is writable
+            parent_dir = os.path.dirname(filename) or '.'
+            if not os.access(parent_dir, os.W_OK):
+                logger.error(f"Cannot create server list file - parent directory not writable: {parent_dir}")
+                return {"status": f"{msg_base} (warning: could not save to disk - directory not writable)"}
+
         try:
             with open(filename, "w") as f:
                 f.write(SERVERS.model_dump_json(indent=4))
+        except PermissionError as e:
+            logger.error(f"Permission denied writing to server list file {filename}: {e}")
+            return {"status": f"{msg_base} (warning: could not save to disk - permission denied)"}
+        except OSError as e:
+            logger.error(f"OS error writing to server list file {filename}: {e}")
+            return {"status": f"{msg_base} (warning: could not save to disk - {e})"}
         except Exception as e:
-            logger.info(e)
-            pass
+            logger.error(f"Error writing to server list file {filename}: {e}")
+            return {"status": f"{msg_base} (warning: could not save to disk)"}
 
-    return {"status": f"registered MCP server {name} at {hostname}:{port}"}
+    return {"status": f"{msg_base}"}
 
 async def register_post(filename: str, request: Request, data: RegistrationRequest):
     hostname = data.host
