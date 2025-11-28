@@ -457,7 +457,6 @@ async def optimize_molecule_retro(
         node = Node(
             f"node_{num_nodes+i}", smiles, smiles, "Discovered", level, current_node.id
         )
-        # nodes.append(node)
         context.node_ids[node.id] = node
 
         # Find paths for the leaf nodes
