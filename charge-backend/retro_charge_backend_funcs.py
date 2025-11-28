@@ -364,11 +364,16 @@ async def optimize_molecule_retro(
     context: RetrosynthesisContext,
     websocket: WebSocket,
     experiment: AutoGenExperiment,
+    config_file: str,
     server_urls: Optional[Union[str, list[str]]] = None,
 ):
     """Optimize a molecule using retrosynthesis by node ID"""
     current_node = context.node_ids.get(node_id)
+    cur_node_id = context.azf_nodes.get(node_id)
     assert current_node is not None, f"Node ID {node_id} not found"
+    assert cur_node_id is not None, f"AZF Node ID {node_id} not found"
+
+    cur_node_id = cur_node_id.node_id
 
     await websocket.send_json(
         {
@@ -452,12 +457,36 @@ async def optimize_molecule_retro(
         node = Node(
             f"node_{num_nodes+i}", smiles, smiles, "Discovered", level, current_node.id
         )
-        nodes.append(node)
         context.node_ids[node.id] = node
-        edges.append(Edge(f"edge_{node_id}_{node.id}", node_id, node.id, "complete"))
+
+        # Find paths for the leaf nodes
+        routes, planner = run_retro_planner(config_file, smiles)
+
+        if not routes:
+            logger.warning(f"No routes found for {smiles}. Skipping...")
+            continue
+
+        logger.info(f"Found {len(routes)} routes for {smiles}.")
+
+        context.node_id_to_planner[node.id] = planner
+        planner.last_route_used = 0
+
+        reaction_path = ReactionPath(
+            route=routes[0],
+            cur_num_nodes=num_nodes,
+            root_parent_node_id=cur_node_id,
+        )
+        child_nodes, child_edges = generate_tree_structure(
+            reaction_path.nodes, context, start_level=level
+        )
+
+        # Stream child nodes and edges
+        nodes.extend(child_nodes)
+        edges.extend(child_edges)
+
+        num_nodes = reaction_path.num_nodes
 
     calculate_positions(nodes, context.nodes_per_level[level])
-    context.nodes_per_level[level] += len(nodes)
 
     for node, edge in zip(nodes, edges):
         await websocket.send_json({"type": "node", "node": node.json()})
