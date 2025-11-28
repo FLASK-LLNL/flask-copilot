@@ -10,6 +10,7 @@ COPY charge-backend /app/charge-backend
 
 ARG AZF_PATH=./aizynth
 COPY ${AZF_PATH}/. /aizynth
+COPY ${AZF_PATH}/flask_copilot_active_tool_servers.json /app/flask_copilot_active_tool_servers.json
 
 RUN . $HOME/.nvm/nvm.sh && \
     npm install -g npm@latest && \
