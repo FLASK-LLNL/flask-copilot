@@ -375,6 +375,7 @@ class ActionManager:
         task = Task(
             system_prompt=f"You are a helpful chemical assistant who answers in concise but factual responses. Answer the following query about the molecule `{node.smiles}`.",
             user_prompt=data["query"],
+            server_urls=list_server_urls(),
         )
 
         # First try finding the parent
@@ -416,7 +417,7 @@ class ActionManager:
         task = Task(
             system_prompt="You are a helpful chemical assistant who answers in concise but factual responses. Answer the following query about the reaction.",
             user_prompt=data["query"],
-            server_urls= list_server_urls()
+            server_urls=list_server_urls(),
         )
 
         node = self.retro_synth_context.node_ids[data["nodeId"]]
