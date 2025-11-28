@@ -436,6 +436,7 @@ class ActionManager:
 
         async def run_and_report():
             result = await agent.run()
+            await self.experiment.add_to_context(agent, task, result)
             # Report answer
             await self._send_processing_message(result, source="Agent")
             await self.websocket.send_json({"type": "complete"})
