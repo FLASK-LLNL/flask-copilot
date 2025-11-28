@@ -395,6 +395,7 @@ class ActionManager:
                 task=task,
                 callback=CallbackHandler(self.websocket),
             )
+            self.retro_synth_context.node_id_to_charge_client[data["nodeId"]] = agent
         else:
             agent.task = task
 
@@ -428,6 +429,7 @@ class ActionManager:
                 task=task,
                 callback=CallbackHandler(self.websocket),
             )
+            self.retro_synth_context.node_id_to_charge_client[data["nodeId"]] = agent
         else:
             agent = self.retro_synth_context.node_id_to_charge_client[data["nodeId"]]
             agent.task = task
@@ -472,6 +474,7 @@ class ActionManager:
                     task=task,
                     callback=CallbackHandler(self.websocket),
                 )
+                self.retro_synth_context.node_id_to_charge_client[parent] = agent
         else:
             await self._send_processing_message(f"Molecule `{node.smiles}` has no parent reaction to query.")
             await self.websocket.send_json({"type": "complete"})
