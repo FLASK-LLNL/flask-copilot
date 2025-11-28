@@ -416,6 +416,7 @@ class ActionManager:
         task = Task(
             system_prompt="You are a helpful chemical assistant who answers in concise but factual responses. Answer the following query about the reaction.",
             user_prompt=data["query"],
+            server_urls= list_server_urls()
         )
 
         node = self.retro_synth_context.node_ids[data["nodeId"]]
@@ -454,6 +455,7 @@ class ActionManager:
         task = Task(
             system_prompt=f"You are a helpful chemical assistant who answers in concise but factual responses. Answer the following query about the reaction in the context of reactant `{node.smiles}`.",
             user_prompt=data["query"],
+            server_urls=list_server_urls()
         )
 
         agent = None
@@ -485,6 +487,7 @@ class ActionManager:
 
         async def run_and_report():
             result = await agent.run()
+            await self.experiment.add_to_context(agent, task, result)
             # Report answer
             await self._send_processing_message(result, source="Agent")
             await self.websocket.send_json({"type": "complete"})
