@@ -58,7 +58,9 @@ class TaskManager:
 
         if type(exc) == chargeConnectionError:
             # logger.error(f"Charge connection error in background task: {exc}")
-            self.clogger.info(f"Unsupported model was selected.  \n Server encountered error: {exc}")
+            self.clogger.info(
+                f"Unsupported model was selected.  \n Server encountered error: {exc}"
+            )
 
         # Send a stopped message with error details to the websocket so the UI can react
         try:
@@ -134,7 +136,9 @@ class ActionManager:
         logger.info("Save state action received")
 
         experiment_context = await self.experiment.save_state()
-        await self.websocket.send_json({"type": "save-context-response", "experimentContext": experiment_context})
+        await self.websocket.send_json(
+            {"type": "save-context-response", "experimentContext": experiment_context}
+        )
 
     async def handle_load_state(self, data, *args, **kwargs) -> None:
         """Handle load state action."""
@@ -150,22 +154,69 @@ class ActionManager:
         self.task_manager.clogger.info("Start Optimization action received")
         logger.info(f"Data: {data}")
 
+        # Validate required field
+        if "propertyType" not in data:
+            error_msg = "Missing required field 'propertyType' for optimization problem"
+            logger.error(error_msg)
+            await self.websocket.send_json(
+                {
+                    "type": "response",
+                    "message": {
+                        "source": "System",
+                        "message": f"Error: {error_msg}",
+                    },
+                }
+            )
+            await self.websocket.send_json({"type": "complete"})
+            return
+
+        property_type = data["propertyType"]
+
         # Property attributes for prompting
-        if data["propertyType"] == "custom":
+        if property_type == "custom":
+            # Validate custom property fields
+            if not data.get("customPropertyName") or not data.get("customPropertyDesc"):
+                error_msg = "Custom property requires both 'customPropertyName' and 'customPropertyDesc'"
+                logger.error(error_msg)
+                await self.websocket.send_json(
+                    {
+                        "type": "response",
+                        "message": {
+                            "source": "System",
+                            "message": f"Error: {error_msg}",
+                        },
+                    }
+                )
+                await self.websocket.send_json({"type": "complete"})
+                return
+
             property_attributes = (
                 data["customPropertyName"],
                 data["customPropertyDesc"],
                 "greater" if data["customPropertyAscending"] else "less",
             )
         else:
-            property_name = data["propertyType"]
+            property_name = property_type
             DEFAULT_PROPERTIES = {
                 "density": ("density", "crystalline density (g/cm^3)", "greater"),
                 "hof": ("heat of formation", "Heat of formation (kcal/mol)", "greater"),
                 "bandgap": ("band gap", "HOMO-LUMO energy gap (Hartree)", "greater"),
             }
             if property_name not in DEFAULT_PROPERTIES:
-                logger.error(f"Property {property_name} not found in default properties")
+                error_msg = (
+                    f"Property '{property_name}' not found in default properties"
+                )
+                logger.error(error_msg)
+                await self.websocket.send_json(
+                    {
+                        "type": "response",
+                        "message": {
+                            "source": "System",
+                            "message": f"Error: {error_msg}",
+                        },
+                    }
+                )
+                await self.websocket.send_json({"type": "complete"})
                 return
             property_attributes = DEFAULT_PROPERTIES[property_name]
 
@@ -241,7 +292,9 @@ class ActionManager:
         """Handle optimize-from action."""
         prompt = data.get("query")
         if prompt:
-            await self._send_processing_message(f"Processing optimization query: {prompt} for node {data['nodeId']}")
+            await self._send_processing_message(
+                f"Processing optimization query: {prompt} for node {data['nodeId']}"
+            )
 
         logger.info("Optimize from action received")
         logger.info(f"Data: {data}")
@@ -251,13 +304,17 @@ class ActionManager:
         """Handle recompute-reaction action."""
         prompt = data.get("query")
         if prompt:
-            await self._send_processing_message(f"Processing reaction query: {prompt} for node {data['nodeId']}")
+            await self._send_processing_message(
+                f"Processing reaction query: {prompt} for node {data['nodeId']}"
+            )
 
         logger.info("Recompute reaction action received")
         logger.info(f"Data: {data}")
         await self.websocket.send_json({"type": "complete"})
 
-    async def _send_processing_message(self, message: str, source: str | None = None, **kwargs) -> None:
+    async def _send_processing_message(
+        self, message: str, source: str | None = None, **kwargs
+    ) -> None:
         """Send a processing message to the client."""
         await self.websocket.send_json(
             {
@@ -318,7 +375,9 @@ class ActionManager:
         await self.handle_reset()
         try:
             logger.info(f"Experiment is reset with model {model} and backend {backend}")
-            autogen_pool = AutoGenPool(model=model, backend=backend, api_key=api_key, base_url=base_url)
+            autogen_pool = AutoGenPool(
+                model=model, backend=backend, api_key=api_key, base_url=base_url
+            )
             # Set up an experiment class for current endpoint
             self.experiment = AutoGenExperiment(task=None, agent_pool=autogen_pool)
 
@@ -332,7 +391,9 @@ class ActionManager:
                 }
             )
         except ValueError as e:
-            logger.error(f"Orchestrator Profile Error: Unable to restart experiment: {e}")
+            logger.error(
+                f"Orchestrator Profile Error: Unable to restart experiment: {e}"
+            )
             backend, model, base_url = await self.report_orchestrator_config()
             await self.websocket.send_json(
                 {
@@ -370,7 +431,9 @@ class ActionManager:
         """Handle a query on the given molecule. First try to ask about the molecule as a reactant. If that is not available, ask about it in the context of it being a product."""
         assert self.retro_synth_context is not None
 
-        await self._send_processing_message(f"Processing molecule query: {data['query']} for node {data['nodeId']}")
+        await self._send_processing_message(
+            f"Processing molecule query: {data['query']} for node {data['nodeId']}"
+        )
         node = self.retro_synth_context.node_ids[data["nodeId"]]
 
         task = Task(
@@ -388,7 +451,10 @@ class ActionManager:
                 agent = self.retro_synth_context.node_id_to_charge_client[parent]
 
         # If we could not find an agent, try as a product
-        if agent is None and data["nodeId"] in self.retro_synth_context.node_id_to_charge_client:
+        if (
+            agent is None
+            and data["nodeId"] in self.retro_synth_context.node_id_to_charge_client
+        ):
             agent = self.retro_synth_context.node_id_to_charge_client[data["nodeId"]]
 
         # Otherwise, use the full experiment context
@@ -451,7 +517,9 @@ class ActionManager:
         """Handle a query on the reaction (from nodeId to its product)."""
         assert self.retro_synth_context is not None
 
-        await self._send_processing_message(f"Processing reaction query: {data['query']} for node {data['nodeId']} (as reactant)")
+        await self._send_processing_message(
+            f"Processing reaction query: {data['query']} for node {data['nodeId']} (as reactant)"
+        )
 
         node = self.retro_synth_context.node_ids[data["nodeId"]]
         task = Task(
