@@ -147,7 +147,18 @@ async def generate_lead_molecule(
 
     canonical_smiles = lead_molecule_smiles
     current_best_smiles = lead_molecule_smiles  # Track the best molecule
-    current_best_value = lead_molecule_data["density"]  # Track the best property value
+
+    # Initialize best value based on the actual property being optimized
+    if property == "density":
+        current_best_value = lead_molecule_data["density"]
+    elif property == "band gap" or property == "bandgap":
+        current_best_value = get_bandgap(lead_molecule_smiles)
+    elif property == "heat of formation" or property == "hof":
+        current_best_value = 0.0  # TODO: Add heat of formation calculation
+    else:
+        # For custom properties, we need to extract from the lead molecule
+        # For now, assume it's available in lead_molecule_data or default to 0
+        current_best_value = lead_molecule_data.get(property, 0.0)
     callback = CallbackHandler(websocket)
     lmo_task = LeadMoleculeOptimization(
         lead_molecule=lead_molecule_smiles,
@@ -217,13 +228,27 @@ async def generate_lead_molecule(
                         mol_data.append(processed_mol)
                         lmo_helper_funcs.save_list_to_json_file(data=mol_data, file_path=mol_file_path)
                         logger.info(f"New molecule added: {canonical_smiles}")
+                        # lmo_helper_funcs.save_list_to_json_file(
+                        #     data=mol_data, file_path=mol_file_path
+                        # )
+                        # # Get the actual property value for comparison
+                        # if property == "density":
+                        #     property_value = densities
+                        # elif property == "band gap" or property == "bandgap":
+                        #     property_value = get_bandgap(canonical_smiles)
+                        # elif property == "heat of formation" or property == "hof":
+                        #     property_value = 0.0  # TODO: Add heat of formation calculation
+                        # else:
+                        #     property_value = processed_mol.get(property, 0.0)
+
+                        # clogger.info(f"New molecule added: {canonical_smiles} with {property}={property_value}")
                         # Check if this is better than current best
-                        if is_better(densities, current_best_value):
+                        if is_better(property_value, current_best_value):
                             current_best_smiles = canonical_smiles
-                            current_best_value = densities
+                            current_best_value = property_value
                             iteration_found_better = True
-                            logger.info(
-                                f"New best molecule found: {canonical_smiles} with {property}={densities}"
+                            clogger.info(
+                                f"New best molecule found: {canonical_smiles} with {property}={property_value}"
                             )
 
                         node_id += 1
@@ -257,13 +282,13 @@ async def generate_lead_molecule(
                         await websocket.send_json({"type": "node", "node": node.json()})
 
                     else:
-                        logger.info(f"Duplicate molecule found: {canonical_smiles}")
+                        clogger.info(f"Duplicate molecule found: {canonical_smiles}")
 
                 # If we found molecules in this iteration, prepare for next iteration
                 if len(generated_smiles_list) > 0:
                     # Break out of max_iterations loop if we found a better molecule
                     if iteration_found_better:
-                        logger.info(
+                        clogger.info(
                             f"Found better molecule in iteration {iteration}, moving to next depth level"
                         )
                         break

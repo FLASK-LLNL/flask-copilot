@@ -10,6 +10,7 @@ from charge.clients.autogen import AutoGenAgent
 import charge.servers.AiZynthTools as aizynth_funcs
 from charge.servers import SMILES_utils
 from charge.servers.molecular_property_utils import get_density
+from callback_logger import CallbackLogger
 
 
 @dataclass
@@ -93,6 +94,7 @@ class CallbackHandler:
     def __init__(self, websocket: WebSocket, name: Optional[str] = None):
         self.websocket = websocket
         self.name = name
+        self.clogger = CallbackLogger(websocket)
 
     async def send(self, assistant_message):
         send = self.websocket.send_json
@@ -135,15 +137,15 @@ class CallbackHandler:
             for result in assistant_message.content:
                 if result.is_error:
                     message = f"[{source}] Function {result.name} errored with output: {result.content}"
-                    logger.error(message)
+                    self.clogger.error(message)
                 else:
                     message = (
                         f"[{source}] Function {result.name} returned: {result.content}"
                     )
-                    logger.info(message)
+                    self.clogger.info(message)
         else:
             message = f"[{source}] Model: {assistant_message.message.content}"
-            logger.info(message)
+            self.clogger.info(message)
 
     def __call__(self, assistant_message):
         asyncio.create_task(self.send(assistant_message))
