@@ -150,7 +150,7 @@ class ActionManager:
             return
         await self.experiment.load_state(experiment_context)
 
-    async def _handle_optimization(self, data: dict) -> None:
+    async def _handle_optimization(self, data: dict, initial_level: int = 0, initial_node_id: int = 0, initial_x_position: int = 50) -> None:
         """Handle optimization problem type."""
         self.task_manager.clogger.info("Start Optimization action received")
         logger.info(f"Data: {data}")
@@ -231,7 +231,10 @@ class ActionManager:
             list_server_urls(),
             self.task_manager.websocket,
             *property_attributes,
-            data.get("custom_prompt", None),
+            data.get("query", None),
+            initial_level,
+            initial_node_id,
+            initial_x_position,
         )
 
         await self.task_manager.run_task(run_func())
@@ -296,10 +299,21 @@ class ActionManager:
             await self._send_processing_message(
                 f"Processing optimization query: {prompt} for node {data['nodeId']}"
             )
+        else:
+            await self._send_processing_message(
+                f"Processing optimization refinement for node {data['nodeId']}"
+            )
 
-        logger.info("Optimize from action received")
-        logger.info(f"Data: {data}")
-        # TODO: Implement optimization logic
+        node: str = data["nodeId"]
+        if '_' in node:
+            node = node[node.rfind("_") + 1:]
+        node_id = int(node)
+        # Level is always equal to node ID for now.
+        # TODO: Keep LMO context with nodes
+        level = node_id
+        xpos = data["xpos"]
+
+        await self._handle_optimization(data, initial_level=level, initial_node_id=node_id, initial_x_position=xpos)
 
     async def handle_recompute_reaction(self, data: dict) -> None:
         """Handle recompute-reaction action."""

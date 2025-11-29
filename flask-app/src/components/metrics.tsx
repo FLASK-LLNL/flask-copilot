@@ -12,6 +12,15 @@ const metricDefinitions: MetricDefinitions = {
         color: '#EC4899',
         calculate: (nodes: TreeNode[]) => nodes.reduce((sum, node) => sum + (node.cost || 0), 0)
     },
+    sascore: { 
+        label: 'Synthesizability Score', 
+        color: '#48adff',
+        calculate: (nodes: TreeNode[]) => {
+            // Get the lowest SA score among all nodes
+            const scores = nodes.map(n => n.sascore || 0);
+            return scores.length > 0 ? Math.min(...scores) : 0;
+        }
+    },
     bandgap: { 
         label: 'Band Gap (eV)', 
         color: '#F59E0B',
@@ -48,6 +57,7 @@ export const useMetricsDashboardState = (): MetricsDashboardState => {
     const [visibleMetrics, setVisibleMetrics] = useState<VisibleMetrics>({
         cost: true,
         bandgap: false,
+        sascore: false,
         density: false,
         yield: false,
     });

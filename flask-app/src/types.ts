@@ -14,6 +14,7 @@ export interface TreeNode {
   bandgap?: number | null;
   density?: number | null;
   yield?: number | null;
+  sascore?: number | null;
   x: number;
   y: number;
   highlight?: keyof typeof NODE_STYLES;
@@ -76,6 +77,7 @@ export interface WebSocketMessageToServer {
   customPropertyName?: string;
   customPropertyDesc?: string;
   customPropertyAscending?: boolean;
+  xpos?: number;
 
   // Custom problem
   systemPrompt?: string;
@@ -111,6 +113,7 @@ export interface MetricDefinitions {
 export interface VisibleMetrics {
   cost: boolean;
   bandgap: boolean;
+  sascore: boolean;
   density: boolean;
   yield: boolean;
 }
