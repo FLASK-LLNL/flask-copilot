@@ -20,7 +20,11 @@ const metricDefinitions: MetricDefinitions = {
     density: { 
         label: 'Molecular Density (g/cm³)', 
         color: '#10B981',
-        calculate: (nodes: TreeNode[]) => nodes[nodes.length-1]?.density || 0
+        calculate: (nodes: TreeNode[]) => {
+            // Get the highest density among all nodes
+            const densities = nodes.map(n => n.density || 0).filter(d => d > 0);
+            return densities.length > 0 ? Math.max(...densities) : 0;
+        }
     },
     /*yield: { 
         label: 'Yield (%)', 
@@ -117,7 +121,7 @@ export const MetricsDashboard: React.FC<MetricsDashboardProps> = ({treeNodes, me
                 return [...prev, { ...metrics }];
             });
         }
-    }, [treeNodes.length]);
+    }, [treeNodes]);
 
     return (
         <div className="mt-6 bg-white/10 backdrop-blur-lg rounded-2xl shadow-2xl p-6 border border-white/20">

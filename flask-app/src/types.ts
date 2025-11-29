@@ -10,10 +10,10 @@ export interface TreeNode {
   hoverInfo: string;
   level: number;
   parentId: string | null;
-  cost?: number;
-  bandgap?: number;
-  density?: number;
-  yield?: number;
+  cost?: number | null;
+  bandgap?: number | null;
+  density?: number | null;
+  yield?: number | null;
   x: number;
   y: number;
   highlight?: keyof typeof NODE_STYLES;
