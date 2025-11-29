@@ -146,6 +146,9 @@ async def generate_lead_molecule(
     )
 
     canonical_smiles = lead_molecule_smiles
+    current_best_smiles = lead_molecule_smiles  # Track the best molecule
+    current_best_value = lead_molecule_data["density"]  # Track the best property value
+    callback = CallbackHandler(websocket)
     callback = CallbackHandler(websocket)
     lmo_task = LeadMoleculeOptimization(
         lead_molecule=lead_molecule_smiles,
@@ -162,12 +165,16 @@ async def generate_lead_molecule(
     generated_smiles_list = []
     generated_densities = []
 
+    # Determine comparison function based on optimization direction
+    is_better = (lambda new, old: new > old) if condition == "greater" else (lambda new, old: new < old)
+
     for i in range(depth):
         logger.info(f"Iteration {i}")
 
         # Generate new molecule
 
         iteration = 0
+        iteration_found_better = False
         while iteration < max_iterations:
             try:
                 iteration += 1
@@ -207,6 +214,13 @@ async def generate_lead_molecule(
                             data=mol_data, file_path=mol_file_path
                         )
                         logger.info(f"New molecule added: {canonical_smiles}")
+                        # Check if this is better than current best
+                        if is_better(densities, current_best_value):
+                            current_best_smiles = canonical_smiles
+                            current_best_value = densities
+                            iteration_found_better = True
+                            logger.info(f"New best molecule found: {canonical_smiles} with {property}={densities}")
+
                         node_id += 1
                         mol_hov = MOLECULE_HOVER_TEMPLATE.format(
                             smiles=canonical_smiles,
@@ -224,6 +238,8 @@ async def generate_lead_molecule(
                             yield_=None,
                             level=i + 1,
                             cost=get_price(canonical_smiles),
+                            # Highlight if this is the new best
+                            highlight="yellow" if canonical_smiles == current_best_smiles else "normal",
                             # Not sure what to put here
                             hoverInfo=mol_hov,
                             x=150 + node_id * 300,
@@ -235,8 +251,13 @@ async def generate_lead_molecule(
                     else:
                         logger.info(f"Duplicate molecule found: {canonical_smiles}")
 
-                    # Continue the while loop to try generating again
+                # If we found molecules in this iteration, prepare for next iteration        # Continue the while loop to try generating again
                 if len(generated_smiles_list) > 0:
+                    # Break out of max_iterations loop if we found a better molecule
+                    if iteration_found_better:
+                        logger.info(f"Found better molecule in iteration {iteration}, moving to next depth level")
+                        break
+
                     formatted_refine_prompt = FURTHER_REFINE_PROMPT.format(
                         previous_values=", ".join(map(str, generated_densities)),
                         previous_smiles=", ".join(generated_smiles_list),
@@ -253,8 +274,10 @@ async def generate_lead_molecule(
                         else formatted_refine_prompt
                     )
 
+                    # Use the BEST molecule found so far as the lead molecule
                     lmo_task = LeadMoleculeOptimization(
-                        lead_molecule=lead_molecule_smiles,
+                        lead_molecule=current_best_smiles,  # ← FIXED: Use best molecule!
+#                        lead_molecule=lead_molecule_smiles,
                         user_prompt=formatted_refine_prompt + "\n",
                         server_urls=available_tools,
                     )
@@ -267,6 +290,8 @@ async def generate_lead_molecule(
                     experiment.add_task(lmo_task)
                 else:
                     logger.info("No new molecules generated in this iteration.")
+                    # Re-use the same task but with current best molecule
+                    lmo_task.lead_molecule = current_best_smiles
                     # Re-use the same task
                     experiment.add_task(lmo_task)
                     parent_id = node_id
@@ -289,8 +314,31 @@ async def generate_lead_molecule(
         if i == depth - 1:
             break
 
+        # Send progress update about current best
+        await websocket.send_json(
+            {
+                "type": "response",
+                "message": {
+                    "source": "System",
+                    "message": f"Iteration {i+1}/{depth} complete. Best molecule so far: {current_best_smiles} with {property}={current_best_value:.3f}",
+                    "smiles": current_best_smiles,
+                },
+            }
+        )
         # TODO: Compute here!!!
         await asyncio.sleep(0.8)
+    # Final summary
+    await websocket.send_json(
+        {
+            "type": "response",
+            "message": {
+                "source": "System",
+                "message": f"Optimization complete! Best molecule: {current_best_smiles} with {property}={current_best_value:.3f}",
+                "smiles": current_best_smiles,
+            },
+        }
+    )
+
     edge_data = Edge(
         id=f"edge_{0}_{1}",
         fromNode=f"node_{0}",
