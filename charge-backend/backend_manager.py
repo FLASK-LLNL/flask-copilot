@@ -1,6 +1,7 @@
 from typing import Optional, Tuple
 from fastapi import WebSocket
 import asyncio
+import os
 from loguru import logger
 from callback_logger import CallbackLogger
 from concurrent.futures import ProcessPoolExecutor
@@ -373,6 +374,14 @@ class ActionManager:
         base_url = data["customUrl"] if data["customUrl"] else None
         api_key = data["apiKey"] if data["apiKey"] else None
         await self.handle_reset()
+
+        # Default to server defaults
+        if backend == os.getenv("FLASK_ORCHESTRATOR_BACKEND", None):
+            if not api_key:
+                api_key = os.getenv("FLASK_ORCHESTRATOR_API_KEY", None)
+            if not base_url:
+                base_url = os.getenv("FLASK_ORCHESTRATOR_URL", None)
+
         try:
             logger.info(f"Experiment is reset with model {model} and backend {backend}")
             autogen_pool = AutoGenPool(
