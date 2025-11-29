@@ -76,6 +76,7 @@ export interface WebSocketMessageToServer {
   customPropertyName?: string;
   customPropertyDesc?: string;
   customPropertyAscending?: boolean;
+  xpos?: number;
 
   // Custom problem
   systemPrompt?: string;
