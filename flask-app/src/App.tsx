@@ -27,7 +27,6 @@ const ChemistryTool: React.FC = () => {
   const [propertyType, setPropertyType] = useState<string>('density');
   const [systemPrompt, setSystemPrompt] = useState<string>('');
   const [problemPrompt, setProblemPrompt] = useState<string>('');
-  const [promptsModified, setPromptsModified] = useState<boolean>(false);
   const [editPromptsModal, setEditPromptsModal] = useState<boolean>(false);
   const [editPropertyModal, setEditPropertyModal] = useState<boolean>(false);
   const [customPropertyName, setCustomPropertyName] = useState<string>('');
@@ -186,7 +185,6 @@ const ChemistryTool: React.FC = () => {
     (data.customPropertyName !== undefined) && setCustomPropertyName(data.customPropertyName);
     (data.customPropertyDesc !== undefined) && setCustomPropertyDesc(data.customPropertyDesc);
     (data.customPropertyAscending !== undefined) && setCustomPropertyAscending(data.customPropertyAscending);
-    setPromptsModified(!!(systemPrompt || problemPrompt));
     data.treeNodes && setTreeNodes(data.treeNodes);
     data.edges && setEdges(data.edges);
     data.metricsHistory && metricsDashboardState.setMetricsHistory(data.metricsHistory);
@@ -570,7 +568,6 @@ const ChemistryTool: React.FC = () => {
   const savePrompts = (newSystemPrompt: string, newProblemPrompt: string): void => {
     setSystemPrompt(newSystemPrompt);
     setProblemPrompt(newProblemPrompt);
-    setPromptsModified(!!(newSystemPrompt || newProblemPrompt));
     setEditPromptsModal(false);
   };
 
@@ -584,9 +581,6 @@ const ChemistryTool: React.FC = () => {
   const resetProblemType = (problem_type: string): void => {
     setSystemPrompt('');
     setProblemPrompt('');
-    if (problem_type !== 'custom') {
-      setPromptsModified(false);
-    }
     // Set default metrics
     if (problem_type === 'retrosynthesis') {
       metricsDashboardState.setVisibleMetrics({cost: false, bandgap: false, yield: true, density: false});
@@ -914,7 +908,7 @@ const ChemistryTool: React.FC = () => {
                   <div>
                     <label className="block text-sm font-medium text-purple-200 mb-2">
                       Problem Type
-                        {problemType === "custom" && !promptsModified && (
+                        {problemType === "custom" && (!systemPrompt || !problemPrompt) && (
                           <span className="ml-2 text-amber-400 cursor-help relative group inline-block">
                             ⚠️
                           <div className="absolute bottom-full mb-2 left-1/2 transform -translate-x-1/2 opacity-0 group-hover:opacity-90 transition-opacity pointer-events-none">
