@@ -63,9 +63,27 @@ const ChemistryTool: React.FC = () => {
   const projectData = useProjectData();
   const projectManagement = useProjectManagement(projectData);
 
+  const treeNodesRef = useRef(treeNodes);
+  const edgesRef = useRef(edges);
+  const sidebarStateRef = useRef(sidebarState);
+
   const [showToolSelectionModal, setShowToolSelectionModal] = useState<boolean>(false);
   const [selectedTools, setSelectedTools] = useState<number[]>([]);
   const [availableToolsMap, setAvailableToolsMap] = useState<SelectableTool[]>([]);
+
+  // Update refs whenever state changes
+  useEffect(() => {
+    treeNodesRef.current = treeNodes;
+  }, [treeNodes]);
+
+  useEffect(() => {
+    edgesRef.current = edges;
+  }, [edges]);
+
+  useEffect(() => {
+    sidebarStateRef.current = sidebarState;
+  }, [sidebarState]);
+
 
   // Load initial settings from localStorage
   const getInitialSettings = () => {
@@ -497,19 +515,19 @@ const ChemistryTool: React.FC = () => {
             customPropertyName,
             customPropertyDesc,
             customPropertyAscending,
-            treeNodes,
-            edges,
+            treeNodes: treeNodesRef.current,
+            edges: edgesRef.current,
             metricsHistory: metricsDashboardState.metricsHistory,
             visibleMetrics: metricsDashboardState.visibleMetrics,
             graphState,
             autoZoom,
-            sidebarState
+            sidebarState: sidebarStateRef.current
           };
         }
       }
       throw "No experiment found";
     };
-  }, [smiles, problemType, graphState, sidebarState, treeNodes, edges, metricsDashboardState, autoZoom, 
+  }, [smiles, problemType, graphState, metricsDashboardState, autoZoom,
       systemPrompt, problemPrompt, propertyType, customPropertyName, customPropertyDesc, customPropertyAscending, projectData, projectSidebar]);
 
 
