@@ -115,7 +115,7 @@ export const ReasoningSidebar: React.FC<SidebarProps> = ({messages, rdkitModule,
               </div>
             ) : (
               messages.filter(msg => visibleSources[msg.source]).map((msg, idx) => (
-                <div key={msg.id} className="bg-white/5 rounded-lg p-4 border border-purple-400/30 animate-slideIn opacity-0" style={{ animationDelay: `${idx * 50}ms`, animationFillMode: 'forwards' }}>
+                <div key={`${msg.id}-${idx}`} className="bg-white/5 rounded-lg p-4 border border-purple-400/30 animate-slideIn opacity-0" style={{ animationDelay: `${idx * 50}ms`, animationFillMode: 'forwards' }}>
                   <div className="flex items-center justify-between mb-2">
                     <div className="text-xs text-purple-400">
                       {new Date(msg.timestamp).toLocaleTimeString()}
