@@ -601,11 +601,11 @@ const ChemistryTool: React.FC = () => {
     setProblemPrompt('');
     // Set default metrics
     if (problem_type === 'retrosynthesis') {
-      metricsDashboardState.setVisibleMetrics({cost: false, bandgap: false, yield: true, density: false});
+      metricsDashboardState.setVisibleMetrics({cost: false, bandgap: false, sascore: false, yield: true, density: false});
     } else if (problem_type === 'optimization') {
-      metricsDashboardState.setVisibleMetrics({cost: false, bandgap: true, yield: false, density: true});
+      metricsDashboardState.setVisibleMetrics({cost: false, bandgap: false, sascore: true, yield: false, density: true});
     } else if (problem_type === 'custom') {
-      metricsDashboardState.setVisibleMetrics({cost: false, bandgap: false, yield: false, density: false});
+      metricsDashboardState.setVisibleMetrics({cost: false, bandgap: false, sascore: false, yield: false, density: false});
     }
     setProblemType(problem_type);
   };

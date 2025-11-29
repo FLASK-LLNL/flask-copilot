@@ -14,6 +14,7 @@ export interface TreeNode {
   bandgap?: number | null;
   density?: number | null;
   yield?: number | null;
+  sascore?: number | null;
   x: number;
   y: number;
   highlight?: keyof typeof NODE_STYLES;
@@ -112,6 +113,7 @@ export interface MetricDefinitions {
 export interface VisibleMetrics {
   cost: boolean;
   bandgap: boolean;
+  sascore: boolean;
   density: boolean;
   yield: boolean;
 }

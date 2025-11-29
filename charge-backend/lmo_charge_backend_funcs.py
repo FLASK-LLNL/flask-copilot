@@ -102,8 +102,9 @@ async def generate_lead_molecule(
             smiles=lead_molecule_smiles,
             label=f"{lead_molecule_smiles}",
             # Add property calculations here
-            density=lead_molecule_data["density"],
-            bandgap=get_bandgap(lead_molecule_smiles),
+            density=lead_molecule_data.get("density", None),
+            sascore=lead_molecule_data.get("sascore", None),
+            bandgap=lead_molecule_data.get("bandgap", None),
             hoverInfo=leader_hov,
             level=initial_level,
             x=50,
@@ -232,8 +233,9 @@ async def generate_lead_molecule(
                             smiles=canonical_smiles,
                             label=f"{canonical_smiles}",
                             # Add property calculations here
-                            density=processed_mol["density"],
-                            bandgap=get_bandgap(canonical_smiles),
+                            density=processed_mol.get("density", None),
+                            sascore=processed_mol.get("sascore", None),
+                            bandgap=processed_mol.get("bandgap", None),
                             yield_=None,
                             level=initial_level + i + 1,
                             cost=get_price(canonical_smiles),
