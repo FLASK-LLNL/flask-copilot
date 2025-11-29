@@ -4,7 +4,7 @@ import asyncio
 from loguru import logger
 import sys
 import os
-from pathlib import Path 
+from pathlib import Path
 from charge.experiments.AutoGenExperiment import AutoGenExperiment
 from charge.clients.autogen_utils import chargeConnectionError
 from callback_logger import CallbackLogger
@@ -104,6 +104,8 @@ async def generate_lead_molecule(
         smiles=lead_molecule_smiles,
         label=f"{lead_molecule_smiles}",
         # Add property calculations here
+        density=lead_molecule_data["density"],
+        bandgap=get_bandgap(lead_molecule_smiles),
         hoverInfo=leader_hov,
         level=0,
         x=50,
@@ -114,9 +116,9 @@ async def generate_lead_molecule(
     await websocket.send_json({"type": "node", "node": node.json()})
 
     edge_data = Edge(
-        id=f"edge_{node_id}_{node_id+1}",
+        id=f"edge_{node_id}_{node_id + 1}",
         fromNode=f"node_{node_id}",
-        toNode=f"node_{node_id+1}",
+        toNode=f"node_{node_id + 1}",
         status="computing",
         label="Optimizing",
     )
@@ -167,7 +169,6 @@ async def generate_lead_molecule(
 
         iteration = 0
         while iteration < max_iterations:
-
             try:
                 iteration += 1
 
@@ -236,7 +237,6 @@ async def generate_lead_molecule(
 
                     # Continue the while loop to try generating again
                 if len(generated_smiles_list) > 0:
-
                     formatted_refine_prompt = FURTHER_REFINE_PROMPT.format(
                         previous_values=", ".join(map(str, generated_densities)),
                         previous_smiles=", ".join(generated_smiles_list),
