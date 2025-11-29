@@ -11,7 +11,7 @@ import charge.servers.AiZynthTools as aizynth_funcs
 from charge.servers import SMILES_utils
 from charge.servers.molecular_property_utils import get_density
 
-# TODO: Put this on the top level package and make it reusable
+
 @dataclass
 class Node:
     id: str
@@ -28,6 +28,7 @@ class Node:
     yield_: Optional[float] = None
     highlight: Optional[str] = "normal"
     density: Optional[float] = None
+    sascore: Optional[float] = None
 
     def json(self):
         ret = asdict(self)

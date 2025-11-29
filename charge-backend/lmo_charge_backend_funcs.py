@@ -52,6 +52,9 @@ async def generate_lead_molecule(
     property_description: str = "molecular density (g/cc)",
     condition: str = "greater",
     custom_prompt: Optional[str] = None,
+    initial_level: int = 0,
+    initial_node_id: int = 0,
+    initial_x_position: int = 50,
 ) -> None:
     """Generate a lead molecule and stream its progress.
     Args:
@@ -76,22 +79,16 @@ async def generate_lead_molecule(
     )
 
     parent_id = 0
-    node_id = 0
-    lead_molecule_data = post_process_lmo_smiles(
-        smiles=lead_molecule_smiles, parent_id=parent_id - 1, node_id=node_id
-    )
+    node_id = initial_node_id
+    lead_molecule_data = post_process_lmo_smiles(smiles=lead_molecule_smiles, parent_id=parent_id - 1, node_id=node_id)
 
     # Start the db with the lead molecule
-    lmo_helper_funcs.save_list_to_json_file(
-        data=[lead_molecule_data], file_path=mol_file_path
-    )
+    lmo_helper_funcs.save_list_to_json_file(data=[lead_molecule_data], file_path=mol_file_path)
 
     clogger.info(f"Storing found molecules in {mol_file_path}")
 
     # Run the task in a loop
-    new_molecules = lmo_helper_funcs.get_list_from_json_file(
-        file_path=mol_file_path
-    )  # Start with known molecules
+    new_molecules = lmo_helper_funcs.get_list_from_json_file(file_path=mol_file_path)  # Start with known molecules
 
     leader_hov = MOLECULE_HOVER_TEMPLATE.format(
         smiles=lead_molecule_smiles,
@@ -99,21 +96,23 @@ async def generate_lead_molecule(
         density=lead_molecule_data["density"],
         sascore=lead_molecule_data["sascore"],
     )
-    node = Node(
-        id=f"node_{node_id}",
-        smiles=lead_molecule_smiles,
-        label=f"{lead_molecule_smiles}",
-        # Add property calculations here
-        density=lead_molecule_data["density"],
-        bandgap=get_bandgap(lead_molecule_smiles),
-        hoverInfo=leader_hov,
-        level=0,
-        x=50,
-        y=100,
-    )
-    logger.info(f"Sending root node: {node}")
+    if initial_level == 0:
+        node = Node(
+            id=f"node_{node_id}",
+            smiles=lead_molecule_smiles,
+            label=f"{lead_molecule_smiles}",
+            # Add property calculations here
+            density=lead_molecule_data.get("density", None),
+            sascore=lead_molecule_data.get("sascore", None),
+            bandgap=lead_molecule_data.get("bandgap", None),
+            hoverInfo=leader_hov,
+            level=initial_level,
+            x=50,
+            y=100,
+        )
+        logger.info(f"Sending root node: {node}")
 
-    await websocket.send_json({"type": "node", "node": node.json()})
+        await websocket.send_json({"type": "node", "node": node.json()})
 
     edge_data = Edge(
         id=f"edge_{node_id}_{node_id + 1}",
@@ -132,6 +131,7 @@ async def generate_lead_molecule(
     direction = "higher" if condition == "greater" else "lower"
     ranking = "highest" if condition == "greater" else "lowest"
 
+    # TODO: Use refinement prompt if initial_level != 0 and custom_prompt is None?
     formatted_user_prompt = (
         custom_prompt
         if custom_prompt is not None
@@ -169,6 +169,9 @@ async def generate_lead_molecule(
     is_better = (lambda new, old: new > old) if condition == "greater" else (lambda new, old: new < old)
 
     for i in range(depth):
+        await websocket.send_json(
+            {"type": "response", "message": {"source": "Logger (Info)", "message": f"Iteration {i+1}/{depth}"}}
+        )
         logger.info(f"Iteration {i}")
 
         # Generate new molecule
@@ -189,30 +192,27 @@ async def generate_lead_molecule(
                         "Returning text results without validation first before post-processing."
                     )
                     clogger.info(f"Results: {results}")
+                logger.debug(f"Received: {_}, {results}")
                 results = MoleculeOutputSchema.model_validate_json(results)
-                results = results.as_list()  # Convert to list of strings
-                clogger.info(f"New molecules generated: {results}")
+                reasoning_summary = results.reasoning_summary
+                await websocket.send_json(
+                    {"type": "response", "message": {"source": "Reasoning", "message": reasoning_summary}}
+                )
 
+                results = results.smiles_list
                 logger.info(f"New molecules generated: {results}")
                 for result in results:
-                    processed_mol = post_process_lmo_smiles(
-                        smiles=result, parent_id=parent_id, node_id=node_id
-                    )
+                    processed_mol = post_process_lmo_smiles(smiles=result, parent_id=parent_id, node_id=node_id)
                     canonical_smiles = processed_mol["smiles"]
                     densities = processed_mol["density"]
-                    if (
-                        canonical_smiles not in new_molecules
-                        and canonical_smiles != "Invalid SMILES"
-                    ):
+                    if canonical_smiles not in new_molecules and canonical_smiles != "Invalid SMILES":
                         new_molecules.append(canonical_smiles)
 
                         generated_smiles_list.append(canonical_smiles)
                         generated_densities.append(densities)
 
                         mol_data.append(processed_mol)
-                        lmo_helper_funcs.save_list_to_json_file(
-                            data=mol_data, file_path=mol_file_path
-                        )
+                        lmo_helper_funcs.save_list_to_json_file(data=mol_data, file_path=mol_file_path)
                         logger.info(f"New molecule added: {canonical_smiles}")
                         # Check if this is better than current best
                         if is_better(densities, current_best_value):
@@ -233,16 +233,17 @@ async def generate_lead_molecule(
                             smiles=canonical_smiles,
                             label=f"{canonical_smiles}",
                             # Add property calculations here
-                            density=processed_mol["density"],
-                            bandgap=get_bandgap(canonical_smiles),
+                            density=processed_mol.get("density", None),
+                            sascore=processed_mol.get("sascore", None),
+                            bandgap=processed_mol.get("bandgap", None),
                             yield_=None,
-                            level=i + 1,
+                            level=initial_level + i + 1,
                             cost=get_price(canonical_smiles),
                             # Highlight if this is the new best
                             highlight="yellow" if canonical_smiles == current_best_smiles else "normal",
                             # Not sure what to put here
                             hoverInfo=mol_hov,
-                            x=150 + node_id * 300,
+                            x=initial_x_position + 100 + (node_id - initial_node_id) * 300,
                             y=100,
                         )
 
@@ -268,25 +269,19 @@ async def generate_lead_molecule(
                         ranking=ranking,
                     )
 
-                    formatted_refine_prompt = (
-                        custom_prompt
-                        if custom_prompt is not None
-                        else formatted_refine_prompt
-                    )
+                    formatted_refine_prompt = custom_prompt if custom_prompt is not None else formatted_refine_prompt
 
                     # Use the BEST molecule found so far as the lead molecule
                     lmo_task = LeadMoleculeOptimization(
                         lead_molecule=current_best_smiles,  # ← FIXED: Use best molecule!
-#                        lead_molecule=lead_molecule_smiles,
+                        #                        lead_molecule=lead_molecule_smiles,
                         user_prompt=formatted_refine_prompt + "\n",
                         server_urls=available_tools,
                     )
 
                     if os.getenv("CHARGE_DISABLE_OUTPUT_VALIDATION", "0") == "1":
                         lmo_task.structured_output_schema = None
-                        logger.warning(
-                            "Structure validation disabled for LMOTask output schema."
-                        )
+                        logger.warning("Structure validation disabled for LMOTask output schema.")
                     experiment.add_task(lmo_task)
                 else:
                     logger.info("No new molecules generated in this iteration.")
@@ -340,9 +335,9 @@ async def generate_lead_molecule(
     )
 
     edge_data = Edge(
-        id=f"edge_{0}_{1}",
-        fromNode=f"node_{0}",
-        toNode=f"node_{1}",
+        id=f"edge_{initial_node_id}_{initial_node_id + 1}",
+        fromNode=f"node_{initial_node_id}",
+        toNode=f"node_{initial_node_id + 1}",
         status="complete",
         label="Completed",
     )

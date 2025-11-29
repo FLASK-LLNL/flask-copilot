@@ -1,6 +1,6 @@
 /* eslint-disable react-hooks/exhaustive-deps */
 import React, { useState, useRef, useEffect, useCallback } from 'react';
-import { Loader2, FlaskConical, TestTubeDiagonal, Network, Play, RotateCcw, X, Send, RefreshCw, Sparkles, MessageCircleQuestion } from 'lucide-react';
+import { Loader2, FlaskConical, TestTubeDiagonal, Network, Play, RotateCcw, X, Send, RefreshCw, Sparkles, MessageCircleQuestion, StepForward, MessageSquareShare } from 'lucide-react';
 import 'recharts';
 
 import { WS_SERVER, VERSION } from './config';
@@ -601,11 +601,11 @@ const ChemistryTool: React.FC = () => {
     setProblemPrompt('');
     // Set default metrics
     if (problem_type === 'retrosynthesis') {
-      metricsDashboardState.setVisibleMetrics({cost: false, bandgap: false, yield: true, density: false});
+      metricsDashboardState.setVisibleMetrics({cost: false, bandgap: false, sascore: false, yield: true, density: false});
     } else if (problem_type === 'optimization') {
-      metricsDashboardState.setVisibleMetrics({cost: false, bandgap: true, yield: false, density: true});
+      metricsDashboardState.setVisibleMetrics({cost: false, bandgap: false, sascore: true, yield: false, density: true});
     } else if (problem_type === 'custom') {
-      metricsDashboardState.setVisibleMetrics({cost: false, bandgap: false, yield: false, density: false});
+      metricsDashboardState.setVisibleMetrics({cost: false, bandgap: false, sascore: false, yield: false, density: false});
     }
     setProblemType(problem_type);
   };
@@ -674,12 +674,24 @@ const ChemistryTool: React.FC = () => {
       alert('WebSocket not connected');
       return;
     }
-    console.log(`Custom query for ${customQueryModal?.label}: ${customQueryText}`);
+
+    let propertyDetails = {};
+    if (problemType === "optimization") {
+      propertyDetails = {
+        propertyType,
+        customPropertyName,
+        customPropertyDesc,
+        customPropertyAscending,
+        smiles: customQueryModal?.smiles,
+        xpos: customQueryModal?.x
+      };
+    }
 
     const message: WebSocketMessageToServer = {
       action: customQueryType ?? (problemType === "optimization" ? "optimize-from" : "recompute-reaction"),
       nodeId: customQueryModal?.id,
-      query: customQueryText
+      query: customQueryText,
+      ...propertyDetails
     };
     wsRef.current.send(JSON.stringify(message));
 
@@ -1103,18 +1115,30 @@ const ChemistryTool: React.FC = () => {
             <>
             <button onClick={() => {
               const nodeId = contextMenu.node!.id;
-              // Delete all nodes from this point on
-              setTreeNodes(prev => {
-                return prev.filter(n => n.y <= contextMenu.node!.y);
-              });
-              sendMessageToServer("optimize-from", {nodeId: nodeId});
-            }}  className="w-full px-4 py-2 text-left text-sm text-white hover:bg-purple-600/50 transition-colors flex items-center gap-2">
-            <RotateCcw className="w-4 h-4" />
-            Restart from here
+                // Delete all nodes from this point on
+                setTreeNodes(prev => {
+                  return prev.filter(n => n.x <= contextMenu.node!.x);
+                });
+                sendMessageToServer("optimize-from", {nodeId: nodeId, propertyType, customPropertyName, customPropertyDesc, customPropertyAscending, smiles: contextMenu.node!.smiles, xpos: contextMenu.node!.x});
+                setIsComputing(true);
+              }}  className="w-full px-4 py-2 text-left text-sm text-white hover:bg-purple-600/50 transition-colors flex items-center gap-2">
+              <StepForward className="w-4 h-4" />
+              Refine search from here
+            </button>
+            <button onClick={() => {
+                const nodeId = contextMenu.node!.id;
+                // Delete all nodes from this point on
+                setTreeNodes(prev => {
+                  return prev.filter(n => n.x <= contextMenu.node!.x);
+                });
+                handleCustomQuery(contextMenu.node!, "optimize-from");
+              }}  className="w-full px-4 py-2 text-left text-sm text-white hover:bg-purple-600/50 transition-colors flex items-center gap-2">
+              <MessageSquareShare className="w-4 h-4" />
+              Refine search (with prompt)
             </button>
             <button onClick={() => { createNewRetrosynthesisExperiment(contextMenu.node!.smiles); }}  className="w-full px-4 py-2 text-left text-sm text-white hover:bg-purple-600/50 transition-colors flex items-center gap-2">
-            <FlaskConical className="w-4 h-4" />
-            Plan synthesis pathway
+              <FlaskConical className="w-4 h-4" />
+              Plan synthesis pathway
             </button>
             </>
           )}
