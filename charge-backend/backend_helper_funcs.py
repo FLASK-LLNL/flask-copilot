@@ -217,15 +217,24 @@ async def loop_executor(executor, func, *args, **kwargs):
     return await loop.run_in_executor(executor, func, *args, **kwargs)
 
 
-def post_process_lmo_smiles(smiles: str, parent_id: int, node_id: int) -> Dict:
-    """Post-process LMO SMILES to add properties like density and SAScore."""
+def post_process_lmo_smiles(smiles: str, parent_id: int, node_id: int, tool_properties: Optional[dict] = {}) -> Dict:
+    """
+    Post-process LMO SMILES, preferring tool-calculated properties.
+
+    Args:
+        tool_properties: If provided, properties are taken from here
+                        (avoids recalculation)
+    """
+#    breakpoint()
     canonical_smiles = SMILES_utils.canonicalize_smiles(smiles)
-    density = get_density(canonical_smiles)
-    sa_score = SMILES_utils.get_synthesizability(canonical_smiles)
+    density = tool_properties.get("density", get_density(canonical_smiles))
+    sascore = tool_properties.get("synthesizability", SMILES_utils.get_synthesizability(canonical_smiles))
+    bandgap = tool_properties.get("bandgap", get_bandgap(canonical_smiles))
     return {
         "smiles": canonical_smiles,
         "parent_id": parent_id,
         "node_id": node_id,
         "density": density,
-        "sascore": sa_score,
+        "sascore": sascore,
+        "bandgap": bandgap,
     }

@@ -173,7 +173,7 @@ async def generate_lead_molecule(
     experiment.add_task(lmo_task)
 
     generated_smiles_list = []
-    generated_densities = []
+    generated_properties = []
 
     # Determine comparison function based on optimization direction
     is_better = (
@@ -213,35 +213,27 @@ async def generate_lead_molecule(
                     {"type": "response", "message": {"source": "Reasoning", "message": reasoning_summary}}
                 )
 
-                results = results.smiles_list
-                logger.info(f"New molecules generated: {results}")
-                for result in results:
-                    processed_mol = post_process_lmo_smiles(smiles=result, parent_id=parent_id, node_id=node_id)
+                optimized_property = results.property_name
+                results = results.as_list()
+                for smiles, property_result in results:
+                    # Extract properties from tool output if available
+                    processed_mol = post_process_lmo_smiles(
+                        smiles=smiles,
+                        parent_id=parent_id,
+                        node_id=node_id,
+                        tool_properties = {optimized_property: property_result}
+                    )
                     canonical_smiles = processed_mol["smiles"]
-                    densities = processed_mol["density"]
                     if canonical_smiles not in new_molecules and canonical_smiles != "Invalid SMILES":
                         new_molecules.append(canonical_smiles)
 
                         generated_smiles_list.append(canonical_smiles)
-                        generated_densities.append(densities)
+                        property_value = processed_mol.get(optimized_property, 0.0)
+                        generated_properties.append(property_value)
 
                         mol_data.append(processed_mol)
                         lmo_helper_funcs.save_list_to_json_file(data=mol_data, file_path=mol_file_path)
                         logger.info(f"New molecule added: {canonical_smiles}")
-                        # lmo_helper_funcs.save_list_to_json_file(
-                        #     data=mol_data, file_path=mol_file_path
-                        # )
-                        # # Get the actual property value for comparison
-                        # if property == "density":
-                        #     property_value = densities
-                        # elif property == "band gap" or property == "bandgap":
-                        #     property_value = get_bandgap(canonical_smiles)
-                        # elif property == "heat of formation" or property == "hof":
-                        #     property_value = 0.0  # TODO: Add heat of formation calculation
-                        # else:
-                        #     property_value = processed_mol.get(property, 0.0)
-
-                        # clogger.info(f"New molecule added: {canonical_smiles} with {property}={property_value}")
                         # Check if this is better than current best
                         if is_better(property_value, current_best_value):
                             current_best_smiles = canonical_smiles
@@ -254,7 +246,7 @@ async def generate_lead_molecule(
                         node_id += 1
                         mol_hov = MOLECULE_HOVER_TEMPLATE.format(
                             smiles=canonical_smiles,
-                            bandgap=get_bandgap(canonical_smiles),
+                            bandgap=processed_mol["bandgap"],
                             density=processed_mol["density"],
                             sascore=processed_mol["sascore"],
                         )
@@ -294,7 +286,7 @@ async def generate_lead_molecule(
                         break
 
                     formatted_refine_prompt = FURTHER_REFINE_PROMPT.format(
-                        previous_values=", ".join(map(str, generated_densities)),
+                        previous_values=", ".join(map(str, generated_properties)),
                         previous_smiles=", ".join(generated_smiles_list),
                         property=property,
                         property_description=property_description,
@@ -307,8 +299,7 @@ async def generate_lead_molecule(
 
                     # Use the BEST molecule found so far as the lead molecule
                     lmo_task = LeadMoleculeOptimization(
-                        lead_molecule=current_best_smiles,  # ← FIXED: Use best molecule!
-                        #                        lead_molecule=lead_molecule_smiles,
+                        lead_molecule=current_best_smiles,
                         user_prompt=formatted_refine_prompt + "\n",
                         server_urls=available_tools,
                     )
