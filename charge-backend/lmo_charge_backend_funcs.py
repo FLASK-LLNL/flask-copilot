@@ -23,7 +23,8 @@ from backend_helper_funcs import (
 )
 
 # TODO: Convert this to a dataclass
-MOLECULE_HOVER_TEMPLATE = """**SMILES:** `{smiles}`\n
+MOLECULE_HOVER_TEMPLATE = """**SMILES:** `{smiles}`
+
 ## Properties
  - **Band Gap:** {bandgap:.2f}
  - **Density:** {density:.3f}
@@ -92,7 +93,7 @@ async def generate_lead_molecule(
 
     leader_hov = MOLECULE_HOVER_TEMPLATE.format(
         smiles=lead_molecule_smiles,
-        bandgap=get_bandgap(lead_molecule_smiles),
+        bandgap=lead_molecule_data["bandgap"],
         density=lead_molecule_data["density"],
         sascore=lead_molecule_data["sascore"],
     )
@@ -147,18 +148,8 @@ async def generate_lead_molecule(
 
     canonical_smiles = lead_molecule_smiles
     current_best_smiles = lead_molecule_smiles  # Track the best molecule
-
     # Initialize best value based on the actual property being optimized
-    if property == "density":
-        current_best_value = lead_molecule_data["density"]
-    elif property == "band gap" or property == "bandgap":
-        current_best_value = get_bandgap(lead_molecule_smiles)
-    elif property == "heat of formation" or property == "hof":
-        current_best_value = 0.0  # TODO: Add heat of formation calculation
-    else:
-        # For custom properties, we need to extract from the lead molecule
-        # For now, assume it's available in lead_molecule_data or default to 0
-        current_best_value = lead_molecule_data.get(property, 0.0)
+    current_best_value = lead_molecule_data.get(property, 0.0)
     callback = CallbackHandler(websocket)
     lmo_task = LeadMoleculeOptimization(
         lead_molecule=lead_molecule_smiles,
@@ -300,6 +291,7 @@ async def generate_lead_molecule(
                     # Use the BEST molecule found so far as the lead molecule
                     lmo_task = LeadMoleculeOptimization(
                         lead_molecule=current_best_smiles,
+                        # This needs to be fixed so that it takes a property name, value, and function for evaluating it
                         user_prompt=formatted_refine_prompt + "\n",
                         server_urls=available_tools,
                     )
