@@ -263,11 +263,17 @@ export const MoleculeGraph: React.FC<MoleculeGraphProps> = ({nodes, edges, ctx, 
                     }}
                     onMouseEnter={(e) => {
                         setHoveredNode(node);
-                        setMousePos({ x: e.clientX, y: e.clientY });
+                        const rect = containerRef.current?.getBoundingClientRect();
+                        if (rect) {
+                            setMousePos({ x: e.clientX - rect.left, y: e.clientY - rect.top });
+                        }
                     }}
                     onMouseMove={(e) => {
                         if (hoveredNode?.id === node.id) {
-                        setMousePos({ x: e.clientX, y: e.clientY });
+                            const rect = containerRef.current?.getBoundingClientRect();
+                            if (rect) {
+                                setMousePos({ x: e.clientX - rect.left, y: e.clientY - rect.top });
+                            }
                         }
                     }}
                     onMouseLeave={() => setHoveredNode(null)}
@@ -304,7 +310,7 @@ export const MoleculeGraph: React.FC<MoleculeGraphProps> = ({nodes, edges, ctx, 
                 </div>
                 )}
             </div>
-            {hoveredNode && !ctx && (
+            {hoveredNode && !ctx?.node && (
                 <div className="fixed z-50 pointer-events-none" style={{ left: `${mousePos.x + 20}px`, top: `${mousePos.y + 20}px`, maxWidth: '400px' }}>
                 <div className="bg-gradient-to-br from-slate-800 to-purple-900 border-2 border-purple-400 rounded-xl shadow-2xl p-4 max-h-96 overflow-y-auto">
                     { /* <div className="text-xs text-purple-400 mb-2">Debug: x={mousePos.x}, y={mousePos.y}</div> */ }
