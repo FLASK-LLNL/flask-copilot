@@ -214,7 +214,6 @@ export const ProjectSidebar: React.FC<ProjectSidebarProps> = ({
     const timestamp = `${month}/${day}/${year} ${hours}:${minutes}`;
     
     const newProjectName = `Project ${timestamp}`;
-    // if (!newProjectName.trim()) return;
     
     // Save before selecting away
     if (onSaveContext()) {
@@ -244,7 +243,6 @@ export const ProjectSidebar: React.FC<ProjectSidebarProps> = ({
       i += 1;
       newExperimentName = `Experiment ${i}`;
     }
-    // if (!newExperimentName.trim()) return;
 
     // Save before selecting away
     if (onSaveContext()) {
@@ -333,10 +331,10 @@ export const ProjectSidebar: React.FC<ProjectSidebarProps> = ({
   if (!isOpen) {
     return (
       <>
-        <div className="w-12 bg-slate-800/50 backdrop-blur-sm border-r border-purple-400/30 flex flex-col items-center py-4">
+        <div className="sidebar sidebar-collapsed">
           <button
             onClick={onToggle}
-            className="p-2 text-purple-300 hover:text-white hover:bg-purple-600/30 rounded-lg transition-all"
+            className="btn-icon"
             title="Open Projects"
           >
             <FolderOpen className="w-5 h-5" />
@@ -345,16 +343,16 @@ export const ProjectSidebar: React.FC<ProjectSidebarProps> = ({
 
         {/* Delete Confirmation Modal (still needs to show when sidebar is collapsed) */}
         {deletingItem && (
-          <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-[60] flex items-center justify-center p-4">
-            <div className="bg-gradient-to-br from-slate-800 to-purple-900 border-2 border-purple-400 rounded-2xl shadow-2xl max-w-md w-full p-6">
+          <div className="modal-overlay z-[60]">
+            <div className="modal-content modal-content-sm">
               <div className="mb-4">
-                <h3 className="text-lg font-bold text-white mb-2">Confirm Delete</h3>
-                <p className="text-purple-200 text-sm">
+                <h3 className="modal-title mb-2">Confirm Delete</h3>
+                <p className="text-secondary text-sm">
                   {deletingItem.type === 'project' 
                     ? `Are you sure you want to delete this project? All ${projects.find(p => p.id === deletingItem.projectId)?.experiments.length || 0} experiments inside will also be deleted.`
                     : 'Are you sure you want to delete this experiment?'}
                 </p>
-                <p className="text-purple-300 text-xs mt-2">This action cannot be undone.</p>
+                <p className="text-tertiary text-xs mt-2">This action cannot be undone.</p>
               </div>
               
               <div className="flex gap-3">
@@ -366,13 +364,13 @@ export const ProjectSidebar: React.FC<ProjectSidebarProps> = ({
                       handleDeleteExperiment(deletingItem.projectId, deletingItem.experimentId!);
                     }
                   }}
-                  className="flex-1 px-4 py-2 bg-red-600 hover:bg-red-500 text-white rounded-lg font-semibold transition-all"
+                  className="btn btn-danger flex-1"
                 >
                   Delete
                 </button>
                 <button
                   onClick={() => setDeletingItem(null)}
-                  className="flex-1 px-4 py-2 bg-white/20 hover:bg-white/30 text-white rounded-lg font-semibold transition-all"
+                  className="btn btn-tertiary flex-1"
                 >
                   Cancel
                 </button>
@@ -387,19 +385,19 @@ export const ProjectSidebar: React.FC<ProjectSidebarProps> = ({
   return (
     <>
     <div 
-      className="bg-slate-800/50 backdrop-blur-sm border-r border-purple-400/30 flex flex-col relative"
+      className="sidebar"
       style={{ width: `${sidebarWidth}px` }}
     >
       {/* Header */}
-      <div className="p-4 border-b border-purple-400/30">
-        <div className="flex items-center justify-between mb-2">
+      <div className="sidebar-header">
+        <div className="flex-between mb-2">
           <div className="flex items-center gap-2">
-            <FolderOpen className="w-5 h-5 text-purple-400" />
-            <h2 className="text-lg font-semibold text-white">Projects</h2>
+            <FolderOpen className="w-5 h-5 text-muted" />
+            <h2 className="heading-3">Projects</h2>
           </div>
           <button
             onClick={onToggle}
-            className="p-1.5 text-purple-300 hover:text-white hover:bg-purple-600/30 rounded-lg transition-all"
+            className="btn-icon"
             title="Collapse"
           >
             <ChevronLeft className="w-5 h-5" />
@@ -408,8 +406,8 @@ export const ProjectSidebar: React.FC<ProjectSidebarProps> = ({
         
         {/* No Project/Experiment Selected Warning */}
         {(!selection.projectId || !selection.experimentId) && (
-          <div className="mt-2 px-3 py-2 bg-amber-500/20 border border-amber-400/50 rounded-lg">
-            <p className="text-amber-200 text-xs">
+          <div className="alert alert-warning mt-2">
+            <p className="text-warning text-xs">
               {!selection.projectId 
                 ? '⚠️ No project selected. A new project will be created when you run.'
                 : '⚠️ No experiment selected. A new experiment will be created when you run.'}
@@ -419,10 +417,10 @@ export const ProjectSidebar: React.FC<ProjectSidebarProps> = ({
       </div>
 
       {/* Content */}
-      <div className="flex-1 overflow-y-auto p-4">
+      <div className="sidebar-content custom-scrollbar">
         {loading ? (
-          <div className="flex items-center justify-center py-8">
-            <Loader2 className="w-6 h-6 text-purple-400 animate-spin" />
+          <div className="flex-center py-8">
+            <Loader2 className="w-6 h-6 text-muted animate-spin" />
           </div>
         ) : (
           <div className="space-y-1">
@@ -430,10 +428,10 @@ export const ProjectSidebar: React.FC<ProjectSidebarProps> = ({
             {projects.map((project) => (
               <div key={project.id} className="space-y-0.5">
                 {/* Project Item */}
-                <div className="flex items-center group relative">
+                <div className="project-item">
                   <button
                     onClick={() => toggleProjectExpanded(project.id)}
-                    className="p-1 text-purple-300 hover:text-white transition-colors flex-shrink-0"
+                    className="btn-icon p-1"
                   >
                     {expandedProjects.has(project.id) ? (
                       <ChevronDown className="w-4 h-4" />
@@ -455,12 +453,12 @@ export const ProjectSidebar: React.FC<ProjectSidebarProps> = ({
                             setEditProjectName('');
                           }
                         }}
-                        className="flex-1 px-2 py-1 bg-white/10 border border-purple-400/50 rounded text-white text-sm focus:outline-none focus:border-purple-400"
+                        className="form-input flex-1 py-1 text-sm"
                         autoFocus
                       />
                       <button
                         onClick={() => handleSaveProjectEdit(project)}
-                        className="px-2 py-1 bg-purple-600 hover:bg-purple-500 text-white text-xs rounded transition-colors"
+                        className="btn btn-secondary btn-sm"
                       >
                         Save
                       </button>
@@ -469,7 +467,7 @@ export const ProjectSidebar: React.FC<ProjectSidebarProps> = ({
                           setEditingProject(null);
                           setEditProjectName('');
                         }}
-                        className="px-2 py-1 bg-white/10 hover:bg-white/20 text-white text-xs rounded transition-colors"
+                        className="btn btn-tertiary btn-sm"
                       >
                         Cancel
                       </button>
@@ -479,29 +477,27 @@ export const ProjectSidebar: React.FC<ProjectSidebarProps> = ({
                       <button
                         disabled={isComputing}
                         onClick={() => handleProjectClick(project)}
-                        className={`flex-1 px-3 py-2 text-left text-sm rounded-lg transition-all flex items-center gap-2 min-w-0 disabled:cursor-not-allowed disabled:hover:bg-white/30 ${
-                          selection.projectId === project.id
-                            ? 'bg-purple-600/50 text-white font-medium'
-                            : 'text-purple-200 hover:text-white hover:bg-purple-600/30'
+                        className={`project-button ${
+                          selection.projectId === project.id ? 'project-button-active' : ''
                         }`}
                       >
                         <FolderOpen className="w-4 h-4 flex-shrink-0" />
                         <span className="truncate flex-1">{project.name}</span>
                         {project.experiments.length > 0 && (
-                          <span className="text-xs text-purple-400 flex-shrink-0">
+                          <span className="text-xs text-muted flex-shrink-0">
                             {project.experiments.length}
                           </span>
                         )}
                       </button>
                       {/* Edit/Delete buttons with background overlay */}
-                      <div className="absolute right-1 flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
-                        <div className="bg-gradient-to-l from-slate-800 via-slate-800 to-transparent pl-8 pr-1 py-1 flex items-center gap-0.5">
+                      <div className="project-actions">
+                        <div className="project-actions-bg">
                           <button
                             onClick={(e) => {
                               e.stopPropagation();
                               handleEditProject(project);
                             }}
-                            className="p-1 text-purple-300 hover:text-white hover:bg-purple-600/50 rounded transition-all backdrop-blur-sm bg-slate-800/80"
+                            className="action-button"
                             title="Edit project"
                           >
                             <Edit2 className="w-3.5 h-3.5" />
@@ -512,7 +508,7 @@ export const ProjectSidebar: React.FC<ProjectSidebarProps> = ({
                               e.stopPropagation();
                               setDeletingItem({ type: 'project', projectId: project.id });
                             }}
-                            className="p-1 text-purple-300 hover:text-red-400 hover:bg-red-500/30 rounded transition-all backdrop-blur-sm bg-slate-800/80 disabled:opacity-50 disabled:cursor-not-allowed"
+                            className="action-button action-button-danger"
                             title="Delete project"
                           >
                             <Trash2 className="w-3.5 h-3.5" />
@@ -528,7 +524,7 @@ export const ProjectSidebar: React.FC<ProjectSidebarProps> = ({
                   <div className="ml-6 space-y-0.5">
                     {/* Experiment Items */}
                     {project.experiments.map((experiment) => (
-                      <div key={experiment.id} className="flex items-center group relative">
+                      <div key={experiment.id} className="project-item">
                         {editingExperiment?.experimentId === experiment.id ? (
                           <div ref={editingExperimentRef} className="flex-1 flex items-center gap-1 px-2 py-1">
                             <input
@@ -542,12 +538,12 @@ export const ProjectSidebar: React.FC<ProjectSidebarProps> = ({
                                   setEditExperimentName('');
                                 }
                               }}
-                              className="flex-1 px-2 py-1 bg-white/10 border border-purple-400/50 rounded text-white text-xs focus:outline-none focus:border-purple-400"
+                              className="form-input flex-1 py-1 text-xs"
                               autoFocus
                             />
                             <button
                               onClick={() => handleSaveExperimentEdit(project.id, experiment)}
-                              className="px-2 py-0.5 bg-purple-600 hover:bg-purple-500 text-white text-xs rounded transition-colors"
+                              className="btn btn-secondary btn-sm text-xs"
                             >
                               Save
                             </button>
@@ -556,7 +552,7 @@ export const ProjectSidebar: React.FC<ProjectSidebarProps> = ({
                                 setEditingExperiment(null);
                                 setEditExperimentName('');
                               }}
-                              className="px-2 py-0.5 bg-white/10 hover:bg-white/20 text-white text-xs rounded transition-colors"
+                              className="btn btn-tertiary btn-sm text-xs"
                             >
                               Cancel
                             </button>
@@ -566,28 +562,26 @@ export const ProjectSidebar: React.FC<ProjectSidebarProps> = ({
                             <button
                               disabled={isComputing}
                               onClick={() => handleExperimentClick(project, experiment)}
-                              className={`flex-1 px-3 py-1.5 text-left text-xs rounded transition-all flex items-center gap-2 min-w-0 ${
-                                selection.experimentId === experiment.id
-                                  ? 'bg-purple-600/50 text-white font-medium'
-                                  : 'text-purple-200 hover:text-white hover:bg-purple-600/20 disabled:cursor-not-allowed disabled:hover:bg-white/0'
+                              className={`experiment-button ${
+                                selection.experimentId === experiment.id ? 'experiment-button-active' : ''
                               }`}
                             >
                               {experiment.isRunning ? (
-                                <Loader2 className="w-3 h-3 flex-shrink-0 animate-spin text-purple-400" />
+                                <Loader2 className="w-3 h-3 flex-shrink-0 animate-spin text-muted" />
                               ) : (
                                 <FileText className="w-3 h-3 flex-shrink-0" />
                               )}
                               <span className="truncate flex-1">{experiment.name}</span>
                             </button>
                             {/* Edit/Delete buttons with background overlay */}
-                            <div className="absolute right-1 flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
-                              <div className="bg-gradient-to-l from-slate-800 via-slate-800 to-transparent pl-6 pr-1 py-0.5 flex items-center gap-0.5">
+                            <div className="project-actions">
+                              <div className="project-actions-bg">
                                 <button
                                   onClick={(e) => {
                                     e.stopPropagation();
                                     handleEditExperiment(project.id, experiment);
                                   }}
-                                  className="p-0.5 text-purple-300 hover:text-white hover:bg-purple-600/50 rounded transition-all backdrop-blur-sm bg-slate-800/80"
+                                  className="action-button"
                                   title="Edit experiment"
                                 >
                                   <Edit2 className="w-3 h-3" />
@@ -598,7 +592,7 @@ export const ProjectSidebar: React.FC<ProjectSidebarProps> = ({
                                     e.stopPropagation();
                                     setDeletingItem({ type: 'experiment', projectId: project.id, experimentId: experiment.id });
                                   }}
-                                  className="p-0.5 text-purple-300 hover:text-red-400 hover:bg-red-500/30 rounded transition-all backdrop-blur-sm bg-slate-800/80 disabled:opacity-50 disabled:cursor-not-allowed"
+                                  className="action-button action-button-danger"
                                   title="Delete experiment"
                                 >
                                   <Trash2 className="w-3 h-3" />
@@ -615,7 +609,7 @@ export const ProjectSidebar: React.FC<ProjectSidebarProps> = ({
                       <button
                         disabled={isComputing}
                         onClick={() => handleCreateExperiment(project.id)}
-                        className="w-full px-3 py-1.5 text-left text-xs text-purple-300 hover:text-white hover:bg-purple-600/20 rounded transition-all flex items-center gap-2 group disabled:cursor-not-allowed disabled:hover:bg-white/30"
+                        className="experiment-button group w-full"
                       >
                         <Plus className="w-3 h-3 group-hover:scale-110 transition-transform" />
                         <span>New Experiment</span>
@@ -634,14 +628,14 @@ export const ProjectSidebar: React.FC<ProjectSidebarProps> = ({
                             }
                           }}
                           placeholder="Experiment name..."
-                          className="w-full px-2 py-1 bg-white/10 border border-purple-400/50 rounded text-white text-xs focus:outline-none focus:border-purple-400"
+                          className="form-input py-1 text-xs"
                           autoFocus
                         />
                         <div className="flex gap-2">
                           <button
                             disabled={isComputing}
                             onClick={() => handleCreateExperiment(project.id)}
-                            className="flex-1 px-2 py-1 bg-purple-600 hover:bg-purple-500 text-white text-xs rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                            className="btn btn-secondary btn-sm flex-1 text-xs"
                           >
                             Create
                           </button>
@@ -650,7 +644,7 @@ export const ProjectSidebar: React.FC<ProjectSidebarProps> = ({
                               setCreatingExperimentFor(null);
                               setNewExperimentName('');
                             }}
-                            className="flex-1 px-2 py-1 bg-white/10 hover:bg-white/20 text-white text-xs rounded transition-colors"
+                            className="btn btn-tertiary btn-sm flex-1 text-xs"
                           >
                             Cancel
                           </button>
@@ -667,7 +661,7 @@ export const ProjectSidebar: React.FC<ProjectSidebarProps> = ({
               <button
                 disabled={isComputing}
                 onClick={handleCreateProject}
-                className="w-full px-3 py-2 text-left text-sm text-purple-300 hover:text-white hover:bg-purple-600/30 rounded-lg transition-all flex items-center gap-2 group disabled:cursor-not-allowed disabled:hover:bg-white/30"
+                className="project-button w-full group"
               >
                 <Plus className="w-4 h-4 group-hover:scale-110 transition-transform" />
                 <span>New Project</span>
@@ -686,14 +680,14 @@ export const ProjectSidebar: React.FC<ProjectSidebarProps> = ({
                     }
                   }}
                   placeholder="Project name..."
-                  className="w-full px-2 py-1 bg-white/10 border border-purple-400/50 rounded text-white text-sm focus:outline-none focus:border-purple-400"
+                  className="form-input py-1 text-sm"
                   autoFocus
                 />
                 <div className="flex gap-2">
                   <button
                     disabled={isComputing}
                     onClick={handleCreateProject}
-                    className="flex-1 px-2 py-1 bg-purple-600 hover:bg-purple-500 text-white text-xs rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                    className="btn btn-secondary btn-sm flex-1 text-xs"
                   >
                     Create
                   </button>
@@ -702,7 +696,7 @@ export const ProjectSidebar: React.FC<ProjectSidebarProps> = ({
                       setCreatingProject(false);
                       setNewProjectName('');
                     }}
-                    className="flex-1 px-2 py-1 bg-white/10 hover:bg-white/20 text-white text-xs rounded transition-colors"
+                    className="btn btn-tertiary btn-sm flex-1 text-xs"
                   >
                     Cancel
                   </button>
@@ -711,7 +705,7 @@ export const ProjectSidebar: React.FC<ProjectSidebarProps> = ({
             )}
 
             {projects.length === 0 && !creatingProject && (
-              <div className="text-center py-8 text-purple-300 text-sm">
+              <div className="empty-state py-8">
                 <p>No projects yet</p>
                 <p className="text-xs mt-1">Click "New Project" to get started</p>
               </div>
@@ -722,9 +716,7 @@ export const ProjectSidebar: React.FC<ProjectSidebarProps> = ({
 
       {/* Resize Handle */}
       <div
-        className={`absolute top-0 right-0 bottom-0 w-2 cursor-col-resize group ${
-          isResizing ? 'bg-purple-400/30' : ''
-        }`}
+        className={`sidebar-resize-handle ${isResizing ? 'bg-secondary' : ''}`}
         onMouseDown={(e) => {
           e.preventDefault();
           setIsResizing(true);
@@ -732,28 +724,28 @@ export const ProjectSidebar: React.FC<ProjectSidebarProps> = ({
         title="Drag to resize (drag left to collapse)"
       >
         {/* Visual indicator line */}
-        <div className="absolute top-0 bottom-0 right-0 w-0.5 bg-purple-400/20 group-hover:bg-purple-400/50 transition-colors" />
+        <div className="absolute top-0 bottom-0 right-0 w-0.5 bg-secondary group-hover:bg-primary transition-colors" />
         {/* Center grip indicator */}
         <div className="absolute top-1/2 right-0.5 -translate-y-1/2 flex flex-col gap-1">
-          <div className="w-0.5 h-1 bg-purple-400/40 group-hover:bg-purple-400/70 transition-colors" />
-          <div className="w-0.5 h-1 bg-purple-400/40 group-hover:bg-purple-400/70 transition-colors" />
-          <div className="w-0.5 h-1 bg-purple-400/40 group-hover:bg-purple-400/70 transition-colors" />
+          <div className="w-0.5 h-1 bg-secondary group-hover:bg-primary transition-colors" />
+          <div className="w-0.5 h-1 bg-secondary group-hover:bg-primary transition-colors" />
+          <div className="w-0.5 h-1 bg-secondary group-hover:bg-primary transition-colors" />
         </div>
       </div>
     </div>
 
     {/* Delete Confirmation Modal */}
     {deletingItem && (
-      <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-[60] flex items-center justify-center p-4">
-        <div className="bg-gradient-to-br from-slate-800 to-purple-900 border-2 border-purple-400 rounded-2xl shadow-2xl max-w-md w-full p-6">
+      <div className="modal-overlay z-[60]">
+        <div className="modal-content modal-content-sm">
           <div className="mb-4">
-            <h3 className="text-lg font-bold text-white mb-2">Confirm Delete</h3>
-            <p className="text-purple-200 text-sm">
+            <h3 className="modal-title mb-2">Confirm Delete</h3>
+            <p className="text-secondary text-sm">
               {deletingItem.type === 'project' 
                 ? `Are you sure you want to delete this project? All ${projects.find(p => p.id === deletingItem.projectId)?.experiments.length || 0} experiments inside will also be deleted.`
                 : 'Are you sure you want to delete this experiment?'}
             </p>
-            <p className="text-purple-300 text-xs mt-2">This action cannot be undone.</p>
+            <p className="text-tertiary text-xs mt-2">This action cannot be undone.</p>
           </div>
           
           <div className="flex gap-3">
@@ -765,13 +757,13 @@ export const ProjectSidebar: React.FC<ProjectSidebarProps> = ({
                   handleDeleteExperiment(deletingItem.projectId, deletingItem.experimentId!);
                 }
               }}
-              className="flex-1 px-4 py-2 bg-red-600 hover:bg-red-500 text-white rounded-lg font-semibold transition-all"
+              className="btn btn-danger flex-1"
             >
               Delete
             </button>
             <button
               onClick={() => setDeletingItem(null)}
-              className="flex-1 px-4 py-2 bg-white/20 hover:bg-white/30 text-white rounded-lg font-semibold transition-all"
+              className="btn btn-tertiary flex-1"
             >
               Cancel
             </button>

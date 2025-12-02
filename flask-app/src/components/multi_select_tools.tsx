@@ -50,37 +50,37 @@ export const MultiSelectToolModal: React.FC<MultiSelectToolModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-      <div className="bg-slate-800 rounded-lg p-6 max-w-md w-full mx-4 border-2 border-purple-400/50">
-        <h3 className="text-xl font-semibold text-purple-200 mb-4">{title}</h3>
+    <div className="modal-overlay">
+      <div className="modal-content modal-content-sm">
+        <h3 className="modal-title mb-4">{title}</h3>
 
-        <div className="max-h-96 overflow-y-auto space-y-2 mb-4">
+        <div className="tool-list space-y-2 custom-scrollbar">
           {availableToolsMap.map((item: SelectableTool) => (
             <label
               key={item.id}
-              className="flex items-center gap-3 p-3 bg-white/10 rounded-lg hover:bg-white/20 cursor-pointer transition-colors"
+              className="tool-list-item"
             >
               <input
                 type="checkbox"
                 checked={selectedTools.includes(item.id)}
                 onChange={() => toggleToolSelection(item.id)}
-                className="w-4 h-4 accent-purple-500"
+                className="form-checkbox"
               />
-              <span className="text-white">{item.tool_server.server}: [{item.tool_server.names!.join(", ")}]</span>
+              <span className="tool-list-item-label">{item.tool_server.server}: [{item.tool_server.names!.join(", ")}]</span>
             </label>
           ))}
         </div>
 
-        <div className="flex gap-3">
+        <div className="flex gap-3 mt-4">
           <button
             onClick={handleDone}
-            className="flex-1 px-4 py-2 bg-purple-500 hover:bg-purple-600 text-white rounded-lg font-medium transition-colors"
+            className="btn btn-secondary flex-1"
           >
             Done
           </button>
           <button
             onClick={handleClearAll}
-            className="px-4 py-2 bg-white/10 hover:bg-white/20 text-purple-200 rounded-lg font-medium transition-colors"
+            className="btn btn-tertiary"
           >
             Clear All
           </button>
