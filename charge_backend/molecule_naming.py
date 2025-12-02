@@ -21,8 +21,8 @@ import json
 import os
 import requests
 
-if os.path.exists("inchi_mapping.json"):
-    with open("inchi_mapping.json", "rb") as fp:
+if os.path.exists("/aizynth/inchi_mapping.json"):
+    with open("/aizynth/inchi_mapping.json", "rb") as fp:
         DATABASE = json.load(fp)
 else:
     DATABASE = None
