@@ -460,7 +460,6 @@
 
 .status-indicator-reconnecting {
   background: #fbbf24;
-  animation: ping 1s cubic-bezier(0, 0, 0.2, 1) infinite;
 }
 
 .status-indicator-ping {

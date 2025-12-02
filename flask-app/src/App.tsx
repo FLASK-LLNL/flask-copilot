@@ -1057,7 +1057,7 @@ const ChemistryTool: React.FC = () => {
                     {autoZoom ? 'Auto-zoom will fit all molecules' : 'Drag to pan • Scroll to zoom'}
                   </p>
                   {!wsConnected && (
-                    <div className="alert alert-warning max-w-md mt-4">
+                    <div className="alert alert-warning mt-4">
                       <div className="alert-warning-text text-center">
                         <strong>Backend Required:</strong> Start your Python backend server at <code className="bg-black/30 px-2 py-1 rounded">{WS_SERVER}</code> to enable molecular computations.
                       </div>
