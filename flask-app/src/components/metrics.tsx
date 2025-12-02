@@ -7,8 +7,8 @@ import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContai
 
 // Metric definitions for extensibility
 const metricDefinitions: MetricDefinitions = {
-    cost: { 
-        label: 'Reaction Cost ($)', 
+    cost: {
+        label: 'Reaction Cost ($)',
         color: '#EC4899',
         calculate: (nodes: TreeNode[]) => nodes.reduce((sum, node) => sum + (node.cost || 0), 0)
     },
@@ -24,10 +24,13 @@ const metricDefinitions: MetricDefinitions = {
     bandgap: { 
         label: 'Band Gap (eV)', 
         color: '#F59E0B',
-        calculate: (nodes: TreeNode[]) => nodes[nodes.length-1]?.bandgap || 0
+        calculate: (nodes: TreeNode[]) => {
+            const bandgaps = nodes.map(n => n.bandgap || 0).filter(b => b > 0);
+            return bandgaps.length > 0 ? Math.max(...bandgaps) : 0;
+        }
     },
-    density: { 
-        label: 'Molecular Density (g/cm³)', 
+    density: {
+        label: 'Molecular Density (g/cm³)',
         color: '#10B981',
         calculate: (nodes: TreeNode[]) => {
             // Get the highest density among all nodes
@@ -35,8 +38,8 @@ const metricDefinitions: MetricDefinitions = {
             return densities.length > 0 ? Math.max(...densities) : 0;
         }
     },
-    /*yield: { 
-        label: 'Yield (%)', 
+    /*yield: {
+        label: 'Yield (%)',
         color: '#10B981',
         calculate: (nodes) => nodes.length > 0 ? (nodes.reduce((sum, node) => sum + (node.yield || Math.random() * 100), 0) / nodes.length) : 0
     },*/
@@ -80,18 +83,18 @@ export const MetricsDashboard: React.FC<MetricsDashboardProps> = ({treeNodes, me
                     <ResponsiveContainer width="100%" height={200}>
                     <LineChart data={metricsHistory}>
                         <CartesianGrid strokeDasharray="3 3" stroke="#8B5CF6" opacity={0.1} />
-                        <XAxis 
-                        dataKey="step" 
+                        <XAxis
+                        dataKey="step"
                         stroke="#A78BFA"
                         tick={{ fontSize: 12 }}
                         />
-                        <YAxis 
+                        <YAxis
                         stroke="#A78BFA"
                         tick={{ fontSize: 12 }}
                         />
-                        <Tooltip 
-                        contentStyle={{ 
-                            backgroundColor: '#1E1B4B', 
+                        <Tooltip
+                        contentStyle={{
+                            backgroundColor: '#1E1B4B',
                             border: '2px solid #8B5CF6',
                             borderRadius: '8px',
                             color: '#E9D5FF'
@@ -99,8 +102,8 @@ export const MetricsDashboard: React.FC<MetricsDashboardProps> = ({treeNodes, me
                         // NOTE: Returning `as any` since no other type information worked
                         formatter={(value: number) => value.toFixed(2) as any}
                         />
-                        <Line 
-                        type="monotone" 
+                        <Line
+                        type="monotone"
                         dataKey={metricKey}
                         stroke={metric.color}
                         strokeWidth={3}
@@ -125,8 +128,21 @@ export const MetricsDashboard: React.FC<MetricsDashboardProps> = ({treeNodes, me
     // Update metrics history whenever tree changes
     useEffect(() => {
         if (treeNodes.length > 0) {
-            let metrics = calculateMetrics(treeNodes);
+            const metrics = calculateMetrics(treeNodes);
             setMetricsHistory(prev => {
+                // Only add if this represents a new state
+                const lastMetrics = prev[prev.length - 1];
+
+                // Check if metrics actually changed
+                const metricsChanged = !lastMetrics ||
+                    Object.keys(metricDefinitions).some(key =>
+                        Math.abs((lastMetrics[key] || 0) - (metrics[key] || 0)) > 0.0001
+                    ) ||
+                    lastMetrics.nodeCount !== metrics.nodeCount;
+
+                if (!metricsChanged) {
+                    return prev;
+                }
                 metrics.step = prev.length;
                 return [...prev, { ...metrics }];
             });
@@ -137,7 +153,7 @@ export const MetricsDashboard: React.FC<MetricsDashboardProps> = ({treeNodes, me
         <div className="mt-6 bg-white/10 backdrop-blur-lg rounded-2xl shadow-2xl p-6 border border-white/20">
             <div className="flex items-center justify-between mb-4">
                 <h3 className="text-xl font-semibold text-white">Optimization Metrics</h3>
-                
+
                 {/* Metric Toggles */}
                 <div className="flex gap-2">
                 {Object.keys(metricDefinitions).map(key => (
