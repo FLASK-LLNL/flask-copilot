@@ -1309,7 +1309,7 @@ const ChemistryTool: React.FC = () => {
                     value={customPropertyName}
                     onChange={(e) => setCustomPropertyName(e.target.value)}
                     placeholder="Enter a name for the property"
-                    className="form-input"
+                    className="form-input form-input-text"
                   />
               </div>
               <div className="form-group">

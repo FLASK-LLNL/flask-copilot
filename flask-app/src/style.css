@@ -274,6 +274,11 @@
   transition: border-color 0.2s;
 }
 
+.form-input-text {
+  font-family: inherit;
+  background: rgba(255, 255, 255, 0.1);
+}
+
 .form-input:focus {
   outline: none;
   border-color: #a78bfa;
