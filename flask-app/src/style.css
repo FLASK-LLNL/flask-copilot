@@ -625,6 +625,10 @@
   cursor: not-allowed;
 }
 
+.experiment-item {
+     padding-left: 2rem;
+}
+
 .project-actions {
   position: absolute;
   right: 0.25rem;
@@ -921,7 +925,6 @@
 }
 
 .alert-warning-text {
-  display: flex;
   align-items: center;
   gap: 0.75rem;
   color: #fef3c7;

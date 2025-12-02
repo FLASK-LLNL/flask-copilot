@@ -521,7 +521,7 @@ export const ProjectSidebar: React.FC<ProjectSidebarProps> = ({
 
                 {/* Experiments List */}
                 {expandedProjects.has(project.id) && (
-                  <div className="ml-6 space-y-0.5">
+                  <div className="experiment-item space-y-0.5">
                     {/* Experiment Items */}
                     {project.experiments.map((experiment) => (
                       <div key={experiment.id} className="project-item">
