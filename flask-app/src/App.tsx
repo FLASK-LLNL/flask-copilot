@@ -974,12 +974,12 @@ const ChemistryTool: React.FC = () => {
                     </div>
                   }
                   {problemType === "optimization" && propertyType === "custom" &&
-                    <button onClick={() => setEditPropertyModal(true)} disabled={isComputing} className="btn btn-tertiary btn-sm mt-5">
+                    <button onClick={() => setEditPropertyModal(true)} disabled={isComputing} className="btn btn-tertiary mt-5">
                       Property...
                     </button>
                   }
                   {problemType === "custom" &&
-                    <button onClick={() => setEditPromptsModal(true)} disabled={isComputing || problemType !== "custom"} className="btn btn-tertiary btn-sm mt-5">
+                    <button onClick={() => setEditPromptsModal(true)} disabled={isComputing || problemType !== "custom"} className="btn btn-tertiary mt-5">
                       Edit
                     </button>
                   }

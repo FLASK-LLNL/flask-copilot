@@ -82,13 +82,13 @@ export const ReasoningSidebar: React.FC<SidebarProps> = ({messages, rdkitModule,
                   <div className="filter-menu-footer">
                     <button
                       onClick={() => setVisibleSources(Object.keys(visibleSources).reduce((acc, key) => ({ ...acc, [key]: true }), {}))}
-                      className="btn btn-secondary btn-sm btn-filter flex-1"
+                      className="btn btn-secondary btn-sm flex-1"
                     >
                       All
                     </button>
                     <button
                       onClick={() => setVisibleSources(Object.keys(visibleSources).reduce((acc, key) => ({ ...acc, [key]: false }), {}))}
-                      className="btn btn-secondary btn-sm btn-filter flex-1"
+                      className="btn btn-secondary btn-sm flex-1"
                     >
                       None
                     </button>
