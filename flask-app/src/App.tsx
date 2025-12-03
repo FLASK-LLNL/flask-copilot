@@ -807,7 +807,7 @@ const ChemistryTool: React.FC = () => {
                 username={username}
               />
               <div className={`absolute app-logo top-6 ${sidebarOpen ? "right-115" : "right-20"} group flex`}>
-                <svg version="1.1" id="Layer_1" height="60px" viewBox="0 0 40 40">
+                <svg version="1.1" id="Layer_1" className="logo-svg" viewBox="0 0 40 40">
                   <g>
                     <rect x="1.73" y="0.01" fill="#FFFFFF" width="34.19" height="34.19"/>
                     <path fill="#1E59AE" d="M35.92,0.01v17.53H18.95V0.01H35.92z M15.88,21.82c-1.12-0.07-1.72-0.78-1.79-2.1V0.01h-0.76v19.73
@@ -815,8 +815,8 @@ const ChemistryTool: React.FC = () => {
             h11.09l-4.59,4.75h-6.68C9.71,32.93,3.19,29.44,2.99,21.13V0.01H0.05v37.3h35.87V17.62l-4.05,4.19L15.88,21.82z"/>
                   </g>
                 </svg>
-                {profileSettings?.backend !== "alcf" && (
-                <svg height="60" viewBox="87 0 26 24">
+                {profileSettings?.backend === "alcf" && (
+                <svg className="logo-svg" viewBox="87 0 26 24">
                   <path fill="#007934" d="M95.9 15.3h-8.1l4 7z"></path>
                   <path d="M103.9 15.3h-8.1l-4 7H108l-4.1-7z" fill="#0082ca"></path>
                   <path fill="#101e8e" d="M112 15.3h-8.1l4.1 7z"></path>
