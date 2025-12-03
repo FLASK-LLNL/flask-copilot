@@ -1,160 +1,55 @@
 import { MarkdownTextProps } from "../types";
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
+import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
+import { vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism';
 
-// Simple markdown-like parser
+// Markdown renderer with custom styling and syntax highlighting
 export const MarkdownText: React.FC<MarkdownTextProps> = ({ text }) => {
-  const parseInline = (line: string): string => {
-    // Bold text
-    line = line.replace(/\*\*(.+?)\*\*/g, '<strong class="markdown-strong">$1</strong>');
-    // Italic text
-    line = line.replace(/\*(.+?)\*/g, '<em class="markdown-em">$1</em>');
-    // Inline code
-    line = line.replace(/`(.+?)`/g, '<code class="markdown-code">$1</code>');
-    return line;
-  };
-
-  const parseBlocks = () => {
-    const lines = text.split('\n');
-    const blocks: JSX.Element[] = [];
-    let i = 0;
-
-    while (i < lines.length) {
-      const line = lines[i];
-
-      // Multiline code block
-      if (line.startsWith('```')) {
-        const codeLines: string[] = [];
-        i++; // Skip opening ```
-        while (i < lines.length && !lines[i].startsWith('```')) {
-          codeLines.push(lines[i]);
-          i++;
-        }
-        blocks.push(
-          <pre key={blocks.length} className="markdown-code-block">
-            <code>{codeLines.join('\n')}</code>
-          </pre>
-        );
-        i++; // Skip closing ```
-        continue;
-      }
-
-      // Table detection (line contains pipes)
-      if (line.includes('|') && line.trim().startsWith('|')) {
-        const tableLines: string[] = [line];
-        let j = i + 1;
-        // Collect consecutive table lines
-        while (j < lines.length && lines[j].includes('|') && lines[j].trim().startsWith('|')) {
-          tableLines.push(lines[j]);
-          j++;
-        }
-        
-        if (tableLines.length >= 2) {
-          // Parse table
-          const rows = tableLines.map(l => 
-            l.split('|').slice(1, -1).map(cell => cell.trim())
-          );
-          const headers = rows[0];
-          const dataRows = rows.slice(2); // Skip separator row
-          
-          blocks.push(
-            <table key={blocks.length} className="markdown-table">
-              <thead>
-                <tr>
-                  {headers.map((header, idx) => (
-                    <th key={idx} className="markdown-table-header">
-                      {header}
-                    </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {dataRows.map((row, rowIdx) => (
-                  <tr key={rowIdx}>
-                    {row.map((cell, cellIdx) => (
-                      <td 
-                        key={cellIdx} 
-                        className="markdown-table-cell"
-                        dangerouslySetInnerHTML={{ __html: parseInline(cell) }}
-                      />
-                    ))}
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          );
-          i = j;
-          continue;
-        }
-      }
-
-      // Heading level 1
-      if (line.startsWith('# ')) {
-        blocks.push(
-          <h3 key={blocks.length} className="markdown-heading-1">
-            {line.slice(2)}
-          </h3>
-        );
-      } 
-      // Heading level 2
-      else if (line.startsWith('## ')) {
-        blocks.push(
-          <h4 key={blocks.length} className="markdown-heading-2">
-            {line.slice(3)}
-          </h4>
-        );
-      }
-      // Heading level 3
-      else if (line.startsWith('### ')) {
-        blocks.push(
-          <h5 key={blocks.length} className="markdown-heading-3">
-            {line.slice(4)}
-          </h5>
-        );
-      }
-      // Numbered list item
-      else if (/^\d+\.\s/.test(line)) {
-        const match = line.match(/^\d+\.\s(.+)/);
-        blocks.push(
-          <li 
-            key={blocks.length} 
-            className="markdown-numbered-list-item" 
-            dangerouslySetInnerHTML={{ __html: parseInline(match![1]) }} 
-          />
-        );
-      }
-      // Bullet list item (- or *)
-      else if (line.startsWith('- ') || line.startsWith('* ')) {
-        blocks.push(
-          <li 
-            key={blocks.length} 
-            className="markdown-list-item" 
-            dangerouslySetInnerHTML={{ __html: parseInline(line.slice(2)) }} 
-          />
-        );
-      } 
-      // Empty line (spacer)
-      else if (line.trim() === '') {
-        blocks.push(<div key={blocks.length} className="markdown-spacer" />);
-      } 
-      // Regular paragraph
-      else {
-        blocks.push(
-          <p 
-            key={blocks.length} 
-            className="markdown-paragraph" 
-            dangerouslySetInnerHTML={{ __html: parseInline(line) }} 
-          />
-        );
-      }
-      
-      i++;
-    }
-
-    return blocks;
-  };
-  
   return (
     <div className="markdown-content space-y-2">
-      {parseBlocks()}
+      <ReactMarkdown
+        remarkPlugins={[remarkGfm]}
+        components={{
+          h1: ({ children }) => <h3 className="markdown-heading-1">{children}</h3>,
+          h2: ({ children }) => <h4 className="markdown-heading-2">{children}</h4>,
+          h3: ({ children }) => <h5 className="markdown-heading-3">{children}</h5>,
+          p: ({ children }) => <p className="markdown-paragraph">{children}</p>,
+          ul: ({ children }) => <ul className="list-disc list-inside">{children}</ul>,
+          ol: ({ children }) => <ol className="list-decimal list-inside">{children}</ol>,
+          li: ({ children }) => <li className="markdown-list-item">{children}</li>,
+          strong: ({ children }) => <strong className="markdown-strong">{children}</strong>,
+          em: ({ children }) => <em className="markdown-em">{children}</em>,
+          code: ({ node, inline, className, children, ...props }: any) => {
+            const match = /language-(\w+)/.exec(className || '');
+
+            // Multi-line code block with syntax highlighting
+            if (!inline && match) {
+              return (
+                <SyntaxHighlighter
+                  style={vscDarkPlus}
+                  language={match[1]}
+                  PreTag="div"
+                  {...props}
+                >
+                  {String(children).replace(/\n$/, '')}
+                </SyntaxHighlighter>
+              );
+            }
+
+            // Single- or Multi-line code block without language
+            return (
+              <code {...props}>{children}</code>
+            );
+
+          },
+          table: ({ children }) => <table className="markdown-table">{children}</table>,
+          th: ({ children }) => <th className="markdown-table-header">{children}</th>,
+          td: ({ children }) => <td className="markdown-table-cell">{children}</td>,
+        }}
+      >
+        {text}
+      </ReactMarkdown>
     </div>
   );
 };
