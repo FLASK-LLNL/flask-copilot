@@ -235,7 +235,7 @@ export const ProjectSidebar: React.FC<ProjectSidebarProps> = ({
   };
 
   const handleCreateExperiment = async (projectId: string) => {
-    const curProject = projectsRef.current.find(p => p.id === projectId)!;
+    const curProject = projectsRef.current!.find(p => p.id === projectId)!;
 
     let i = curProject.experiments.length + 1;
     let newExperimentName = `Experiment ${i}`
@@ -252,7 +252,6 @@ export const ProjectSidebar: React.FC<ProjectSidebarProps> = ({
     
     try {
       const experiment = await createExperiment(projectId, newExperimentName);
-      const updatedProject = projectsRef.current.find(p => p.id === projectId)!;
       setNewExperimentName('');
       setCreatingExperimentFor(null);
       // Auto-select the new experiment
