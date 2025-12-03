@@ -11,7 +11,7 @@ import { ReasoningSidebar, useSidebarState } from './components/sidebar';
 import { MoleculeGraph, useGraphState } from './components/graph';
 import { MultiSelectToolModal } from './components/multi_select_tools';
 import { ProjectSidebar, useProjectSidebar, useProjectManagement } from './components/project_sidebar';
-import { ProfileButton } from './components/profile_button';
+import { ProfileButton, BACKEND_OPTIONS } from './components/profile_button';
 
 import { findAllDescendants, hasDescendants, isRootNode, relayoutTree } from './tree_utils';
 import { copyToClipboard } from './utils';
@@ -104,6 +104,15 @@ const ChemistryTool: React.FC = () => {
   };
   const [profileSettings, setProfileSettings] = useState(getInitialSettings());
 
+  // Add this helper function near the top of the ChemistryTool component
+  const getDisplayUrl = (): string => {
+    if (profileSettings.useCustomUrl && profileSettings.customUrl) {
+      return profileSettings.customUrl;
+    }
+    const backendOption = BACKEND_OPTIONS.find(opt => opt.value === profileSettings.backend);
+    return backendOption?.defaultUrl || 'Not configured';
+  };
+
   // Callback function to send selected tools to backend
   const handleToolSelectionConfirm = async (
     selectedIds: number[],
@@ -141,6 +150,10 @@ const ChemistryTool: React.FC = () => {
       return;
     }
     console.log(`Updated Profile Saved`);
+
+    // Update local state immediately
+    setProfileSettings(settings);
+    localStorage.setItem('profileSettings', JSON.stringify(settings));
 
     if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
       const message = {
@@ -550,7 +563,7 @@ const ChemistryTool: React.FC = () => {
   };
 
   const saveFullContext = (experimentContext: string): void => {
-    const data = { lastModified: new Date().toISOString(), smiles, problemType, systemPrompt, problemPrompt, propertyType, customPropertyName, 
+    const data = { lastModified: new Date().toISOString(), smiles, problemType, systemPrompt, problemPrompt, propertyType, customPropertyName,
                    customPropertyDesc, customPropertyAscending, treeNodes, edges, graphState, metricsDashboardState, sidebarState, experimentContext };
     const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
@@ -750,8 +763,11 @@ const ChemistryTool: React.FC = () => {
                 <h1 className="app-title">FLASK Copilot</h1>
               </div>
               <p className="app-subtitle">Real-time molecular assistant</p>
-              <p className="app-subtitle">Connected to simulators at <code>SOMEWHERE.llnl.gov</code> (LLNL)</p>
-              <p className="app-subtitle">Connected to orchestrator <code>MODEL NAME</code> at <code>URL</code> (ORIGIN)</p>
+              <p className="app-subtitle">Connected to simulators at <code>llnl.gov</code> (LLNL)</p>
+              <p className="app-subtitle">
+                Connected to orchestrator <code>{profileSettings.model || 'Not configured'}</code> at{' '}
+                <code>{getDisplayUrl()}</code> ({profileSettings.backend.toUpperCase()})
+              </p>
             </div>
 
 

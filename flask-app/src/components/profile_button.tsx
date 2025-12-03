@@ -10,7 +10,7 @@ interface ProfileButtonProps {
   className?: string;
 }
 
-const BACKEND_OPTIONS = [
+export const BACKEND_OPTIONS = [
   {
     value: 'openai',
     label: 'OpenAI',
