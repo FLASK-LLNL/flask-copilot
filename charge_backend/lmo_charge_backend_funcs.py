@@ -21,6 +21,7 @@ from backend_helper_funcs import (
     get_price,
     CallbackHandler,
 )
+from molecule_naming import smiles_to_html
 
 # TODO: Convert this to a dataclass
 MOLECULE_HOVER_TEMPLATE = """**SMILES:** `{smiles}`
@@ -101,7 +102,7 @@ async def generate_lead_molecule(
         node = Node(
             id=f"node_{node_id}",
             smiles=lead_molecule_smiles,
-            label=f"{lead_molecule_smiles}",
+            label=smiles_to_html(lead_molecule_smiles),
             # Add property calculations here
             density=lead_molecule_data.get("density", None),
             sascore=lead_molecule_data.get("sascore", None),
@@ -244,7 +245,7 @@ async def generate_lead_molecule(
                         node = Node(
                             id=f"node_{node_id}",
                             smiles=canonical_smiles,
-                            label=f"{canonical_smiles}",
+                            label=smiles_to_html(canonical_smiles),
                             # Add property calculations here
                             density=processed_mol.get("density", None),
                             sascore=processed_mol.get("sascore", None),

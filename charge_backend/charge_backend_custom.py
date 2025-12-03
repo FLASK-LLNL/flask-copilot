@@ -6,7 +6,7 @@ from charge.experiments.AutoGenExperiment import AutoGenExperiment
 from charge.tasks.Task import Task
 from charge.servers.log_progress import LOG_PROGRESS_SYSTEM_PROMPT
 from backend_helper_funcs import Node, CallbackHandler
-
+from molecule_naming import smiles_to_html
 
 async def run_custom_problem(
     start_smiles: str,
@@ -42,7 +42,7 @@ async def run_custom_problem(
             node = Node(
                 id=f"node_{i}",
                 smiles=smiles,
-                label=smiles,
+                label=smiles_to_html(smiles),
                 hoverInfo=result,
                 level=0,
                 x=50,
