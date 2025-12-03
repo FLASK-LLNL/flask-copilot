@@ -21,7 +21,7 @@ import json
 import os
 import requests
 
-_DATABASE_PATH = os.getenv("FLASK_INCHI_DB", "/aizynth/inchi_mapping.json")
+_DATABASE_PATH = os.getenv("FLASK_INCHI_DB", "/data/inchi_mapping.json")
 if os.path.exists(_DATABASE_PATH):
     with open(_DATABASE_PATH, "rb") as fp:
         DATABASE = json.load(fp)
