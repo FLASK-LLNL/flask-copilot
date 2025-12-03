@@ -25,7 +25,7 @@ const ChemistryTool: React.FC = () => {
   const [smiles, setSmiles] = useState<string>('');
   const [problemType, setProblemType] = useState<string>('retrosynthesis');
   const [propertyType, setPropertyType] = useState<string>('density');
-  const [systemPrompt, setSystemPrompt] = useState<string>('');
+  const [systemPrompt, setSystemPrompt] = useState<string>('Respond with concise and clear answers, as well as JSONs for each SMILES string you return as `{"smiles": "<SMILES STRING GOES HERE>"}`.');
   const [problemPrompt, setProblemPrompt] = useState<string>('');
   const [editPromptsModal, setEditPromptsModal] = useState<boolean>(false);
   const [editPropertyModal, setEditPropertyModal] = useState<boolean>(false);
