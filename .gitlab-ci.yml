@@ -14,7 +14,7 @@ build:
     - echo "${CI_REGISTRY_PASSWORD}" | podman login -u="$CI_REGISTRY_USER" --password-stdin $CI_REGISTRY
     - mkdir -p data
     # adding DATA_PATH into current podman build context
-    - cp -r $DATA_PATH data
+    - cp -r $DATA_PATH/* data
     # Version management (use tag if available, or commit SHA otherwise)
     - SERV_REV="${CI_COMMIT_TAG:-$CI_COMMIT_SHA}"
     - echo "Server version $SERV_REV"
