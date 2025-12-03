@@ -100,10 +100,11 @@ const ChemistryTool: React.FC = () => {
       backend: 'vllm',
       customUrl: 'http://localhost:8000/v1',
       model: 'gpt-oss',
-      apiKey: ''
+      apiKey: '',
+      backendLabel: 'vLLM'
     };
   };
-  const [profileSettings, setProfileSettings] = useState(getInitialSettings());
+  const [profileSettings, setProfileSettings] = useState<ProfileSettings>(getInitialSettings());
 
   // Add this helper function near the top of the ChemistryTool component
   const getDisplayUrl = (): string => {
@@ -425,6 +426,7 @@ const ChemistryTool: React.FC = () => {
           // Check the model against the list of models in copilot
           // useCustomModel: data.profileSettings.useCustomModel,
           apiKey: data.profileSettings!.apiKey,
+          backendLabel: data.profileSettings!.backendLabel
         };
         setProfileSettings(newSettings);
         console.log('Updating the profile settings ', newSettings);
@@ -768,7 +770,7 @@ const ChemistryTool: React.FC = () => {
               <p className="app-subtitle">Connected to simulators at <code>llnl.gov</code> (LLNL)</p>
               <p className="app-subtitle">
                 Connected to orchestrator <code>{profileSettings.model || 'Not configured'}</code> at{' '}
-                <code>{getDisplayUrl()}</code> ({profileSettings.backend.toUpperCase()})
+                <code>{getDisplayUrl()}</code> ({profileSettings.backendLabel})
               </p>
             </div>
 
