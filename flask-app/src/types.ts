@@ -61,6 +61,7 @@ export interface ProfileSettings {
   model: string;
   useCustomModel?: boolean;
   apiKey: string;
+  backendLabel: string;
 }
 
 export interface WebSocketMessageToServer {

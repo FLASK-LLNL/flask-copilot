@@ -85,6 +85,7 @@ export const ProfileButton: React.FC<ProfileButtonProps> = ({
   // Merge provided initial settings with defaults
   const defaultSettings: ProfileSettings = {
     backend: 'openai',
+    backendLabel: 'OpenAI',
     useCustomUrl: false,
     customUrl: '',
     model: 'gpt-5-nano',
@@ -107,6 +108,7 @@ export const ProfileButton: React.FC<ProfileButtonProps> = ({
       const updatedSettings = {
         ...settings,
         ...initialSettings,
+        backendLabel: backendOption!.label,
         // If model is not in the predefined list, automatically set useCustomModel to true
         // Unless useCustomModel is explicitly provided in initialSettings
         useCustomModel: initialSettings.useCustomModel !== undefined
@@ -171,7 +173,8 @@ export const ProfileButton: React.FC<ProfileButtonProps> = ({
       backend: newBackend,
       customUrl: urlToUse,
       model: modelToUse,
-      useCustomModel: useCustomModelToUse
+      useCustomModel: useCustomModelToUse,
+      backendLabel: newBackendOption!.label
     });
   };
 
