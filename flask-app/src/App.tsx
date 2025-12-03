@@ -1156,7 +1156,7 @@ const ChemistryTool: React.FC = () => {
         <div className="context-menu" style={{ left: `${contextMenu.x + 10}px`, top: `${contextMenu.y + 10}px` }} onClick={(e) => e.stopPropagation()} onMouseDown={(e) => e.stopPropagation()}>
           <div className="context-menu-header">
             <div className="context-menu-label">Actions for</div>
-            <div className="context-menu-title">{contextMenu.node.label}</div>
+            <div className="context-menu-title" dangerouslySetInnerHTML={{__html: contextMenu.node.label}}></div>
           </div>
 
           { (problemType === "optimization") && (

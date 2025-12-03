@@ -15,7 +15,10 @@
     "lucide-react": "^0.544.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
+    "react-markdown": "^10.1.0",
+    "react-syntax-highlighter": "^16.1.0",
     "recharts": "^2.5.0",
+    "remark-gfm": "^4.0.1",
     "typescript": "^5.9.3",
     "web-vitals": "^2.1.4"
   },
@@ -46,6 +49,7 @@
   "devDependencies": {
     "@types/react": "^18.3.27",
     "@types/react-dom": "^18.3.7",
+    "@types/react-syntax-highlighter": "^15.5.13",
     "@vitejs/plugin-react": "^5.1.0",
     "autoprefixer": "^10.4.21",
     "tailwindcss": "^4.1.16",

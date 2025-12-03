@@ -711,6 +711,8 @@
   animation: slideIn 0.3s ease-out;
   animation-fill-mode: forwards;
   opacity: 0;
+  overflow-x: auto;
+  word-break: break-word;
 }
 
 /* ========================================
@@ -1283,7 +1285,19 @@
   color: #d8b4fe;
 }
 
+.markdown-heading-3 {
+  font-size: 0.9375rem;
+  font-weight: 600;
+  color: #c4b5fd;
+}
+
 .markdown-list-item {
+  margin-left: 1rem;
+  font-size: 0.875rem;
+  color: #e9d5ff;
+}
+
+.markdown-numbered-list-item {
   margin-left: 1rem;
   font-size: 0.875rem;
   color: #e9d5ff;
@@ -1292,14 +1306,6 @@
 .markdown-paragraph {
   font-size: 0.875rem;
   color: #e9d5ff;
-}
-
-.markdown-code {
-  background: rgba(88, 28, 135, 0.5);
-  padding: 0 0.25rem;
-  border-radius: 0.25rem;
-  font-family: ui-monospace, monospace;
-  font-size: 0.875rem;
 }
 
 .markdown-strong {
@@ -1312,6 +1318,34 @@
 
 .markdown-spacer {
   height: 0.25rem;
+}
+
+.markdown-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.875rem;
+  margin: 0.5rem 0;
+  table-layout: fixed;
+  word-break: break-word;
+}
+
+.markdown-table-header {
+  background: rgba(88, 28, 135, 0.4);
+  padding: 0.5rem;
+  text-align: left;
+  font-weight: 600;
+  color: #ddd6fe;
+  border: 1px solid rgba(139, 92, 246, 0.3);
+}
+
+.markdown-table-cell {
+  padding: 0.5rem;
+  border: 1px solid rgba(139, 92, 246, 0.2);
+  color: #e9d5ff;
+}
+
+.markdown-table tbody tr:nth-child(even) {
+  background: rgba(88, 28, 135, 0.2);
 }
 
 /* Icon containers */
