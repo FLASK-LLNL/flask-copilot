@@ -1326,6 +1326,7 @@
   font-size: 0.875rem;
   margin: 0.5rem 0;
   table-layout: fixed;
+  word-break: break-word;
 }
 
 .markdown-table-header {
