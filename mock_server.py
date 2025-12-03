@@ -28,6 +28,7 @@ from typing import Any, Optional, Literal
 import requests
 from datetime import datetime
 from loguru import logger
+from charge_backend.molecule_naming import smiles_to_html
 
 app = FastAPI()
 
@@ -68,23 +69,6 @@ if os.path.exists(ASSETS_PATH):
            </script>""",
         )
         return HTMLResponse(html)
-
-
-CACTUS = "https://cactus.nci.nih.gov/chemical/structure/{0}/{1}"
-
-
-def smiles_to_iupac(smiles):
-    return smiles
-    try:
-        rep = "iupac_name"
-        url = CACTUS.format(smiles, rep)
-        response = requests.get(url)
-        response.raise_for_status()
-        if response.text.startswith("<"):  # HTML
-            return smiles
-        return response.text
-    except requests.exceptions.HTTPError:
-        return smiles
 
 
 @dataclass
@@ -167,7 +151,7 @@ def generate_tree_structure(start_smiles: str, depth: int = 3):
             node = Node(
                 id=node_id,
                 smiles=child_smiles,
-                label=child_smiles,  # smiles_to_iupac(child_smiles),
+                label=smiles_to_html(child_smiles),
                 cost=random.uniform(10, 110),
                 bandgap=random.uniform(100, 600),
                 yield_=random.uniform(0, 100),
@@ -193,7 +177,7 @@ def generate_tree_structure(start_smiles: str, depth: int = 3):
     root = Node(
         id=root_id,
         smiles=start_smiles,
-        label=smiles_to_iupac(start_smiles),
+        label=smiles_to_html(start_smiles),
         cost=random.uniform(10, 110),
         bandgap=random.uniform(100, 600),
         yield_=2.0,
@@ -313,7 +297,7 @@ async def lead_molecule(start_smiles: str, depth: int = 3, websocket: WebSocket 
         node = dict(
             id=f"node_{i}",
             smiles=start_smiles + "C" * i,
-            label="Water",
+            label=smiles_to_html(start_smiles + "C" * i),
             bandgap=i * random.uniform(0, 16),
             level=0,
             hoverInfo="This is some markdown\n# Hej",

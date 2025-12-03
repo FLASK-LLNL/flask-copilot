@@ -8,6 +8,7 @@ from typing import Dict
 
 from backend_helper_funcs import Node, Edge, RetrosynthesisContext, calculate_positions
 import charge.servers.AiZynthTools as AiZynthFuncs
+from molecule_naming import smiles_to_html
 
 
 def generate_tree_structure(
@@ -40,7 +41,7 @@ def generate_tree_structure(
         node = Node(
             id=node_id_str,
             smiles=smiles,
-            label=smiles,
+            label=smiles_to_html(smiles),
             hoverInfo=hover_info,
             level=level,
             parentId=(f"node_{current_node.parent_id}" if current_node.parent_id is not None else None),
@@ -85,7 +86,7 @@ async def aizynth_retro(
     root = Node(
         id="node_0",
         smiles=start_smiles,
-        label=start_smiles,
+        label=smiles_to_html(start_smiles),
         hoverInfo=f"# Root molecule \n **SMILES:** {start_smiles}",
         level=0,
         parentId=None,

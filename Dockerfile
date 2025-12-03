@@ -6,7 +6,7 @@ RUN . $HOME/.nvm/nvm.sh && nvm install 22
 WORKDIR /app
 COPY requirements.txt /app
 COPY flask-app/. /app
-COPY charge-backend /app/charge-backend
+COPY charge_backend /app/charge_backend
 
 ARG AZF_PATH=./aizynth
 COPY ${AZF_PATH}/. /aizynth

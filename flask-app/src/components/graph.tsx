@@ -277,7 +277,7 @@ export const MoleculeGraph: React.FC<MoleculeGraphProps> = ({nodes, edges, ctx, 
                     <div className={`node-card ${NODE_STYLES[node.highlight || 'normal']}`}>
                         <MoleculeSVG smiles={node.smiles} height={80} rdkitModule={rdkitModule} />
                         <div className="node-label">
-                        <div className="node-label-text">{node.label}</div>
+                        <div className="node-label-text" dangerouslySetInnerHTML={{ __html: node.label }}></div>
                         </div>
                     </div>
                     </div>
