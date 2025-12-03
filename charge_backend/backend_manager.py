@@ -364,12 +364,16 @@ class ActionManager:
         base_url = raw_config.get("base_url")
         model = raw_config.get("model")
         api_key = raw_config.get("api_key")
+        if agent_pool.backend in ["livai", "livchat", "llamame", "alcf"]:
+            useCustomUrl = True
+        else:
+            useCustomUrl = False
         await self.websocket.send_json(
             {
                 "type": "update-orchestrator-profile",
                 "profileSettings": {
                     "backend": agent_pool.backend,
-                    "useCustomUrl": False,
+                    "useCustomUrl": useCustomUrl,
                     "customUrl": base_url if base_url else "",
                     "model": model,
                     "useCustomModel": False,
