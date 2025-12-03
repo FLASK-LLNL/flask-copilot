@@ -711,6 +711,8 @@
   animation: slideIn 0.3s ease-out;
   animation-fill-mode: forwards;
   opacity: 0;
+  overflow-x: auto;
+  word-break: break-word;
 }
 
 /* ========================================
@@ -1323,6 +1325,7 @@
   border-collapse: collapse;
   font-size: 0.875rem;
   margin: 0.5rem 0;
+  table-layout: fixed;
 }
 
 .markdown-table-header {
