@@ -19,6 +19,7 @@ from backend_helper_funcs import (
     Edge,
     loop_executor,
 )
+from molecule_naming import smiles_to_html
 
 from charge.tasks.RetrosynthesisTask import (
     TemplateFreeRetrosynthesisTask as RetrosynthesisTask,
@@ -256,7 +257,7 @@ async def generate_molecules(
     root = Node(
         id="node_0",
         smiles=start_smiles,
-        label=start_smiles,
+        label=smiles_to_html(start_smiles),
         hoverInfo=f"# Root molecule \n **SMILES:** {start_smiles}",
         level=0,
         parentId=None,
@@ -455,7 +456,7 @@ async def optimize_molecule_retro(
     edges: list[Edge] = []
     for i, smiles in enumerate(result.reactants_smiles_list):
         node = Node(
-            f"node_{num_nodes+i}", smiles, smiles, "Discovered", level, current_node.id
+            f"node_{num_nodes+i}", smiles, smiles_to_html(smiles), "Discovered", level, current_node.id
         )
         context.node_ids[node.id] = node
 
