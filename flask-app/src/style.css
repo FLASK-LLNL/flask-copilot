@@ -1631,6 +1631,10 @@
   color: #d8b4fe;
 }
 
+.app-logo {
+  margin-top: 0.5rem;
+}
+
 /* Input row styling */
 .input-row {
   display: flex;
