@@ -1,4 +1,3 @@
-
 import React from 'react';
 import { User } from 'lucide-react';
 import { ProfileSettings } from '../types';
@@ -296,7 +295,7 @@ export const ProfileButton: React.FC<ProfileButtonProps> = ({
     <>
       <button
         onClick={handleOpenModal}
-        className={`px-4 py-2 bg-purple-500/30 text-white rounded-lg text-sm font-semibold hover:bg-purple-500/50 transition-all flex items-center gap-2 ${className}`}
+        className={`btn btn-secondary btn-sm ${className}`}
       >
         <User className="w-4 h-4" />
         <span>Profile</span>
@@ -307,33 +306,36 @@ export const ProfileButton: React.FC<ProfileButtonProps> = ({
 
       {/* Profile Settings Modal */}
       {isModalOpen && (
-        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-gradient-to-br from-slate-800 to-purple-900 border-2 border-purple-400 rounded-2xl shadow-2xl max-w-2xl w-full p-6">
-            <div className="flex items-center justify-between mb-6">
+        <div className="modal-overlay">
+          <div className="modal-content modal-content-lg">
+            <div className="modal-header">
               <div>
-                <h2 className="text-xl font-bold text-white">{username}'s Profile Settings</h2>
-                <p className="text-sm text-purple-300">Configure your connection and model settings</p>
+                <h2 className="modal-title">{username}'s Profile Settings</h2>
+                <p className="modal-subtitle">Configure your connection and model settings</p>
               </div>
               <button
                 onClick={handleCancel}
-                className="text-purple-300 hover:text-white transition-colors"
+                className="btn-icon"
               >
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
               </button>
             </div>
 
-            <div className="space-y-4">
+            <div className="modal-body space-y-4">
               {/* Backend Selector */}
-              <div>
-                <label className="block text-sm font-medium text-purple-200 mb-2">
+              <div className="form-group">
+                <label className="form-label">
                   Backend
                 </label>
                 <select
                   value={tempSettings.backend}
                   onChange={(e) => handleBackendChange(e.target.value)}
-                  className="w-full px-4 py-3 bg-white/10 border-2 border-purple-400/50 rounded-lg focus:border-purple-400 focus:outline-none text-white cursor-pointer"
+                  className="form-select"
                 >
                   {BACKEND_OPTIONS.map(option => (
-                    <option key={option.value} value={option.value} className="bg-slate-800">
+                    <option key={option.value} value={option.value}>
                       {option.label}
                     </option>
                   ))}
@@ -342,26 +344,26 @@ export const ProfileButton: React.FC<ProfileButtonProps> = ({
 
               {/* Use Custom URL Checkbox */}
               <div>
-                <label className="flex items-center gap-2 text-sm text-purple-200 cursor-pointer">
+                <label className="form-label flex items-center gap-2 cursor-pointer">
                   <input
                     type="checkbox"
                     checked={tempSettings.useCustomUrl}
                     onChange={(e) => handleCustomUrlToggle(e.target.checked)}
-                    className="w-4 h-4 rounded border-purple-400/50 bg-white/20 text-purple-600 focus:ring-purple-500 focus:ring-offset-0"
+                    className="form-checkbox"
                   />
                   <span>Use custom URL for this backend</span>
                 </label>
-                <p className="text-xs text-purple-400 mt-1 ml-6">
+                <p className="text-xs text-muted mt-1 ml-6">
                   Override the default endpoint with a custom server URL
                 </p>
               </div>
 
               {/* Custom URL Field (conditional) */}
               {tempSettings.useCustomUrl && (
-                <div className="animate-fadeIn">
-                  <label className="block text-sm font-medium text-purple-200 mb-2">
+                <div className="form-group animate-fadeIn">
+                  <label className="form-label">
                     Custom URL
-                    <span className="text-purple-400 text-xs ml-2">
+                    <span className="text-muted text-xs ml-2">
                       {tempSettings.backend === 'vllm' && '(vLLM endpoint)'}
                       {tempSettings.backend === 'ollama' && '(Ollama endpoint)'}
                       {(tempSettings.backend === 'livai') && '(LivAI base URL)'}
@@ -376,19 +378,19 @@ export const ProfileButton: React.FC<ProfileButtonProps> = ({
                     value={tempSettings.customUrl || ''}
                     onChange={(e) => handleCustomUrlChange(e.target.value)}
                     placeholder={currentBackendOption?.defaultUrl || 'http://localhost:8000'}
-                    className="w-full px-4 py-3 bg-white/10 border-2 border-purple-400/50 rounded-lg focus:border-purple-400 focus:outline-none text-white placeholder-purple-300/50"
+                    className="form-input"
                   />
-                  <p className="text-xs text-purple-400 mt-1">
+                  <p className="text-xs text-muted mt-1">
                     Default: {currentBackendOption?.defaultUrl || 'Not set'}
                   </p>
                 </div>
               )}
 
               {/* Model Selection */}
-              <div>
-                <label className="block text-sm font-medium text-purple-200 mb-2">
+              <div className="form-group">
+                <label className="form-label">
                   Model
-                  <span className="text-purple-400 text-xs ml-2">
+                  <span className="text-muted text-xs ml-2">
                     {tempSettings.backend === 'openai' && '(GPT models)'}
                     {tempSettings.backend === 'livai' && '(LLNL Enterprise models)'}
                     {tempSettings.backend === 'llamame' && '(LLNL Internal models)'}
@@ -403,10 +405,10 @@ export const ProfileButton: React.FC<ProfileButtonProps> = ({
                   <select
                     value={tempSettings.model}
                     onChange={(e) => handleModelSelect(e.target.value)}
-                    className="w-full px-4 py-3 bg-white/10 border-2 border-purple-400/50 rounded-lg focus:border-purple-400 focus:outline-none text-white cursor-pointer font-mono text-sm"
+                    className="form-select text-mono"
                   >
                     {currentBackendOption?.models?.map(model => (
-                      <option key={model} value={model} className="bg-slate-800">
+                      <option key={model} value={model}>
                         {model}
                       </option>
                     ))}
@@ -417,32 +419,32 @@ export const ProfileButton: React.FC<ProfileButtonProps> = ({
                     value={tempSettings.model}
                     onChange={(e) => handleCustomModelChange(e.target.value)}
                     placeholder="Enter custom model name"
-                    className="w-full px-4 py-3 bg-white/10 border-2 border-purple-400/50 rounded-lg focus:border-purple-400 focus:outline-none text-white placeholder-purple-300/50 font-mono text-sm"
+                    className="form-input text-mono"
                   />
                 )}
               </div>
 
               {/* Use Custom Model Checkbox */}
               <div>
-                <label className="flex items-center gap-2 text-sm text-purple-200 cursor-pointer">
+                <label className="form-label flex items-center gap-2 cursor-pointer">
                   <input
                     type="checkbox"
                     checked={tempSettings.useCustomModel || false}
                     onChange={(e) => handleCustomModelToggle(e.target.checked)}
-                    className="w-4 h-4 rounded border-purple-400/50 bg-white/20 text-purple-600 focus:ring-purple-500 focus:ring-offset-0"
+                    className="form-checkbox"
                   />
                   <span>Use custom model name</span>
                 </label>
-                <p className="text-xs text-purple-400 mt-1 ml-6">
+                <p className="text-xs text-muted mt-1 ml-6">
                   Enter a custom model identifier not in the preset list
                 </p>
               </div>
 
               {/* API Key Field */}
-              <div>
-                <label className="block text-sm font-medium text-purple-200 mb-2">
+              <div className="form-group">
+                <label className="form-label">
                   API Key
-                  <span className="text-purple-400 text-xs ml-2">
+                  <span className="text-muted text-xs ml-2">
                     {(tempSettings.backend === 'ollama' || tempSettings.backend === 'huggingface' || tempSettings.backend === 'vllm') && '(Optional for local backends)'}
                     {tempSettings.backend === 'openai' && '(OPENAI_API_KEY)'}
                     {tempSettings.backend === 'livai' && '(LIVAI_API_KEY)'}
@@ -456,15 +458,15 @@ export const ProfileButton: React.FC<ProfileButtonProps> = ({
                   value={tempSettings.apiKey}
                   onChange={(e) => setTempSettings({...tempSettings, apiKey: e.target.value})}
                   placeholder="Enter your API key"
-                  className="w-full px-4 py-3 bg-white/10 border-2 border-purple-400/50 rounded-lg focus:border-purple-400 focus:outline-none text-white placeholder-purple-300/50 font-mono text-sm"
+                  className="form-input text-mono"
                 />
               </div>
             </div>
 
-            <div className="flex gap-3 mt-6">
+            <div className="modal-footer">
               <button
                 onClick={handleSave}
-                className="flex-1 px-6 py-3 bg-gradient-to-r from-purple-600 to-pink-600 text-white rounded-lg font-semibold shadow-lg hover:shadow-xl transform hover:-translate-y-0.5 transition-all flex items-center justify-center gap-2"
+                className="btn btn-primary flex-1"
               >
                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
@@ -473,7 +475,7 @@ export const ProfileButton: React.FC<ProfileButtonProps> = ({
               </button>
               <button
                 onClick={handleCancel}
-                className="px-6 py-3 bg-white/20 text-white rounded-lg font-semibold hover:bg-white/30 transition-all"
+                className="btn btn-tertiary"
               >
                 Cancel
               </button>

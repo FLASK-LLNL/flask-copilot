@@ -202,20 +202,16 @@ export const MoleculeGraph: React.FC<MoleculeGraphProps> = ({nodes, edges, ctx, 
         <>
             <div 
                 ref={containerRef}
-                className={`relative w-full h-full overflow-hidden ${
-                autoZoom ? 'cursor-default' : isDragging ? 'cursor-grabbing' : 'cursor-grab'
+                className={`graph-container ${
+                autoZoom ? 'graph-cursor-default' : isDragging ? 'graph-cursor-grabbing' : 'graph-cursor-grab'
                 }`}
                 onMouseDown={handleMouseDown}
                 style={{ userSelect: 'none' }}
             >
                 <div
-                className="absolute"
+                className={`graph-canvas ${isDragging ? '' : 'graph-canvas-smooth'}`}
                 style={{
                     transform: `translate(${offset.x}px, ${offset.y}px) scale(${zoom})`,
-                    transformOrigin: '0 0',
-                    transition: isDragging ? 'none' : 'transform 0.1s ease-out',
-                    width: '3000px',
-                    height: '2000px'
                 }}
                 >
                 {edges.filter(edge => getNode(edge.fromNode) && getNode(edge.toNode)).map((edge, idx) => {
@@ -237,9 +233,9 @@ export const MoleculeGraph: React.FC<MoleculeGraphProps> = ({nodes, edges, ctx, 
                         </g>
                         </svg>
                         
-                        <div className="absolute pointer-events-auto" style={{ left: `${midpoint.x}px`, top: `${midpoint.y}px`, transform: 'translate(-50%, -50%)' }}>
+                        <div className="edge-label" style={{ left: `${midpoint.x}px`, top: `${midpoint.y}px` }}>
                         {edge.label && (
-                            <div className={`px-3 py-1.5 rounded-lg text-xs font-semibold shadow-lg ${edge.status === 'computing' ? 'bg-amber-500 text-white animate-pulse' : 'bg-purple-500 text-white'}`}>
+                            <div className={`edge-label-badge ${edge.status === 'computing' ? 'edge-label-computing' : 'edge-label-normal'}`}>
                             {edge.status === 'computing' && <Loader2 className="w-3 h-3 inline mr-1 animate-spin" />}
                             {edge.label}
                             </div>
@@ -253,13 +249,12 @@ export const MoleculeGraph: React.FC<MoleculeGraphProps> = ({nodes, edges, ctx, 
                     <div
                     key={node.id}
                     data-node-id={node.id}
-                    className="absolute animate-fadeInScale"
+                    className="graph-node"
                     style={{ 
                         left: `${node.x}px`, 
                         top: `${node.y}px`, 
                         width: `${BOX_WIDTH*1.05}px`,
                         animationDelay: `${idx * 100}ms`,
-                        transition: 'left 0.6s cubic-bezier(0.34, 1.56, 0.64, 1), top 0.6s cubic-bezier(0.34, 1.56, 0.64, 1)'
                     }}
                     onMouseEnter={(e) => {
                         setHoveredNode(node);
@@ -279,10 +274,10 @@ export const MoleculeGraph: React.FC<MoleculeGraphProps> = ({nodes, edges, ctx, 
                     onMouseLeave={() => setHoveredNode(null)}
                     onClick={(e) => handleNodeClick(e, node)}
                     >
-                    <div className={`bg-gradient-to-br backdrop-blur-sm rounded-xl p-3 border-2 shadow-lg hover:shadow-2xl hover:scale-105 transition-all pointer-events-auto cursor-pointer ${NODE_STYLES[node.highlight || 'normal']}`} style={{ textAlign: 'center' }}>
+                    <div className={`node-card ${NODE_STYLES[node.highlight || 'normal']}`}>
                         <MoleculeSVG smiles={node.smiles} height={80} rdkitModule={rdkitModule} />
-                        <div className="mt-2 text-center">
-                        <div className="text-xs font-semibold text-purple-200 bg-black/30 rounded px-2 py-1 whitespace-pre-line">{node.label}</div>
+                        <div className="node-label">
+                        <div className="node-label-text">{node.label}</div>
                         </div>
                     </div>
                     </div>
@@ -290,18 +285,18 @@ export const MoleculeGraph: React.FC<MoleculeGraphProps> = ({nodes, edges, ctx, 
                 </div>
 
                 {nodes.length > 0 && !isDragging && (
-                <div className="absolute bottom-4 left-4 space-y-2 pointer-events-none">
-                    <div className="bg-black/50 backdrop-blur-sm rounded-lg px-3 py-2 text-purple-200 text-sm flex items-center gap-2">
+                <div className="graph-controls space-y-2">
+                    <div className="graph-control-panel">
                     <Move className="w-4 h-4" />
                     {autoZoom ? 'Auto-zoom active • Drag to pan' : 'Drag to pan • Scroll to zoom'}
                     </div>
-                    <div className="bg-black/50 backdrop-blur-sm rounded-lg px-3 py-2 text-purple-200 text-sm flex items-center justify-between gap-3 pointer-events-auto">
+                    <div className="graph-control-panel graph-control-panel-interactive flex-between">
                     <span>Zoom: {(zoom * 100).toFixed(0)}%</span>
                     {!autoZoom && (
                         <button
                         onClick={(e) => { e.stopPropagation(); resetZoom(); }}
                         onMouseDown={(e) => e.stopPropagation()}
-                        className="text-xs bg-purple-500 hover:bg-purple-600 px-2 py-1 rounded transition-colors"
+                        className="btn-sm bg-primary hover:bg-secondary text-primary rounded transition-colors"
                         >
                         Reset
                         </button>
@@ -311,9 +306,8 @@ export const MoleculeGraph: React.FC<MoleculeGraphProps> = ({nodes, edges, ctx, 
                 )}
             </div>
             {hoveredNode && !ctx?.node && (
-                <div className="fixed z-50 pointer-events-none" style={{ left: `${mousePos.x + 20}px`, top: `${mousePos.y + 20}px`, maxWidth: '400px' }}>
-                <div className="bg-gradient-to-br from-slate-800 to-purple-900 border-2 border-purple-400 rounded-xl shadow-2xl p-4 max-h-96 overflow-y-auto">
-                    { /* <div className="text-xs text-purple-400 mb-2">Debug: x={mousePos.x}, y={mousePos.y}</div> */ }
+                <div className="node-hover-tooltip" style={{ left: `${mousePos.x + 20}px`, top: `${mousePos.y + 20}px` }}>
+                <div className="node-hover-content custom-scrollbar">
                     <MarkdownText text={hoveredNode.hoverInfo} />
                 </div>
                 </div>
