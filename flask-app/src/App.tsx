@@ -4,6 +4,7 @@ import { Loader2, FlaskConical, TestTubeDiagonal, Network, Play, RotateCcw, X, S
 import 'recharts';
 
 import { WS_SERVER, VERSION } from './config';
+import { DEFAULT_CUSTOM_SYSTEM_PROMPT } from './constants';
 import { TreeNode, Edge, ContextMenuState, SidebarMessage, Tool, WebSocketMessageToServer, WebSocketMessage, SelectableTool, Experiment, ProfileSettings } from './types';
 
 import { loadRDKit } from './components/molecule';
@@ -25,7 +26,7 @@ const ChemistryTool: React.FC = () => {
   const [smiles, setSmiles] = useState<string>('');
   const [problemType, setProblemType] = useState<string>('retrosynthesis');
   const [propertyType, setPropertyType] = useState<string>('density');
-  const [systemPrompt, setSystemPrompt] = useState<string>('');
+  const [systemPrompt, setSystemPrompt] = useState<string>(DEFAULT_CUSTOM_SYSTEM_PROMPT);
   const [problemPrompt, setProblemPrompt] = useState<string>('');
   const [editPromptsModal, setEditPromptsModal] = useState<boolean>(false);
   const [editPropertyModal, setEditPropertyModal] = useState<boolean>(false);
@@ -619,6 +620,7 @@ const ChemistryTool: React.FC = () => {
       metricsDashboardState.setVisibleMetrics({cost: false, bandgap: false, sascore: true, yield: false, density: true});
     } else if (problem_type === 'custom') {
       metricsDashboardState.setVisibleMetrics({cost: false, bandgap: false, sascore: false, yield: false, density: false});
+      setSystemPrompt(DEFAULT_CUSTOM_SYSTEM_PROMPT);
     }
     setProblemType(problem_type);
   };
@@ -1314,7 +1316,7 @@ const ChemistryTool: React.FC = () => {
             </div>
 
             <div className="modal-footer">
-              <button onClick={() => { savePrompts('', ''); }} className="btn btn-tertiary">
+              <button onClick={() => { savePrompts(DEFAULT_CUSTOM_SYSTEM_PROMPT, ''); }} className="btn btn-tertiary">
                 <RotateCcw className="w-4 h-4" />
                 Reset
               </button>
