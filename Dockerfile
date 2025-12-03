@@ -8,8 +8,8 @@ COPY requirements.txt /app
 COPY flask-app/. /app
 COPY charge_backend /app/charge_backend
 
-ARG AZF_PATH=./aizynth
-COPY ${AZF_PATH}/. /aizynth
+ARG DATA_PATH=./data
+COPY ${DATA_PATH}/. /data
 
 RUN . $HOME/.nvm/nvm.sh && \
     npm install -g npm@latest && \
@@ -27,7 +27,7 @@ RUN . /venv/bin/activate && \
 COPY mock_server.py /app
 COPY dockerscripts/launch_servers.sh /app
 
-RUN chmod -R g+rwx /app /aizynth
+RUN chmod -R g+rwx /app /data
 
 ENV FLASK_APPDIR=/app/dist
 
