@@ -5,27 +5,57 @@ export const MarkdownText: React.FC<MarkdownTextProps> = ({ text }) => {
   const lines = text.split('\n');
   
   const parseInline = (line: string): string => {
-    line = line.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
-    line = line.replace(/\*(.+?)\*/g, '<em>$1</em>');
-    line = line.replace(/`(.+?)`/g, '<code class="bg-purple-900/50 px-1 rounded">$1</code>');
+    // Bold text
+    line = line.replace(/\*\*(.+?)\*\*/g, '<strong class="markdown-strong">$1</strong>');
+    // Italic text
+    line = line.replace(/\*(.+?)\*/g, '<em class="markdown-em">$1</em>');
+    // Inline code
+    line = line.replace(/`(.+?)`/g, '<code class="markdown-code">$1</code>');
     return line;
   };
   
   return (
-    <div className="space-y-2">
+    <div className="markdown-content space-y-2">
       {lines.map((line, idx) => {
+        // Heading level 1
         if (line.startsWith('# ')) {
-          return <h3 key={idx} className="text-lg font-bold text-purple-200">{line.slice(2)}</h3>;
-        } else if (line.startsWith('## ')) {
-          return <h4 key={idx} className="text-base font-semibold text-purple-300">{line.slice(3)}</h4>;
-        } else if (line.startsWith('- ')) {
           return (
-            <li key={idx} className="ml-4 text-sm text-purple-100" dangerouslySetInnerHTML={{ __html: parseInline(line.slice(2)) }} />
+            <h3 key={idx} className="markdown-heading-1">
+              {line.slice(2)}
+            </h3>
           );
-        } else if (line.trim() === '') {
-          return <div key={idx} className="h-1" />;
-        } else {
-          return <p key={idx} className="text-sm text-purple-100" dangerouslySetInnerHTML={{ __html: parseInline(line) }} />;
+        } 
+        // Heading level 2
+        else if (line.startsWith('## ')) {
+          return (
+            <h4 key={idx} className="markdown-heading-2">
+              {line.slice(3)}
+            </h4>
+          );
+        } 
+        // List item
+        else if (line.startsWith('- ')) {
+          return (
+            <li 
+              key={idx} 
+              className="markdown-list-item" 
+              dangerouslySetInnerHTML={{ __html: parseInline(line.slice(2)) }} 
+            />
+          );
+        } 
+        // Empty line (spacer)
+        else if (line.trim() === '') {
+          return <div key={idx} className="markdown-spacer" />;
+        } 
+        // Regular paragraph
+        else {
+          return (
+            <p 
+              key={idx} 
+              className="markdown-paragraph" 
+              dangerouslySetInnerHTML={{ __html: parseInline(line) }} 
+            />
+          );
         }
       })}
     </div>
