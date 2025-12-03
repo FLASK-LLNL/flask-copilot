@@ -39,5 +39,15 @@ export default defineConfig({
   define: {
     'window.APP_CONFIG.WS_SERVER': JSON.stringify(process.env.WS_SERVER || 'ws://localhost:8001/ws'),
     'window.APP_CONFIG.VERSION': JSON.stringify(process.env.SERVER_VERSION || '')
+  },
+  optimizeDeps: {
+    include: ['react', 'react-dom', 'scheduler']
+  },
+  build: {
+    rollupOptions: {
+      output: {
+        manualChunks: undefined  // Prevent chunk splitting issues
+      }
+    }
   }
 });
