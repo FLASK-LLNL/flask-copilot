@@ -8,3 +8,5 @@ export const NODE_STYLES = {
   "red": 'node-error',
   "yellow": 'node-computing',
 } as const;
+
+export const DEFAULT_CUSTOM_SYSTEM_PROMPT = 'Respond with concise and clear answers, as well as JSONs for each SMILES string you return as `{"smiles": "<SMILES STRING GOES HERE>"}`.';
