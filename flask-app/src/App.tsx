@@ -806,7 +806,7 @@ const ChemistryTool: React.FC = () => {
                 onSettingsChange={handleProfileUpdateConfirm}
                 username={username}
               />
-              <div className="absolute top-6 right-20 group flex">
+              <div className={`absolute app-logo top-6 ${sidebarOpen ? "right-115" : "right-20"} group flex`}>
                 <svg version="1.1" id="Layer_1" height="60px" viewBox="0 0 40 40">
                   <g>
                     <rect x="1.73" y="0.01" fill="#FFFFFF" width="34.19" height="34.19"/>
@@ -815,7 +815,7 @@ const ChemistryTool: React.FC = () => {
             h11.09l-4.59,4.75h-6.68C9.71,32.93,3.19,29.44,2.99,21.13V0.01H0.05v37.3h35.87V17.62l-4.05,4.19L15.88,21.82z"/>
                   </g>
                 </svg>
-                {profileSettings?.backend === "alcf" && (
+                {profileSettings?.backend !== "alcf" && (
                 <svg height="60" viewBox="87 0 26 24">
                   <path fill="#007934" d="M95.9 15.3h-8.1l4 7z"></path>
                   <path d="M103.9 15.3h-8.1l-4 7H108l-4.1-7z" fill="#0082ca"></path>
@@ -830,7 +830,7 @@ const ChemistryTool: React.FC = () => {
               </div>
               {/* WebSocket Status Indicator */}
                 <div
-                  className="absolute top-11 group"
+                  className="absolute top-13 group"
                   onClick={(e) => {
                     e.stopPropagation();
                     if (!wsConnected) {
