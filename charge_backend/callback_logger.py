@@ -19,7 +19,16 @@ async def handle_callback_log(message):
         msg = record["message"]
         level = record["level"].name
         if not source:
-            source = f"Logger ({level})"
+            LEVELS = {
+               'DEBUG': 'Debug',
+               'VERBOSE': 'Verbose',
+               'INFO': 'Info',
+               'WARN': 'Warning',
+               'WARNING': 'Warning',
+               'ERROR': 'Error'
+            }
+            level_str = LEVELS.get(level, level)
+            source = f"Logger ({level_str})"
         await websocket.send_json(
             {
                 "type": "response",
