@@ -34,6 +34,7 @@ from tool_registration import (
     register_url,
     register_post,
     reload_server_list,
+    split_url,
 )
 
 from backend_manager import TaskManager, ActionManager
@@ -102,8 +103,8 @@ if manual_mcp_servers_env:
     manual_mcp_servers = manual_mcp_servers_env.split(",")
     count = 0
     for url in manual_mcp_servers:
-        host, port = url.split(":")
-        status = register_url(args.tool_server_cache, host, port, f"m{count}")
+        host, port, path = split_url(url)
+        status = register_url(args.tool_server_cache, host, port, path, f"m{count}")
         logger.info(f"{status}")
         count += 1
 

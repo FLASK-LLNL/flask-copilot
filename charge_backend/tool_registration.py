@@ -12,9 +12,10 @@ from loguru import logger
 import requests
 from pydantic import BaseModel
 import json
-from typing import Optional
+from typing import Optional, Tuple
 import time
 import os
+import re
 
 from charge.utils.system_utils import check_server_paths
 from autogen_ext.tools.mcp import McpWorkbench, SseServerParams
@@ -22,6 +23,15 @@ from charge.clients.autogen_utils import (
     _list_wb_tools,
 )
 
+def split_url(url: str) -> Tuple[str, int, str]:
+    # Regular expression pattern
+    pattern = r'^(?:https?://)?([^:]+):(\d+)(?:/(.+?))?/?$'
+    match = re.match(pattern, url)
+    if match:
+        host = match.group(1)
+        port = match.group(2)
+        path = match.group(3) or ""  # Return empty string if None
+    return host, port, path
 
 @dataclass
 class ToolList:
@@ -35,13 +45,16 @@ class ToolList:
 class ToolServer(BaseModel):
     address: str
     port: int
+    path: str
     name: str
 
     def __str__(self):
-        return f"http://{self.address}:{self.port}/sse"
+        path_if_valid = f"/{self.path}" if self.path else ""
+        return f"http://{self.address}:{self.port}{path_if_valid}/sse"
 
     def long_name(self):
-        return f"[{self.name}] http://{self.address}:{self.port}/sse"
+        path_if_valid = f"/{self.path}" if self.path else ""
+        return f"[{self.name}] http://{self.address}:{self.port}{path_if_valid}/sse"
 
 
 class ToolServerDict(BaseModel):
@@ -116,9 +129,10 @@ def reload_server_list(filename: str):
         return
 
 
-def register_url(filename: str, hostname: str, port: int, name: Optional[str] = ""):
-    key = f"{hostname}:{port}"
-    new_server = ToolServer(address=hostname, port=port, name=name)
+def register_url(filename: str, hostname: str, port: int, path: Optional[str] = "", name: Optional[str] = ""):
+    path_if_valid = f"/{path}" if path else ""
+    key = f"{hostname}:{port}{path_if_valid}"
+    new_server = ToolServer(address=hostname, port=port, path=path, name=name)
 
     old_server = SERVERS.servers.pop(key, None)
     if old_server:
@@ -131,7 +145,7 @@ def register_url(filename: str, hostname: str, port: int, name: Optional[str] = 
         # Check if file exists
         file_exists = os.path.exists(filename)
 
-        msg_base = f"registered MCP server {name} at {hostname}:{port}"
+        msg_base = f"registered MCP server {name} at {hostname}:{port}{path_if_valid}"
         # Check if file is writable (or parent directory is writable for new files)
         if file_exists:
             if not os.access(filename, os.W_OK):
