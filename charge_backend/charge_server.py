@@ -22,8 +22,6 @@ import os
 import logging
 from aizynthfinder.utils.logging import setup_logger
 
-setup_logger(console_level=logging.INFO)
-
 from loguru import logger
 from charge.clients.Client import Client
 from charge.experiments.AutoGenExperiment import AutoGenExperiment
