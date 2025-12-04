@@ -136,13 +136,11 @@ class CallbackHandler:
 
             for result in assistant_message.content:
                 if result.is_error:
-                    message = f"[{source}] Function {result.name} errored with output: {result.content}"
-                    self.clogger.error(message)
+                    self.clogger.error(f"[{source}] Function {result.name} errored with output: {result.content}",
+                                       source=result.name)
                 else:
-                    message = (
-                        f"[{source}] Function {result.name} returned: {result.content}"
-                    )
-                    self.clogger.info(message)
+                    self.clogger.info(f"[{source}] Function {result.name} returned: {result.content}",
+                                      source=result.name)
         else:
             message = f"[{source}] Model: {assistant_message.message.content}"
             self.clogger.info(message)
@@ -227,9 +225,9 @@ def post_process_lmo_smiles(smiles: str, parent_id: int, node_id: int, tool_prop
     """
     tool_properties = tool_properties or {}
     canonical_smiles = SMILES_utils.canonicalize_smiles(smiles)
-    density = tool_properties.get("density", get_density(canonical_smiles))
-    sascore = tool_properties.get("synthesizability", SMILES_utils.get_synthesizability(canonical_smiles))
-    bandgap = tool_properties.get("bandgap", get_bandgap(canonical_smiles))
+    density = float(tool_properties.get("density", get_density(canonical_smiles)))
+    sascore = float(tool_properties.get("synthesizability", SMILES_utils.get_synthesizability(canonical_smiles)))
+    bandgap = float(tool_properties.get("bandgap", get_bandgap(canonical_smiles)))
     return {
         "smiles": canonical_smiles,
         "parent_id": parent_id,

@@ -9,6 +9,7 @@ async def handle_callback_log(message):
     record = message.record
     websocket = record["extra"].get("websocket", None)
     smiles = record["extra"].get("smiles", None)
+    source = record["extra"].get("source", None)
     kwargs = {}
     if smiles:
         kwargs["smiles"] = smiles
@@ -17,13 +18,14 @@ async def handle_callback_log(message):
         # timestamp = record["time"].isoformat(" ", timespec='seconds')
         msg = record["message"]
         level = record["level"].name
+        if not source:
+            source = f"Logger ({level})"
         await websocket.send_json(
             {
                 "type": "response",
-                "message": {"source": f"Logger ({level})", "message": msg, **kwargs},
+                "message": {"source": source, "message": msg, **kwargs},
             }
         )
-    sys.stdout.write(message)
 
 
 logger.add(handle_callback_log, filter=lambda record: record["level"].name == "INFO")
