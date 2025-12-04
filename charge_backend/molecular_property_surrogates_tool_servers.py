@@ -48,6 +48,9 @@ def main(
 
     mcp = FastMCP(
         "Computationally expensive surrogate models for molecular properties MCP Server",
+        sse_path=f"/mol_prop_tools/sse",
+        message_path=f"/mol_prop_tools/messages/",
+
     )
     mcp.tool()(calculate_property_hf)
     
