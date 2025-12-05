@@ -194,14 +194,15 @@ class ActionManager:
             property_attributes = (
                 data["customPropertyName"],
                 data["customPropertyDesc"],
+                "calculate_property_hf",
                 "greater" if data["customPropertyAscending"] else "less",
             )
         else:
             property_name = property_type
             DEFAULT_PROPERTIES = {
-                "density": ("density", "crystalline density (g/cm^3)", "greater"),
-                "hof": ("heat of formation", "Heat of formation (kcal/mol)", "greater"),
-                "bandgap": ("band gap", "HOMO-LUMO energy gap (Hartree)", "greater"),
+                "density": ("density", "crystalline density (g/cm^3)", "calculate_property_hf", "greater"),
+                "hof": ("heat of formation", "Heat of formation (kcal/mol)", "calculate_property_hf", "greater"),
+                "bandgap": ("band gap", "HOMO-LUMO energy gap (Hartree)", "calculate_property_hf", "greater"),
             }
             if property_name not in DEFAULT_PROPERTIES:
                 error_msg = (
