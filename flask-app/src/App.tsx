@@ -752,13 +752,39 @@ const ChemistryTool: React.FC = () => {
         />
         <div className="content-wrapper">
           <div className="w-full">
-            <div className="absolute text-white">
-              <div className="w-full flex app-logo">
-                <svg width="40" height="40" viewBox="0 0 28 28" fill="none">
-                  <path d="M13.967 0C6.65928 0 0.646366 5.60212 0 12.7273H2.77682C3.25522 11.7261 4.27793 11.0303 5.46222 11.0303C7.10365 11.0303 8.43891 12.3624 8.43891 14C8.43891 15.6376 7.10365 16.9697 5.46222 16.9697C4.27793 16.9697 3.25522 16.2739 2.77682 15.2727H0C0.646366 22.3979 6.65928 28 13.967 28C21.7043 28 28 21.7191 28 14C28 6.28091 21.7043 0 13.967 0ZM5.46222 19.5152C8.5112 19.5152 10.9904 17.0418 10.9904 14C10.9904 10.9582 8.5112 8.48485 5.46222 8.48485C5.32189 8.48485 5.18156 8.49121 5.04336 8.50182C6.3042 7.43273 7.935 6.78788 9.71463 6.78788C13.7013 6.78788 16.9437 10.0227 16.9437 14C16.9437 17.9773 13.7013 21.2121 9.71463 21.2121C7.935 21.2121 6.3042 20.5652 5.04336 19.4982C5.18156 19.5088 5.32189 19.5152 5.46222 19.5152ZM13.967 25.4545C11.6112 25.4545 9.42122 24.7418 7.59693 23.5242C8.27944 23.6749 8.98747 23.7576 9.71463 23.7576C15.1067 23.7576 19.4952 19.3794 19.4952 14C19.4952 8.62061 15.1067 4.24242 9.71463 4.24242C8.98747 4.24242 8.27944 4.32515 7.59693 4.47576C9.42122 3.25818 11.6112 2.54545 13.967 2.54545C20.2989 2.54545 25.4486 7.68303 25.4486 14C25.4486 20.317 20.2989 25.4545 13.967 25.4545Z" fill="white"/>
-                </svg>
-                <p className="text-center font-['Geist',sans-serif] text-[32px] leading-[1.3] font-medium text-nowrap whitespace-pre text-white noselect"> Genesis Mission</p>
+            <div className="content-header">
+              { /* Left logos */ }
+              <div className="text-white">
+                <div className="w-full flex app-logo">
+                  <svg width="40" height="40" viewBox="0 0 28 28" fill="none">
+                    <path d="M13.967 0C6.65928 0 0.646366 5.60212 0 12.7273H2.77682C3.25522 11.7261 4.27793 11.0303 5.46222 11.0303C7.10365 11.0303 8.43891 12.3624 8.43891 14C8.43891 15.6376 7.10365 16.9697 5.46222 16.9697C4.27793 16.9697 3.25522 16.2739 2.77682 15.2727H0C0.646366 22.3979 6.65928 28 13.967 28C21.7043 28 28 21.7191 28 14C28 6.28091 21.7043 0 13.967 0ZM5.46222 19.5152C8.5112 19.5152 10.9904 17.0418 10.9904 14C10.9904 10.9582 8.5112 8.48485 5.46222 8.48485C5.32189 8.48485 5.18156 8.49121 5.04336 8.50182C6.3042 7.43273 7.935 6.78788 9.71463 6.78788C13.7013 6.78788 16.9437 10.0227 16.9437 14C16.9437 17.9773 13.7013 21.2121 9.71463 21.2121C7.935 21.2121 6.3042 20.5652 5.04336 19.4982C5.18156 19.5088 5.32189 19.5152 5.46222 19.5152ZM13.967 25.4545C11.6112 25.4545 9.42122 24.7418 7.59693 23.5242C8.27944 23.6749 8.98747 23.7576 9.71463 23.7576C15.1067 23.7576 19.4952 19.3794 19.4952 14C19.4952 8.62061 15.1067 4.24242 9.71463 4.24242C8.98747 4.24242 8.27944 4.32515 7.59693 4.47576C9.42122 3.25818 11.6112 2.54545 13.967 2.54545C20.2989 2.54545 25.4486 7.68303 25.4486 14C25.4486 20.317 20.2989 25.4545 13.967 25.4545Z" fill="white"/>
+                  </svg>
+                  <p className="text-center font-['Geist',sans-serif] text-[32px] leading-[1.3] font-medium text-nowrap whitespace-pre text-white noselect"> Genesis Mission</p>
+                </div>
               </div>
+
+              { /* Right logos */ }
+              <div className="app-logo-right group flex">
+                  <svg version="1.1" id="Layer_1" className="logo-svg" viewBox="0 0 40 40">
+                    <g>
+                      <rect x="1.73" y="0.01" fill="#FFFFFF" width="34.19" height="34.19"/>
+                      <path fill="#1E59AE" d="M35.92,0.01v17.53H18.95V0.01H35.92z M15.88,21.82c-1.12-0.07-1.72-0.78-1.79-2.1V0.01h-0.76v19.73
+              c0.09,1.72,1,2.75,2.53,2.84h15.28l-4.83,5l-11.79,0c-3.04-0.36-6.22-2.93-6.14-6.98V0.01H7.6V20.6c-0.09,4.49,3.45,7.34,6.86,7.75
+              h11.09l-4.59,4.75h-6.68C9.71,32.93,3.19,29.44,2.99,21.13V0.01H0.05v37.3h35.87V17.62l-4.05,4.19L15.88,21.82z"/>
+                    </g>
+                  </svg>
+                  {profileSettings?.backend === "alcf" && (
+                  <svg className="logo-svg" viewBox="87 0 26 24">
+                    <path fill="#007934" d="M95.9 15.3h-8.1l4 7z"></path>
+                    <path d="M103.9 15.3h-8.1l-4 7H108l-4.1-7z" fill="#0082ca"></path>
+                    <path fill="#101e8e" d="M112 15.3h-8.1l4.1 7z"></path>
+                    <path fill="#fff" d="M103.9 15.3h-8l4-7z"></path>
+                    <path fill="#a22a2e" d="M103.9 1.3h-8l4 7z"></path>
+                    <path fill="#d9272e" d="M103.9 1.3l-4 7 4 7h8.1z"></path>
+                    <path d="M95.9 15.3l4-7-4-7-8.1 14h8.1z" fill="#82bc00"></path>
+                  </svg>
+                  )}
+                </div>
             </div>
 
             <div className="app-header">
@@ -769,8 +795,8 @@ const ChemistryTool: React.FC = () => {
               <p className="app-subtitle">Real-time molecular assistant</p>
               <p className="app-subtitle">Connected to simulators at <code>llnl.gov</code> (LLNL)</p>
               <p className="app-subtitle">
-                Connected to orchestrator <code>{profileSettings.model || 'Not configured'}</code> at{' '}
-                <code>{getDisplayUrl()}</code> ({profileSettings.backendLabel})
+                Connected to orchestrator <code>{profileSettings.model || 'Not configured'}</code> at
+                &nbsp;<code>{getDisplayUrl()}</code> ({profileSettings.backendLabel})
               </p>
             </div>
 
@@ -808,31 +834,10 @@ const ChemistryTool: React.FC = () => {
                 onSettingsChange={handleProfileUpdateConfirm}
                 username={username}
               />
-              <div className={`absolute app-logo top-6 ${sidebarOpen ? "right-115" : "right-20"} group flex`}>
-                <svg version="1.1" id="Layer_1" className="logo-svg" viewBox="0 0 40 40">
-                  <g>
-                    <rect x="1.73" y="0.01" fill="#FFFFFF" width="34.19" height="34.19"/>
-                    <path fill="#1E59AE" d="M35.92,0.01v17.53H18.95V0.01H35.92z M15.88,21.82c-1.12-0.07-1.72-0.78-1.79-2.1V0.01h-0.76v19.73
-            c0.09,1.72,1,2.75,2.53,2.84h15.28l-4.83,5l-11.79,0c-3.04-0.36-6.22-2.93-6.14-6.98V0.01H7.6V20.6c-0.09,4.49,3.45,7.34,6.86,7.75
-            h11.09l-4.59,4.75h-6.68C9.71,32.93,3.19,29.44,2.99,21.13V0.01H0.05v37.3h35.87V17.62l-4.05,4.19L15.88,21.82z"/>
-                  </g>
-                </svg>
-                {profileSettings?.backend === "alcf" && (
-                <svg className="logo-svg" viewBox="87 0 26 24">
-                  <path fill="#007934" d="M95.9 15.3h-8.1l4 7z"></path>
-                  <path d="M103.9 15.3h-8.1l-4 7H108l-4.1-7z" fill="#0082ca"></path>
-                  <path fill="#101e8e" d="M112 15.3h-8.1l4.1 7z"></path>
-                  <path fill="#fff" d="M103.9 15.3h-8l4-7z"></path>
-                  <path fill="#a22a2e" d="M103.9 1.3h-8l4 7z"></path>
-                  <path fill="#d9272e" d="M103.9 1.3l-4 7 4 7h8.1z"></path>
-                  <path d="M95.9 15.3l4-7-4-7-8.1 14h8.1z" fill="#82bc00"></path>
-                </svg>
-                )}
 
-              </div>
               {/* WebSocket Status Indicator */}
                 <div
-                  className="absolute top-13 group"
+                  className="ws-status-indicator group"
                   onClick={(e) => {
                     e.stopPropagation();
                     if (!wsConnected) {
