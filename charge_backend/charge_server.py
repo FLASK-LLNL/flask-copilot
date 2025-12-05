@@ -101,8 +101,8 @@ if manual_mcp_servers_env:
     manual_mcp_servers = manual_mcp_servers_env.split(",")
     count = 0
     for url in manual_mcp_servers:
-        host, port, path = split_url(url)
-        status = register_url(args.tool_server_cache, host, port, path, f"m{count}")
+        host, port, path, protocol = split_url(url)
+        status = register_url(args.tool_server_cache, host, port, path, protocol, f"m{count}")
         logger.info(f"{status}")
         count += 1
 
