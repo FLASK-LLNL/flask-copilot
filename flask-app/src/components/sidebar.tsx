@@ -2,7 +2,7 @@
 
 import { useRef, useEffect, useState } from "react";
 import { SidebarMessage, SidebarProps, SidebarState, VisibleSources } from "../types";
-import { X } from "lucide-react";
+import { X, Brain } from "lucide-react";
 import { MarkdownText } from "./markdown";
 import { MoleculeSVG } from "./molecule";
 
@@ -18,31 +18,136 @@ export const useSidebarState = (): SidebarState => {
         'Logger (Debug)': false
     });
 
-
     return {messages, setMessages, sourceFilterOpen, setSourceFilterOpen, visibleSources, setVisibleSources };
 };
 
-export const ReasoningSidebar: React.FC<SidebarProps> = ({messages, rdkitModule, setSidebarOpen, sourceFilterOpen, setSourceFilterOpen, visibleSources, setVisibleSources}) => {
+interface ReasoningSidebarPropsExtended extends SidebarProps {
+  isOpen: boolean;
+  onToggle: () => void;
+}
+
+export const ReasoningSidebar: React.FC<ReasoningSidebarPropsExtended> = ({
+  messages, 
+  rdkitModule, 
+  setSidebarOpen, 
+  sourceFilterOpen, 
+  setSourceFilterOpen, 
+  visibleSources, 
+  setVisibleSources,
+  isOpen,
+  onToggle
+}) => {
+    const SIDEBAR_WIDTH_STORAGE_KEY = 'flask_copilot_reasoning_sidebar_width';
+    const MIN_WIDTH = 200;
+    const MAX_WIDTH = 1600;
+    const DEFAULT_WIDTH = 400;
+    const COLLAPSE_THRESHOLD = 5;
+
+    const [sidebarWidth, setSidebarWidth] = useState<number>(() => {
+      const saved = localStorage.getItem(SIDEBAR_WIDTH_STORAGE_KEY);
+      return saved ? parseInt(saved, 10) : DEFAULT_WIDTH;
+    });
+    const [isResizing, setIsResizing] = useState(false);
+
     const sidebarRef = useRef<HTMLDivElement>(null);
+
+    // Save width to localStorage when it changes
+    useEffect(() => {
+      localStorage.setItem(SIDEBAR_WIDTH_STORAGE_KEY, sidebarWidth.toString());
+    }, [sidebarWidth]);
+
+    // Handle resize
+    useEffect(() => {
+      if (!isResizing) return;
+
+      document.body.style.cursor = 'col-resize';
+      document.body.style.userSelect = 'none';
+
+      const handleMouseMove = (e: MouseEvent) => {
+        const containerWidth = window.innerWidth;
+        const newWidth = containerWidth - e.clientX;
+        
+        // Check if width falls below collapse threshold
+        if (newWidth < COLLAPSE_THRESHOLD) {
+          onToggle();
+          setIsResizing(false);
+          return;
+        }
+        
+        // Constrain width between min and max
+        if (newWidth >= MIN_WIDTH && newWidth <= MAX_WIDTH) {
+          setSidebarWidth(newWidth);
+        }
+      };
+
+      const handleMouseUp = () => {
+        setIsResizing(false);
+        document.body.style.cursor = '';
+        document.body.style.userSelect = '';
+      };
+
+      document.addEventListener('mousemove', handleMouseMove);
+      document.addEventListener('mouseup', handleMouseUp);
+
+      return () => {
+        document.removeEventListener('mousemove', handleMouseMove);
+        document.removeEventListener('mouseup', handleMouseUp);
+        document.body.style.cursor = '';
+        document.body.style.userSelect = '';
+      };
+    }, [isResizing, onToggle]);
 
     // Auto-scroll sidebar to bottom when new messages arrive
     useEffect(() => {
-        if (sidebarRef.current && messages.length > 0) {
+        if (sidebarRef.current && messages.length > 0 && isOpen) {
             // Delay scroll to allow molecules to render
             setTimeout(() => {
-            if (sidebarRef.current) {
-                sidebarRef.current.scrollTo({
-                top: sidebarRef.current.scrollHeight,
-                behavior: 'smooth'
-                });
-            }
+              if (sidebarRef.current) {
+                  sidebarRef.current.scrollTo({
+                    top: sidebarRef.current.scrollHeight,
+                    behavior: 'smooth'
+                  });
+              }
             }, 100);
         }
-    }, [messages]);
+    }, [messages, isOpen]);
 
+    if (!isOpen) {
+      return (
+        <div className="sidebar sidebar-collapsed sidebar-right">
+          <button
+            onClick={onToggle}
+            className="btn-icon"
+            title="Open Reasoning"
+          >
+            <Brain className="w-5 h-5" />
+          </button>
+        </div>
+      );
+    }
 
     return (
-      <div className="reasoning-sidebar flex-col">
+      <div 
+        className={`reasoning-sidebar flex-col ${isResizing ? 'resizing' : ''}`}
+        style={{ width: `${sidebarWidth}px` }}
+      >
+        {/* Resize Handle (on left side for right sidebar) */}
+        <div
+          className={`sidebar-resize-handle sidebar-resize-handle-left ${isResizing ? 'bg-secondary' : ''}`}
+          onMouseDown={(e) => {
+            e.preventDefault();
+            setIsResizing(true);
+          }}
+          title="Drag to resize (drag right to collapse)"
+        >
+          <div className="absolute top-0 bottom-0 left-0 w-0.5 bg-secondary group-hover:bg-primary transition-colors" />
+          <div className="absolute top-1/2 left-0.5 -translate-y-1/2 flex flex-col gap-1">
+            <div className="w-0.5 h-1 bg-secondary group-hover:bg-primary transition-colors" />
+            <div className="w-0.5 h-1 bg-secondary group-hover:bg-primary transition-colors" />
+            <div className="w-0.5 h-1 bg-secondary group-hover:bg-primary transition-colors" />
+          </div>
+        </div>
+
         <div className="card-header">
           <h3 className="heading-3">Reasoning</h3>
           <div className="flex items-center gap-2">
@@ -96,7 +201,7 @@ export const ReasoningSidebar: React.FC<SidebarProps> = ({messages, rdkitModule,
                 </div>
               )}
             </div>
-            <button onClick={() => setSidebarOpen(false)} className="btn-icon">
+            <button onClick={onToggle} className="btn-icon">
               <X className="w-5 h-5" />
             </button>
           </div>
