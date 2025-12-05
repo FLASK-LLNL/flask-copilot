@@ -15,20 +15,19 @@ You must stop as soon as you have found a valid new molecule with {direction} {p
 
 PROCEDURE (must be followed deterministically):
 1. Compute the lead molecule {property}:
-   - Use calculate_property_hf(LEAD_SMILES, "{property}") or calculate_property(LEAD_SMILES, "{property}").
+   - Use {calculate_property_tool}(LEAD_SMILES, "{property}").
    - Store the value as LEAD_PROPERTY.
 2. Generate up to 10 candidate SMILES containing only C,H,O,N.
 3. For each candidate:
    a. Validate that the SMILES is syntactically correct and contains only allowed elements.
    b. Call known_smiles(smiles). If True, skip this candidate.
-   c. If valid and new, call calculate_property_hf(smiles,
-   "{property}") (or calculate_property(LEAD_SMILES, "{property}")) and record the {property}.
+   c. If valid and new, call {calculate_property_tool}(smiles, "{property}") and record the {property}.
    d. Keep only candidates with {property} {condition} LEAD_PROPERTY.
 4. Rank the valid new candidates by {property} ({ranking} first).
 5. Return the top 1 or repeat steps 2-4 until you have found 3 valid new molecules.
 
 CONSTRAINTS:
-- Do not estimate or guess {property} without calling calculate_property_hf(smiles, "{property}") or calculate_property(LEAD_SMILES, "{property}").
-- Always use the high fidelity version, calculate_propery_hf, if it is available.  Otherwise use the faster calculate_propery tool.
+- Do not estimate or guess {property} without calling {calculate_property_tool}(SMILES, "{property}").
+- Always use the tool {calculate_property_tool}, if it is available.
 - Do not claim global novelty. Use only known_smiles(smiles) for novelty checking.
 - Do not compute {property} for invalid or known SMILES.
