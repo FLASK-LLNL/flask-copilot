@@ -23,15 +23,22 @@ from charge.clients.autogen_utils import (
     _list_wb_tools,
 )
 
-def split_url(url: str) -> Tuple[str, int, str]:
+def split_url(url: str) -> Tuple[str, int, str, str]:
     # Regular expression pattern
-    pattern = r'^(?:https?://)?([^:]+):(\d+)(?:/(.+?))?/?$'
+    pattern = r'^(https?://)?([^:/]+)(?::(\d+))?(?:/(.+?))?/?$'
+
     match = re.match(pattern, url)
+
     if match:
-        host = match.group(1)
-        port = match.group(2)
-        path = match.group(3) or ""  # Return empty string if None
-    return host, port, path
+        protocol = match.group(1) or ""
+        host = match.group(2)
+        port = match.group(3) or ""
+        path = match.group(4) or ""
+
+    if not port and not path:
+        raise ValueError(f"Unusable URL provide {url} -- requires either a port or a path")
+
+    return host, port, path, protocol
 
 @dataclass
 class ToolList:
@@ -47,14 +54,17 @@ class ToolServer(BaseModel):
     port: int
     path: str
     name: str
+    protocol: Optional[str] = None
 
     def __str__(self):
         path_if_valid = f"/{self.path}" if self.path else ""
-        return f"http://{self.address}:{self.port}{path_if_valid}/sse"
+        protocol_if_valid = f"{self.protocol}" if self.protocol else "http://"
+        return f"{protocol_if_valid}{self.address}:{self.port}{path_if_valid}/sse"
 
     def long_name(self):
         path_if_valid = f"/{self.path}" if self.path else ""
-        return f"[{self.name}] http://{self.address}:{self.port}{path_if_valid}/sse"
+        protocol_if_valid = f"{self.protocol}" if self.protocol else "http://"
+        return f"[{self.name}] {protocol_if_valid}{self.address}:{self.port}{path_if_valid}/sse"
 
 
 class ToolServerDict(BaseModel):
@@ -129,10 +139,11 @@ def reload_server_list(filename: str):
         return
 
 
-def register_url(filename: str, hostname: str, port: int, path: Optional[str] = "", name: Optional[str] = ""):
+def register_url(filename: str, hostname: str, port: int, path: Optional[str] = "", protocol: Optional[str] = "", name: Optional[str] = ""):
     path_if_valid = f"/{path}" if path else ""
-    key = f"{hostname}:{port}{path_if_valid}"
-    new_server = ToolServer(address=hostname, port=port, path=path, name=name)
+    protocol_if_valid = f"{protocol}" if protocol else "http://"
+    key = f"{protocol_if_valid}{hostname}:{port}{path_if_valid}"
+    new_server = ToolServer(address=hostname, port=port, path=path, name=name, protocol=protocol)
 
     old_server = SERVERS.servers.pop(key, None)
     if old_server:
@@ -145,7 +156,7 @@ def register_url(filename: str, hostname: str, port: int, path: Optional[str] = 
         # Check if file exists
         file_exists = os.path.exists(filename)
 
-        msg_base = f"registered MCP server {name} at {hostname}:{port}{path_if_valid}"
+        msg_base = f"registered MCP server {name} at {key}"
         # Check if file is writable (or parent directory is writable for new files)
         if file_exists:
             if not os.access(filename, os.W_OK):
