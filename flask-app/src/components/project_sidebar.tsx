@@ -384,7 +384,7 @@ export const ProjectSidebar: React.FC<ProjectSidebarProps> = ({
   return (
     <>
     <div 
-      className="sidebar"
+      className={`sidebar ${isResizing ? 'resizing' : ''}`}
       style={{ width: `${sidebarWidth}px` }}
     >
       {/* Header */}

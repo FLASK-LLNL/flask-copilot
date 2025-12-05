@@ -1,6 +1,6 @@
 /* eslint-disable react-hooks/exhaustive-deps */
 import React, { useState, useRef, useEffect, useCallback } from 'react';
-import { Loader2, FlaskConical, TestTubeDiagonal, Network, Play, RotateCcw, X, Send, RefreshCw, Sparkles, MessageCircleQuestion, StepForward, MessageSquareShare } from 'lucide-react';
+import { Loader2, FlaskConical, TestTubeDiagonal, Network, Play, RotateCcw, X, Send, RefreshCw, Sparkles, MessageCircleQuestion, StepForward, MessageSquareShare, Brain } from 'lucide-react';
 import 'recharts';
 
 import { WS_SERVER, VERSION } from './config';
@@ -757,7 +757,7 @@ const ChemistryTool: React.FC = () => {
                 <svg width="40" height="40" viewBox="0 0 28 28" fill="none">
                   <path d="M13.967 0C6.65928 0 0.646366 5.60212 0 12.7273H2.77682C3.25522 11.7261 4.27793 11.0303 5.46222 11.0303C7.10365 11.0303 8.43891 12.3624 8.43891 14C8.43891 15.6376 7.10365 16.9697 5.46222 16.9697C4.27793 16.9697 3.25522 16.2739 2.77682 15.2727H0C0.646366 22.3979 6.65928 28 13.967 28C21.7043 28 28 21.7191 28 14C28 6.28091 21.7043 0 13.967 0ZM5.46222 19.5152C8.5112 19.5152 10.9904 17.0418 10.9904 14C10.9904 10.9582 8.5112 8.48485 5.46222 8.48485C5.32189 8.48485 5.18156 8.49121 5.04336 8.50182C6.3042 7.43273 7.935 6.78788 9.71463 6.78788C13.7013 6.78788 16.9437 10.0227 16.9437 14C16.9437 17.9773 13.7013 21.2121 9.71463 21.2121C7.935 21.2121 6.3042 20.5652 5.04336 19.4982C5.18156 19.5088 5.32189 19.5152 5.46222 19.5152ZM13.967 25.4545C11.6112 25.4545 9.42122 24.7418 7.59693 23.5242C8.27944 23.6749 8.98747 23.7576 9.71463 23.7576C15.1067 23.7576 19.4952 19.3794 19.4952 14C19.4952 8.62061 15.1067 4.24242 9.71463 4.24242C8.98747 4.24242 8.27944 4.32515 7.59693 4.47576C9.42122 3.25818 11.6112 2.54545 13.967 2.54545C20.2989 2.54545 25.4486 7.68303 25.4486 14C25.4486 20.317 20.2989 25.4545 13.967 25.4545Z" fill="white"/>
                 </svg>
-                <p className="text-center font-['Geist',sans-serif] text-[32px] leading-[1.3] font-medium text-nowrap whitespace-pre text-white"> Genesis Mission</p>
+                <p className="text-center font-['Geist',sans-serif] text-[32px] leading-[1.3] font-medium text-nowrap whitespace-pre text-white noselect"> Genesis Mission</p>
               </div>
             </div>
 
@@ -800,9 +800,7 @@ const ChemistryTool: React.FC = () => {
                 )}
               </div>
               <button onClick={() => setSidebarOpen(!sidebarOpen)} className="btn btn-secondary btn-sm">
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" />
-                </svg>
+                <Brain className="w-4 h-4" />
                 Reasoning
               </button>
               <ProfileButton
@@ -1149,9 +1147,13 @@ const ChemistryTool: React.FC = () => {
           </div>
         </div>
 
-        {sidebarOpen && (
-          <ReasoningSidebar {...sidebarState} setSidebarOpen={setSidebarOpen} rdkitModule={rdkitModule} />
-        )}
+        <ReasoningSidebar 
+          {...sidebarState} 
+          setSidebarOpen={setSidebarOpen} 
+          rdkitModule={rdkitModule}
+          isOpen={sidebarOpen}
+          onToggle={() => setSidebarOpen(!sidebarOpen)}
+        />
       </div>
 
       {contextMenu && contextMenu.node && (
