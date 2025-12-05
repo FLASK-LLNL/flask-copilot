@@ -5,24 +5,15 @@
 ## SPDX-License-Identifier: Apache-2.0
 ################################################################################
 
-import asyncio
-from concurrent.futures import ProcessPoolExecutor
 from functools import partial
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Request
-from fastapi.responses import HTMLResponse
-from fastapi.staticfiles import StaticFiles
-from fastapi.middleware.cors import CORSMiddleware
+from fastapi import WebSocket, WebSocketDisconnect
 import os
 import argparse
 import httpx
-from charge.servers.server_utils import try_get_public_hostname
 import os
-
-
-import logging
-from aizynthfinder.utils.logging import setup_logger
-
 from loguru import logger
+
+from charge.servers.server_utils import try_get_public_hostname
 from charge.clients.Client import Client
 from charge.experiments.AutoGenExperiment import AutoGenExperiment
 from charge.clients.autogen import AutoGenPool
@@ -36,6 +27,10 @@ from tool_registration import (
 )
 
 from backend_manager import TaskManager, ActionManager
+from backend.server import app
+from backend.routers import projects as projrouter
+
+app.include_router(projrouter.router)
 
 parser = argparse.ArgumentParser()
 
@@ -69,28 +64,9 @@ parser.add_argument(
 )
 
 # Add standard CLI arguments
-Client.add_std_parser_arguments(
-    parser, defaults=dict(backend="openai", model="gpt-5-nano")
-)
+Client.add_std_parser_arguments(parser, defaults=dict(backend="openai", model="gpt-5-nano"))
 
 args, _ = parser.parse_known_args()
-
-app = FastAPI()
-
-# CORS for development
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
-
-if "FLASK_APPDIR" in os.environ:
-    DIST_PATH = os.environ["FLASK_APPDIR"]
-else:
-    DIST_PATH = os.path.join(os.path.dirname(__file__), "flask-app", "dist")
-ASSETS_PATH = os.path.join(DIST_PATH, "assets")
 
 reload_server_list(args.tool_server_cache)
 
@@ -107,55 +83,6 @@ if manual_mcp_servers_env:
         )
         logger.info(f"{status}")
         count += 1
-
-if os.path.exists(ASSETS_PATH):
-    # Serve the frontend
-    app.mount("/assets", StaticFiles(directory=ASSETS_PATH), name="assets")
-    app.mount(
-        "/rdkit", StaticFiles(directory=os.path.join(DIST_PATH, "rdkit")), name="rdkit"
-    )
-
-    @app.get("/")
-    async def root(request: Request):
-        logger.info(f"Request for Web UI received. Headers: {str(request.headers)}")
-        with open(os.path.join(DIST_PATH, "index.html"), "r") as fp:
-            html = fp.read()
-
-        html = html.replace(
-            "<!-- APP CONFIG -->",
-            f"""
-           <script>
-           window.APP_CONFIG = {{
-               WS_SERVER: '{os.getenv("WS_SERVER", "ws://localhost:8001/ws")}',
-               VERSION: '{os.getenv("SERVER_VERSION", "")}'
-           }};
-           </script>""",
-        )
-        return HTMLResponse(html)
-
-
-async def _cancel_task_if_running(
-    action, task: asyncio.Task | None, executor: ProcessPoolExecutor | None
-):
-    if action not in [
-        "compute",
-        "optimize-from",
-        "compute-reaction-from",
-        "recompute-reaction",
-        "recompute-parent-reaction",
-    ]:
-        return
-
-    if task and not task.done():
-        logger.info("Cancelling existing compute task...")
-        task.cancel()
-        try:
-            await task
-        except asyncio.CancelledError:
-            logger.info("Previous compute task cancelled.")
-
-    if executor:
-        executor.shutdown(wait=False, cancel_futures=True)
 
 
 @app.websocket("/ws")
@@ -180,9 +107,7 @@ async def websocket_endpoint(websocket: WebSocket):
 
     # set up an AutoGenAgent pool for tasks on this endpoint
 
-    autogen_pool = AutoGenPool(
-        model=model, backend=backend, api_key=API_KEY, base_url=BASE_URL
-    )
+    autogen_pool = AutoGenPool(model=model, backend=backend, api_key=API_KEY, base_url=BASE_URL)
 
     # Set up an experiment class for current endpoint
     experiment = AutoGenExperiment(task=None, agent_pool=autogen_pool)
@@ -223,9 +148,7 @@ async def websocket_endpoint(websocket: WebSocket):
                     handler_func = action_handlers[action]
                     await handler_func(data)
                 else:
-                    logger.warning(
-                        f"Unknown action received: {action} with data {data}"
-                    )
+                    logger.warning(f"Unknown action received: {action} with data {data}")
             except ValueError as e:
                 logger.error(f"Error in internal loop connection: {e}")
                 await task_manager.cancel_current_task()

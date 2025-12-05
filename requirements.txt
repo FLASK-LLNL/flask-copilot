@@ -3,3 +3,6 @@ uvicorn
 python-multipart
 websockets
 requests
+sqlalchemy[asyncio]
+aiomysql
+pydantic

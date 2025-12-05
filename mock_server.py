@@ -15,107 +15,17 @@ Supported messages from frontend to server:
     * ``custom_query``: Execute custom user query
 """
 
-from fastapi import FastAPI, Request, WebSocket, WebSocketDisconnect
-from fastapi.responses import JSONResponse, HTMLResponse
-from fastapi.staticfiles import StaticFiles
-from fastapi.middleware.cors import CORSMiddleware
+from fastapi import WebSocket, WebSocketDisconnect
 from dataclasses import dataclass, asdict
 import asyncio
 import copy
-import os
 import random
-from typing import Any, Optional, Literal
-import requests
+from typing import Optional
 from datetime import datetime
 from loguru import logger
 from charge_backend.molecule_naming import smiles_to_html
-
-app = FastAPI()
-
-# CORS for development
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
-
-if "FLASK_APPDIR" in os.environ:
-    DIST_PATH = os.environ["FLASK_APPDIR"]
-else:
-    DIST_PATH = os.path.join(os.path.dirname(__file__), "flask-app", "dist")
-ASSETS_PATH = os.path.join(DIST_PATH, "assets")
-
-if os.path.exists(ASSETS_PATH):
-    # Serve the frontend
-    app.mount("/assets", StaticFiles(directory=ASSETS_PATH), name="assets")
-    app.mount(
-        "/rdkit", StaticFiles(directory=os.path.join(DIST_PATH, "rdkit")), name="rdkit"
-    )
-
-    @app.get("/")
-    async def root(request: Request):
-        logger.info(f"Request for Web UI received. Headers: {str(request.headers)}")
-        with open(os.path.join(DIST_PATH, "index.html"), "r") as fp:
-            html = fp.read()
-
-        html = html.replace(
-            "<!-- APP CONFIG -->",
-            f"""
-           <script>
-           window.APP_CONFIG = {{
-               WS_SERVER: '{os.getenv("WS_SERVER", "ws://localhost:8001/ws")}',
-               VERSION: '{os.getenv("SERVER_VERSION", "")}'
-           }};
-           </script>""",
-        )
-        return HTMLResponse(html)
-
-
-@dataclass
-class Node:
-    id: str
-    smiles: str
-    label: str
-    hoverInfo: str
-    level: int
-    parentId: Optional[str] = None
-    x: Optional[int] = None
-    y: Optional[int] = None
-    # Properties
-    cost: Optional[float] = None
-    bandgap: Optional[float] = None
-    density: Optional[float] = None
-    yield_: Optional[float] = None
-    highlight: Optional[str] = "normal"
-
-    def json(self):
-        ret = asdict(self)
-        ret["yield"] = ret["yield_"]
-        del ret["yield_"]
-        return ret
-
-
-@dataclass
-class Edge:
-    id: str
-    fromNode: str
-    toNode: str
-    status: Literal["computing", "complete"]
-    label: Optional[str] = None
-
-    def json(self):
-        return asdict(self)
-
-
-@dataclass
-class SidebarMessage:
-    content: str
-    smiles: str
-
-    def json(self):
-        return asdict(self)
+from charge_backend.structures import Node, Edge
+from backend.server import app
 
 
 @dataclass
