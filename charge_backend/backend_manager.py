@@ -25,6 +25,18 @@ from retro_charge_backend_funcs import (
     optimize_molecule_retro,
 )
 
+# Mapping from backend name to human-readable labels. Mirrored from the frontend
+BACKEND_LABELS = {
+    'openai': 'OpenAI',
+    'livai': 'LivAI',
+    'llamame': 'LLamaMe',
+    'alcf': 'ALCF Sophia',
+    'gemini': 'Google Gemini',
+    'ollama': 'Ollama',
+    'vllm': 'vLLM',
+    'huggingface': 'HuggingFace Local',
+    'custom': 'Custom URL',
+}
 
 class TaskManager:
     """Manages background tasks and processes state for a websocket connection."""
@@ -373,6 +385,7 @@ class ActionManager:
                 "type": "update-orchestrator-profile",
                 "profileSettings": {
                     "backend": agent_pool.backend,
+                    "backendLabel": BACKEND_LABELS.get(agent_pool.backend, agent_pool.backend),
                     "useCustomUrl": useCustomUrl,
                     "customUrl": base_url if base_url else "",
                     "model": model,
