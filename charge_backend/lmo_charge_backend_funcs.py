@@ -7,6 +7,7 @@ import os
 from pathlib import Path
 from charge.experiments.AutoGenExperiment import AutoGenExperiment
 from charge.clients.autogen_utils import chargeConnectionError
+from charge.utils.mcp_workbench_utils import call_mcp_tool_directly
 from callback_logger import CallbackLogger
 from charge.tasks.LMOTask import (
     LMOTask as LeadMoleculeOptimization,
@@ -24,12 +25,14 @@ from backend_helper_funcs import (
 from molecule_naming import smiles_to_html
 
 # TODO: Convert this to a dataclass
-MOLECULE_HOVER_TEMPLATE = """**SMILES:** `{smiles}`
-
-## Properties
- - **Band Gap:** {bandgap:.2f}
- - **Density:** {density:.3f}
- - **Synthesizability (SA) Score:** {sascore:.3f}"""
+MOLECULE_HOVER_TEMPLATE = (
+    "**SMILES:** `{smiles}`\n"
+    "\n"
+    "## Properties\n"
+    " - **Band Gap:** {bandgap:.2f}\n"
+    " - **Density:** {density:.3f}\n"
+    " - **Synthesizability (SA) Score:** {sascore:.3f}"
+)
 
 BASE_DIR = Path(__file__).resolve().parent
 PROMPTS_DIR = BASE_DIR / "prompts"
@@ -52,6 +55,7 @@ async def generate_lead_molecule(
     websocket: WebSocket,
     property: str = "density",
     property_description: str = "molecular density (g/cc)",
+    calculate_property_tool: str = "calculate_property_hf",
     condition: str = "greater",
     custom_prompt: Optional[str] = None,
     initial_level: int = 0,
@@ -78,11 +82,34 @@ async def generate_lead_molecule(
     clogger.info(
         f"Starting task with lead molecule: {lead_molecule_smiles}",
         smiles=lead_molecule_smiles,
+        source="generate_lead_molecules",
     )
 
     parent_id = 0
     node_id = initial_node_id
-    lead_molecule_data = post_process_lmo_smiles(smiles=lead_molecule_smiles, parent_id=parent_id - 1, node_id=node_id)
+
+    # Fix how the available tools interacts with the calculate property tool field
+    property_result_msg = await call_mcp_tool_directly(
+        tool_name = calculate_property_tool,
+        arguments = {
+            "smiles": lead_molecule_smiles,
+            "property": property,
+        },
+        urls = available_tools,
+    )
+    results = property_result_msg.result
+    if len(results) > 1:
+        property_result = float(property_result_msg.result[1].content)
+    else:
+        property_result = 0.0
+        raise ValueError(f"{property_result_msg.result[0].content}")
+
+    lead_molecule_data = post_process_lmo_smiles(
+        smiles=lead_molecule_smiles,
+        parent_id=parent_id - 1,
+        node_id=node_id,
+        tool_properties = {property: property_result}
+    )
 
     # Start the db with the lead molecule
     lmo_helper_funcs.save_list_to_json_file(data=[lead_molecule_data], file_path=mol_file_path)
@@ -141,6 +168,7 @@ async def generate_lead_molecule(
             smiles=lead_molecule_smiles,
             property=property,
             property_description=property_description,
+            calculate_property_tool=calculate_property_tool,
             condition=condition,
             direction=direction,
             ranking=ranking,
@@ -155,8 +183,11 @@ async def generate_lead_molecule(
     lmo_task = LeadMoleculeOptimization(
         lead_molecule=lead_molecule_smiles,
         user_prompt=formatted_user_prompt + "\n",
+        property_tool_name=calculate_property_tool,
+        property_name=property,
         server_urls=available_tools,
     )
+    await lmo_task.get_initial_property_value()
 
     if os.getenv("CHARGE_DISABLE_OUTPUT_VALIDATION", "0") == "1":
         lmo_task.structured_output_schema = None
@@ -282,6 +313,7 @@ async def generate_lead_molecule(
                         previous_smiles=", ".join(generated_smiles_list),
                         property=property,
                         property_description=property_description,
+                        calculate_property_tool=calculate_property_tool,
                         condition=condition,
                         direction=direction,
                         ranking=ranking,
@@ -294,8 +326,11 @@ async def generate_lead_molecule(
                         lead_molecule=current_best_smiles,
                         # This needs to be fixed so that it takes a property name, value, and function for evaluating it
                         user_prompt=formatted_refine_prompt + "\n",
+                        property_tool_name=calculate_property_tool,
+                        property_name=property,
                         server_urls=available_tools,
                     )
+                    await lmo_task.get_initial_property_value()
 
                     if os.getenv("CHARGE_DISABLE_OUTPUT_VALIDATION", "0") == "1":
                         lmo_task.structured_output_schema = None
