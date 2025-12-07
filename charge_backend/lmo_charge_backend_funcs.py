@@ -99,7 +99,7 @@ async def generate_lead_molecule(
     )
     results = property_result_msg.result
     if len(results) > 1:
-        property_result = property_result_msg.result[1].content
+        property_result = float(property_result_msg.result[1].content)
     else:
         property_result = 0.0
         raise ValueError(f"{property_result_msg.result[0].content}")
@@ -313,6 +313,7 @@ async def generate_lead_molecule(
                         previous_smiles=", ".join(generated_smiles_list),
                         property=property,
                         property_description=property_description,
+                        calculate_property_tool=calculate_property_tool,
                         condition=condition,
                         direction=direction,
                         ranking=ranking,
