@@ -408,13 +408,15 @@ const ChemistryTool: React.FC = () => {
         addSidebarMessage(data.message!);
         console.log('Server response:', data.message);
       } else if (data.type === 'available-tools-response') {
-        setAvailableTools(data.tools || []);
-        availableToolsMap.splice(0, availableToolsMap.length);
+        const newTools = data.tools || [];
+        setAvailableTools(newTools);
+        setAvailableToolsMap(
+          newTools.map((server: Tool, index: number) => ({
+            id: index,
+            tool_server: server
+          }))
+        );
         setSelectedTools([]);
-        availableTools.forEach((server: Tool, index: number, array: Tool[]) => {
-          console.log(`Tool Server Element at index ${index}: ${server.server}`);
-          availableToolsMap.push({id: index, tool_server: server})
-        });
       } else if (data.type === 'update-orchestrator-profile') {
         // Handle profile settings updates from server
         const newSettings: ProfileSettings = {
