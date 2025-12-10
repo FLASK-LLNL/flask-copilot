@@ -70,23 +70,47 @@ class TaskManager:
         if exc is None:
             return
 
+        # Log the exception details
+        msg = f"Background task failed with exception: {type(exc).__name__}: {exc}"
+        logger.error(msg)
+        await self.websocket.send_json(
+            {
+                "type": "response",
+                "message": {
+                    "source": "system",
+                    "message": msg,
+                },
+            }
+        )
+
         if type(exc) == chargeConnectionError:
             # logger.error(f"Charge connection error in background task: {exc}")
             await self.clogger.info(
                 f"Unsupported model was selected.  \n Server encountered error: {exc}"
             )
+        else:
+            # Log other exceptions for debugging
+            logger.exception(f"Unexpected error in background task: {type(exc).__name__}: {exc}")
 
         # Send a stopped message with error details to the websocket so the UI can react
         try:
             await self.websocket.send_json({"type": "complete"})
-        except Exception:
-            logger.exception("Failed to send task error to websocket")
-        raise exc
+        except Exception as send_error:
+            logger.exception(f"Failed to send task error to websocket: {send_error}")
 
     async def run_task(self, coro) -> None:
         await self.cancel_current_task()
-        self.current_task = asyncio.create_task(coro)
-        self._attach_done_callback(self.current_task)
+        try:
+            self.current_task = asyncio.create_task(coro)
+            self._attach_done_callback(self.current_task)
+            await self.current_task  # Await it to catch exceptions properly
+        except asyncio.CancelledError:
+            logger.info("Task was cancelled")
+            raise
+        except Exception as e:
+            logger.error(f"Task failed: {e}")
+            await self.websocket.send_json({"type": "complete"})
+            # Optionally re-raise or handle as needed
 
     async def cancel_current_task(self) -> None:
         if self.current_task and not self.current_task.done():
@@ -250,7 +274,6 @@ class ActionManager:
             initial_node_id,
             initial_x_position,
         )
-
         await self.task_manager.run_task(run_func())
 
     async def _handle_retrosynthesis(self, data: dict) -> None:

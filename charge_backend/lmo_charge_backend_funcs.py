@@ -82,7 +82,7 @@ async def generate_lead_molecule(
     await  clogger.info(
         f"Starting task with lead molecule: {lead_molecule_smiles} and available tools: {available_tools}",
         smiles=lead_molecule_smiles,
-        source="generate_lead_molecules",
+        source="generate_lead_molecule",
     )
 
     parent_id = 0
