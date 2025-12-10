@@ -47,6 +47,7 @@ class TaskManager:
         self.clogger = CallbackLogger(websocket)
         self.max_workers = max_workers
         self.executor = ProcessPoolExecutor(max_workers=max_workers)
+        self.available_tools: Optional[list[str]] = None
 
     def _attach_done_callback(self, task: asyncio.Task) -> None:
         """Attach a done-callback to a background task so exceptions are observed.
@@ -241,7 +242,7 @@ class ActionManager:
             self.args.json_file,
             self.args.max_iterations,
             data.get("depth", 3),
-            list_server_urls(),
+            self.task_manager.available_tools or list_server_urls(),
             self.task_manager.websocket,
             *property_attributes,
             data.get("query", None),
@@ -466,7 +467,10 @@ class ActionManager:
         """Handle select-tools-for-task action."""
         logger.info("Select tools for task")
         logger.info(f"Data: {data}")
-        # TODO: Implement tool selection logic
+        available_tools = []
+        for server in data["enabledTools"]["selectedTools"]:
+            available_tools.append(server["tool_server"]["server"])
+        self.task_manager.available_tools = available_tools
 
     async def handle_custom_query_retro_molecule(self, data: dict) -> None:
         """Handle a query on the given molecule. First try to ask about the molecule as a reactant. If that is not available, ask about it in the context of it being a product."""
