@@ -366,7 +366,7 @@ async def optimize_molecule_retro(
     websocket: WebSocket,
     experiment: AutoGenExperiment,
     config_file: str,
-    server_urls: Optional[Union[str, list[str]]] = None,
+    available_tools: Optional[Union[str, list[str]]] = None,
 ):
     """Optimize a molecule using retrosynthesis by node ID"""
     current_node = context.node_ids.get(node_id)
@@ -387,6 +387,8 @@ async def optimize_molecule_retro(
         }
     )
 
+    clogger = CallbackLogger(websocket)
+
     if node_id in context.node_id_to_charge_client:
         # Existing context
         runner = context.node_id_to_charge_client[node_id]
@@ -397,7 +399,7 @@ async def optimize_molecule_retro(
         )
         user_prompt += "\nDouble check the reactants with the `predict_reaction_products` tool to see if the products are equivalent to the given product. If there is any inconsistency (canonicalize both sides of the equation first), log it and try some other set of reactants."
         retro_task = RetrosynthesisTask(
-            user_prompt=user_prompt, server_urls=server_urls
+            user_prompt=user_prompt, server_urls=available_tools
         )
 
         if os.getenv("CHARGE_DISABLE_OUTPUT_VALIDATION", "0") == "1":
@@ -415,7 +417,7 @@ async def optimize_molecule_retro(
         )
         context.node_id_to_charge_client[node_id] = runner
 
-    logger.info(f"Optimizing {current_node.smiles} using retrosynthesis.")
+    clogger.info(f"Optimizing {current_node.smiles} using retrosynthesis with available tools: {available_tools}.")
 
     # Run task
     await highlight_node(current_node, websocket, True)
@@ -426,8 +428,7 @@ async def optimize_molecule_retro(
             "Structure validation disabled for RetrosynthesisTask output schema."
             "Returning text results without validation first before post-processing."
         )
-        clogger = CallbackLogger(websocket)
-        await clogger.info(f"Results: {output}")
+    await clogger.info(f"Results: {output}")
 
     result = ReactionOutputSchema.model_validate_json(output)
 
@@ -437,8 +438,9 @@ async def optimize_molecule_retro(
     num_nodes = len(context.node_ids)
 
     reasoning_summary = result.reasoning_summary
-    logger.info(
-        f"Retrosynthesis reasoning for {current_node.smiles}: {reasoning_summary}"
+    clogger.info(
+        f"Retrosynthesis reasoning for {current_node.smiles}: {reasoning_summary}",
+        source = "optimize_molecule_retro"
     )
 
     await websocket.send_json(

@@ -303,7 +303,7 @@ class ActionManager:
             data["systemPrompt"],
             data["userPrompt"],
             self.experiment,
-            list_server_urls(),
+            self.task_manager.available_tools or list_server_urls(),
             self.task_manager.websocket,
         )
 
@@ -324,7 +324,7 @@ class ActionManager:
             self.task_manager.websocket,
             self.experiment,
             self.args.config_file,
-            list_server_urls(),
+            self.task_manager.available_tools or list_server_urls(),
         )
 
         await self.task_manager.run_task(run_func())
@@ -507,7 +507,7 @@ class ActionManager:
         task = Task(
             system_prompt=f"You are a helpful chemical assistant who answers in concise but factual responses. Answer the following query about the molecule `{node.smiles}`.",
             user_prompt=data["query"],
-            server_urls=list_server_urls(),
+            server_urls=self.task_manager.available_tools or list_server_urls(),
         )
 
         # First try finding the parent
@@ -552,7 +552,7 @@ class ActionManager:
         task = Task(
             system_prompt="You are a helpful chemical assistant who answers in concise but factual responses. Answer the following query about the reaction.",
             user_prompt=data["query"],
-            server_urls=list_server_urls(),
+            server_urls=self.task_manager.available_tools or list_server_urls(),
         )
 
         node = self.retro_synth_context.node_ids[data["nodeId"]]
@@ -593,7 +593,7 @@ class ActionManager:
         task = Task(
             system_prompt=f"You are a helpful chemical assistant who answers in concise but factual responses. Answer the following query about the reaction in the context of reactant `{node.smiles}`.",
             user_prompt=data["query"],
-            server_urls=list_server_urls()
+            server_urls=self.task_manager.available_tools or list_server_urls()
         )
 
         agent = None
