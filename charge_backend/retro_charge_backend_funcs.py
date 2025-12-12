@@ -249,7 +249,7 @@ async def generate_molecules(
     websocket: WebSocket,
 ):
     """Stream positioned nodes and edges"""
-    clogger = CallbackLogger(websocket)
+    clogger = CallbackLogger(websocket, source="generate_molecules")
     await clogger.info(f"Planning retrosynthesis for: {start_smiles}")
 
     # Generate and position entire tree upfront
@@ -325,6 +325,8 @@ async def constrained_opt(
 ):
     """Constrained optimization using retrosynthesis"""
 
+    clogger = CallbackLogger(websocket, source="constrained_retrosynthesis")
+
     await websocket.send_json(
         {
             "type": "response",
@@ -351,7 +353,7 @@ async def constrained_opt(
     )
     retro_task = RetrosynthesisTask(user_prompt=user_prompt)
     planner.task = retro_task
-    logger.info(
+    await clogger.info(
         f"Optimizing {parent_smiles} without using {constraint_smiles} in the synthesis."
     )
     result = await planner.run()
@@ -387,7 +389,7 @@ async def optimize_molecule_retro(
         }
     )
 
-    clogger = CallbackLogger(websocket)
+    clogger = CallbackLogger(websocket, source="optimize_molecule_retro")
 
     if node_id in context.node_id_to_charge_client:
         # Existing context
@@ -404,7 +406,7 @@ async def optimize_molecule_retro(
 
         if os.getenv("CHARGE_DISABLE_OUTPUT_VALIDATION", "0") == "1":
             retro_task.structured_output_schema = None
-            logger.warning(
+            await clogger.warning(
                 "Structure validation disabled for RetrosynthesisTask output schema."
             )
         agent_name = experiment.agent_pool.create_agent_name(
@@ -417,14 +419,14 @@ async def optimize_molecule_retro(
         )
         context.node_id_to_charge_client[node_id] = runner
 
-    clogger.info(f"Optimizing {current_node.smiles} using retrosynthesis with available tools: {available_tools}.")
+    await clogger.info(f"Optimizing {current_node.smiles} using retrosynthesis with available tools: {available_tools}.")
 
     # Run task
     await highlight_node(current_node, websocket, True)
     output = await runner.run()
 
     if os.getenv("CHARGE_DISABLE_OUTPUT_VALIDATION", "0") == "1":
-        logger.warning(
+        await clogger.warning(
             "Structure validation disabled for RetrosynthesisTask output schema."
             "Returning text results without validation first before post-processing."
         )
@@ -438,9 +440,8 @@ async def optimize_molecule_retro(
     num_nodes = len(context.node_ids)
 
     reasoning_summary = result.reasoning_summary
-    clogger.info(
+    await clogger.info(
         f"Retrosynthesis reasoning for {current_node.smiles}: {reasoning_summary}",
-        source = "optimize_molecule_retro"
     )
 
     await websocket.send_json(
@@ -466,10 +467,10 @@ async def optimize_molecule_retro(
         routes, planner = run_retro_planner(config_file, smiles)
 
         if not routes:
-            logger.warning(f"No routes found for {smiles}. Skipping...")
+            await clogger.warning(f"No routes found for {smiles}. Skipping...")
             continue
 
-        logger.info(f"Found {len(routes)} routes for {smiles}.")
+        await clogger.info(f"Found {len(routes)} routes for {smiles}.")
 
         context.node_id_to_planner[node.id] = planner
         planner.last_route_used = 0
