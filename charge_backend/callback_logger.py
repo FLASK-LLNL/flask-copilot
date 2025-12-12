@@ -25,7 +25,7 @@ async def handle_callback_log(message):
                'INFO': 'Info',
                'WARN': 'Warning',
                'WARNING': 'Warning',
-                'ERROR': 'Error',
+               'ERROR': 'Error',
                'EXCEPTION': 'Exception'
             }
             level_str = LEVELS.get(level, level)
