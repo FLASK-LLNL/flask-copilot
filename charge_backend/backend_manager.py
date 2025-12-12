@@ -71,7 +71,7 @@ class TaskManager:
 
         if type(exc) == chargeConnectionError:
             # logger.error(f"Charge connection error in background task: {exc}")
-            self.clogger.info(
+            await self.clogger.info(
                 f"Unsupported model was selected.  \n Server encountered error: {exc}"
             )
 
@@ -164,7 +164,7 @@ class ActionManager:
 
     async def _handle_optimization(self, data: dict, initial_level: int = 0, initial_node_id: int = 0, initial_x_position: int = 50) -> None:
         """Handle optimization problem type."""
-        self.task_manager.clogger.info("Start Optimization action received")
+        await self.task_manager.clogger.info("Start Optimization action received")
         logger.info(f"Data: {data}")
 
         # Validate required field
@@ -254,7 +254,7 @@ class ActionManager:
 
     async def _handle_retrosynthesis(self, data: dict) -> None:
         """Handle retrosynthesis problem type."""
-        self.task_manager.clogger.info("Setting up retrosynthesis task...")
+        await self.task_manager.clogger.info("Setting up retrosynthesis task...")
         logger.info(f"Data: {data}")
 
         run_func = partial(
@@ -270,7 +270,7 @@ class ActionManager:
 
     async def _handle_custom_problem(self, data: dict) -> None:
         """Handle custom problem type."""
-        self.task_manager.clogger.info("Setting up custom task...")
+        await self.task_manager.clogger.info("Setting up custom task...")
         logger.info(f"Data: {data}")
 
         run_func = partial(

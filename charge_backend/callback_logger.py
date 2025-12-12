@@ -25,7 +25,8 @@ async def handle_callback_log(message):
                'INFO': 'Info',
                'WARN': 'Warning',
                'WARNING': 'Warning',
-               'ERROR': 'Error'
+               'ERROR': 'Error',
+               'EXCEPTION': 'Exception'
             }
             level_str = LEVELS.get(level, level)
             source = f"Logger ({level_str})"
@@ -42,6 +43,7 @@ logger.add(handle_callback_log, filter=lambda record: record["level"].name == "I
 logger.add(handle_callback_log, filter=lambda record: record["level"].name == "Warning")
 logger.add(handle_callback_log, filter=lambda record: record["level"].name == "Debug")
 logger.add(handle_callback_log, filter=lambda record: record["level"].name == "Error")
+logger.add(handle_callback_log, filter=lambda record: record["level"].name == "Exception")
 
 
 # The Callback logger can hold a websocket that will allow the log message to be
@@ -51,29 +53,35 @@ class CallbackLogger:
         self.websocket = websocket
         self.logger = logger.bind(websocket=websocket)
 
-    def info(self, message, **kwargs):
+    async def info(self, message, **kwargs):
         if kwargs:
             logger.bind(websocket=self.websocket, **kwargs).info(message)
         else:
             self.logger.info(message)
 
-    def warning(self, message, **kwargs):
+    async def warning(self, message, **kwargs):
         if kwargs:
             logger.bind(websocket=self.websocket, **kwargs).warning(message)
         else:
             self.logger.warning(message)
 
-    def debug(self, message, **kwargs):
+    async def debug(self, message, **kwargs):
         if kwargs:
             logger.bind(websocket=self.websocket, **kwargs).debug(message)
         else:
             self.logger.debug(message)
 
-    def error(self, message, **kwargs):
+    async def error(self, message, **kwargs):
         if kwargs:
             logger.bind(websocket=self.websocket, **kwargs).error(message)
         else:
             self.logger.error(message)
+
+    async def exception(self, message, **kwargs):
+        if kwargs:
+            logger.bind(websocket=self.websocket, **kwargs).error(message)
+        else:
+            self.logger.exception(message)
 
     def unbind(self):
         self.websocket = None
