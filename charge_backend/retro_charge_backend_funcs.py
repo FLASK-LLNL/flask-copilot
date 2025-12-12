@@ -250,7 +250,7 @@ async def generate_molecules(
 ):
     """Stream positioned nodes and edges"""
     clogger = CallbackLogger(websocket)
-    clogger.info(f"Planning retrosynthesis for: {start_smiles}")
+    await clogger.info(f"Planning retrosynthesis for: {start_smiles}")
 
     # Generate and position entire tree upfront
 
@@ -270,7 +270,7 @@ async def generate_molecules(
     )
     await websocket.send_json({"type": "node", "node": root.json()})
 
-    clogger.info("Starting planning in executor...")
+    await clogger.info("Starting planning in executor...")
 
     # Disable executor for now due to bad interaction with task_done callbacks
     # routes, planner = await loop_executor(
@@ -278,7 +278,7 @@ async def generate_molecules(
     # )
 
     routes, planner = run_retro_planner(config_file, start_smiles)
-    clogger.info(f"Running RetroPlanner for SMILES: {start_smiles}")
+    await clogger.info(f"Running RetroPlanner for SMILES: {start_smiles}")
 
     context.node_id_to_planner[root.id] = planner
 
@@ -295,7 +295,7 @@ async def generate_molecules(
         )
         await websocket.send_json({"type": "complete"})
         return
-    clogger.info(f"Found {len(routes)} routes for {start_smiles}.")
+    await clogger.info(f"Found {len(routes)} routes for {start_smiles}.")
 
     planner.last_route_used = 0
     reaction_path = ReactionPath(route=routes[0])
@@ -427,7 +427,7 @@ async def optimize_molecule_retro(
             "Returning text results without validation first before post-processing."
         )
         clogger = CallbackLogger(websocket)
-        clogger.info(f"Results: {output}")
+        await clogger.info(f"Results: {output}")
 
     result = ReactionOutputSchema.model_validate_json(output)
 
