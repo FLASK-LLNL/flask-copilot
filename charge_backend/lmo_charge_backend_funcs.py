@@ -79,7 +79,7 @@ async def generate_lead_molecule(
     lead_molecule_smiles = start_smiles
     clogger = CallbackLogger(websocket)
 
-    clogger.info(
+    await clogger.info(
         f"Starting task with lead molecule: {lead_molecule_smiles}",
         smiles=lead_molecule_smiles,
         source="generate_lead_molecules",
@@ -114,7 +114,7 @@ async def generate_lead_molecule(
     # Start the db with the lead molecule
     lmo_helper_funcs.save_list_to_json_file(data=[lead_molecule_data], file_path=mol_file_path)
 
-    clogger.info(f"Storing found molecules in {mol_file_path}")
+    await clogger.info(f"Storing found molecules in {mol_file_path}")
 
     # Run the task in a loop
     new_molecules = lmo_helper_funcs.get_list_from_json_file(file_path=mol_file_path)  # Start with known molecules
@@ -228,7 +228,7 @@ async def generate_lead_molecule(
                         "Structure validation disabled for LMOTask output schema."
                         "Returning text results without validation first before post-processing."
                     )
-                    clogger.info(f"Results: {results}")
+                    await clogger.info(f"Results: {results}")
                 logger.debug(f"Received: {_}, {results}")
                 results = MoleculeOutputSchema.model_validate_json(results)
                 reasoning_summary = results.reasoning_summary
@@ -262,7 +262,7 @@ async def generate_lead_molecule(
                             current_best_smiles = canonical_smiles
                             current_best_value = property_value
                             iteration_found_better = True
-                            clogger.info(
+                            await clogger.info(
                                 f"New best molecule found: {canonical_smiles} with {property}={property_value}"
                             )
 
@@ -297,13 +297,13 @@ async def generate_lead_molecule(
                         await websocket.send_json({"type": "node", "node": node.json()})
 
                     else:
-                        clogger.info(f"Duplicate molecule found: {canonical_smiles}")
+                        await clogger.info(f"Duplicate molecule found: {canonical_smiles}")
 
                 # If we found molecules in this iteration, prepare for next iteration
                 if len(generated_smiles_list) > 0:
                     # Break out of max_iterations loop if we found a better molecule
                     if iteration_found_better:
-                        clogger.info(
+                        await clogger.info(
                             f"Found better molecule in iteration {iteration}, moving to next depth level"
                         )
                         break

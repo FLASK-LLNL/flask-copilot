@@ -79,7 +79,7 @@ async def aizynth_retro(
 ):
     clogger = CallbackLogger(websocket)
     """Stream positioned nodes and edges"""
-    clogger.info(f"Planning retrosynthesis for: {start_smiles}")
+    await clogger.info(f"Planning retrosynthesis for: {start_smiles}")
 
     # Generate and position entire tree upfront
 
@@ -112,11 +112,11 @@ async def aizynth_retro(
         )
         await websocket.send_json({"type": "complete"})
         return
-    clogger.info(f"Found {len(routes)} routes for {start_smiles}.")
+    await clogger.info(f"Found {len(routes)} routes for {start_smiles}.")
 
     reaction_path = AiZynthFuncs.ReactionPath(route=routes[0])
     nodes, edges = generate_tree_structure(reaction_path.nodes, retro_synth_context)
-    clogger.info(f"Generated {len(nodes)} nodes and {len(edges)} edges.")
+    await clogger.info(f"Generated {len(nodes)} nodes and {len(edges)} edges.")
 
     calculate_positions(nodes)
 

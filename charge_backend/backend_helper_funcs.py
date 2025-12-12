@@ -136,14 +136,14 @@ class CallbackHandler:
 
             for result in assistant_message.content:
                 if result.is_error:
-                    self.clogger.error(f"[{source}] Function {result.name} errored with output: {result.content}",
+                    await self.clogger.error(f"[{source}] Function {result.name} errored with output: {result.content}",
                                        source=result.name)
                 else:
-                    self.clogger.info(f"[{source}] Function {result.name} returned: {result.content}",
+                    await self.clogger.info(f"[{source}] Function {result.name} returned: {result.content}",
                                       source=result.name)
         else:
             message = f"[{source}] Model: {assistant_message.message.content}"
-            self.clogger.info(message)
+            await self.clogger.info(message)
 
     def __call__(self, assistant_message):
         asyncio.create_task(self.send(assistant_message))
