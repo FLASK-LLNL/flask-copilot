@@ -9,7 +9,7 @@ import { MarkdownText } from "./markdown";
 export const useGraphState = (): MoleculeGraphState => {
     const [offset, setOffset] = useState<Position>({ x: 50, y: 50 });
     const [zoom, setZoom] = useState<number>(1);
-  
+
     return { offset, setOffset, zoom, setZoom };
 };
 
@@ -46,24 +46,24 @@ export const MoleculeGraph: React.FC<MoleculeGraphProps> = ({nodes, edges, ctx, 
 
     const handleWheel = (e: WheelEvent): void => {
     e.preventDefault();
-    
+
     if (autoZoom) {
         setAutoZoom(false);
     }
-    
+
     const rect = containerRef.current?.getBoundingClientRect();
         if (!rect) return;
-        
+
         const mouseX = e.clientX - rect.left;
         const mouseY = e.clientY - rect.top;
-        
+
         const delta = -e.deltaY * 0.001;
         const newZoom = Math.min(Math.max(0.1, zoom + delta), 3);
-        
+
         const zoomRatio = newZoom / zoom;
         const newOffsetX = mouseX - (mouseX - offset.x) * zoomRatio;
         const newOffsetY = mouseY - (mouseY - offset.y) * zoomRatio;
-        
+
         setZoom(newZoom);
         setOffset({ x: newOffsetX, y: newOffsetY });
     };
@@ -75,13 +75,13 @@ export const MoleculeGraph: React.FC<MoleculeGraphProps> = ({nodes, edges, ctx, 
 
     const fitToView = (): void => {
     if (!containerRef.current || nodes.length === 0) return;
-    
+
     const padding = 80;
     let minX = Infinity, maxX = -Infinity;
     let minY = Infinity, maxY = -Infinity;
-    
+
     const nodeElements = containerRef.current.querySelectorAll('[data-node-id]');
-    
+
     if (nodeElements.length === 0) {
         nodes.forEach(node => {
         minX = Math.min(minX, node.x);
@@ -93,11 +93,11 @@ export const MoleculeGraph: React.FC<MoleculeGraphProps> = ({nodes, edges, ctx, 
         nodeElements.forEach((element) => {
         const nodeId = element.getAttribute('data-node-id');
         const node = nodes.find(n => n.id === nodeId);
-        
+
         if (node) {
             const actualWidth = (element as HTMLElement).offsetWidth;
             const actualHeight = (element as HTMLElement).offsetHeight;
-            
+
             minX = Math.min(minX, node.x);
             maxX = Math.max(maxX, node.x + actualWidth);
             minY = Math.min(minY, node.y);
@@ -105,24 +105,24 @@ export const MoleculeGraph: React.FC<MoleculeGraphProps> = ({nodes, edges, ctx, 
         }
         });
     }
-    
+
     const contentWidth = maxX - minX + padding * 2;
     const contentHeight = maxY - minY + padding * 2;
-    
+
     const rect = containerRef.current.getBoundingClientRect();
     const viewWidth = rect.width;
     const viewHeight = rect.height;
-    
+
     const scaleX = viewWidth / contentWidth;
     const scaleY = viewHeight / contentHeight;
     const newZoom = Math.min(scaleX, scaleY, 1);
-    
+
     const contentCenterX = (minX + maxX) / 2;
     const contentCenterY = (minY + maxY) / 2;
-    
+
     const newOffsetX = viewWidth / 2 - contentCenterX * newZoom;
     const newOffsetY = viewHeight / 2 - contentCenterY * newZoom;
-    
+
     setZoom(newZoom);
     setOffset({ x: newOffsetX, y: newOffsetY });
     };
@@ -185,14 +185,14 @@ export const MoleculeGraph: React.FC<MoleculeGraphProps> = ({nodes, edges, ctx, 
         const controlX1 = startX + (endX - startX) * 0.3;
         const controlX2 = startX + (endX - startX) * 0.7;
 
-        const x = Math.pow(1-t, 3) * startX + 
-                    3 * Math.pow(1-t, 2) * t * controlX1 + 
-                    3 * (1-t) * Math.pow(t, 2) * controlX2 + 
+        const x = Math.pow(1-t, 3) * startX +
+                    3 * Math.pow(1-t, 2) * t * controlX1 +
+                    3 * (1-t) * Math.pow(t, 2) * controlX2 +
                     Math.pow(t, 3) * endX;
 
-        const y = Math.pow(1-t, 3) * startY + 
-                    3 * Math.pow(1-t, 2) * t * startY + 
-                    3 * (1-t) * Math.pow(t, 2) * endY + 
+        const y = Math.pow(1-t, 3) * startY +
+                    3 * Math.pow(1-t, 2) * t * startY +
+                    3 * (1-t) * Math.pow(t, 2) * endY +
                     Math.pow(t, 3) * endY;
 
         return { x, y };
@@ -200,7 +200,7 @@ export const MoleculeGraph: React.FC<MoleculeGraphProps> = ({nodes, edges, ctx, 
 
     return (
         <>
-            <div 
+            <div
                 ref={containerRef}
                 className={`graph-container ${
                 autoZoom ? 'graph-cursor-default' : isDragging ? 'graph-cursor-grabbing' : 'graph-cursor-grab'
@@ -232,7 +232,7 @@ export const MoleculeGraph: React.FC<MoleculeGraphProps> = ({nodes, edges, ctx, 
                             <circle cx={getNode(edge.toNode)!.x + 10} cy={getNode(edge.toNode)!.y + 50} r="5" fill={edge.status === 'computing' ? '#F59E0B' : '#EC4899'} />
                         </g>
                         </svg>
-                        
+
                         <div className="edge-label" style={{ left: `${midpoint.x}px`, top: `${midpoint.y}px` }}>
                         {edge.label && (
                             <div className={`edge-label-badge ${edge.status === 'computing' ? 'edge-label-computing' : 'edge-label-normal'}`}>
@@ -250,9 +250,9 @@ export const MoleculeGraph: React.FC<MoleculeGraphProps> = ({nodes, edges, ctx, 
                     key={node.id}
                     data-node-id={node.id}
                     className="graph-node"
-                    style={{ 
-                        left: `${node.x}px`, 
-                        top: `${node.y}px`, 
+                    style={{
+                        left: `${node.x}px`,
+                        top: `${node.y}px`,
                         width: `${BOX_WIDTH*1.05}px`,
                         animationDelay: `${idx * 100}ms`,
                     }}

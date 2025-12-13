@@ -1,4 +1,3 @@
-
 ################################################################################
 ## Copyright 2025 Lawrence Livermore National Security, LLC. and Binghamton University.
 ## See the top-level LICENSE file for details.
@@ -28,13 +27,14 @@ if os.path.exists(_DATABASE_PATH):
 else:
     DATABASE = None
 
+
 def inchi_lookup(inchi: str) -> str | None:
     if DATABASE is None:
         return None
-    
+
     if inchi not in DATABASE:
         return None
-    
+
     if DATABASE[inchi]["name"]:  # Canonical/brand first
         return DATABASE[inchi]["name"]
     if DATABASE[inchi]["iupac_name"]:  # IUPAC second
@@ -54,8 +54,8 @@ def smiles_to_html(smiles: str) -> str:
     inchi = Chem.MolToInchi(mol)
     name = inchi_lookup(inchi)
     if name:
-       return name
-    
+        return name
+
     # Otherwise, use RDKit for a general chemical formula
     # Get the formula
     if rdMolDescriptors is None:
@@ -64,13 +64,13 @@ def smiles_to_html(smiles: str) -> str:
     # Find charge
     charge = Chem.GetFormalCharge(mol)
     # Replace numbers with subscripts
-    formula_html = re.sub(r'(\d+)', r'<sub>\1</sub>', formula)
+    formula_html = re.sub(r"(\d+)", r"<sub>\1</sub>", formula)
     # Replace isotope notation (e.g., [13C]) with superscript
     # RDKit already includes isotopes as e.g. 13CH4, so we want to superscript leading numbers
-    formula_html = re.sub(r'\b(\d+)([A-Z][a-z]?)', r'<sup>\1</sup>\2', formula_html)
+    formula_html = re.sub(r"\b(\d+)([A-Z][a-z]?)", r"<sup>\1</sup>\2", formula_html)
     # Add charge as superscript at the end (if not zero)
     if charge != 0:
-        sign = '+' if charge > 0 else '-'
+        sign = "+" if charge > 0 else "-"
         abs_charge = abs(charge)
         # Use only sign for single charge, number+sign for higher
         charge_str = f"{sign}" if abs_charge == 1 else f"{abs_charge}{sign}"

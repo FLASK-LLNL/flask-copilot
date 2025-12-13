@@ -8,4 +8,3 @@ root.render(
     <ChemistryTool />
   </React.StrictMode>
 );
-

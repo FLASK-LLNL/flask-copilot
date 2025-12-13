@@ -27,12 +27,12 @@ interface ReasoningSidebarPropsExtended extends SidebarProps {
 }
 
 export const ReasoningSidebar: React.FC<ReasoningSidebarPropsExtended> = ({
-  messages, 
-  rdkitModule, 
-  setSidebarOpen, 
-  sourceFilterOpen, 
-  setSourceFilterOpen, 
-  visibleSources, 
+  messages,
+  rdkitModule,
+  setSidebarOpen,
+  sourceFilterOpen,
+  setSourceFilterOpen,
+  visibleSources,
   setVisibleSources,
   isOpen,
   onToggle
@@ -66,14 +66,14 @@ export const ReasoningSidebar: React.FC<ReasoningSidebarPropsExtended> = ({
       const handleMouseMove = (e: MouseEvent) => {
         const containerWidth = window.innerWidth;
         const newWidth = containerWidth - e.clientX;
-        
+
         // Check if width falls below collapse threshold
         if (newWidth < COLLAPSE_THRESHOLD) {
           onToggle();
           setIsResizing(false);
           return;
         }
-        
+
         // Constrain width between min and max
         if (newWidth >= MIN_WIDTH && newWidth <= MAX_WIDTH) {
           setSidebarWidth(newWidth);
@@ -127,7 +127,7 @@ export const ReasoningSidebar: React.FC<ReasoningSidebarPropsExtended> = ({
     }
 
     return (
-      <div 
+      <div
         className={`reasoning-sidebar flex-col ${isResizing ? 'resizing' : ''}`}
         style={{ width: `${sidebarWidth}px` }}
       >
@@ -152,7 +152,7 @@ export const ReasoningSidebar: React.FC<ReasoningSidebarPropsExtended> = ({
           <h3 className="heading-3">Reasoning</h3>
           <div className="flex items-center gap-2">
             <div className="filter-control">
-              <button 
+              <button
                 onClick={(e) => { e.stopPropagation(); setSourceFilterOpen(!sourceFilterOpen); }}
                 onMouseDown={(e) => e.stopPropagation()}
                 className="btn btn-secondary btn-sm"

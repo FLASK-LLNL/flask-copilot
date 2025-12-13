@@ -20,7 +20,9 @@ from charge.servers.molecular_property_utils import calculate_property_hf
 @click.command()
 @click.option("--port", type=int, default=8126, help="Port to run the server on")
 @click.option("--host", type=str, default=None, help="Host to run the server on")
-@click.option("--name", type=str, default="mol_prop_surrogates", help="Name of the MCP server")
+@click.option(
+    "--name", type=str, default="mol_prop_surrogates", help="Name of the MCP server"
+)
 @click.option(
     "--copilot-port", type=int, default=8001, help="Port to the running copilot backend"
 )
@@ -42,7 +44,9 @@ def main(
     try:
         register_tool_server(port, host, name, copilot_port, copilot_host)
     except:
-        logger.info(f"{name} could not connect to server for registration -- requires manual registration")
+        logger.info(
+            f"{name} could not connect to server for registration -- requires manual registration"
+        )
 
     sys.argv = [sys.argv[0]] + ctx.args + [f"--port={port}", f"--host={host}"]
 
@@ -50,10 +54,9 @@ def main(
         "Computationally expensive surrogate models for molecular properties MCP Server",
         sse_path=f"/mol_prop_tools/sse",
         message_path=f"/mol_prop_tools/messages/",
-
     )
     mcp.tool()(calculate_property_hf)
-    
+
     update_mcp_network(mcp, host, port)
 
     mcp.run(transport="sse")

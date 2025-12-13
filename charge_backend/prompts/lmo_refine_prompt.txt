@@ -8,7 +8,7 @@ Propose up to 1 **new**, **valid** organic molecules (SMILES) that:
   2. Are not already known (as determined by calling known_smiles(smiles)).
   3. Have a **{property} {condition}** than that of the lead molecules.
   4. Are chemically valid, synthesizable, and syntactically correct SMILES.
- 
+
  Where {property} is defined as {property_description}
 
 You must stop as soon as you have found 1 valid new molecule with {direction} than the lead.

@@ -47,14 +47,14 @@ export const MoleculeSVG: React.FC<MoleculeSVGProps> = ({ smiles, height = 80, r
     const hash = smiles.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
     const color = colors[hash % colors.length];
     const nodes = 5 + (hash % 3);
-    
+
     const points: [number, number][] = [];
     for (let i = 0; i < nodes; i++) {
       const angle = (i * 2 * Math.PI) / nodes;
       const r = 25;
       points.push([40 + r * Math.cos(angle), 40 + r * Math.sin(angle)]);
     }
-    
+
     return (
       <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', width: '100%', height: height }}>
         <svg height={height} viewBox="0 0 80 80" style={{ display: 'block', margin: '0 auto' }}>
@@ -105,7 +105,7 @@ export const loadRDKit = (): RDKitModule | null => {
         const script = document.createElement('script');
         script.src = '/rdkit/RDKit_minimal.js';
         script.async = true;
-        
+
         script.onload = () => {
         window.initRDKitModule().then((RDKit: RDKitModule) => {
             console.log('RDKit loaded successfully!');
@@ -114,13 +114,13 @@ export const loadRDKit = (): RDKitModule | null => {
             console.error('RDKit initialization failed:', error);
         });
         };
-        
+
         script.onerror = () => {
         console.error('Failed to load RDKit script');
         };
-        
+
         document.body.appendChild(script);
-        
+
         return () => {
         if (document.body.contains(script)) {
             document.body.removeChild(script);

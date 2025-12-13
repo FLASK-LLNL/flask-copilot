@@ -50,7 +50,9 @@ ASSETS_PATH = os.path.join(DIST_PATH, "assets")
 if os.path.exists(ASSETS_PATH):
     # Serve the frontend
     app.mount("/assets", StaticFiles(directory=ASSETS_PATH), name="assets")
-    app.mount("/rdkit", StaticFiles(directory=os.path.join(DIST_PATH, "rdkit")), name="rdkit")
+    app.mount(
+        "/rdkit", StaticFiles(directory=os.path.join(DIST_PATH, "rdkit")), name="rdkit"
+    )
 
     @app.get("/")
     async def root(request: Request):
@@ -166,7 +168,15 @@ def generate_tree_structure(start_smiles: str, depth: int = 3):
                 fromNode=parent_id,
                 toNode=node_id,
                 status="computing",
-                label=random.choice(["Hydrogenation", "Oxidation", "Methylation", "Reduction", "Cyclization"]),
+                label=random.choice(
+                    [
+                        "Hydrogenation",
+                        "Oxidation",
+                        "Methylation",
+                        "Reduction",
+                        "Cyclization",
+                    ]
+                ),
             )
             edges.append(edge)
 
@@ -223,7 +233,9 @@ def calculate_positions(nodes: list[Node]):
     return positioned
 
 
-async def generate_molecules(start_smiles: str, depth: int = 3, websocket: WebSocket = None):
+async def generate_molecules(
+    start_smiles: str, depth: int = 3, websocket: WebSocket = None
+):
     """
     Stream positioned nodes and edges for the retrosynthesis sample.
     """
@@ -339,22 +351,37 @@ async def websocket_endpoint(websocket: WebSocket):
 
             if data["action"] == "compute":
                 if data["problemType"] == "optimization":
-                    await lead_molecule(data["smiles"], data.get("depth", 10), websocket=websocket)
+                    await lead_molecule(
+                        data["smiles"], data.get("depth", 10), websocket=websocket
+                    )
                 elif data["problemType"] == "retrosynthesis":
-                    await generate_molecules(data["smiles"], data.get("depth", 3), websocket)
+                    await generate_molecules(
+                        data["smiles"], data.get("depth", 3), websocket
+                    )
                 else:
                     await websocket.send_json(
-                        {"type": "error", "error": f"Unsupported problem type {data['problemType']}"}
+                        {
+                            "type": "error",
+                            "error": f"Unsupported problem type {data['problemType']}",
+                        }
                     )
             elif data["action"] == "compute-reaction-from":
                 await websocket.send_json(
-                    {"type": "subtree_update", "node": {"id": data["nodeId"], "highlight": "yellow"}, "withNode": True}
+                    {
+                        "type": "subtree_update",
+                        "node": {"id": data["nodeId"], "highlight": "yellow"},
+                        "withNode": True,
+                    }
                 )
             elif data["action"] == "recompute-reaction" and "query" not in data:
                 await websocket.send_json(
                     {
                         "type": "response",
-                        "message": {"source": "Some custom source", "message": f"Hi from server", "smiles": "CCO"},
+                        "message": {
+                            "source": "Some custom source",
+                            "message": f"Hi from server",
+                            "smiles": "CCO",
+                        },
                     }
                 )
                 await websocket.send_json({"type": "complete"})
@@ -374,13 +401,17 @@ async def websocket_endpoint(websocket: WebSocket):
                     await websocket.send_json(
                         {
                             "type": "response",
-                            "message": {"message": f"Processing query: {data['query']} for node {data['nodeId']}"},
+                            "message": {
+                                "message": f"Processing query: {data['query']} for node {data['nodeId']}"
+                            },
                         }
                     )
                 await asyncio.sleep(3)  # Random wait
                 await websocket.send_json({"type": "complete"})
             elif data["action"] == "list-tools":
-                tools = [Tool(f"tool_{i}", f"Does what tool {i} does") for i in range(1, 16)]
+                tools = [
+                    Tool(f"tool_{i}", f"Does what tool {i} does") for i in range(1, 16)
+                ]
                 tools.append(Tool("a_tool_with_no_desc"))
                 await websocket.send_json(
                     {
