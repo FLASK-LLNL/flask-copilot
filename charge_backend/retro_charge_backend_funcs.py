@@ -122,6 +122,11 @@ async def constrained_retro(
                 network errors, timeouts, and planner failures.
     """
 
+    clogger = CallbackLogger(websocket, source="constrained_retrosynthesis")
+
+    await clogger.info(
+        f"Finding synthesis pathway for {parent_smiles}...", smiles=parent_smiles
+    )
     await websocket.send_json(
         {
             "type": "response",
@@ -247,10 +252,13 @@ async def generate_molecules(
     context: RetrosynthesisContext,
     executor: ProcessPoolExecutor,
     websocket: WebSocket,
+    available_tools: Optional[Union[str, list[str]]] = None,
 ):
     """Stream positioned nodes and edges"""
-    clogger = CallbackLogger(websocket)
-    await clogger.info(f"Planning retrosynthesis for: {start_smiles}")
+    clogger = CallbackLogger(websocket, source="generate_molecules")
+    await clogger.info(
+        f"Planning retrosynthesis for: {start_smiles} with available tools: {available_tools}."
+    )
 
     # Generate and position entire tree upfront
 
@@ -283,15 +291,9 @@ async def generate_molecules(
     context.node_id_to_planner[root.id] = planner
 
     if not routes:
-        await websocket.send_json(
-            {
-                "type": "response",
-                "message": {
-                    "source": "System",
-                    "message": f"No synthesis routes found for {start_smiles}.",
-                    "smiles": start_smiles,
-                },
-            }
+        await clogger.info(
+            f"No synthesis routes found for {start_smiles}.",
+            smiles=start_smiles,
         )
         await websocket.send_json({"type": "complete"})
         return
@@ -325,25 +327,14 @@ async def constrained_opt(
 ):
     """Constrained optimization using retrosynthesis"""
 
-    await websocket.send_json(
-        {
-            "type": "response",
-            "message": {
-                "source": "System",
-                "message": f"Finding synthesis pathway for {parent_smiles}...",
-                "smiles": parent_smiles,
-            },
-        }
+    clogger = CallbackLogger(websocket, source="constrained_opt")
+    await clogger.info(
+        f"Finding synthesis pathway for {parent_smiles}...",
+        smiles=parent_smiles,
     )
-    await websocket.send_json(
-        {
-            "type": "response",
-            "message": {
-                "source": "System",
-                "message": f"Searching for alternatives without {constraint_smiles}",
-                "smiles": constraint_smiles,
-            },
-        }
+    await clogger.info(
+        f"Searching for alternatives without {constraint_smiles}",
+        smiles=constraint_smiles,
     )
 
     user_prompt = RETROSYNTH_CONSTRAINED_USER_PROMPT_TEMPLATE.format(
@@ -351,7 +342,7 @@ async def constrained_opt(
     )
     retro_task = RetrosynthesisTask(user_prompt=user_prompt)
     planner.task = retro_task
-    logger.info(
+    await clogger.info(
         f"Optimizing {parent_smiles} without using {constraint_smiles} in the synthesis."
     )
     result = await planner.run()
@@ -366,7 +357,7 @@ async def optimize_molecule_retro(
     websocket: WebSocket,
     experiment: AutoGenExperiment,
     config_file: str,
-    server_urls: Optional[Union[str, list[str]]] = None,
+    available_tools: Optional[Union[str, list[str]]] = None,
 ):
     """Optimize a molecule using retrosynthesis by node ID"""
     current_node = context.node_ids.get(node_id)
@@ -376,15 +367,11 @@ async def optimize_molecule_retro(
 
     cur_node_id = cur_node_id.node_id
 
-    await websocket.send_json(
-        {
-            "type": "response",
-            "message": {
-                "source": "System",
-                "message": f"Finding synthesis pathway to {current_node.smiles}...",
-                "smiles": current_node.smiles,
-            },
-        }
+    clogger = CallbackLogger(websocket, source="optimize_molecule_retro")
+
+    await clogger.info(
+        f"Finding synthesis pathway to {current_node.smiles}... with available tools: {available_tools}.",
+        smiles=current_node.smiles,
     )
 
     if node_id in context.node_id_to_charge_client:
@@ -397,12 +384,12 @@ async def optimize_molecule_retro(
         )
         user_prompt += "\nDouble check the reactants with the `predict_reaction_products` tool to see if the products are equivalent to the given product. If there is any inconsistency (canonicalize both sides of the equation first), log it and try some other set of reactants."
         retro_task = RetrosynthesisTask(
-            user_prompt=user_prompt, server_urls=server_urls
+            user_prompt=user_prompt, server_urls=available_tools
         )
 
         if os.getenv("CHARGE_DISABLE_OUTPUT_VALIDATION", "0") == "1":
             retro_task.structured_output_schema = None
-            logger.warning(
+            await clogger.warning(
                 "Structure validation disabled for RetrosynthesisTask output schema."
             )
         agent_name = experiment.agent_pool.create_agent_name(
@@ -415,19 +402,20 @@ async def optimize_molecule_retro(
         )
         context.node_id_to_charge_client[node_id] = runner
 
-    logger.info(f"Optimizing {current_node.smiles} using retrosynthesis.")
+    await clogger.info(
+        f"Optimizing {current_node.smiles} using retrosynthesis with available tools: {available_tools}."
+    )
 
     # Run task
     await highlight_node(current_node, websocket, True)
     output = await runner.run()
 
     if os.getenv("CHARGE_DISABLE_OUTPUT_VALIDATION", "0") == "1":
-        logger.warning(
+        await clogger.warning(
             "Structure validation disabled for RetrosynthesisTask output schema."
             "Returning text results without validation first before post-processing."
         )
-        clogger = CallbackLogger(websocket)
-        await clogger.info(f"Results: {output}")
+    await clogger.info(f"Results: {output}")
 
     result = ReactionOutputSchema.model_validate_json(output)
 
@@ -437,26 +425,20 @@ async def optimize_molecule_retro(
     num_nodes = len(context.node_ids)
 
     reasoning_summary = result.reasoning_summary
-    logger.info(
-        f"Retrosynthesis reasoning for {current_node.smiles}: {reasoning_summary}"
-    )
-
-    await websocket.send_json(
-        {
-            "type": "response",
-            "message": {
-                "source": "System",
-                "message": f"Reasoning summary for {current_node.smiles}: "
-                + f"\n {reasoning_summary}",
-            },
-        }
+    await clogger.info(
+        f"Retrosynthesis reasoning summary for {current_node.smiles}:\n{reasoning_summary}",
     )
 
     nodes: list[Node] = []
     edges: list[Edge] = []
     for i, smiles in enumerate(result.reactants_smiles_list):
         node = Node(
-            f"node_{num_nodes+i}", smiles, smiles_to_html(smiles), "Discovered", level, current_node.id
+            f"node_{num_nodes+i}",
+            smiles,
+            smiles_to_html(smiles),
+            "Discovered",
+            level,
+            current_node.id,
         )
         context.node_ids[node.id] = node
 
@@ -464,10 +446,10 @@ async def optimize_molecule_retro(
         routes, planner = run_retro_planner(config_file, smiles)
 
         if not routes:
-            logger.warning(f"No routes found for {smiles}. Skipping...")
+            await clogger.warning(f"No routes found for {smiles}. Skipping...")
             continue
 
-        logger.info(f"Found {len(routes)} routes for {smiles}.")
+        await clogger.info(f"Found {len(routes)} routes for {smiles}.")
 
         context.node_id_to_planner[node.id] = planner
         planner.last_route_used = 0
