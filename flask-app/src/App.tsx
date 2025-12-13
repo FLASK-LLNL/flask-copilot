@@ -1154,9 +1154,9 @@ const ChemistryTool: React.FC = () => {
           </div>
         </div>
 
-        <ReasoningSidebar 
-          {...sidebarState} 
-          setSidebarOpen={setSidebarOpen} 
+        <ReasoningSidebar
+          {...sidebarState}
+          setSidebarOpen={setSidebarOpen}
           rdkitModule={rdkitModule}
           isOpen={sidebarOpen}
           onToggle={() => setSidebarOpen(!sidebarOpen)}

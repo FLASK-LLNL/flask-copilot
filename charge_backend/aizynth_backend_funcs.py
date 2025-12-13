@@ -44,7 +44,11 @@ def generate_tree_structure(
             label=smiles_to_html(smiles),
             hoverInfo=hover_info,
             level=level,
-            parentId=(f"node_{current_node.parent_id}" if current_node.parent_id is not None else None),
+            parentId=(
+                f"node_{current_node.parent_id}"
+                if current_node.parent_id is not None
+                else None
+            ),
             highlight=("red" if (leaf and not purchasable) else "normal"),
         )
 
@@ -107,7 +111,7 @@ async def aizynth_retro(
                     "source": "AiZynthFinder",
                     "message": f"No synthesis routes found for {start_smiles}.",
                     "smiles": start_smiles,
-                }
+                },
             }
         )
         await websocket.send_json({"type": "complete"})
@@ -154,7 +158,7 @@ async def aizynth_retro(
                     "id": edge.id,
                     "status": "complete",
                     "label": edge.label,
-                }
+                },
             }
             await websocket.send_json(edge_complete)
 

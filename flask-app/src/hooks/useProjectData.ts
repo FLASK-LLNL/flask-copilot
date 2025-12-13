@@ -55,11 +55,11 @@ class LocalStorageDataSource implements ProjectDataSource {
       lastModified: new Date().toISOString(),
       experiments: []
     };
-    
+
     const projects = await this.loadProjects();
     projects.push(newProject);
     await this.saveProjects(projects);
-    
+
     return newProject;
   }
 
@@ -153,7 +153,7 @@ export const useProjectData = () => {
   useEffect(() => {
     projectsRef.current = projects;
   }, [projects]);
-  
+
   // TODO(later): Swap this to use ServerDataSource
   const dataSource: ProjectDataSource = new LocalStorageDataSource();
 

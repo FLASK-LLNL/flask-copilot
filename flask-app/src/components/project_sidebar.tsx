@@ -82,14 +82,14 @@ export const ProjectSidebar: React.FC<ProjectSidebarProps> = ({
 
     const handleMouseMove = (e: MouseEvent) => {
       const newWidth = e.clientX;
-      
+
       // Check if width falls below collapse threshold
       if (newWidth < COLLAPSE_THRESHOLD) {
         onToggle(); // Collapse the sidebar
         setIsResizing(false);
         return;
       }
-      
+
       // Constrain width between min and max
       if (newWidth >= MIN_WIDTH && newWidth <= MAX_WIDTH) {
         setSidebarWidth(newWidth);
@@ -130,7 +130,7 @@ export const ProjectSidebar: React.FC<ProjectSidebarProps> = ({
           setEditProjectName('');
         }
       }
-      
+
       // Check if editing an experiment
       if (editingExperiment && editingExperimentRef.current) {
         if (!editingExperimentRef.current.contains(event.target as Node)) {
@@ -168,18 +168,18 @@ export const ProjectSidebar: React.FC<ProjectSidebarProps> = ({
       onReset();
 
     // Auto-select the last experiment if the project has any
-    const lastExperiment = project.experiments.length > 0 
-      ? project.experiments[project.experiments.length - 1] 
+    const lastExperiment = project.experiments.length > 0
+      ? project.experiments[project.experiments.length - 1]
       : null;
-    
+
     const newSelection: ProjectSelection = {
       projectId: project.id,
       experimentId: lastExperiment?.id || null
     };
-    
+
     onSelectionChange(newSelection);
     onLoadContext(project.id, lastExperiment?.id || null);
-    
+
     // Auto-expand when clicking a project
     if (!expandedProjects.has(project.id)) {
       toggleProjectExpanded(project.id);
@@ -195,7 +195,7 @@ export const ProjectSidebar: React.FC<ProjectSidebarProps> = ({
     // Save before selecting away
     if (onSaveContext())
       onReset();
-    
+
     const newSelection: ProjectSelection = {
       projectId: project.id,
       experimentId: experiment.id
@@ -212,9 +212,9 @@ export const ProjectSidebar: React.FC<ProjectSidebarProps> = ({
     const hours = String(now.getHours()).padStart(2, '0');
     const minutes = String(now.getMinutes()).padStart(2, '0');
     const timestamp = `${month}/${day}/${year} ${hours}:${minutes}`;
-    
+
     const newProjectName = `Project ${timestamp}`;
-    
+
     // Save before selecting away
     if (onSaveContext()) {
       // Reset UI state
@@ -249,7 +249,7 @@ export const ProjectSidebar: React.FC<ProjectSidebarProps> = ({
       // Reset UI state
       onReset();
     }
-    
+
     try {
       const experiment = await createExperiment(projectId, newExperimentName);
       setNewExperimentName('');
@@ -270,7 +270,7 @@ export const ProjectSidebar: React.FC<ProjectSidebarProps> = ({
 
   const handleSaveProjectEdit = async (project: Project) => {
     if (!editProjectName.trim()) return;
-    
+
     try {
       await updateProject({ ...project, name: editProjectName });
       setEditingProject(null);
@@ -302,7 +302,7 @@ export const ProjectSidebar: React.FC<ProjectSidebarProps> = ({
 
   const handleSaveExperimentEdit = async (projectId: string, experiment: Experiment) => {
     if (!editExperimentName.trim()) return;
-    
+
     try {
       await updateExperiment(projectId, { ...experiment, name: editExperimentName });
       setEditingExperiment(null);
@@ -347,13 +347,13 @@ export const ProjectSidebar: React.FC<ProjectSidebarProps> = ({
               <div className="mb-4">
                 <h3 className="modal-title mb-2">Confirm Delete</h3>
                 <p className="text-secondary text-sm">
-                  {deletingItem.type === 'project' 
+                  {deletingItem.type === 'project'
                     ? `Are you sure you want to delete this project? All ${projects.find(p => p.id === deletingItem.projectId)?.experiments.length || 0} experiments inside will also be deleted.`
                     : 'Are you sure you want to delete this experiment?'}
                 </p>
                 <p className="text-tertiary text-xs mt-2">This action cannot be undone.</p>
               </div>
-              
+
               <div className="flex gap-3">
                 <button
                   onClick={() => {
@@ -383,7 +383,7 @@ export const ProjectSidebar: React.FC<ProjectSidebarProps> = ({
 
   return (
     <>
-    <div 
+    <div
       className={`sidebar ${isResizing ? 'resizing' : ''}`}
       style={{ width: `${sidebarWidth}px` }}
     >
@@ -402,12 +402,12 @@ export const ProjectSidebar: React.FC<ProjectSidebarProps> = ({
             <ChevronLeft className="w-5 h-5" />
           </button>
         </div>
-        
+
         {/* No Project/Experiment Selected Warning */}
         {(!selection.projectId || !selection.experimentId) && (
           <div className="alert alert-warning mt-2">
             <p className="text-warning text-xs">
-              {!selection.projectId 
+              {!selection.projectId
                 ? '⚠️ No project selected. A new project will be created when you run.'
                 : '⚠️ No experiment selected. A new experiment will be created when you run.'}
             </p>
@@ -438,7 +438,7 @@ export const ProjectSidebar: React.FC<ProjectSidebarProps> = ({
                       <ChevronRight className="w-4 h-4" />
                     )}
                   </button>
-                  
+
                   {editingProject === project.id ? (
                     <div ref={editingProjectRef} className="flex-1 flex items-center gap-1 px-2">
                       <input
@@ -740,13 +740,13 @@ export const ProjectSidebar: React.FC<ProjectSidebarProps> = ({
           <div className="mb-4">
             <h3 className="modal-title mb-2">Confirm Delete</h3>
             <p className="text-secondary text-sm">
-              {deletingItem.type === 'project' 
+              {deletingItem.type === 'project'
                 ? `Are you sure you want to delete this project? All ${projects.find(p => p.id === deletingItem.projectId)?.experiments.length || 0} experiments inside will also be deleted.`
                 : 'Are you sure you want to delete this experiment?'}
             </p>
             <p className="text-tertiary text-xs mt-2">This action cannot be undone.</p>
           </div>
-          
+
           <div className="flex gap-3">
             <button
               onClick={() => {
@@ -777,7 +777,7 @@ export const ProjectSidebar: React.FC<ProjectSidebarProps> = ({
 // Custom hook to manage sidebar state
 export const useProjectSidebar = () => {
   const SELECTION_STORAGE_KEY = 'flask_copilot_last_selection';
-  
+
   const [isOpen, setIsOpen] = useState(true);
   const [selection, setSelectionState] = useState<ProjectSelection>({
     projectId: null,
@@ -810,12 +810,12 @@ export const useProjectManagement = (projectData: ProjectData) => {
   const { projectsRef, projects, createProject, createExperiment, updateExperiment } = projectData;
 
   const createProjectAndExperiment = React.useCallback(async (
-    projectName: string, 
+    projectName: string,
     experimentName: string
   ): Promise<{ projectId: string; experimentId: string }> => {
     const project = await createProject(projectName);
     const experiment = await createExperiment(project.id, experimentName);
-    
+
     return {
       projectId: project.id,
       experimentId: experiment.id

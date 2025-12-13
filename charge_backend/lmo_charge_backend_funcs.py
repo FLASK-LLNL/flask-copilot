@@ -79,7 +79,7 @@ async def generate_lead_molecule(
     lead_molecule_smiles = start_smiles
     clogger = CallbackLogger(websocket)
 
-    await  clogger.info(
+    await clogger.info(
         f"Starting task with lead molecule: {lead_molecule_smiles} and available tools: {available_tools}",
         smiles=lead_molecule_smiles,
         source="generate_lead_molecule",
@@ -90,12 +90,12 @@ async def generate_lead_molecule(
 
     # Fix how the available tools interacts with the calculate property tool field
     property_result_msg = await call_mcp_tool_directly(
-        tool_name = calculate_property_tool,
-        arguments = {
+        tool_name=calculate_property_tool,
+        arguments={
             "smiles": lead_molecule_smiles,
             "property": property,
         },
-        urls = available_tools,
+        urls=available_tools,
     )
     results = property_result_msg.result
     if len(results) > 1:
@@ -108,16 +108,20 @@ async def generate_lead_molecule(
         smiles=lead_molecule_smiles,
         parent_id=parent_id - 1,
         node_id=node_id,
-        tool_properties = {property: property_result}
+        tool_properties={property: property_result},
     )
 
     # Start the db with the lead molecule
-    lmo_helper_funcs.save_list_to_json_file(data=[lead_molecule_data], file_path=mol_file_path)
+    lmo_helper_funcs.save_list_to_json_file(
+        data=[lead_molecule_data], file_path=mol_file_path
+    )
 
     await clogger.info(f"Storing found molecules in {mol_file_path}")
 
     # Run the task in a loop
-    new_molecules = lmo_helper_funcs.get_list_from_json_file(file_path=mol_file_path)  # Start with known molecules
+    new_molecules = lmo_helper_funcs.get_list_from_json_file(
+        file_path=mol_file_path
+    )  # Start with known molecules
 
     leader_hov = MOLECULE_HOVER_TEMPLATE.format(
         smiles=lead_molecule_smiles,
@@ -207,7 +211,13 @@ async def generate_lead_molecule(
 
     for i in range(depth):
         await websocket.send_json(
-            {"type": "response", "message": {"source": "Logger (Info)", "message": f"Iteration {i+1}/{depth}"}}
+            {
+                "type": "response",
+                "message": {
+                    "source": "Logger (Info)",
+                    "message": f"Iteration {i+1}/{depth}",
+                },
+            }
         )
         logger.info(f"Iteration {i}")
 
@@ -233,7 +243,13 @@ async def generate_lead_molecule(
                 results = MoleculeOutputSchema.model_validate_json(results)
                 reasoning_summary = results.reasoning_summary
                 await websocket.send_json(
-                    {"type": "response", "message": {"source": "Reasoning", "message": reasoning_summary}}
+                    {
+                        "type": "response",
+                        "message": {
+                            "source": "Reasoning",
+                            "message": reasoning_summary,
+                        },
+                    }
                 )
 
                 optimized_property = results.property_name
@@ -244,10 +260,13 @@ async def generate_lead_molecule(
                         smiles=smiles,
                         parent_id=parent_id,
                         node_id=node_id,
-                        tool_properties = {optimized_property: property_result}
+                        tool_properties={optimized_property: property_result},
                     )
                     canonical_smiles = processed_mol["smiles"]
-                    if canonical_smiles not in new_molecules and canonical_smiles != "Invalid SMILES":
+                    if (
+                        canonical_smiles not in new_molecules
+                        and canonical_smiles != "Invalid SMILES"
+                    ):
                         new_molecules.append(canonical_smiles)
 
                         generated_smiles_list.append(canonical_smiles)
@@ -255,7 +274,9 @@ async def generate_lead_molecule(
                         generated_properties.append(property_value)
 
                         mol_data.append(processed_mol)
-                        lmo_helper_funcs.save_list_to_json_file(data=mol_data, file_path=mol_file_path)
+                        lmo_helper_funcs.save_list_to_json_file(
+                            data=mol_data, file_path=mol_file_path
+                        )
                         logger.info(f"New molecule added: {canonical_smiles}")
                         # Check if this is better than current best
                         if is_better(property_value, current_best_value):
@@ -285,19 +306,25 @@ async def generate_lead_molecule(
                             level=initial_level + i + 1,
                             cost=get_price(canonical_smiles),
                             # Highlight if this is the new best
-                            highlight="yellow"
-                            if canonical_smiles == current_best_smiles
-                            else "normal",
+                            highlight=(
+                                "yellow"
+                                if canonical_smiles == current_best_smiles
+                                else "normal"
+                            ),
                             # Not sure what to put here
                             hoverInfo=mol_hov,
-                            x=initial_x_position + 100 + (node_id - initial_node_id) * 300,
+                            x=initial_x_position
+                            + 100
+                            + (node_id - initial_node_id) * 300,
                             y=100,
                         )
 
                         await websocket.send_json({"type": "node", "node": node.json()})
 
                     else:
-                        await clogger.info(f"Duplicate molecule found: {canonical_smiles}")
+                        await clogger.info(
+                            f"Duplicate molecule found: {canonical_smiles}"
+                        )
 
                 # If we found molecules in this iteration, prepare for next iteration
                 if len(generated_smiles_list) > 0:
@@ -319,7 +346,11 @@ async def generate_lead_molecule(
                         ranking=ranking,
                     )
 
-                    formatted_refine_prompt = custom_prompt if custom_prompt is not None else formatted_refine_prompt
+                    formatted_refine_prompt = (
+                        custom_prompt
+                        if custom_prompt is not None
+                        else formatted_refine_prompt
+                    )
 
                     # Use the BEST molecule found so far as the lead molecule
                     lmo_task = LeadMoleculeOptimization(
@@ -334,7 +365,9 @@ async def generate_lead_molecule(
 
                     if os.getenv("CHARGE_DISABLE_OUTPUT_VALIDATION", "0") == "1":
                         lmo_task.structured_output_schema = None
-                        logger.warning("Structure validation disabled for LMOTask output schema.")
+                        logger.warning(
+                            "Structure validation disabled for LMOTask output schema."
+                        )
                     experiment.add_task(lmo_task)
                 else:
                     logger.info("No new molecules generated in this iteration.")

@@ -12,7 +12,7 @@ WebSocket-powered server as the backend.
 * Backend:
     * Make sure you have Python installed with a virtualenv.
     * Go to the main folder and run `pip install -r requirements.txt`
-* Frontend:    
+* Frontend:
     * Install `npm`
     * `cd` into the `flask-app` folder and run `npm install`
     * Go into the `flask-app` directory and run `npm start dev` for development
@@ -23,7 +23,7 @@ WebSocket-powered server as the backend.
 To run FLASK Copilot, both the frontend and the backend need to run. The backend
 will also serve the frontend web UI on the same port, if `npm run build` was
 run. If this is not the case (e.g., with `npm start dev`), the backend still
-needs to run. A server that creates mock data will run with 
+needs to run. A server that creates mock data will run with
 `python mock_server.py`.
 
 Note: if the server was not running when the web UI started, click the blinking

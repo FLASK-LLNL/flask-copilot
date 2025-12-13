@@ -20,13 +20,13 @@ async def handle_callback_log(message):
         level = record["level"].name
         if not source:
             LEVELS = {
-               'DEBUG': 'Debug',
-               'VERBOSE': 'Verbose',
-               'INFO': 'Info',
-               'WARN': 'Warning',
-               'WARNING': 'Warning',
-               'ERROR': 'Error',
-               'EXCEPTION': 'Exception'
+                "DEBUG": "Debug",
+                "VERBOSE": "Verbose",
+                "INFO": "Info",
+                "WARN": "Warning",
+                "WARNING": "Warning",
+                "ERROR": "Error",
+                "EXCEPTION": "Exception",
             }
             level_str = LEVELS.get(level, level)
             source = f"Logger ({level_str})"
@@ -43,7 +43,9 @@ logger.add(handle_callback_log, filter=lambda record: record["level"].name == "I
 logger.add(handle_callback_log, filter=lambda record: record["level"].name == "Warning")
 logger.add(handle_callback_log, filter=lambda record: record["level"].name == "Debug")
 logger.add(handle_callback_log, filter=lambda record: record["level"].name == "Error")
-logger.add(handle_callback_log, filter=lambda record: record["level"].name == "Exception")
+logger.add(
+    handle_callback_log, filter=lambda record: record["level"].name == "Exception"
+)
 
 
 # The Callback logger can hold a websocket that will allow the log message to be
@@ -58,7 +60,7 @@ class CallbackLogger:
         if self.source and (not kwargs or "source" not in kwargs):
             kwargs["source"] = self.source
         return kwargs
-    
+
     async def info(self, message, **kwargs):
         kwargs = self._apply_msg_source(**kwargs)
         if kwargs:

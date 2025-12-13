@@ -14,12 +14,17 @@ import charge.servers.retrosynthesis_reaction_server as RETRO_MCP
 from charge.servers.server_utils import update_mcp_network, get_hostname
 from tool_registration import register_tool_server
 
+
 @click.command()
 @click.option("--port", type=int, default=8123, help="Port to run the server on")
 @click.option("--host", type=str, default=None, help="Host to run the server on")
 @click.option("--name", type=str, default="retro_tools", help="Name of the MCP server")
-@click.option("--copilot-port", type=int, default=8001, help="Port to the running copilot backend")
-@click.option("--copilot-host", type=str, default=None, help="Host to the running copilot backend")
+@click.option(
+    "--copilot-port", type=int, default=8001, help="Port to the running copilot backend"
+)
+@click.option(
+    "--copilot-host", type=str, default=None, help="Host to the running copilot backend"
+)
 @click.option(
     "--config",
     type=str,
@@ -33,7 +38,9 @@ def main(port, host, name, copilot_port, copilot_host, config):
     try:
         register_tool_server(port, host, name, copilot_port, copilot_host)
     except:
-        logger.info(f"{name} could not connect to server for registration -- requires manual registration")
+        logger.info(
+            f"{name} could not connect to server for registration -- requires manual registration"
+        )
 
     mcp = RETRO_MCP.template_free_mcp
 
@@ -43,6 +50,7 @@ def main(port, host, name, copilot_port, copilot_host, config):
     update_mcp_network(mcp, host, port)
 
     mcp.run(transport="sse")
+
 
 if __name__ == "__main__":
     main()
