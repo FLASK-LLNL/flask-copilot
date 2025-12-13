@@ -23,9 +23,10 @@ from charge.clients.autogen_utils import (
     _list_wb_tools,
 )
 
+
 def split_url(url: str) -> Tuple[str, int, str, str]:
     # Regular expression pattern
-    pattern = r'^(https?://)?([^:/]+)(?::(\d+))?(?:/(.+?))?/?$'
+    pattern = r"^(https?://)?([^:/]+)(?::(\d+))?(?:/(.+?))?/?$"
 
     match = re.match(pattern, url)
 
@@ -36,9 +37,12 @@ def split_url(url: str) -> Tuple[str, int, str, str]:
         path = match.group(4) or ""
 
     if not port and not path:
-        raise ValueError(f"Unusable URL provide {url} -- requires either a port or a path")
+        raise ValueError(
+            f"Unusable URL provide {url} -- requires either a port or a path"
+        )
 
     return host, port, path, protocol
+
 
 @dataclass
 class ToolList:
@@ -139,11 +143,20 @@ def reload_server_list(filename: str):
         return
 
 
-def register_url(filename: str, hostname: str, port: int, path: Optional[str] = "", protocol: Optional[str] = "", name: Optional[str] = ""):
+def register_url(
+    filename: str,
+    hostname: str,
+    port: int,
+    path: Optional[str] = "",
+    protocol: Optional[str] = "",
+    name: Optional[str] = "",
+):
     path_if_valid = f"/{path}" if path else ""
     protocol_if_valid = f"{protocol}" if protocol else "http://"
     key = f"{protocol_if_valid}{hostname}:{port}{path_if_valid}"
-    new_server = ToolServer(address=hostname, port=port, path=path, name=name, protocol=protocol)
+    new_server = ToolServer(
+        address=hostname, port=port, path=path, name=name, protocol=protocol
+    )
 
     old_server = SERVERS.servers.pop(key, None)
     if old_server:
@@ -161,20 +174,30 @@ def register_url(filename: str, hostname: str, port: int, path: Optional[str] = 
         if file_exists:
             if not os.access(filename, os.W_OK):
                 logger.error(f"Server list file is not writable: {filename}")
-                return {"status": f"{msg_base} (warning: could not save to disk - file not writable)"}
+                return {
+                    "status": f"{msg_base} (warning: could not save to disk - file not writable)"
+                }
         else:
             # For new files, check if parent directory is writable
-            parent_dir = os.path.dirname(filename) or '.'
+            parent_dir = os.path.dirname(filename) or "."
             if not os.access(parent_dir, os.W_OK):
-                logger.error(f"Cannot create server list file - parent directory not writable: {parent_dir}")
-                return {"status": f"{msg_base} (warning: could not save to disk - directory not writable)"}
+                logger.error(
+                    f"Cannot create server list file - parent directory not writable: {parent_dir}"
+                )
+                return {
+                    "status": f"{msg_base} (warning: could not save to disk - directory not writable)"
+                }
 
         try:
             with open(filename, "w") as f:
                 f.write(SERVERS.model_dump_json(indent=4))
         except PermissionError as e:
-            logger.error(f"Permission denied writing to server list file {filename}: {e}")
-            return {"status": f"{msg_base} (warning: could not save to disk - permission denied)"}
+            logger.error(
+                f"Permission denied writing to server list file {filename}: {e}"
+            )
+            return {
+                "status": f"{msg_base} (warning: could not save to disk - permission denied)"
+            }
         except OSError as e:
             logger.error(f"OS error writing to server list file {filename}: {e}")
             return {"status": f"{msg_base} (warning: could not save to disk - {e})"}
@@ -184,28 +207,36 @@ def register_url(filename: str, hostname: str, port: int, path: Optional[str] = 
 
     return {"status": f"{msg_base}"}
 
+
 async def register_post(filename: str, request: Request, data: RegistrationRequest):
     hostname = data.host
     if not hostname:
         hostname = get_client_info(request)
     return register_url(filename, hostname, data.port, data.name)
 
+
 def register_tool_server(port, host, name, copilot_port, copilot_host):
     for i in range(5):
         try:
             try:
                 url = f"https://{copilot_host}:{copilot_port}/register"
-                response = requests.post(url, json={"host": host, "port": port, "name": name})
+                response = requests.post(
+                    url, json={"host": host, "port": port, "name": name}
+                )
             except:
                 url = f"http://{copilot_host}:{copilot_port}/register"
-                response = requests.post(url, json={"host": host, "port": port, "name": name})
+                response = requests.post(
+                    url, json={"host": host, "port": port, "name": name}
+                )
             logger.info(response.json())
             break
         except:
             if i == 4:
                 logger.error("Could not connect to server for registration! Exiting")
                 raise
-            logger.info("Could not connect to server for registration, retrying in 10 seconds")
+            logger.info(
+                "Could not connect to server for registration, retrying in 10 seconds"
+            )
             time.sleep(10)
             continue
 
@@ -218,7 +249,9 @@ def list_server_urls() -> list[str]:
         if validated_server:
             server_urls.append(f"{server}")
         else:
-            logger.info(f"Previously cached URL is no longer valid - removing {server.long_name()} from cache")
+            logger.info(
+                f"Previously cached URL is no longer valid - removing {server.long_name()} from cache"
+            )
             invalid_keys.append(key)
 
     for key in invalid_keys:

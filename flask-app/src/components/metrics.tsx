@@ -12,8 +12,8 @@ const metricDefinitions: MetricDefinitions = {
         color: '#EC4899',
         calculate: (nodes: TreeNode[]) => nodes.reduce((sum, node) => sum + (node.cost || 0), 0)
     },
-    sascore: { 
-        label: 'Synthesizability Score', 
+    sascore: {
+        label: 'Synthesizability Score',
         color: '#48adff',
         calculate: (nodes: TreeNode[]) => {
             // Get the lowest SA score among all nodes
@@ -21,8 +21,8 @@ const metricDefinitions: MetricDefinitions = {
             return scores.length > 0 ? Math.min(...scores) : 0;
         }
     },
-    bandgap: { 
-        label: 'Band Gap (eV)', 
+    bandgap: {
+        label: 'Band Gap (eV)',
         color: '#F59E0B',
         calculate: (nodes: TreeNode[]) => {
             const bandgaps = nodes.map(n => n.bandgap || 0).filter(b => b > 0);
@@ -69,7 +69,7 @@ export const MetricsDashboard: React.FC<MetricsDashboardProps> = ({treeNodes, me
         if (metricsHistory.length === 0) return null;
 
         const visibleCount = Object.values(visibleMetrics).filter(Boolean).length;
-        
+
         return (
             <div className={`metrics-grid ${visibleCount > 1 ? 'metrics-grid-multi' : 'metrics-grid-single'}`}>
             {Object.keys(metricDefinitions).filter(key => visibleMetrics[key as keyof VisibleMetrics]).map(metricKey => {

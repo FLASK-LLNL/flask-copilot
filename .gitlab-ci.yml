@@ -35,7 +35,7 @@ build:
     - podman push ${NEXUS_REGISTRY_IMAGE}:demo
     - podman logout $NEXUS_REGISTRY
     - podman logout $CI_REGISTRY
-    
+
 deploy:
   stage: deploy
   tags:

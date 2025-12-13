@@ -8,6 +8,7 @@ from charge.servers.log_progress import LOG_PROGRESS_SYSTEM_PROMPT
 from backend_helper_funcs import Node, CallbackHandler
 from molecule_naming import smiles_to_html
 
+
 async def run_custom_problem(
     start_smiles: str,
     system_prompt: str,
