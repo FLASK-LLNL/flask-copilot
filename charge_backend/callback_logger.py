@@ -49,35 +49,46 @@ logger.add(handle_callback_log, filter=lambda record: record["level"].name == "E
 # The Callback logger can hold a websocket that will allow the log message to be
 # copied to the websocket as well as the logger
 class CallbackLogger:
-    def __init__(self, websocket: WebSocket):
+    def __init__(self, websocket: WebSocket, source: Optional[str] = None):
         self.websocket = websocket
         self.logger = logger.bind(websocket=websocket)
+        self.source = source
 
+    def _apply_msg_source(self, **kwargs):
+        if self.source and (not kwargs or "source" not in kwargs):
+            kwargs["source"] = self.source
+        return kwargs
+    
     async def info(self, message, **kwargs):
+        kwargs = self._apply_msg_source(**kwargs)
         if kwargs:
             logger.bind(websocket=self.websocket, **kwargs).info(message)
         else:
             self.logger.info(message)
 
     async def warning(self, message, **kwargs):
+        kwargs = self._apply_msg_source(**kwargs)
         if kwargs:
             logger.bind(websocket=self.websocket, **kwargs).warning(message)
         else:
             self.logger.warning(message)
 
     async def debug(self, message, **kwargs):
+        kwargs = self._apply_msg_source(**kwargs)
         if kwargs:
             logger.bind(websocket=self.websocket, **kwargs).debug(message)
         else:
             self.logger.debug(message)
 
     async def error(self, message, **kwargs):
+        kwargs = self._apply_msg_source(**kwargs)
         if kwargs:
             logger.bind(websocket=self.websocket, **kwargs).error(message)
         else:
             self.logger.error(message)
 
     async def exception(self, message, **kwargs):
+        kwargs = self._apply_msg_source(**kwargs)
         if kwargs:
             logger.bind(websocket=self.websocket, **kwargs).error(message)
         else:
