@@ -122,6 +122,11 @@ async def constrained_retro(
                 network errors, timeouts, and planner failures.
     """
 
+    clogger = CallbackLogger(websocket, source="constrained_retrosynthesis")
+
+    await clogger.info(
+        f"Finding synthesis pathway for {parent_smiles}...", smiles=parent_smiles
+    )
     await websocket.send_json(
         {
             "type": "response",
@@ -247,10 +252,13 @@ async def generate_molecules(
     context: RetrosynthesisContext,
     executor: ProcessPoolExecutor,
     websocket: WebSocket,
+    available_tools: Optional[Union[str, list[str]]] = None,
 ):
     """Stream positioned nodes and edges"""
     clogger = CallbackLogger(websocket, source="generate_molecules")
-    await clogger.info(f"Planning retrosynthesis for: {start_smiles}")
+    await clogger.info(
+        f"Planning retrosynthesis for: {start_smiles} with available tools: {available_tools}."
+    )
 
     # Generate and position entire tree upfront
 
@@ -283,15 +291,9 @@ async def generate_molecules(
     context.node_id_to_planner[root.id] = planner
 
     if not routes:
-        await websocket.send_json(
-            {
-                "type": "response",
-                "message": {
-                    "source": "System",
-                    "message": f"No synthesis routes found for {start_smiles}.",
-                    "smiles": start_smiles,
-                },
-            }
+        await clogger.info(
+            f"No synthesis routes found for {start_smiles}.",
+            smiles=start_smiles,
         )
         await websocket.send_json({"type": "complete"})
         return
@@ -325,27 +327,14 @@ async def constrained_opt(
 ):
     """Constrained optimization using retrosynthesis"""
 
-    clogger = CallbackLogger(websocket, source="constrained_retrosynthesis")
-
-    await websocket.send_json(
-        {
-            "type": "response",
-            "message": {
-                "source": "System",
-                "message": f"Finding synthesis pathway for {parent_smiles}...",
-                "smiles": parent_smiles,
-            },
-        }
+    clogger = CallbackLogger(websocket, source="constrained_opt")
+    await clogger.info(
+        f"Finding synthesis pathway for {parent_smiles}...",
+        smiles=parent_smiles,
     )
-    await websocket.send_json(
-        {
-            "type": "response",
-            "message": {
-                "source": "System",
-                "message": f"Searching for alternatives without {constraint_smiles}",
-                "smiles": constraint_smiles,
-            },
-        }
+    await clogger.info(
+        f"Searching for alternatives without {constraint_smiles}",
+        smiles=constraint_smiles,
     )
 
     user_prompt = RETROSYNTH_CONSTRAINED_USER_PROMPT_TEMPLATE.format(
@@ -378,18 +367,12 @@ async def optimize_molecule_retro(
 
     cur_node_id = cur_node_id.node_id
 
-    await websocket.send_json(
-        {
-            "type": "response",
-            "message": {
-                "source": "System",
-                "message": f"Finding synthesis pathway to {current_node.smiles}...",
-                "smiles": current_node.smiles,
-            },
-        }
-    )
-
     clogger = CallbackLogger(websocket, source="optimize_molecule_retro")
+
+    await clogger.info(
+        f"Finding synthesis pathway to {current_node.smiles}... with available tools: {available_tools}.",
+        smiles=current_node.smiles,
+    )
 
     if node_id in context.node_id_to_charge_client:
         # Existing context
@@ -419,7 +402,9 @@ async def optimize_molecule_retro(
         )
         context.node_id_to_charge_client[node_id] = runner
 
-    await clogger.info(f"Optimizing {current_node.smiles} using retrosynthesis with available tools: {available_tools}.")
+    await clogger.info(
+        f"Optimizing {current_node.smiles} using retrosynthesis with available tools: {available_tools}."
+    )
 
     # Run task
     await highlight_node(current_node, websocket, True)
@@ -441,25 +426,19 @@ async def optimize_molecule_retro(
 
     reasoning_summary = result.reasoning_summary
     await clogger.info(
-        f"Retrosynthesis reasoning for {current_node.smiles}: {reasoning_summary}",
-    )
-
-    await websocket.send_json(
-        {
-            "type": "response",
-            "message": {
-                "source": "System",
-                "message": f"Reasoning summary for {current_node.smiles}: "
-                + f"\n {reasoning_summary}",
-            },
-        }
+        f"Retrosynthesis reasoning summary for {current_node.smiles}:\n{reasoning_summary}",
     )
 
     nodes: list[Node] = []
     edges: list[Edge] = []
     for i, smiles in enumerate(result.reactants_smiles_list):
         node = Node(
-            f"node_{num_nodes+i}", smiles, smiles_to_html(smiles), "Discovered", level, current_node.id
+            f"node_{num_nodes+i}",
+            smiles,
+            smiles_to_html(smiles),
+            "Discovered",
+            level,
+            current_node.id,
         )
         context.node_ids[node.id] = node
 

@@ -27,16 +27,17 @@ from retro_charge_backend_funcs import (
 
 # Mapping from backend name to human-readable labels. Mirrored from the frontend
 BACKEND_LABELS = {
-    'openai': 'OpenAI',
-    'livai': 'LivAI',
-    'llamame': 'LLamaMe',
-    'alcf': 'ALCF Sophia',
-    'gemini': 'Google Gemini',
-    'ollama': 'Ollama',
-    'vllm': 'vLLM',
-    'huggingface': 'HuggingFace Local',
-    'custom': 'Custom URL',
+    "openai": "OpenAI",
+    "livai": "LivAI",
+    "llamame": "LLamaMe",
+    "alcf": "ALCF Sophia",
+    "gemini": "Google Gemini",
+    "ollama": "Ollama",
+    "vllm": "vLLM",
+    "huggingface": "HuggingFace Local",
+    "custom": "Custom URL",
 }
+
 
 class TaskManager:
     """Manages background tasks and processes state for a websocket connection."""
@@ -44,7 +45,7 @@ class TaskManager:
     def __init__(self, websocket: WebSocket, max_workers: int = 4):
         self.websocket = websocket
         self.current_task: Optional[asyncio.Task] = None
-        self.clogger = CallbackLogger(websocket)
+        self.clogger = CallbackLogger(websocket, source="backend_manager")
         self.max_workers = max_workers
         self.executor = ProcessPoolExecutor(max_workers=max_workers)
         self.available_tools: Optional[list[str]] = None
@@ -90,7 +91,9 @@ class TaskManager:
             )
         else:
             # Log other exceptions for debugging
-            logger.exception(f"Unexpected error in background task: {type(exc).__name__}: {exc}")
+            logger.exception(
+                f"Unexpected error in background task: {type(exc).__name__}: {exc}"
+            )
 
         # Send a stopped message with error details to the websocket so the UI can react
         try:
@@ -187,7 +190,13 @@ class ActionManager:
             return
         await self.experiment.load_state(experiment_context)
 
-    async def _handle_optimization(self, data: dict, initial_level: int = 0, initial_node_id: int = 0, initial_x_position: int = 50) -> None:
+    async def _handle_optimization(
+        self,
+        data: dict,
+        initial_level: int = 0,
+        initial_node_id: int = 0,
+        initial_x_position: int = 50,
+    ) -> None:
         """Handle optimization problem type."""
         await self.task_manager.clogger.info("Start Optimization action received")
         logger.info(f"Data: {data}")
@@ -237,9 +246,24 @@ class ActionManager:
         else:
             property_name = property_type
             DEFAULT_PROPERTIES = {
-                "density": ("density", "crystalline density (g/cm^3)", "calculate_property_hf", "greater"),
-                "hof": ("heat of formation", "Heat of formation (kcal/mol)", "calculate_property_hf", "greater"),
-                "bandgap": ("band gap", "HOMO-LUMO energy gap (Hartree)", "calculate_property_hf", "greater"),
+                "density": (
+                    "density",
+                    "crystalline density (g/cm^3)",
+                    "calculate_property_hf",
+                    "greater",
+                ),
+                "hof": (
+                    "heat of formation",
+                    "Heat of formation (kcal/mol)",
+                    "calculate_property_hf",
+                    "greater",
+                ),
+                "bandgap": (
+                    "band gap",
+                    "HOMO-LUMO energy gap (Hartree)",
+                    "calculate_property_hf",
+                    "greater",
+                ),
             }
             if property_name not in DEFAULT_PROPERTIES:
                 error_msg = (
@@ -278,8 +302,11 @@ class ActionManager:
 
     async def _handle_retrosynthesis(self, data: dict) -> None:
         """Handle retrosynthesis problem type."""
-        await self.task_manager.clogger.info("Setting up retrosynthesis task...")
-        logger.info(f"Data: {data}")
+        available_tools = self.task_manager.available_tools or list_server_urls()
+        await self.task_manager.clogger.info(
+            "Setting up retrosynthesis task... with available tools: {available_tools}."
+        )
+        await self.task_manager.clogger.info(f"Data: {data}")
 
         run_func = partial(
             generate_molecules,
@@ -288,6 +315,7 @@ class ActionManager:
             self.get_retro_synth_context(),
             self.task_manager.executor,
             self.task_manager.websocket,
+            available_tools,
         )
 
         await self.task_manager.run_task(run_func())
@@ -342,15 +370,17 @@ class ActionManager:
             )
 
         node: str = data["nodeId"]
-        if '_' in node:
-            node = node[node.rfind("_") + 1:]
+        if "_" in node:
+            node = node[node.rfind("_") + 1 :]
         node_id = int(node)
         # Level is always equal to node ID for now.
         # TODO: Keep LMO context with nodes
         level = node_id
         xpos = data["xpos"]
 
-        await self._handle_optimization(data, initial_level=level, initial_node_id=node_id, initial_x_position=xpos)
+        await self._handle_optimization(
+            data, initial_level=level, initial_node_id=node_id, initial_x_position=xpos
+        )
 
     async def handle_recompute_reaction(self, data: dict) -> None:
         """Handle recompute-reaction action."""
@@ -410,7 +440,9 @@ class ActionManager:
                 "type": "update-orchestrator-profile",
                 "profileSettings": {
                     "backend": agent_pool.backend,
-                    "backendLabel": BACKEND_LABELS.get(agent_pool.backend, agent_pool.backend),
+                    "backendLabel": BACKEND_LABELS.get(
+                        agent_pool.backend, agent_pool.backend
+                    ),
                     "useCustomUrl": useCustomUrl,
                     "customUrl": base_url if base_url else "",
                     "model": model,
@@ -547,7 +579,9 @@ class ActionManager:
         """Handle a query on the reaction (from nodeId to its reactants)."""
         assert self.retro_synth_context is not None
 
-        await self._send_processing_message(f"Processing reaction query: {data['query']} for node {data['nodeId']} (as product)")
+        await self._send_processing_message(
+            f"Processing reaction query: {data['query']} for node {data['nodeId']} (as product)"
+        )
 
         task = Task(
             system_prompt="You are a helpful chemical assistant who answers in concise but factual responses. Answer the following query about the reaction.",
@@ -558,9 +592,13 @@ class ActionManager:
         node = self.retro_synth_context.node_ids[data["nodeId"]]
         if data["nodeId"] not in self.retro_synth_context.node_id_to_charge_client:
             # No charge client (likely only AZF was run), add context from tree
-            child_nodes = [nid for nid, p in self.retro_synth_context.parents.items() if p == data["nodeId"]]
+            child_nodes = [
+                nid
+                for nid, p in self.retro_synth_context.parents.items()
+                if p == data["nodeId"]
+            ]
             reactants = [self.retro_synth_context.node_ids[nid] for nid in child_nodes]
-            reactants_str = '\n'.join(reactant.smiles for reactant in reactants)
+            reactants_str = "\n".join(reactant.smiles for reactant in reactants)
             task.system_prompt += f"\n\nThe reaction in question is:\nProduct: {node.smiles}\nReactants:\n{reactants_str}"
             agent = self.experiment.create_agent_with_experiment_state(
                 task=task,
@@ -578,7 +616,6 @@ class ActionManager:
             await self._send_processing_message(result, source="Agent")
             await self.websocket.send_json({"type": "complete"})
 
-
         await self.task_manager.run_task(run_and_report())
 
     async def handle_custom_query_retro_reactant(self, data: dict) -> None:
@@ -593,7 +630,7 @@ class ActionManager:
         task = Task(
             system_prompt=f"You are a helpful chemical assistant who answers in concise but factual responses. Answer the following query about the reaction in the context of reactant `{node.smiles}`.",
             user_prompt=data["query"],
-            server_urls=self.task_manager.available_tools or list_server_urls()
+            server_urls=self.task_manager.available_tools or list_server_urls(),
         )
 
         agent = None
@@ -601,15 +638,20 @@ class ActionManager:
             parent = self.retro_synth_context.parents[data["nodeId"]]
             parent_node = self.retro_synth_context.node_ids[parent]
 
-
             if parent in self.retro_synth_context.node_id_to_charge_client:
                 # Context already exists
                 agent = self.retro_synth_context.node_id_to_charge_client[parent]
             else:
                 # No charge client (likely only AZF was run), add context from tree
-                child_nodes = [nid for nid, p in self.retro_synth_context.parents.items() if p == parent]
-                reactants = [self.retro_synth_context.node_ids[nid] for nid in child_nodes]
-                reactants_str = '\n'.join(reactant.smiles for reactant in reactants)
+                child_nodes = [
+                    nid
+                    for nid, p in self.retro_synth_context.parents.items()
+                    if p == parent
+                ]
+                reactants = [
+                    self.retro_synth_context.node_ids[nid] for nid in child_nodes
+                ]
+                reactants_str = "\n".join(reactant.smiles for reactant in reactants)
                 task.system_prompt += f"\n\nThe reaction in question is:\nProduct: {parent_node.smiles}\nReactants:\n{reactants_str}"
                 agent = self.experiment.create_agent_with_experiment_state(
                     task=task,
@@ -617,7 +659,9 @@ class ActionManager:
                 )
                 self.retro_synth_context.node_id_to_charge_client[parent] = agent
         else:
-            await self._send_processing_message(f"Molecule `{node.smiles}` has no parent reaction to query.")
+            await self._send_processing_message(
+                f"Molecule `{node.smiles}` has no parent reaction to query."
+            )
             await self.websocket.send_json({"type": "complete"})
             return
 

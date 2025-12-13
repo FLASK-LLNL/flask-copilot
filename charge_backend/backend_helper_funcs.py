@@ -114,7 +114,7 @@ class CallbackHandler:
                 for item in assistant_message.content:
                     if hasattr(item, "name") and hasattr(item, "arguments"):
                         name = item.name
-                        _str = f"[{source}] Function call: {item.name} with args {item.arguments}"
+                        _str = f"[{source}] Calling {item.name}: with args {item.arguments}"
                         logger.info(_str)
                         if "log_msg" in item.arguments:
                             str_to_dict = json.loads(item.arguments)
@@ -136,11 +136,15 @@ class CallbackHandler:
 
             for result in assistant_message.content:
                 if result.is_error:
-                    await self.clogger.error(f"[{source}] Function {result.name} errored with output: {result.content}",
-                                       source=result.name)
+                    await self.clogger.error(
+                        f"[{source}] Function {result.name} errored with output: {result.content}",
+                        source=result.name,
+                    )
                 else:
-                    await self.clogger.info(f"[{source}] Function {result.name} returned: {result.content}",
-                                      source=result.name)
+                    await self.clogger.info(
+                        f"[{source}] Returning {result.name}: {result.content}",
+                        source=result.name,
+                    )
         else:
             message = f"[{source}] Model: {assistant_message.message.content}"
             await self.clogger.info(message)
@@ -215,7 +219,9 @@ async def loop_executor(executor, func, *args, **kwargs):
     return await loop.run_in_executor(executor, func, *args, **kwargs)
 
 
-def post_process_lmo_smiles(smiles: str, parent_id: int, node_id: int, tool_properties: Optional[dict] = None) -> Dict:
+def post_process_lmo_smiles(
+    smiles: str, parent_id: int, node_id: int, tool_properties: Optional[dict] = None
+) -> Dict:
     """
     Post-process LMO SMILES, preferring tool-calculated properties.
 
@@ -226,7 +232,11 @@ def post_process_lmo_smiles(smiles: str, parent_id: int, node_id: int, tool_prop
     tool_properties = tool_properties or {}
     canonical_smiles = SMILES_utils.canonicalize_smiles(smiles)
     density = float(tool_properties.get("density", get_density(canonical_smiles)))
-    sascore = float(tool_properties.get("synthesizability", SMILES_utils.get_synthesizability(canonical_smiles)))
+    sascore = float(
+        tool_properties.get(
+            "synthesizability", SMILES_utils.get_synthesizability(canonical_smiles)
+        )
+    )
     bandgap = float(tool_properties.get("bandgap", get_bandgap(canonical_smiles)))
     return {
         "smiles": canonical_smiles,
