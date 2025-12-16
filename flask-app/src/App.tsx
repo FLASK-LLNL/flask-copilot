@@ -1047,8 +1047,15 @@ const ChemistryTool: React.FC = () => {
                       <label className="form-label">
                         Actions
                       </label>
-                      <button onClick={runComputation} disabled={!wsConnected || isComputing || !smiles} className="btn btn-primary">
-                        {isComputing ? <><Loader2 className="w-5 h-5 animate-spin" />Computing</> : <><Play className="w-5 h-5" />Run</>}
+                      <button onClick={() => {
+                        if (treeNodes.length > 0) {
+                          if (!window.confirm('Are you sure you want to rerun this computation? This will clear all previous progress.')) {
+                            return;
+                          }
+                        }
+                        runComputation();
+                      }} disabled={!wsConnected || isComputing || !smiles} className="btn btn-primary">
+                        {isComputing ? <><Loader2 className="w-5 h-5 animate-spin" />Computing</> : (treeNodes.length === 0 ? <><Play className="w-5 h-5" />Run</> : <><RefreshCw className="w-5 h-5" />Rerun</>)}
                       </button>
                       {(!wsConnected || isComputing || !smiles) && (
                         <div className="tooltip absolute bottom-full mb-2 left-1/2 transform -translate-x-1/2 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
@@ -1078,7 +1085,11 @@ const ChemistryTool: React.FC = () => {
                   </div>
                   <div>
                     <label className="form-label">&nbsp;</label>
-                    <button onClick={reset} disabled={isComputing} className="btn btn-tertiary">
+                    <button onClick={() => {
+                      if (window.confirm('Are you sure you want to reset this window? This will clear all molecules.')) {
+                        reset();
+                      }
+                    }} disabled={isComputing} className="btn btn-tertiary">
                       <RotateCcw className="w-5 h-5" />Reset
                     </button>
                   </div>
