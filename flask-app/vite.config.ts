@@ -57,8 +57,17 @@ export default defineConfig({
     'window.APP_CONFIG.WS_SERVER': JSON.stringify(process.env.WS_SERVER || 'ws://localhost:8001/ws'),
     'window.APP_CONFIG.VERSION': JSON.stringify(process.env.SERVER_VERSION || '')
   },
+  optimizeDeps: {
+    // Force pre-bundling in dev AND specify for build
+    include: ['scheduler'],
+    force: true  // Force re-optimization
+  },
   build: {
     rollupOptions: {
+      // Completely disable CommonJS detection for scheduler
+      commonjsOptions: {
+        exclude: ['scheduler'],  // Don't let commonjs plugin touch it
+      },
       // Explicitly tell Rollup: DO NOT externalize scheduler
       external: (id) => {
         if (id.includes('scheduler')) {
