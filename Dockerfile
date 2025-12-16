@@ -14,7 +14,9 @@ COPY ${DATA_PATH}/. /data
 RUN . $HOME/.nvm/nvm.sh && \
     npm install -g npm@latest && \
     npm install && \
-    rm -rf node_modules/.vite && \
+    rm -rf node_modules/.vite dist .vite && \
+    sync && sleep 2 && \
+    cat node_modules/scheduler/package.json && \
     npm run build
 
 RUN python -m venv /venv
