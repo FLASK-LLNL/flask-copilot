@@ -2,7 +2,7 @@ import { defineConfig } from 'vite';
 import tailwindcss from '@tailwindcss/vite'
 import react from '@vitejs/plugin-react';
 import { resolve } from 'path'
-import { copyFileSync, mkdirSync } from 'fs'
+import { copyFileSync, mkdirSync, writeFileSync } from 'fs'
 
 // Plugin to copy RDKit files during build
 function copyRDKitFiles() {
@@ -34,19 +34,38 @@ export default defineConfig({
   plugins: [
     react(),
     tailwindcss(),
-    copyRDKitFiles()
+    copyRDKitFiles(),
+    {
+      name: 'log-modules',
+      buildStart() {
+        this.modules = new Set();
+      },
+      transform(code, id) {
+        this.modules.add(id);
+      },
+      buildEnd() {
+        const moduleList = Array.from(this.modules).sort();
+        writeFileSync(
+          'build-modules.json',
+          JSON.stringify(moduleList, null, 2)
+        );
+        console.log(`Total modules: ${moduleList.length}`);
+      }
+    }
   ],
   define: {
     'window.APP_CONFIG.WS_SERVER': JSON.stringify(process.env.WS_SERVER || 'ws://localhost:8001/ws'),
     'window.APP_CONFIG.VERSION': JSON.stringify(process.env.SERVER_VERSION || '')
   },
-  optimizeDeps: {
-    include: ['react', 'react-dom', 'scheduler']
-  },
   build: {
     rollupOptions: {
-      output: {
-        manualChunks: undefined  // Prevent chunk splitting issues
+      // Explicitly tell Rollup: DO NOT externalize scheduler
+      external: (id) => {
+        if (id.includes('scheduler')) {
+          console.log('🔍 Checking scheduler:', id, '-> BUNDLE IT!');
+          return false;
+        }
+        return false;
       }
     }
   }
