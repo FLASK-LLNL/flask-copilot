@@ -1,6 +1,6 @@
 import React from 'react';
-import { User } from 'lucide-react';
-import { ProfileSettings } from '../types';
+import { User, Plus, Trash2, Edit2, Loader2 } from 'lucide-react';
+import { ProfileSettings, ToolServer } from '../types';
 
 interface ProfileButtonProps {
   onClick?: () => void;
@@ -67,6 +67,13 @@ export const BACKEND_OPTIONS = [
   },
 ];
 
+export const MOLECULE_NAME_OPTIONS = [
+  { value: 'brand', label: 'Brand/Common Name' },
+  { value: 'iupac', label: 'IUPAC Name' },
+  { value: 'formula', label: 'Chemical Formula' },
+  { value: 'smiles', label: 'SMILES' }
+];
+
 export const ProfileButton: React.FC<ProfileButtonProps> = ({
   onClick,
   onSettingsChange,
@@ -82,7 +89,7 @@ export const ProfileButton: React.FC<ProfileButtonProps> = ({
     useCustomModel: boolean;
   }>>({});
 
-  // Merge provided initial settings with defaults
+  // Default settings
   const defaultSettings: ProfileSettings = {
     backend: 'openai',
     backendLabel: 'OpenAI',
@@ -91,11 +98,30 @@ export const ProfileButton: React.FC<ProfileButtonProps> = ({
     model: 'gpt-5-nano',
     useCustomModel: false,
     apiKey: '',
+    moleculeName: 'brand',
+    toolServers: [],
     ...initialSettings
   };
 
   const [settings, setSettings] = React.useState<ProfileSettings>(defaultSettings);
   const [tempSettings, setTempSettings] = React.useState<ProfileSettings>(settings);
+
+  // Tool Servers state
+  const [addingServer, setAddingServer] = React.useState(false);
+  const [newServerUrl, setNewServerUrl] = React.useState('');
+  const [editingServer, setEditingServer] = React.useState<string | null>(null);
+  const [editServerUrl, setEditServerUrl] = React.useState('');
+  const [connectivityStatus, setConnectivityStatus] = React.useState<Record<string, {
+    status: 'checking' | 'connected' | 'disconnected';
+    tools?: Array<{ name: string; description?: string }>;
+    error?: string;
+  }>>({});
+  const [hoveredServer, setHoveredServer] = React.useState<string | null>(null);
+  const [pinnedServer, setPinnedServer] = React.useState<string | null>(null);
+
+  // Store active connections for cleanup
+  const activeConnectionsRef = React.useRef<Map<string, AbortController>>(new Map());
+  const tooltipRef = React.useRef<HTMLDivElement>(null);
 
   // Update settings when initialSettings prop changes
   React.useEffect(() => {
@@ -120,6 +146,225 @@ export const ProfileButton: React.FC<ProfileButtonProps> = ({
     }
   }, [initialSettings]);
 
+  // Check connectivity for all tool servers when modal opens
+  React.useEffect(() => {
+    if (isModalOpen && tempSettings.toolServers && tempSettings.toolServers.length > 0) {
+      tempSettings.toolServers.forEach(server => {
+        checkMCPServerConnectivity(server.url);
+      });
+    }
+
+    // Cleanup: abort all connections when modal closes
+    return () => {
+      activeConnectionsRef.current.forEach(controller => controller.abort());
+      activeConnectionsRef.current.clear();
+    };
+  }, [isModalOpen, tempSettings.toolServers]);
+
+  // Handle click outside to close pinned tooltip
+  React.useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (tooltipRef.current && !tooltipRef.current.contains(event.target as Node)) {
+        // Check if click is on a connectivity indicator
+        const target = event.target as HTMLElement;
+        if (!target.closest('.connectivity-indicator')) {
+          setPinnedServer(null);
+        }
+      }
+    };
+
+    if (pinnedServer) {
+      document.addEventListener('mousedown', handleClickOutside);
+      return () => document.removeEventListener('mousedown', handleClickOutside);
+    }
+  }, [pinnedServer]);
+
+  const checkMCPServerConnectivity = async (url: string) => {
+    // Cancel any existing connection for this URL
+    const existingController = activeConnectionsRef.current.get(url);
+    if (existingController) {
+      existingController.abort();
+    }
+
+    // Create new abort controller
+    const abortController = new AbortController();
+    activeConnectionsRef.current.set(url, abortController);
+
+    setConnectivityStatus(prev => ({
+      ...prev,
+      [url]: { status: 'checking' }
+    }));
+
+    try {
+      const sseUrl = (url.endsWith('/sse') ? url : `${url.replace(/\/$/, '')}/sse`);
+
+      const response = await fetch(sseUrl, {
+        method: 'GET',
+        headers: {
+          'Accept': 'text/event-stream',
+        },
+        signal: abortController.signal
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}`);
+      }
+
+      if (!response.body) {
+        throw new Error('No response body');
+      }
+
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = '';
+      const tools: Array<{ name: string; description?: string }> = [];
+      let hasReceivedData = false;
+      let messagesEndpoint = '';
+      let initSent = false;
+      let toolsListSent = false;
+      let initialized = false;
+
+      // Read the stream
+      const timeout = setTimeout(() => {
+        reader.cancel();
+        abortController.abort();
+        if (!hasReceivedData) {
+          setConnectivityStatus(prev => ({
+            ...prev,
+            [url]: { status: 'disconnected', error: 'Connection timeout' }
+          }));
+          activeConnectionsRef.current.delete(url);
+        }
+      }, 10000);
+
+      try {
+        // Function to send requests (returns 202 Accepted, response comes via SSE)
+        const sendRequest = async (method: string, params: any, id: number) => {
+          const baseUrl = url.replace('/sse', '').replace(/\/$/, '');
+          try {
+            await fetch(`${baseUrl}${messagesEndpoint}`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                jsonrpc: '2.0',
+                method,
+                params,
+                id
+              }),
+              signal: abortController.signal
+            });
+          } catch (e) {
+            console.warn(`Failed to send ${method}:`, e);
+          }
+        };
+
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+
+          hasReceivedData = true;
+          buffer += decoder.decode(value, { stream: true });
+
+          const lines = buffer.split('\n');
+          buffer = lines.pop() || '';
+
+          for (const line of lines) {
+            if (line.startsWith('data: ')) {
+              try {
+                const data = line.slice(6);
+
+                // Try to parse as JSON
+                try {
+                  const jsonData = JSON.parse(data);
+
+                  // Handle initialize response (id: 1)
+                  if (jsonData.id === 1 && jsonData.result) {
+                    initialized = true;
+                    console.log('MCP initialized');
+
+                    // Now request tools list
+                    if (!toolsListSent) {
+                      toolsListSent = true;
+                      await sendRequest('tools/list', {}, 2);
+                    }
+                  }
+
+                  // Handle tools/list response (id: 2)
+                  if (jsonData.id === 2 && jsonData.result?.tools) {
+                    jsonData.result.tools.forEach((tool: any) => {
+                      tools.push({
+                        name: tool.name,
+                        description: tool.description
+                      });
+                    });
+
+                    // We have tools, update status and exit
+                    setConnectivityStatus(prev => ({
+                      ...prev,
+                      [url]: {
+                        status: 'connected',
+                        tools: tools.length > 0 ? tools : undefined
+                      }
+                    }));
+                    clearTimeout(timeout);
+                    reader.cancel();
+                    return;
+                  }
+                } catch {
+                  // If not JSON, might be plain text endpoint info
+                  if (data.includes('/messages/')) {
+                    messagesEndpoint = data.trim();
+
+                    // Send initialize request once we have the endpoint
+                    if (!initSent) {
+                      initSent = true;
+                      await sendRequest('initialize', {
+                        protocolVersion: '2024-11-05',
+                        capabilities: {
+                          roots: { listChanged: false },
+                          sampling: {}
+                        },
+                        clientInfo: {
+                          name: 'flask-copilot',
+                          version: '1.0.0'
+                        }
+                      }, 1);
+                    }
+                  }
+                }
+              } catch (e) {
+                console.warn('Failed to parse SSE data:', e);
+              }
+            }
+          }
+        }
+
+        // Mark as connected
+        setConnectivityStatus(prev => ({
+          ...prev,
+          [url]: {
+            status: 'connected',
+            tools: tools.length > 0 ? tools : undefined
+          }
+        }));
+      } finally {
+        clearTimeout(timeout);
+        reader.cancel();
+      }
+
+      activeConnectionsRef.current.delete(url);
+    } catch (error: any) {
+      setConnectivityStatus(prev => ({
+        ...prev,
+        [url]: {
+          status: 'disconnected',
+          error: error.message || 'Connection failed'
+        }
+      }));
+      activeConnectionsRef.current.delete(url);
+    }
+  };
+
   const handleOpenModal = () => {
     setTempSettings(settings);
     setIsModalOpen(true);
@@ -129,6 +374,7 @@ export const ProfileButton: React.FC<ProfileButtonProps> = ({
   const handleSave = () => {
     setSettings(tempSettings);
     setIsModalOpen(false);
+    setPinnedServer(null);
     console.log('Settings saved:', tempSettings);
 
     // Call the callback with the saved settings
@@ -140,6 +386,9 @@ export const ProfileButton: React.FC<ProfileButtonProps> = ({
   const handleCancel = () => {
     setTempSettings(settings);
     setIsModalOpen(false);
+    setAddingServer(false);
+    setEditingServer(null);
+    setPinnedServer(null);
   };
 
   const handleBackendChange = (newBackend: string) => {
@@ -290,6 +539,104 @@ export const ProfileButton: React.FC<ProfileButtonProps> = ({
       ...tempSettings,
       model: newModel
     });
+  };
+
+  // Tool Server handlers
+  const handleAddServer = () => {
+    if (!newServerUrl.trim()) return;
+
+    const newServer: ToolServer = {
+      id: Date.now().toString(),
+      url: newServerUrl.trim()
+    };
+
+    setTempSettings({
+      ...tempSettings,
+      toolServers: [...(tempSettings.toolServers || []), newServer]
+    });
+
+    // Check connectivity for the new server
+    checkMCPServerConnectivity(newServer.url);
+
+    setNewServerUrl('');
+    setAddingServer(false);
+  };
+
+  const handleEditServer = (serverId: string) => {
+    const server = tempSettings.toolServers?.find(s => s.id === serverId);
+    if (server) {
+      setEditingServer(serverId);
+      setEditServerUrl(server.url);
+    }
+  };
+
+  const handleSaveServerEdit = (serverId: string) => {
+    if (!editServerUrl.trim()) return;
+
+    const oldServer = tempSettings.toolServers?.find(s => s.id === serverId);
+    const oldUrl = oldServer?.url;
+
+    setTempSettings({
+      ...tempSettings,
+      toolServers: tempSettings.toolServers?.map(s =>
+        s.id === serverId ? { ...s, url: editServerUrl.trim() } : s
+      ) || []
+    });
+
+    // Clean up old URL status and re-check connectivity for the edited server
+    if (oldUrl) {
+      setConnectivityStatus(prev => {
+        const newStatus = { ...prev };
+        delete newStatus[oldUrl];
+        return newStatus;
+      });
+    }
+    checkMCPServerConnectivity(editServerUrl.trim());
+
+    setEditingServer(null);
+    setEditServerUrl('');
+  };
+
+  const handleDeleteServer = (serverId: string) => {
+    const server = tempSettings.toolServers?.find(s => s.id === serverId);
+    if (server) {
+      // Cancel any active connection
+      const controller = activeConnectionsRef.current.get(server.url);
+      if (controller) {
+        controller.abort();
+        activeConnectionsRef.current.delete(server.url);
+      }
+
+      // Clean up status
+      setConnectivityStatus(prev => {
+        const newStatus = { ...prev };
+        delete newStatus[server.url];
+        return newStatus;
+      });
+
+      // Clear pinned state if deleting the pinned server
+      if (pinnedServer === serverId) {
+        setPinnedServer(null);
+      }
+    }
+
+    setTempSettings({
+      ...tempSettings,
+      toolServers: tempSettings.toolServers?.filter(s => s.id !== serverId) || []
+    });
+  };
+
+  const handleClearAllServers = () => {
+    // Cancel all active connections
+    activeConnectionsRef.current.forEach(controller => controller.abort());
+    activeConnectionsRef.current.clear();
+
+    setTempSettings({
+      ...tempSettings,
+      toolServers: []
+    });
+    setConnectivityStatus({});
+    setPinnedServer(null);
   };
 
   const currentBackendOption = BACKEND_OPTIONS.find(opt => opt.value === tempSettings.backend);
@@ -463,6 +810,223 @@ export const ProfileButton: React.FC<ProfileButtonProps> = ({
                   placeholder="Enter your API key"
                   className="form-input text-mono"
                 />
+              </div>
+
+              {/* Divider */}
+              <div className="border-t border-border my-4"></div>
+
+              {/* Molecule Name Preference */}
+              <div className="form-group">
+                <label className="form-label">
+                  Preferred Molecule Name Format
+                </label>
+                <select
+                  value={tempSettings.moleculeName || 'brand'}
+                  onChange={(e) => setTempSettings({...tempSettings, moleculeName: e.target.value as any})}
+                  className="form-select"
+                >
+                  {MOLECULE_NAME_OPTIONS.map(option => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+                <p className="text-xs text-muted mt-1">
+                  Choose how molecule names are displayed throughout the application
+                </p>
+              </div>
+
+              {/* Custom Tool Servers */}
+              <div className="form-group">
+                <div className="flex-between mb-2">
+                  <label className="form-label mb-0">
+                    Custom Tool Servers (MCP)
+                  </label>
+                  {tempSettings.toolServers && tempSettings.toolServers.length > 0 && (
+                    <button
+                      onClick={handleClearAllServers}
+                      className="btn btn-tertiary btn-sm text-xs"
+                    >
+                      Clear All
+                    </button>
+                  )}
+                </div>
+                <p className="text-xs text-muted mb-3">
+                  Configure external MCP tool servers for extended functionality
+                </p>
+
+                {/* Server List */}
+                <div className="space-y-2 mb-3">
+                  {tempSettings.toolServers?.map(server => (
+                    <div key={server.id} className="border border-border rounded p-3 bg-surface-secondary">
+                      {editingServer === server.id ? (
+                        <div className="space-y-2">
+                          <input
+                            type="text"
+                            value={editServerUrl}
+                            onChange={(e) => setEditServerUrl(e.target.value)}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') handleSaveServerEdit(server.id);
+                              if (e.key === 'Escape') {
+                                setEditingServer(null);
+                                setEditServerUrl('');
+                              }
+                            }}
+                            placeholder="https://example.com/sse"
+                            className="form-input text-sm text-mono"
+                            autoFocus
+                          />
+                          <div className="flex gap-2">
+                            <button
+                              onClick={() => handleSaveServerEdit(server.id)}
+                              className="btn btn-secondary btn-sm text-xs flex-1"
+                            >
+                              Save
+                            </button>
+                            <button
+                              onClick={() => {
+                                setEditingServer(null);
+                                setEditServerUrl('');
+                              }}
+                              className="btn btn-tertiary btn-sm text-xs flex-1"
+                            >
+                              Cancel
+                            </button>
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="flex items-center gap-3">
+                          {/* Connectivity Indicator */}
+                          <div
+                            className="relative flex-shrink-0 connectivity-indicator"
+                            onMouseEnter={() => setHoveredServer(server.id)}
+                            onMouseLeave={() => setHoveredServer(null)}
+                            onClick={() => setPinnedServer(pinnedServer === server.id ? null : server.id)}
+                            style={{ cursor: 'pointer' }}
+                          >
+                            {connectivityStatus[server.url]?.status === 'checking' ? (
+                              <Loader2 className="w-4 h-4 text-muted animate-spin" />
+                            ) : (
+                              <div
+                                className={`w-3 h-3 rounded-full ${
+                                  connectivityStatus[server.url]?.status === 'connected'
+                                    ? 'bg-green-500'
+                                    : 'bg-red-500'
+                                }`}
+                                title={
+                                  connectivityStatus[server.url]?.status === 'connected'
+                                    ? 'Connected (click for tools)'
+                                    : connectivityStatus[server.url]?.error || 'Disconnected'
+                                }
+                              />
+                            )}
+
+                            {/* Tools Tooltip */}
+                            {(hoveredServer === server.id || pinnedServer === server.id) &&
+                             connectivityStatus[server.url]?.status === 'connected' &&
+                             connectivityStatus[server.url]?.tools &&
+                             connectivityStatus[server.url].tools!.length > 0 && (
+                              <div ref={tooltipRef} className="ws-tooltip" style={{ left: 'auto', right: 0, top: '2.5rem' }}>
+                                <p className="text-xs font-semibold mb-2 text-primary">Available Tools:</p>
+                                <ul className="text-xs space-y-1.5 max-h-[200px] overflow-y-auto custom-scrollbar">
+                                  {connectivityStatus[server.url].tools!.map((tool, idx) => (
+                                    <li key={idx} className="text-secondary">
+                                      <span className="font-mono text-primary font-semibold">• {tool.name}</span>
+                                      {tool.description && (
+                                        <p className="text-secondary text-[10px] ml-3 mt-0.5">
+                                          {tool.description.length > 80
+                                            ? `${tool.description.substring(0, 80)}...`
+                                            : tool.description}
+                                        </p>
+                                      )}
+                                    </li>
+                                  ))}
+                                </ul>
+                              </div>
+                            )}
+                          </div>
+
+                          {/* URL */}
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm text-mono truncate text-primary">{server.url}</p>
+                          </div>
+
+                          {/* Action Buttons */}
+                          <div className="flex items-center gap-2 flex-shrink-0">
+                            <button
+                              onClick={() => handleEditServer(server.id)}
+                              className="btn-icon p-1.5"
+                              title="Edit server"
+                            >
+                              <Edit2 className="w-4 h-4" />
+                            </button>
+                            <button
+                              onClick={() => handleDeleteServer(server.id)}
+                              className="btn-icon p-1.5 hover:text-red-500"
+                              title="Delete server"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  ))}
+
+                  {/* Empty State */}
+                  {(!tempSettings.toolServers || tempSettings.toolServers.length === 0) && !addingServer && (
+                    <div className="border border-border border-dashed rounded p-8 text-center">
+                      <p className="text-sm text-muted">No tool servers configured</p>
+                      <p className="text-xs text-tertiary mt-1">Click "Add Tool Server" to get started</p>
+                    </div>
+                  )}
+                </div>
+
+                {/* Add New Server */}
+                {addingServer ? (
+                  <div className="border border-border rounded p-3 bg-surface-secondary space-y-2">
+                    <input
+                      type="text"
+                      value={newServerUrl}
+                      onChange={(e) => setNewServerUrl(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') handleAddServer();
+                        if (e.key === 'Escape') {
+                          setAddingServer(false);
+                          setNewServerUrl('');
+                        }
+                      }}
+                      placeholder="https://example.com/sse"
+                      className="form-input text-sm text-mono"
+                      autoFocus
+                    />
+                    <div className="flex gap-2">
+                      <button
+                        onClick={handleAddServer}
+                        className="btn btn-secondary btn-sm flex-1 text-xs"
+                      >
+                        Add Server
+                      </button>
+                      <button
+                        onClick={() => {
+                          setAddingServer(false);
+                          setNewServerUrl('');
+                        }}
+                        className="btn btn-tertiary btn-sm flex-1 text-xs"
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <button
+                    onClick={() => setAddingServer(true)}
+                    className="btn btn-secondary btn-sm w-full group"
+                  >
+                    <Plus className="w-4 h-4 group-hover:scale-110 transition-transform" />
+                    <span>Add Tool Server</span>
+                  </button>
+                )}
               </div>
             </div>
 

@@ -54,6 +54,14 @@ export interface ToolMap {
   selectedTools?: SelectableTool[];
 }
 
+export interface ToolServer {
+  id: string;
+  url: string;
+  name?: string;  // Optional display name
+}
+
+export type MoleculeNameFormat = 'brand' | 'iupac' | 'formula' | 'smiles';
+
 export interface ProfileSettings {
   backend: string;
   useCustomUrl: boolean;
@@ -62,6 +70,8 @@ export interface ProfileSettings {
   useCustomModel?: boolean;
   apiKey: string;
   backendLabel: string;
+  moleculeName?: MoleculeNameFormat;
+  toolServers?: ToolServer[];
 }
 
 export interface WebSocketMessageToServer {
