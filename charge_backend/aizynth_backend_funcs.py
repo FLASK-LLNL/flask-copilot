@@ -4,7 +4,7 @@ from callback_logger import CallbackLogger
 from fastapi import WebSocket
 import asyncio
 import copy
-from typing import Dict
+from typing import Dict, Literal
 
 from backend_helper_funcs import Node, Edge, RetrosynthesisContext, calculate_positions
 import charge.servers.AiZynthTools as AiZynthFuncs
@@ -15,6 +15,7 @@ def generate_tree_structure(
     reaction_path_dict: Dict[int, Node],
     retro_synth_context: RetrosynthesisContext,
     start_level: int = 0,
+    molecule_name_format: Literal["brand", "iupac", "formula", "smiles"] = "brand",
 ) -> tuple[list[Node], list[Edge]]:
     """Generate nodes and edges from reaction path dict"""
     nodes = []
@@ -41,7 +42,7 @@ def generate_tree_structure(
         node = Node(
             id=node_id_str,
             smiles=smiles,
-            label=smiles_to_html(smiles),
+            label=smiles_to_html(smiles, molecule_name_format),
             hoverInfo=hover_info,
             level=level,
             parentId=(
@@ -80,6 +81,7 @@ async def aizynth_retro(
     planner: AiZynthFuncs.RetroPlanner,
     retro_synth_context: RetrosynthesisContext,
     websocket: WebSocket,
+    molecule_name_format: Literal["brand", "iupac", "formula", "smiles"] = "brand",
 ):
     clogger = CallbackLogger(websocket)
     """Stream positioned nodes and edges"""
@@ -90,7 +92,7 @@ async def aizynth_retro(
     root = Node(
         id="node_0",
         smiles=start_smiles,
-        label=smiles_to_html(start_smiles),
+        label=smiles_to_html(start_smiles, molecule_name_format),
         hoverInfo=f"# Root molecule \n **SMILES:** {start_smiles}",
         level=0,
         parentId=None,
@@ -119,7 +121,11 @@ async def aizynth_retro(
     await clogger.info(f"Found {len(routes)} routes for {start_smiles}.")
 
     reaction_path = AiZynthFuncs.ReactionPath(route=routes[0])
-    nodes, edges = generate_tree_structure(reaction_path.nodes, retro_synth_context)
+    nodes, edges = generate_tree_structure(
+        reaction_path.nodes,
+        retro_synth_context,
+        molecule_name_format=molecule_name_format,
+    )
     await clogger.info(f"Generated {len(nodes)} nodes and {len(edges)} edges.")
 
     calculate_positions(nodes)

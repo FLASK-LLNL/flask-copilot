@@ -7,7 +7,7 @@ from charge.servers.AiZynthTools import RetroPlanner, ReactionPath
 from aizynth_backend_funcs import generate_tree_structure
 from loguru import logger
 from callback_logger import CallbackLogger
-from typing import Optional, Union
+from typing import Literal, Optional, Union
 
 from backend_helper_funcs import (
     CallbackHandler,
@@ -253,6 +253,7 @@ async def generate_molecules(
     executor: ProcessPoolExecutor,
     websocket: WebSocket,
     available_tools: Optional[Union[str, list[str]]] = None,
+    molecule_name_format: Literal["brand", "iupac", "formula", "smiles"] = "brand",
 ):
     """Stream positioned nodes and edges"""
     clogger = CallbackLogger(websocket, source="generate_molecules")
@@ -265,7 +266,7 @@ async def generate_molecules(
     root = Node(
         id="node_0",
         smiles=start_smiles,
-        label=smiles_to_html(start_smiles),
+        label=smiles_to_html(start_smiles, molecule_name_format),
         hoverInfo=f"# Root molecule \n **SMILES:** {start_smiles}",
         level=0,
         parentId=None,
@@ -358,6 +359,7 @@ async def optimize_molecule_retro(
     experiment: AutoGenExperiment,
     config_file: str,
     available_tools: Optional[Union[str, list[str]]] = None,
+    molecule_name_format: Literal["brand", "iupac", "formula", "smiles"] = "brand",
 ):
     """Optimize a molecule using retrosynthesis by node ID"""
     current_node = context.node_ids.get(node_id)
@@ -435,7 +437,7 @@ async def optimize_molecule_retro(
         node = Node(
             f"node_{num_nodes+i}",
             smiles,
-            smiles_to_html(smiles),
+            smiles_to_html(smiles, molecule_name_format),
             "Discovered",
             level,
             current_node.id,

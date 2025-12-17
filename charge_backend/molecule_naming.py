@@ -19,6 +19,7 @@ import re
 import json
 import os
 import requests
+from typing import Literal
 
 _DATABASE_PATH = os.getenv("FLASK_INCHI_DB", "/data/inchi_mapping.json")
 if os.path.exists(_DATABASE_PATH):
@@ -28,21 +29,33 @@ else:
     DATABASE = None
 
 
-def inchi_lookup(inchi: str) -> str | None:
+def inchi_lookup(inchi: str, prefer_iupac: bool = False) -> str | None:
     if DATABASE is None:
         return None
 
     if inchi not in DATABASE:
         return None
 
-    if DATABASE[inchi]["name"]:  # Canonical/brand first
-        return DATABASE[inchi]["name"]
-    if DATABASE[inchi]["iupac_name"]:  # IUPAC second
-        return DATABASE[inchi]["iupac_name"]
+    # IUPAC first, Canonical/brand second
+    if prefer_iupac:
+        if DATABASE[inchi]["iupac_name"]:
+            return DATABASE[inchi]["iupac_name"]
+        if DATABASE[inchi]["name"]:
+            return DATABASE[inchi]["name"]
+    else:
+        if DATABASE[inchi]["name"]:  # Canonical/brand first
+            return DATABASE[inchi]["name"]
+        if DATABASE[inchi]["iupac_name"]:  # IUPAC second
+            return DATABASE[inchi]["iupac_name"]
     return None
 
 
-def smiles_to_html(smiles: str) -> str:
+def smiles_to_html(
+    smiles: str,
+    molecule_name_format: Literal["brand", "iupac", "formula", "smiles"] = "brand",
+) -> str:
+    if molecule_name_format == "smiles":
+        return smiles
     if Chem is None:
         return smiles
 
@@ -51,10 +64,11 @@ def smiles_to_html(smiles: str) -> str:
         return smiles
 
     # First, try to find a canonical or IUPAC name
-    inchi = Chem.MolToInchi(mol)
-    name = inchi_lookup(inchi)
-    if name:
-        return name
+    if molecule_name_format in ("brand", "iupac"):
+        inchi = Chem.MolToInchi(mol)
+        name = inchi_lookup(inchi, molecule_name_format == "iupac")
+        if name:
+            return name
 
     # Otherwise, use RDKit for a general chemical formula
     # Get the formula

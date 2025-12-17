@@ -1,6 +1,7 @@
 from fastapi import WebSocket
 from loguru import logger
 import re
+from typing import Literal
 
 from charge.experiments.AutoGenExperiment import AutoGenExperiment
 from charge.tasks.Task import Task
@@ -16,6 +17,7 @@ async def run_custom_problem(
     experiment: AutoGenExperiment,
     available_tools: list[str],
     websocket: WebSocket,
+    molecule_name_format: Literal["brand", "iupac", "formula", "smiles"] = "brand",
 ):
     task = Task(
         system_prompt=system_prompt + "\n\n" + LOG_PROGRESS_SYSTEM_PROMPT,
@@ -43,7 +45,7 @@ async def run_custom_problem(
             node = Node(
                 id=f"node_{i}",
                 smiles=smiles,
-                label=smiles_to_html(smiles),
+                label=smiles_to_html(smiles, molecule_name_format),
                 hoverInfo=result,
                 level=0,
                 x=50,

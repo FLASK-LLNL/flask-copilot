@@ -13,7 +13,7 @@ from charge.tasks.LMOTask import (
     LMOTask as LeadMoleculeOptimization,
     MoleculeOutputSchema,
 )
-from typing import Optional
+from typing import Literal, Optional
 from backend_helper_funcs import (
     Node,
     Edge,
@@ -61,6 +61,7 @@ async def generate_lead_molecule(
     initial_level: int = 0,
     initial_node_id: int = 0,
     initial_x_position: int = 50,
+    molecule_name_format: Literal["brand", "iupac", "formula", "smiles"] = "brand",
 ) -> None:
     """Generate a lead molecule and stream its progress.
     Args:
@@ -133,7 +134,7 @@ async def generate_lead_molecule(
         node = Node(
             id=f"node_{node_id}",
             smiles=lead_molecule_smiles,
-            label=smiles_to_html(lead_molecule_smiles),
+            label=smiles_to_html(lead_molecule_smiles, molecule_name_format),
             # Add property calculations here
             density=lead_molecule_data.get("density", None),
             sascore=lead_molecule_data.get("sascore", None),
@@ -297,7 +298,9 @@ async def generate_lead_molecule(
                         node = Node(
                             id=f"node_{node_id}",
                             smiles=canonical_smiles,
-                            label=smiles_to_html(canonical_smiles),
+                            label=smiles_to_html(
+                                canonical_smiles, molecule_name_format
+                            ),
                             # Add property calculations here
                             density=processed_mol.get("density", None),
                             sascore=processed_mol.get("sascore", None),

@@ -127,7 +127,11 @@ class Tool:
         return asdict(self)
 
 
-def generate_tree_structure(start_smiles: str, depth: int = 3):
+def generate_tree_structure(
+    start_smiles: str,
+    depth: int = 3,
+    molecule_name_format: Literal["brand", "iupac", "formula", "smiles"] = "brand",
+):
     """
     Generate entire tree structure upfront.
     """
@@ -153,7 +157,7 @@ def generate_tree_structure(start_smiles: str, depth: int = 3):
             node = Node(
                 id=node_id,
                 smiles=child_smiles,
-                label=smiles_to_html(child_smiles),
+                label=smiles_to_html(child_smiles, molecule_name_format),
                 cost=random.uniform(10, 110),
                 bandgap=random.uniform(100, 600),
                 yield_=random.uniform(0, 100),
@@ -187,7 +191,7 @@ def generate_tree_structure(start_smiles: str, depth: int = 3):
     root = Node(
         id=root_id,
         smiles=start_smiles,
-        label=smiles_to_html(start_smiles),
+        label=smiles_to_html(start_smiles, molecule_name_format),
         cost=random.uniform(10, 110),
         bandgap=random.uniform(100, 600),
         yield_=2.0,
@@ -234,14 +238,17 @@ def calculate_positions(nodes: list[Node]):
 
 
 async def generate_molecules(
-    start_smiles: str, depth: int = 3, websocket: WebSocket = None
+    start_smiles: str,
+    depth: int = 3,
+    websocket: WebSocket = None,
+    molecule_name_format: Literal["brand", "iupac", "formula", "smiles"] = "brand",
 ):
     """
     Stream positioned nodes and edges for the retrosynthesis sample.
     """
 
     # Generate and position entire tree upfront
-    nodes, edges = generate_tree_structure(start_smiles, depth)
+    nodes, edges = generate_tree_structure(start_smiles, depth, molecule_name_format)
     positioned_nodes = calculate_positions(nodes)
 
     # Stream root first
@@ -287,7 +294,12 @@ async def generate_molecules(
     await websocket.send_json({"type": "complete"})
 
 
-async def lead_molecule(start_smiles: str, depth: int = 3, websocket: WebSocket = None):
+async def lead_molecule(
+    start_smiles: str,
+    depth: int = 3,
+    websocket: WebSocket = None,
+    molecule_name_format: Literal["brand", "iupac", "formula", "smiles"] = "brand",
+):
     """
     Stream positioned nodes and edges for the lead molecule optimization sample.
     """
@@ -309,7 +321,7 @@ async def lead_molecule(start_smiles: str, depth: int = 3, websocket: WebSocket 
         node = dict(
             id=f"node_{i}",
             smiles=start_smiles + "C" * i,
-            label=smiles_to_html(start_smiles + "C" * i),
+            label=smiles_to_html(start_smiles + "C" * i, molecule_name_format),
             bandgap=i * random.uniform(0, 16),
             level=0,
             hoverInfo="This is some markdown\n# Hej",
@@ -340,6 +352,7 @@ async def lead_molecule(start_smiles: str, depth: int = 3, websocket: WebSocket 
 async def websocket_endpoint(websocket: WebSocket):
     logger.info(f"Request for websocket received. Headers: {str(websocket.headers)}")
 
+    molecule_format = "brand"
     username = "nobody"
     if "x-forwarded-user" in websocket.headers:
         username = websocket.headers["x-forwarded-user"]
@@ -352,11 +365,14 @@ async def websocket_endpoint(websocket: WebSocket):
             if data["action"] == "compute":
                 if data["problemType"] == "optimization":
                     await lead_molecule(
-                        data["smiles"], data.get("depth", 10), websocket=websocket
+                        data["smiles"],
+                        data.get("depth", 10),
+                        websocket=websocket,
+                        molecule_name_format=molecule_format,
                     )
                 elif data["problemType"] == "retrosynthesis":
                     await generate_molecules(
-                        data["smiles"], data.get("depth", 3), websocket
+                        data["smiles"], data.get("depth", 3), websocket, molecule_format
                     )
                 else:
                     await websocket.send_json(
@@ -435,6 +451,8 @@ async def websocket_endpoint(websocket: WebSocket):
                         "username": username,
                     }
                 )
+            elif data["action"] == "update-profile-settings":
+                molecule_format = data["moleculeName"]
             else:
                 print("WARN: Unhandled message:", data)
     except WebSocketDisconnect:
