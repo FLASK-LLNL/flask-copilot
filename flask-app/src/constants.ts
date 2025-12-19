@@ -9,4 +9,10 @@ export const NODE_STYLES = {
   "yellow": 'node-computing',
 } as const;
 
+export const PROPERTY_NAMES: Record<string, string> = {
+  "density": "Crystalline Density",
+  "hof": "Heat of Formation",
+  "bandgap": "Band Gap"
+} as const;
+
 export const DEFAULT_CUSTOM_SYSTEM_PROMPT = 'Respond with concise and clear answers, as well as JSONs for each SMILES string you return as `{"smiles": "<SMILES STRING GOES HERE>"}`.';
