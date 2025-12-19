@@ -4,7 +4,7 @@ import { Loader2, FlaskConical, TestTubeDiagonal, Network, Play, RotateCcw, X, S
 import 'recharts';
 
 import { WS_SERVER, VERSION } from './config';
-import { DEFAULT_CUSTOM_SYSTEM_PROMPT } from './constants';
+import { DEFAULT_CUSTOM_SYSTEM_PROMPT, PROPERTY_NAMES } from './constants';
 import { TreeNode, Edge, ContextMenuState, SidebarMessage, Tool, WebSocketMessageToServer, WebSocketMessage, SelectableTool, Experiment, ProfileSettings } from './types';
 
 import { loadRDKit } from './components/molecule';
@@ -249,6 +249,15 @@ const ChemistryTool: React.FC = () => {
   const runComputation = async (): Promise<void> => {
     setSidebarOpen(true);
 
+    // Default experiment names
+    let experimentName = null;
+    if (problemType === "optimization") {
+      const propertyName = propertyType === "custom" ? customPropertyName : PROPERTY_NAMES[propertyType];
+      experimentName = `Optimizing ${propertyName} for ${smiles}`;
+    } else if (problemType === "retrosynthesis") {
+      experimentName = `Synthesizing ${smiles}`;
+    }
+
     // Check if we need to create project and/or experiment
     if (!projectSidebar.selectionRef.current.projectId) {
       // No project at all - create both project and experiment
@@ -261,8 +270,9 @@ const ChemistryTool: React.FC = () => {
       const timestamp = `${month}/${day}/${year} ${hours}:${minutes}`;
 
       const projectName = `Project ${timestamp}`;
-      const experimentName = `Experiment 1`;
-
+      if (experimentName === null) {
+        experimentName = `Experiment 1`;
+      }
       try {
         const { projectId, experimentId } = await projectManagement.createProjectAndExperiment(
           projectName,
@@ -282,8 +292,10 @@ const ChemistryTool: React.FC = () => {
 
       // Find the project to count existing experiments
       const project = projectData.projectsRef.current.find(p => p.id === projectId);
-      const experimentCount = project ? project.experiments.length + 1 : 1;
-      const experimentName = `Experiment ${experimentCount}`;
+      if (experimentName === null) {
+        const experimentCount = project ? project.experiments.length + 1 : 1;
+        experimentName = `Experiment ${experimentCount}`;
+      }
 
       try {
         const experiment = await projectManagement.createExperiment(projectId, experimentName);
@@ -1015,9 +1027,9 @@ const ChemistryTool: React.FC = () => {
                         )}
                       </label>
                       <select value={propertyType} onChange={(e) => {setPropertyType(e.target.value)}} disabled={isComputing} className="form-select w-48">
-                        <option value="density">Crystalline Density</option>
-                        <option value="hof">Heat of Formation</option>
-                        <option value="bandgap">Band Gap</option>
+                        <option value="density">{PROPERTY_NAMES["density"]}</option>
+                        <option value="hof">{PROPERTY_NAMES["hof"]}</option>
+                        <option value="bandgap">{PROPERTY_NAMES["bandgap"]}</option>
                         <option value="custom">Other</option>
                       </select>
                     </div>
@@ -1047,8 +1059,15 @@ const ChemistryTool: React.FC = () => {
                       <label className="form-label">
                         Actions
                       </label>
-                      <button onClick={runComputation} disabled={!wsConnected || isComputing || !smiles} className="btn btn-primary">
-                        {isComputing ? <><Loader2 className="w-5 h-5 animate-spin" />Computing</> : <><Play className="w-5 h-5" />Run</>}
+                      <button onClick={() => {
+                        if (treeNodes.length > 0) {
+                          if (!window.confirm('Are you sure you want to rerun this computation? This will clear all previous progress.')) {
+                            return;
+                          }
+                        }
+                        runComputation();
+                      }} disabled={!wsConnected || isComputing || !smiles} className="btn btn-primary">
+                        {isComputing ? <><Loader2 className="w-5 h-5 animate-spin" />Computing</> : (treeNodes.length === 0 ? <><Play className="w-5 h-5" />Run</> : <><RefreshCw className="w-5 h-5" />Rerun</>)}
                       </button>
                       {(!wsConnected || isComputing || !smiles) && (
                         <div className="tooltip absolute bottom-full mb-2 left-1/2 transform -translate-x-1/2 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
@@ -1078,7 +1097,11 @@ const ChemistryTool: React.FC = () => {
                   </div>
                   <div>
                     <label className="form-label">&nbsp;</label>
-                    <button onClick={reset} disabled={isComputing} className="btn btn-tertiary">
+                    <button onClick={() => {
+                      if (window.confirm('Are you sure you want to reset this window? This will clear all molecules.')) {
+                        reset();
+                      }
+                    }} disabled={isComputing} className="btn btn-tertiary">
                       <RotateCcw className="w-5 h-5" />Reset
                     </button>
                   </div>
