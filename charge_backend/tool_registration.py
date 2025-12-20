@@ -427,6 +427,37 @@ def delete_registered_server(filename: str, url: str) -> Dict:
     }
 
 
+async def get_registered_servers(filename: str) -> Dict:
+    """
+    Get list of all registered MCP servers and their status.
+
+    This endpoint aggregates server info and checks connectivity
+    using existing validation utilities.
+    """
+    # Get connectivity status for all servers
+    statuses = await check_registered_servers(filename)
+
+    # Build response with server info and status
+    servers = []
+    for key, server in SERVERS.servers.items():
+        url = str(server)
+        status_info = statuses.get(url, {"status": "unknown"})
+
+        servers.append(
+            {
+                "id": key,
+                "url": url,
+                "name": server.name,
+                "address": server.address,
+                "port": server.port,
+                "path": server.path,
+                **status_info,
+            }
+        )
+
+    return {"servers": servers}
+
+
 async def validate_mcp_server_endpoint(
     filename: str, request: Request, data: ValidateMCPServerRequest
 ):

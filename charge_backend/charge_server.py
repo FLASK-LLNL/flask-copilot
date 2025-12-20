@@ -36,6 +36,7 @@ from tool_registration import (
     split_url,
     validate_mcp_server_endpoint,
     delete_mcp_server_endpoint,
+    get_registered_servers,
 )
 
 from backend_manager import TaskManager, ActionManager
@@ -139,39 +140,9 @@ async def check_mcp_servers_endpoint(data: CheckServersRequest):
     return {"results": results}
 
 
-@app.get("/registered-mcp-servers")
-async def get_registered_servers():
-    """
-    Get list of all registered MCP servers and their status.
-
-    This endpoint aggregates server info and checks connectivity
-    using existing validation utilities.
-    """
-    from tool_registration import SERVERS, check_registered_servers
-
-    # Get connectivity status for all servers
-    statuses = await check_registered_servers(args.tool_server_cache)
-
-    # Build response with server info and status
-    servers = []
-    for key, server in SERVERS.servers.items():
-        url = str(server)
-        status_info = statuses.get(url, {"status": "unknown"})
-
-        servers.append(
-            {
-                "id": key,
-                "url": url,
-                "name": server.name,
-                "address": server.address,
-                "port": server.port,
-                "path": server.path,
-                **status_info,
-            }
-        )
-
-    return {"servers": servers}
-
+app.get("/registered-mcp-servers")(
+    partial(get_registered_servers, args.tool_server_cache)
+)
 
 manual_mcp_servers_env = os.getenv("FLASK_MCP_SERVERS", "")
 if manual_mcp_servers_env:
