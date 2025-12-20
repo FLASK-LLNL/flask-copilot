@@ -29,13 +29,24 @@ from charge.clients.autogen import AutoGenPool
 
 
 from tool_registration import (
+    get_client_info,
     register_url,
     register_post,
     reload_server_list,
     split_url,
+    validate_mcp_server_endpoint,
 )
 
 from backend_manager import TaskManager, ActionManager
+
+# Pydantic models for new endpoints
+from pydantic import BaseModel
+from typing import Optional
+
+
+class CheckServersRequest(BaseModel):
+    urls: list[str]
+
 
 parser = argparse.ArgumentParser()
 
@@ -95,6 +106,67 @@ ASSETS_PATH = os.path.join(DIST_PATH, "assets")
 reload_server_list(args.tool_server_cache)
 
 app.post("/register")(partial(register_post, args.tool_server_cache))
+
+app.post("/validate-mcp-server")(
+    partial(validate_mcp_server_endpoint, args.tool_server_cache)
+)
+
+
+@app.post("/check-mcp-servers")
+async def check_mcp_servers_endpoint(data: CheckServersRequest):
+    """
+    Check connectivity status of multiple MCP server URLs.
+    Returns status and tools for each URL.
+
+    Uses existing workbench utilities for validation.
+    """
+    from tool_registration import _check_mcp_connectivity
+
+    results = {}
+
+    for url in data.urls:
+        try:
+            tools = await _check_mcp_connectivity(url, timeout=5.0)
+            results[url] = {"status": "connected", "tools": tools}
+        except Exception as e:
+            results[url] = {"status": "disconnected", "error": str(e)}
+
+    return {"results": results}
+
+
+@app.get("/registered-mcp-servers")
+async def get_registered_servers():
+    """
+    Get list of all registered MCP servers and their status.
+
+    This endpoint aggregates server info and checks connectivity
+    using existing validation utilities.
+    """
+    from tool_registration import SERVERS, check_registered_servers
+
+    # Get connectivity status for all servers
+    statuses = await check_registered_servers(args.tool_server_cache)
+
+    # Build response with server info and status
+    servers = []
+    for key, server in SERVERS.servers.items():
+        url = str(server)
+        status_info = statuses.get(url, {"status": "unknown"})
+
+        servers.append(
+            {
+                "id": key,
+                "url": url,
+                "name": server.name,
+                "address": server.address,
+                "port": server.port,
+                "path": server.path,
+                **status_info,
+            }
+        )
+
+    return {"servers": servers}
+
 
 manual_mcp_servers_env = os.getenv("FLASK_MCP_SERVERS", "")
 if manual_mcp_servers_env:

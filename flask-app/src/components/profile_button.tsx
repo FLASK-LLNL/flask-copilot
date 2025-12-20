@@ -5,6 +5,7 @@ import { ProfileSettings, ToolServer } from '../types';
 interface ProfileButtonProps {
   onClick?: () => void;
   onSettingsChange?: (settings: ProfileSettings) => void;
+  onServerAdded?: () => void;
   initialSettings?: Partial<ProfileSettings>;
   username?: string;
   className?: string;
@@ -77,6 +78,7 @@ export const MOLECULE_NAME_OPTIONS = [
 export const ProfileButton: React.FC<ProfileButtonProps> = ({
   onClick,
   onSettingsChange,
+  onServerAdded,
   initialSettings,
   username,
   className = ''
@@ -196,13 +198,15 @@ export const ProfileButton: React.FC<ProfileButtonProps> = ({
     }));
 
     try {
-      const sseUrl = (url.endsWith('/sse') ? url : `${url.replace(/\/$/, '')}/sse`);
-
-      const response = await fetch(sseUrl, {
-        method: 'GET',
+      // Call backend to validate the MCP server
+      const response = await fetch('/check-mcp-servers', {
+        method: 'POST',
         headers: {
-          'Accept': 'text/event-stream',
+          'Content-Type': 'application/json',
         },
+        body: JSON.stringify({
+          urls: [url]
+        }),
         signal: abortController.signal
       });
 
@@ -210,150 +214,34 @@ export const ProfileButton: React.FC<ProfileButtonProps> = ({
         throw new Error(`HTTP ${response.status}`);
       }
 
-      if (!response.body) {
-        throw new Error('No response body');
-      }
+      const data = await response.json();
+      const result = data.results[url];
 
-      const reader = response.body.getReader();
-      const decoder = new TextDecoder();
-      let buffer = '';
-      const tools: Array<{ name: string; description?: string }> = [];
-      let hasReceivedData = false;
-      let messagesEndpoint = '';
-      let initSent = false;
-      let toolsListSent = false;
-      let initialized = false;
-
-      // Read the stream
-      const timeout = setTimeout(() => {
-        reader.cancel();
-        abortController.abort();
-        if (!hasReceivedData) {
-          setConnectivityStatus(prev => ({
-            ...prev,
-            [url]: { status: 'disconnected', error: 'Connection timeout' }
-          }));
-          activeConnectionsRef.current.delete(url);
-        }
-      }, 10000);
-
-      try {
-        // Function to send requests (returns 202 Accepted, response comes via SSE)
-        const sendRequest = async (method: string, params: any, id: number) => {
-          const baseUrl = url.replace('/sse', '').replace(/\/$/, '');
-          try {
-            await fetch(`${baseUrl}${messagesEndpoint}`, {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                jsonrpc: '2.0',
-                method,
-                params,
-                id
-              }),
-              signal: abortController.signal
-            });
-          } catch (e) {
-            console.warn(`Failed to send ${method}:`, e);
-          }
-        };
-
-        while (true) {
-          const { done, value } = await reader.read();
-          if (done) break;
-
-          hasReceivedData = true;
-          buffer += decoder.decode(value, { stream: true });
-
-          const lines = buffer.split('\n');
-          buffer = lines.pop() || '';
-
-          for (const line of lines) {
-            if (line.startsWith('data: ')) {
-              try {
-                const data = line.slice(6);
-
-                // Try to parse as JSON
-                try {
-                  const jsonData = JSON.parse(data);
-
-                  // Handle initialize response (id: 1)
-                  if (jsonData.id === 1 && jsonData.result) {
-                    initialized = true;
-                    console.log('MCP initialized');
-
-                    // Now request tools list
-                    if (!toolsListSent) {
-                      toolsListSent = true;
-                      await sendRequest('tools/list', {}, 2);
-                    }
-                  }
-
-                  // Handle tools/list response (id: 2)
-                  if (jsonData.id === 2 && jsonData.result?.tools) {
-                    jsonData.result.tools.forEach((tool: any) => {
-                      tools.push({
-                        name: tool.name,
-                        description: tool.description
-                      });
-                    });
-
-                    // We have tools, update status and exit
-                    setConnectivityStatus(prev => ({
-                      ...prev,
-                      [url]: {
-                        status: 'connected',
-                        tools: tools.length > 0 ? tools : undefined
-                      }
-                    }));
-                    clearTimeout(timeout);
-                    reader.cancel();
-                    return;
-                  }
-                } catch {
-                  // If not JSON, might be plain text endpoint info
-                  if (data.includes('/messages/')) {
-                    messagesEndpoint = data.trim();
-
-                    // Send initialize request once we have the endpoint
-                    if (!initSent) {
-                      initSent = true;
-                      await sendRequest('initialize', {
-                        protocolVersion: '2024-11-05',
-                        capabilities: {
-                          roots: { listChanged: false },
-                          sampling: {}
-                        },
-                        clientInfo: {
-                          name: 'flask-copilot',
-                          version: '1.0.0'
-                        }
-                      }, 1);
-                    }
-                  }
-                }
-              } catch (e) {
-                console.warn('Failed to parse SSE data:', e);
-              }
-            }
-          }
-        }
-
-        // Mark as connected
+      if (result.status === 'connected') {
         setConnectivityStatus(prev => ({
           ...prev,
           [url]: {
             status: 'connected',
-            tools: tools.length > 0 ? tools : undefined
+            tools: result.tools?.length > 0 ? result.tools : undefined
           }
         }));
-      } finally {
-        clearTimeout(timeout);
-        reader.cancel();
+      } else {
+        setConnectivityStatus(prev => ({
+          ...prev,
+          [url]: {
+            status: 'disconnected',
+            error: result.error || 'Connection failed'
+          }
+        }));
       }
 
       activeConnectionsRef.current.delete(url);
     } catch (error: any) {
+      if (error.name === 'AbortError') {
+        // Request was cancelled, don't update status
+        return;
+      }
+
       setConnectivityStatus(prev => ({
         ...prev,
         [url]: {
@@ -542,24 +430,88 @@ export const ProfileButton: React.FC<ProfileButtonProps> = ({
   };
 
   // Tool Server handlers
-  const handleAddServer = () => {
+  const handleAddServer = async () => {
     if (!newServerUrl.trim()) return;
 
-    const newServer: ToolServer = {
-      id: Date.now().toString(),
-      url: newServerUrl.trim()
-    };
+    const url = newServerUrl.trim();
 
-    setTempSettings({
-      ...tempSettings,
-      toolServers: [...(tempSettings.toolServers || []), newServer]
-    });
+    // Set to checking state
+    setConnectivityStatus(prev => ({
+      ...prev,
+      [url]: { status: 'checking' }
+    }));
 
-    // Check connectivity for the new server
-    checkMCPServerConnectivity(newServer.url);
+    try {
+      // Call backend to validate and register
+      const response = await fetch('/validate-mcp-server', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          url: url,
+          name: `Server ${Date.now()}`
+        })
+      });
 
-    setNewServerUrl('');
-    setAddingServer(false);
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}`);
+      }
+
+      const result = await response.json();
+
+      if (result.status === 'connected') {
+        // Server validated and registered successfully
+        const newServer: ToolServer = {
+          id: Date.now().toString(),
+          url: result.url || url
+        };
+
+        setTempSettings({
+          ...tempSettings,
+          toolServers: [...(tempSettings.toolServers || []), newServer]
+        });
+
+        // Update connectivity status with tools
+        setConnectivityStatus(prev => ({
+          ...prev,
+          [newServer.url]: {
+            status: 'connected',
+            tools: result.tools?.length > 0 ? result.tools : undefined
+          }
+        }));
+
+        setNewServerUrl('');
+        setAddingServer(false);
+
+        // Notify parent that server was added
+        if (onServerAdded) {
+           onServerAdded();
+        }
+      } else {
+        // Validation failed
+        setConnectivityStatus(prev => ({
+          ...prev,
+          [url]: {
+            status: 'disconnected',
+            error: result.error || 'Validation failed'
+          }
+        }));
+
+        // Show error to user but keep the input visible
+        alert(`Failed to add server: ${result.error || 'Validation failed'}`);
+      }
+    } catch (error: any) {
+      setConnectivityStatus(prev => ({
+        ...prev,
+        [url]: {
+          status: 'disconnected',
+          error: error.message || 'Connection failed'
+        }
+      }));
+
+      alert(`Failed to add server: ${error.message || 'Connection failed'}`);
+    }
   };
 
   const handleEditServer = (serverId: string) => {
@@ -570,31 +522,91 @@ export const ProfileButton: React.FC<ProfileButtonProps> = ({
     }
   };
 
-  const handleSaveServerEdit = (serverId: string) => {
+  const handleSaveServerEdit = async (serverId: string) => {
     if (!editServerUrl.trim()) return;
 
     const oldServer = tempSettings.toolServers?.find(s => s.id === serverId);
-    const oldUrl = oldServer?.url;
+    if (!oldServer) return;
 
-    setTempSettings({
-      ...tempSettings,
-      toolServers: tempSettings.toolServers?.map(s =>
-        s.id === serverId ? { ...s, url: editServerUrl.trim() } : s
-      ) || []
-    });
+    const newUrl = editServerUrl.trim();
 
-    // Clean up old URL status and re-check connectivity for the edited server
-    if (oldUrl) {
-      setConnectivityStatus(prev => {
-        const newStatus = { ...prev };
-        delete newStatus[oldUrl];
-        return newStatus;
+    // Set to checking state
+    setConnectivityStatus(prev => ({
+      ...prev,
+      [newUrl]: { status: 'checking' }
+    }));
+
+    try {
+      // Call backend to validate and register
+      const response = await fetch('/validate-mcp-server', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          url: newUrl,
+          name: oldServer.name || `Server ${serverId}`
+        })
       });
-    }
-    checkMCPServerConnectivity(editServerUrl.trim());
 
-    setEditingServer(null);
-    setEditServerUrl('');
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}`);
+      }
+
+      const result = await response.json();
+
+      if (result.status === 'connected') {
+        // Clean up old URL status
+        if (oldServer.url !== newUrl) {
+          setConnectivityStatus(prev => {
+            const newStatus = { ...prev };
+            delete newStatus[oldServer.url];
+            return newStatus;
+          });
+        }
+
+        // Update server URL
+        setTempSettings({
+          ...tempSettings,
+          toolServers: tempSettings.toolServers?.map(s =>
+            s.id === serverId ? { ...s, url: result.url || newUrl } : s
+          ) || []
+        });
+
+        // Update connectivity status
+        setConnectivityStatus(prev => ({
+          ...prev,
+          [result.url || newUrl]: {
+            status: 'connected',
+            tools: result.tools?.length > 0 ? result.tools : undefined
+          }
+        }));
+
+        setEditingServer(null);
+        setEditServerUrl('');
+      } else {
+        // Validation failed
+        setConnectivityStatus(prev => ({
+          ...prev,
+          [newUrl]: {
+            status: 'disconnected',
+            error: result.error || 'Validation failed'
+          }
+        }));
+
+        alert(`Failed to update server: ${result.error || 'Validation failed'}`);
+      }
+    } catch (error: any) {
+      setConnectivityStatus(prev => ({
+        ...prev,
+        [newUrl]: {
+          status: 'disconnected',
+          error: error.message || 'Connection failed'
+        }
+      }));
+
+      alert(`Failed to update server: ${error.message || 'Connection failed'}`);
+    }
   };
 
   const handleDeleteServer = (serverId: string) => {
