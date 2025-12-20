@@ -6,6 +6,7 @@ interface ProfileButtonProps {
   onClick?: () => void;
   onSettingsChange?: (settings: ProfileSettings) => void;
   onServerAdded?: () => void;
+  onServerRemoved?: () => void;
   initialSettings?: Partial<ProfileSettings>;
   username?: string;
   className?: string;
@@ -79,6 +80,7 @@ export const ProfileButton: React.FC<ProfileButtonProps> = ({
   onClick,
   onSettingsChange,
   onServerAdded,
+  onServerRemoved,
   initialSettings,
   username,
   className = ''
@@ -609,46 +611,104 @@ export const ProfileButton: React.FC<ProfileButtonProps> = ({
     }
   };
 
-  const handleDeleteServer = (serverId: string) => {
+  const handleDeleteServer = async (serverId: string) => {
     const server = tempSettings.toolServers?.find(s => s.id === serverId);
-    if (server) {
-      // Cancel any active connection
-      const controller = activeConnectionsRef.current.get(server.url);
-      if (controller) {
-        controller.abort();
-        activeConnectionsRef.current.delete(server.url);
-      }
+    if (!server) return;
 
-      // Clean up status
-      setConnectivityStatus(prev => {
-        const newStatus = { ...prev };
-        delete newStatus[server.url];
-        return newStatus;
+    console.log('🗑️ Deleting server:', server.url);
+
+    try {
+      const response = await fetch('/delete-mcp-server', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url: server.url })
       });
 
-      // Clear pinned state if deleting the pinned server
-      if (pinnedServer === serverId) {
-        setPinnedServer(null);
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}`);
       }
-    }
 
-    setTempSettings({
-      ...tempSettings,
-      toolServers: tempSettings.toolServers?.filter(s => s.id !== serverId) || []
-    });
+      const result = await response.json();
+      console.log('🗑️ Backend response:', result);
+
+      if (result.status === 'deleted' || result.status === 'not_found') {
+        // Cancel any active connection
+        const controller = activeConnectionsRef.current.get(server.url);
+        if (controller) {
+          controller.abort();
+          activeConnectionsRef.current.delete(server.url);
+        }
+
+        // Clean up status
+        setConnectivityStatus(prev => {
+          const newStatus = { ...prev };
+          delete newStatus[server.url];
+          return newStatus;
+        });
+
+        if (pinnedServer === serverId) {
+          setPinnedServer(null);
+        }
+
+        // Remove from tempSettings
+        setTempSettings({
+          ...tempSettings,
+          toolServers: tempSettings.toolServers?.filter(s => s.id !== serverId) || []
+        });
+
+        // Notify parent
+        if (onServerRemoved) {
+          onServerRemoved();
+        }
+
+        console.log('✅ Server deleted successfully');
+      } else {
+        alert(`Failed to delete server: ${result.message}`);
+      }
+    } catch (error: any) {
+      alert(`Failed to delete server: ${error.message || 'Connection failed'}`);
+    }
   };
 
-  const handleClearAllServers = () => {
+  const handleClearAllServers = async () => {
+    if (!tempSettings.toolServers || tempSettings.toolServers.length === 0) {
+      return;
+    }
+
+    if (!confirm(`Remove all ${tempSettings.toolServers.length} tool servers?`)) {
+      return;
+    }
+
+    // Delete each server from backend
+    const deletePromises = tempSettings.toolServers.map(async (server) => {
+      try {
+        await fetch('/delete-mcp-server', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ url: server.url })
+        });
+      } catch (error) {
+        console.warn(`Error deleting ${server.url}:`, error);
+      }
+    });
+
+    await Promise.all(deletePromises);
+
     // Cancel all active connections
     activeConnectionsRef.current.forEach(controller => controller.abort());
     activeConnectionsRef.current.clear();
 
+    // Clear frontend state
     setTempSettings({
       ...tempSettings,
       toolServers: []
     });
     setConnectivityStatus({});
     setPinnedServer(null);
+
+    if (onServerRemoved) {
+      onServerRemoved();
+    }
   };
 
   const currentBackendOption = BACKEND_OPTIONS.find(opt => opt.value === tempSettings.backend);

@@ -35,6 +35,7 @@ from tool_registration import (
     reload_server_list,
     split_url,
     validate_mcp_server_endpoint,
+    delete_mcp_server_endpoint,
 )
 
 from backend_manager import TaskManager, ActionManager
@@ -109,6 +110,10 @@ app.post("/register")(partial(register_post, args.tool_server_cache))
 
 app.post("/validate-mcp-server")(
     partial(validate_mcp_server_endpoint, args.tool_server_cache)
+)
+
+app.post("/delete-mcp-server")(
+    partial(delete_mcp_server_endpoint, args.tool_server_cache)
 )
 
 

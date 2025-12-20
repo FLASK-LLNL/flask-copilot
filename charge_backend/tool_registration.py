@@ -34,6 +34,10 @@ class ValidateMCPServerRequest(BaseModel):
     name: Optional[str] = None
 
 
+class DeleteMCPServerRequest(BaseModel):
+    url: str
+
+
 def split_url(url: str) -> Tuple[str, int, str, str]:
     # Regular expression pattern
     pattern = r"^(https?://)?([^:/]+)(?::(\d+))?(?:/(.+?))?/?$"
@@ -379,6 +383,45 @@ async def check_registered_servers(filename: str) -> Dict[str, Dict]:
     return results
 
 
+def delete_registered_server(filename: str, url: str) -> Dict:
+    """Delete a registered MCP server."""
+    # Find the server by URL
+    key_to_delete = None
+    for key, server in SERVERS.servers.items():
+        if str(server) == url or key == url:
+            key_to_delete = key
+            break
+
+    if not key_to_delete:
+        logger.warning(f"Server not found for deletion: {url}")
+        return {
+            "status": "not_found",
+            "message": f"Server {url} not found in registered servers",
+        }
+
+    # Delete from in-memory dict
+    deleted_server = SERVERS.servers.pop(key_to_delete)
+    logger.info(f"Deleted server: {deleted_server.long_name()}")
+
+    # Save to file
+    if filename:
+        try:
+            with open(filename, "w") as f:
+                f.write(SERVERS.model_dump_json(indent=4))
+            logger.info(f"Saved updated server list to {filename}")
+        except Exception as e:
+            logger.error(f"Failed to save server list: {e}")
+            return {
+                "status": "error",
+                "message": f"Deleted from memory but failed to save: {str(e)}",
+            }
+
+    return {
+        "status": "deleted",
+        "message": f"Successfully deleted server: {deleted_server.long_name()}",
+    }
+
+
 async def validate_mcp_server_endpoint(
     filename: str, request: Request, data: ValidateMCPServerRequest
 ):
@@ -392,8 +435,27 @@ async def validate_mcp_server_endpoint(
 
     # Get client info for logging
     client_info = get_client_info(request)
+    logger.info(f"validate request from {client_info} for MCP server: {data.url}")
 
     result = await validate_and_register_mcp_server(filename, data.url, data.name)
+
+    logger.info(f"Validate result: {result}")
+
+    return result
+
+
+async def delete_mcp_server_endpoint(
+    filename: str, request: Request, data: DeleteMCPServerRequest
+):
+    """Delete a registered MCP server."""
+    from tool_registration import delete_registered_server
+
+    client_info = get_client_info(request)
+    logger.info(f"Delete request from {client_info} for MCP server: {data.url}")
+
+    result = delete_registered_server(filename, data.url)
+
+    logger.info(f"Delete result: {result}")
 
     return result
 

@@ -849,6 +849,7 @@ const ChemistryTool: React.FC = () => {
                 initialSettings={profileSettings}
                 onSettingsChange={handleProfileUpdateConfirm}
                 onServerAdded={refreshToolsList}
+                onServerRemoved={refreshToolsList}
                 username={username}
               />
 
