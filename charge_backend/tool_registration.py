@@ -77,12 +77,17 @@ class ToolServer(BaseModel):
     def __str__(self):
         path_if_valid = f"/{self.path}" if self.path else ""
         protocol_if_valid = f"{self.protocol}" if self.protocol else "http://"
-        return f"{protocol_if_valid}{self.address}:{self.port}{path_if_valid}/sse"
+        # Ensure path ends with /sse
+        sse_path_if_valid = (
+            path_if_valid
+            if path_if_valid.endswith("/sse")
+            else f"{path_if_valid.rstrip('/')}/sse"
+        )
+        return f"{protocol_if_valid}{self.address}:{self.port}{sse_path_if_valid}"
 
     def long_name(self):
-        path_if_valid = f"/{self.path}" if self.path else ""
-        protocol_if_valid = f"{self.protocol}" if self.protocol else "http://"
-        return f"[{self.name}] {protocol_if_valid}{self.address}:{self.port}{path_if_valid}/sse"
+        short_name = self.__str__()
+        return f"[{self.name}] {short_name}"
 
 
 class ToolServerDict(BaseModel):
