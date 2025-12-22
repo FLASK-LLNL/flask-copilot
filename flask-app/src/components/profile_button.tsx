@@ -201,7 +201,7 @@ export const ProfileButton: React.FC<ProfileButtonProps> = ({
 
     try {
       // Call backend to validate the MCP server
-      const response = await fetch('/check-mcp-servers', {
+      const response = await fetch(HTTP_SERVER + '/check-mcp-servers', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
