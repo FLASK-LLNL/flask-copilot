@@ -1,4 +1,4 @@
-from typing import Optional, Tuple
+from typing import Literal, Optional, Tuple
 from fastapi import WebSocket
 import asyncio
 import os
@@ -150,6 +150,9 @@ class ActionManager:
         self.experiment = experiment
         self.args = args
         self.username = username
+        self.molecule_name_format: Literal["brand", "iupac", "formula", "smiles"] = (
+            "brand"
+        )
         self.websocket = task_manager.websocket
 
     def setup_retro_synth_context(self) -> None:
@@ -297,6 +300,7 @@ class ActionManager:
             initial_level,
             initial_node_id,
             initial_x_position,
+            self.molecule_name_format,
         )
         await self.task_manager.run_task(run_func())
 
@@ -316,6 +320,7 @@ class ActionManager:
             self.task_manager.executor,
             self.task_manager.websocket,
             available_tools,
+            self.molecule_name_format,
         )
 
         await self.task_manager.run_task(run_func())
@@ -333,6 +338,7 @@ class ActionManager:
             self.experiment,
             self.task_manager.available_tools or list_server_urls(),
             self.task_manager.websocket,
+            self.molecule_name_format,
         )
 
         await self.task_manager.run_task(run_func())
@@ -353,6 +359,7 @@ class ActionManager:
             self.experiment,
             self.args.config_file,
             self.task_manager.available_tools or list_server_urls(),
+            self.molecule_name_format,
         )
 
         await self.task_manager.run_task(run_func())
@@ -456,6 +463,9 @@ class ActionManager:
     async def handle_profile_update(self, data: dict) -> None:
         from charge.experiments.AutoGenExperiment import AutoGenExperiment
         from charge.clients.autogen import AutoGenPool
+
+        if "moleculeName" in data:
+            self.molecule_name_format = data["moleculeName"]
 
         backend = data["backend"]
         model = data["model"]

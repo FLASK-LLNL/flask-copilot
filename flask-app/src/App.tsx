@@ -53,6 +53,15 @@ const ChemistryTool: React.FC = () => {
   const [username, setUsername] = useState<string>('<LOCAL USER>');
 
   const wsRef = useRef<WebSocket | null>(null);
+
+  // Function to refresh tools list from backend
+  const refreshToolsList = useCallback(() => {
+    if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+      console.log('🔄 Refreshing tools list from backend');
+      wsRef.current.send(JSON.stringify({ action: 'list-tools' }));
+    }
+  }, []);
+
   const getContextRef = useRef<() => Experiment>(() => {
     throw new Error("getContext called before initialization");
   });
@@ -140,7 +149,7 @@ const ChemistryTool: React.FC = () => {
     }
 
     // Optional: Add any additional processing or API calls here
-    // await fetch('/api/save-selection', { method: 'POST', body: JSON.stringify(payload) });
+    // await fetch(HTTP_SERVER + '/api/save-selection', { method: 'POST', body: JSON.stringify(payload) });
   };
 
   // Callback function to send updated profile to backend
@@ -163,9 +172,14 @@ const ChemistryTool: React.FC = () => {
         backend: settings.backend,
         customUrl: settings.customUrl,
         model: settings.model,
-        apiKey: settings.apiKey
+        apiKey: settings.apiKey,
+        moleculeName: settings.moleculeName
       };
       wsRef.current.send(JSON.stringify(message));
+
+      // Refresh tools list after updating profile
+      console.log('🔄 Refreshing tools list after profile update');
+      refreshToolsList();
      }
   };
 
@@ -846,6 +860,8 @@ const ChemistryTool: React.FC = () => {
               <ProfileButton
                 initialSettings={profileSettings}
                 onSettingsChange={handleProfileUpdateConfirm}
+                onServerAdded={refreshToolsList}
+                onServerRemoved={refreshToolsList}
                 username={username}
               />
 

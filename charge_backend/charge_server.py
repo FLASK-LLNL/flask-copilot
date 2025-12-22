@@ -29,13 +29,26 @@ from charge.clients.autogen import AutoGenPool
 
 
 from tool_registration import (
+    get_client_info,
     register_url,
     register_post,
     reload_server_list,
     split_url,
+    validate_mcp_server_endpoint,
+    delete_mcp_server_endpoint,
+    get_registered_servers,
 )
 
 from backend_manager import TaskManager, ActionManager
+
+# Pydantic models for new endpoints
+from pydantic import BaseModel
+from typing import Optional
+
+
+class CheckServersRequest(BaseModel):
+    urls: list[str]
+
 
 parser = argparse.ArgumentParser()
 
@@ -95,6 +108,41 @@ ASSETS_PATH = os.path.join(DIST_PATH, "assets")
 reload_server_list(args.tool_server_cache)
 
 app.post("/register")(partial(register_post, args.tool_server_cache))
+
+app.post("/validate-mcp-server")(
+    partial(validate_mcp_server_endpoint, args.tool_server_cache)
+)
+
+app.post("/delete-mcp-server")(
+    partial(delete_mcp_server_endpoint, args.tool_server_cache)
+)
+
+
+@app.post("/check-mcp-servers")
+async def check_mcp_servers_endpoint(data: CheckServersRequest):
+    """
+    Check connectivity status of multiple MCP server URLs.
+    Returns status and tools for each URL.
+
+    Uses existing workbench utilities for validation.
+    """
+    from tool_registration import _check_mcp_connectivity
+
+    results = {}
+
+    for url in data.urls:
+        try:
+            tools = await _check_mcp_connectivity(url, timeout=5.0)
+            results[url] = {"status": "connected", "tools": tools}
+        except Exception as e:
+            results[url] = {"status": "disconnected", "error": str(e)}
+
+    return {"results": results}
+
+
+app.get("/registered-mcp-servers")(
+    partial(get_registered_servers, args.tool_server_cache)
+)
 
 manual_mcp_servers_env = os.getenv("FLASK_MCP_SERVERS", "")
 if manual_mcp_servers_env:
