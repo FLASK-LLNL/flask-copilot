@@ -1,6 +1,7 @@
 import React from 'react';
 import { User, Plus, Trash2, Edit2, Loader2 } from 'lucide-react';
 import { ProfileSettings, ToolServer } from '../types';
+import { HTTP_SERVER } from '../config';
 
 interface ProfileButtonProps {
   onClick?: () => void;
