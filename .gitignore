@@ -142,6 +142,7 @@ vite.config.ts.timestamp-*
 *~
 .venv/
 venv/
+__pycache__/
 
 # Visual Studio Code
 .vscode/
