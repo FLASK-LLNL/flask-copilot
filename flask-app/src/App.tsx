@@ -3,7 +3,7 @@ import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { Loader2, FlaskConical, TestTubeDiagonal, Network, Play, RotateCcw, X, Send, RefreshCw, Sparkles, MessageCircleQuestion, StepForward, MessageSquareShare, Brain } from 'lucide-react';
 import 'recharts';
 
-import { WS_SERVER, VERSION, HTTP_SERVER } from './config';
+import { WS_SERVER, VERSION } from './config';
 import { DEFAULT_CUSTOM_SYSTEM_PROMPT } from './constants';
 import { TreeNode, Edge, ContextMenuState, SidebarMessage, Tool, WebSocketMessageToServer, WebSocketMessage, SelectableTool, Experiment, ProfileSettings } from './types';
 
