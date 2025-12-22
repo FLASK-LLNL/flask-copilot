@@ -15,7 +15,7 @@ RUN . $HOME/.nvm/nvm.sh && \
     npm install -g npm@latest && \
     npm install && \
     rm -rf node_modules/.vite dist .vite
-RUN npm run build
+RUN . $HOME/.nvm/nvm.sh && npm run build
 
 RUN python -m venv /venv
 RUN . /venv/bin/activate && \
