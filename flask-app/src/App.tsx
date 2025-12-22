@@ -429,6 +429,7 @@ const ChemistryTool: React.FC = () => {
         ));
       } else if (data.type === 'complete') {
         setIsComputing(false);
+        unhighlightNodes();
         saveStateToExperiment();  // Keep experiment up to date
       } else if (data.type === 'response') {
         addSidebarMessage(data.message!);
@@ -529,6 +530,12 @@ const ChemistryTool: React.FC = () => {
     }
   };
 
+  const unhighlightNodes = (): void => {
+    setTreeNodes(prev => prev.map(n =>
+      n.highlight === "yellow" ? { ...n, highlight: "normal" } : n
+    ));
+  };
+
   const stop = (): void => {
     if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) {
       // alert('WebSocket not connected');
@@ -538,6 +545,7 @@ const ChemistryTool: React.FC = () => {
     console.log('Sending stop command to server');
     setIsComputing(false);
     wsRef.current.send(JSON.stringify({ action: 'stop' }));
+    unhighlightNodes();
     saveStateToExperiment();
   };
 
