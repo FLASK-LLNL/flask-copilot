@@ -445,7 +445,7 @@ export const ProfileButton: React.FC<ProfileButtonProps> = ({
 
     try {
       // Call backend to validate and register
-      const response = await fetch('/validate-mcp-server', {
+      const response = await fetch(HTTP_SERVER + '/validate-mcp-server', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -540,7 +540,7 @@ export const ProfileButton: React.FC<ProfileButtonProps> = ({
 
     try {
       // Call backend to validate and register
-      const response = await fetch('/validate-mcp-server', {
+      const response = await fetch(HTTP_SERVER + '/validate-mcp-server', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -618,7 +618,7 @@ export const ProfileButton: React.FC<ProfileButtonProps> = ({
     console.log('🗑️ Deleting server:', server.url);
 
     try {
-      const response = await fetch('/delete-mcp-server', {
+      const response = await fetch(HTTP_SERVER + '/delete-mcp-server', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ url: server.url })
@@ -682,7 +682,7 @@ export const ProfileButton: React.FC<ProfileButtonProps> = ({
     // Delete each server from backend
     const deletePromises = tempSettings.toolServers.map(async (server) => {
       try {
-        await fetch('/delete-mcp-server', {
+        await fetch(HTTP_SERVER + '/delete-mcp-server', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ url: server.url })

@@ -149,7 +149,7 @@ const ChemistryTool: React.FC = () => {
     }
 
     // Optional: Add any additional processing or API calls here
-    // await fetch('/api/save-selection', { method: 'POST', body: JSON.stringify(payload) });
+    // await fetch(HTTP_SERVER + '/api/save-selection', { method: 'POST', body: JSON.stringify(payload) });
   };
 
   // Callback function to send updated profile to backend
