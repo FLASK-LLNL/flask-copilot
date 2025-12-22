@@ -34,24 +34,7 @@ export default defineConfig({
   plugins: [
     react(),
     tailwindcss(),
-    copyRDKitFiles(),
-    {
-      name: 'log-modules',
-      buildStart() {
-        this.modules = new Set();
-      },
-      transform(code, id) {
-        this.modules.add(id);
-      },
-      buildEnd() {
-        const moduleList = Array.from(this.modules).sort();
-        writeFileSync(
-          'build-modules.json',
-          JSON.stringify(moduleList, null, 2)
-        );
-        console.log(`Total modules: ${moduleList.length}`);
-      }
-    }
+    copyRDKitFiles()
   ],
   define: {
     'window.APP_CONFIG.WS_SERVER': JSON.stringify(process.env.WS_SERVER || 'ws://localhost:8001/ws'),
