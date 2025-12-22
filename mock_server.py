@@ -389,7 +389,7 @@ async def websocket_endpoint(websocket: WebSocket):
                         "withNode": True,
                     }
                 )
-            elif data["action"] == "recompute-reaction" and "query" not in data:
+            elif data["action"].startswith("query-retro-") and "query" not in data:
                 await websocket.send_json(
                     {
                         "type": "response",
@@ -401,7 +401,7 @@ async def websocket_endpoint(websocket: WebSocket):
                     }
                 )
                 await websocket.send_json({"type": "complete"})
-            elif data["action"] == "recompute-reaction":
+            elif data["action"].startswith("query-retro-"):
                 if "water" in data["query"].lower():
                     await websocket.send_json(
                         {

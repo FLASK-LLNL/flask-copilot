@@ -1312,7 +1312,7 @@ const ChemistryTool: React.FC = () => {
             <div className="modal-header">
               <div>
                 <h2 className="modal-title">Custom Query</h2>
-                <p className="modal-subtitle">for {customQueryModal.label}</p>
+                <div className="modal-subtitle" dangerouslySetInnerHTML={{__html: "for " + customQueryModal.label}}></div>
               </div>
               <button onClick={() => setCustomQueryModal(null)} className="btn-icon">
                 <X className="w-6 h-6" />
