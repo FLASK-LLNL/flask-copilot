@@ -168,7 +168,7 @@ const ChemistryTool: React.FC = () => {
 
     if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
       const message = {
-        action: 'ux-update-orchestrator-settings',
+        action: 'ui-update-orchestrator-settings',
         backend: settings.backend,
         customUrl: settings.customUrl,
         model: settings.model,
