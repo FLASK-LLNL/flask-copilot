@@ -444,8 +444,8 @@ class ActionManager:
             useCustomUrl = False
         await self.websocket.send_json(
             {
-                "type": "update-orchestrator-profile",
-                "profileSettings": {
+                "type": "server-update-orchestrator-settings",
+                "orchestratorSettings": {
                     "backend": agent_pool.backend,
                     "backendLabel": BACKEND_LABELS.get(
                         agent_pool.backend, agent_pool.backend
@@ -460,7 +460,7 @@ class ActionManager:
         )
         return agent_pool.backend, model, base_url
 
-    async def handle_profile_update(self, data: dict) -> None:
+    async def handle_orchestrator_settings_update(self, data: dict) -> None:
         from charge.experiments.AutoGenExperiment import AutoGenExperiment
         from charge.clients.autogen import AutoGenPool
 
