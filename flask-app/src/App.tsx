@@ -5,14 +5,14 @@ import 'recharts';
 
 import { WS_SERVER, VERSION } from './config';
 import { DEFAULT_CUSTOM_SYSTEM_PROMPT, PROPERTY_NAMES } from './constants';
-import { TreeNode, Edge, ContextMenuState, SidebarMessage, Tool, WebSocketMessageToServer, WebSocketMessage, SelectableTool, Experiment, ProfileSettings } from './types';
+import { TreeNode, Edge, ContextMenuState, SidebarMessage, Tool, WebSocketMessageToServer, WebSocketMessage, SelectableTool, Experiment, OrchestratorSettings } from './types';
 
 import { loadRDKit } from './components/molecule';
 import { ReasoningSidebar, useSidebarState } from './components/sidebar';
 import { MoleculeGraph, useGraphState } from './components/graph';
 import { MultiSelectToolModal } from './components/multi_select_tools';
 import { ProjectSidebar, useProjectSidebar, useProjectManagement } from './components/project_sidebar';
-import { ProfileButton, BACKEND_OPTIONS } from './components/profile_button';
+import { SettingsButton, BACKEND_OPTIONS } from './components/settings_button';
 
 import { findAllDescendants, hasDescendants, isRootNode, relayoutTree } from './tree_utils';
 import { copyToClipboard } from './utils';
@@ -97,7 +97,7 @@ const ChemistryTool: React.FC = () => {
 
   // Load initial settings from localStorage
   const getInitialSettings = () => {
-    const saved = localStorage.getItem('profileSettings');
+    const saved = localStorage.getItem('orchestratorSettings');
     if (saved) {
       try {
         return JSON.parse(saved);
@@ -113,14 +113,14 @@ const ChemistryTool: React.FC = () => {
       backendLabel: 'vLLM'
     };
   };
-  const [profileSettings, setProfileSettings] = useState<ProfileSettings>(getInitialSettings());
+  const [orchestratorSettings, setOrchestratorSettings] = useState<OrchestratorSettings>(getInitialSettings());
 
   // Add this helper function near the top of the ChemistryTool component
   const getDisplayUrl = (): string => {
-    if (profileSettings.useCustomUrl && profileSettings.customUrl) {
-      return profileSettings.customUrl;
+    if (orchestratorSettings.useCustomUrl && orchestratorSettings.customUrl) {
+      return orchestratorSettings.customUrl;
     }
-    const backendOption = BACKEND_OPTIONS.find(opt => opt.value === profileSettings.backend);
+    const backendOption = BACKEND_OPTIONS.find(opt => opt.value === orchestratorSettings.backend);
     return backendOption?.defaultUrl || 'Not configured';
   };
 
@@ -152,23 +152,23 @@ const ChemistryTool: React.FC = () => {
     // await fetch(HTTP_SERVER + '/api/save-selection', { method: 'POST', body: JSON.stringify(payload) });
   };
 
-  // Callback function to send updated profile to backend
-  const handleProfileUpdateConfirm = async (
-    settings: ProfileSettings,
+  // Callback function to send updated settings to backend
+  const handleSettingsUpdateConfirm = async (
+    settings: OrchestratorSettings,
   ): Promise<void> => {
     if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) {
       alert('WebSocket not connected');
       return;
     }
-    console.log(`Updated Profile Saved`);
+    console.log(`Updated Settings Saved`);
 
     // Update local state immediately
-    setProfileSettings(settings);
-    localStorage.setItem('profileSettings', JSON.stringify(settings));
+    setOrchestratorSettings(settings);
+    localStorage.setItem('orchestratorSettings', JSON.stringify(settings));
 
     if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
       const message = {
-        action: 'update-profile-settings',
+        action: 'ux-update-orchestrator-settings',
         backend: settings.backend,
         customUrl: settings.customUrl,
         model: settings.model,
@@ -177,8 +177,8 @@ const ChemistryTool: React.FC = () => {
       };
       wsRef.current.send(JSON.stringify(message));
 
-      // Refresh tools list after updating profile
-      console.log('🔄 Refreshing tools list after profile update');
+      // Refresh tools list after updating settings
+      console.log('🔄 Refreshing tools list after settings update');
       refreshToolsList();
      }
   };
@@ -444,22 +444,22 @@ const ChemistryTool: React.FC = () => {
           }))
         );
         setSelectedTools([]);
-      } else if (data.type === 'update-orchestrator-profile') {
-        // Handle profile settings updates from server
-        const newSettings: ProfileSettings = {
-          backend: data.profileSettings!.backend,
-          useCustomUrl: data.profileSettings!.useCustomUrl,
-          customUrl: data.profileSettings!.customUrl,
-          model: data.profileSettings!.model,
+      } else if (data.type === 'server-update-orchestrator-settings') {
+        // Handle orchestrator settings updates from server
+        const newSettings: OrchestratorSettings = {
+          backend: data.orchestratorSettings!.backend,
+          useCustomUrl: data.orchestratorSettings!.useCustomUrl,
+          customUrl: data.orchestratorSettings!.customUrl,
+          model: data.orchestratorSettings!.model,
           // Don't take the use custom model field from the backend
           // Check the model against the list of models in copilot
-          // useCustomModel: data.profileSettings.useCustomModel,
-          apiKey: data.profileSettings!.apiKey,
-          backendLabel: data.profileSettings!.backendLabel
+          // useCustomModel: data.orchestratorSettings.useCustomModel,
+          apiKey: data.orchestratorSettings!.apiKey,
+          backendLabel: data.orchestratorSettings!.backendLabel
         };
-        setProfileSettings(newSettings);
-        console.log('Updating the profile settings ', newSettings);
-        localStorage.setItem('profileSettings', JSON.stringify(newSettings));
+        setOrchestratorSettings(newSettings);
+        console.log('Updating the orchestrator settings ', newSettings);
+        localStorage.setItem('orchestratorSettings', JSON.stringify(newSettings));
       } else if (data.type === 'error') {
         console.error(data.message);
         alert("Server error: " + data.message);
@@ -809,7 +809,7 @@ const ChemistryTool: React.FC = () => {
               h11.09l-4.59,4.75h-6.68C9.71,32.93,3.19,29.44,2.99,21.13V0.01H0.05v37.3h35.87V17.62l-4.05,4.19L15.88,21.82z"/>
                     </g>
                   </svg>
-                  {profileSettings?.backend === "alcf" && (
+                  {orchestratorSettings?.backend === "alcf" && (
                   <svg className="logo-svg" viewBox="87 0 26 24">
                     <path fill="#007934" d="M95.9 15.3h-8.1l4 7z"></path>
                     <path d="M103.9 15.3h-8.1l-4 7H108l-4.1-7z" fill="#0082ca"></path>
@@ -831,8 +831,8 @@ const ChemistryTool: React.FC = () => {
               <p className="app-subtitle">Real-time molecular assistant</p>
               <p className="app-subtitle">Connected to simulators at <code>llnl.gov</code> (LLNL)</p>
               <p className="app-subtitle">
-                Connected to orchestrator <code>{profileSettings.model || 'Not configured'}</code> at
-                &nbsp;<code>{getDisplayUrl()}</code> ({profileSettings.backendLabel})
+                Connected to orchestrator <code>{orchestratorSettings.model || 'Not configured'}</code> at
+                &nbsp;<code>{getDisplayUrl()}</code> ({orchestratorSettings.backendLabel})
               </p>
             </div>
 
@@ -865,9 +865,9 @@ const ChemistryTool: React.FC = () => {
                 <Brain className="w-4 h-4" />
                 Reasoning
               </button>
-              <ProfileButton
-                initialSettings={profileSettings}
-                onSettingsChange={handleProfileUpdateConfirm}
+              <SettingsButton
+                initialSettings={orchestratorSettings}
+                onSettingsChange={handleSettingsUpdateConfirm}
                 onServerAdded={refreshToolsList}
                 onServerRemoved={refreshToolsList}
                 username={username}

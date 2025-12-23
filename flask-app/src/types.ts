@@ -62,7 +62,7 @@ export interface ToolServer {
 
 export type MoleculeNameFormat = 'brand' | 'iupac' | 'formula' | 'smiles';
 
-export interface ProfileSettings {
+export interface OrchestratorSettings {
   backend: string;
   useCustomUrl: boolean;
   customUrl?: string;
@@ -104,7 +104,7 @@ export interface WebSocketMessage {
   message?: SidebarMessage;
   tools?: Tool[];
   experimentContext?: string;
-  profileSettings?: ProfileSettings;
+  orchestratorSettings?: OrchestratorSettings;
 
   withNode?: boolean;
   username?: string;
