@@ -1,10 +1,11 @@
 // Molecule graph view
 import { Loader2, Move } from "lucide-react";
 import { useRef, useCallback, useEffect, useState } from "react";
-import { BOX_HEIGHT, BOX_WIDTH, NODE_STYLES } from "../constants";
-import {MoleculeGraphProps, MoleculeGraphState, Position, TreeNode} from "../types";
+import { BOX_HEIGHT, BOX_WIDTH, NODE_STYLES, REACTION_STYLES } from "../constants";
+import {MoleculeGraphProps, MoleculeGraphState, Position, Reaction, TreeNode} from "../types";
 import { MoleculeSVG } from "./molecule";
 import { MarkdownText } from "./markdown";
+import { estimateTextWidth } from "../tree_utils";
 
 export const useGraphState = (): MoleculeGraphState => {
     const [offset, setOffset] = useState<Position>({ x: 50, y: 50 });
@@ -13,10 +14,11 @@ export const useGraphState = (): MoleculeGraphState => {
     return { offset, setOffset, zoom, setZoom };
 };
 
-export const MoleculeGraph: React.FC<MoleculeGraphProps> = ({nodes, edges, ctx, autoZoom, setAutoZoom, handleNodeClick, rdkitModule, offset, setOffset, zoom, setZoom}) => {
+export const MoleculeGraph: React.FC<MoleculeGraphProps> = ({nodes, edges, ctx, autoZoom, setAutoZoom, handleNodeClick, handleReactionClick, rdkitModule, offset, setOffset, zoom, setZoom}) => {
     const [isDragging, setIsDragging] = useState<boolean>(false);
     const [dragStart, setDragStart] = useState<Position>({ x: 0, y: 0 });
     const [hoveredNode, setHoveredNode] = useState<TreeNode | null>(null);
+    const [hoveredReaction, setHoveredReaction] = useState<TreeNode | null>(null);
     const [mousePos, setMousePos] = useState<Position>({ x: 0, y: 0 });
     const containerRef = useRef<HTMLDivElement>(null);
 
@@ -24,6 +26,9 @@ export const MoleculeGraph: React.FC<MoleculeGraphProps> = ({nodes, edges, ctx, 
         return nodes.find(n => n.id === nodeId);
     }, [nodes]);
 
+    const isEdgeHighlighted = useCallback((nodeId: string): boolean => {
+        return hoveredReaction?.id == nodeId;
+    }, [hoveredReaction]);
 
     const handleMouseDown = (e: React.MouseEvent<HTMLDivElement>): void => {
     if (e.button !== 0) return;
@@ -160,6 +165,7 @@ export const MoleculeGraph: React.FC<MoleculeGraphProps> = ({nodes, edges, ctx, 
     }, [nodes, autoZoom]);
 
 
+
     const getCurvedPath = (from: TreeNode | undefined, to: TreeNode | undefined): string => {
         if (!from || !to) return '';
 
@@ -168,10 +174,32 @@ export const MoleculeGraph: React.FC<MoleculeGraphProps> = ({nodes, edges, ctx, 
         const endX = to.x;
         const endY = to.y + BOX_HEIGHT / 2;
 
-        const controlX1 = startX + (endX - startX) * 0.3;
-        const controlX2 = startX + (endX - startX) * 0.7;
+        // Check if parent node has a reaction
+        if (from.reaction) {
+            const reactionCircleBaseWidth = 60;
+            const reactionPadding = 40;
 
-        return `M ${startX} ${startY} C ${controlX1} ${startY}, ${controlX2} ${endY}, ${endX} ${endY}`;
+            let reactionWidth = reactionCircleBaseWidth;
+            if (from.reaction.label) {
+                const labelWidth = estimateTextWidth(from.reaction.label);
+                reactionWidth = Math.max(reactionWidth, labelWidth);
+            }
+
+            // Calculate where the straight line should end (after reaction)
+            const straightEndX = startX + reactionWidth + reactionPadding;
+
+            // Create path: straight line, then curve
+            const controlX1 = straightEndX + (endX - straightEndX) * 0.3;
+            const controlX2 = straightEndX + (endX - straightEndX) * 0.7;
+
+            return `M ${startX} ${startY} L ${straightEndX} ${startY} C ${controlX1} ${startY}, ${controlX2} ${endY}, ${endX} ${endY}`;
+        } else {
+            // Normal curved path
+            const controlX1 = startX + (endX - startX) * 0.3;
+            const controlX2 = startX + (endX - startX) * 0.7;
+
+            return `M ${startX} ${startY} C ${controlX1} ${startY}, ${controlX2} ${endY}, ${endX} ${endY}`;
+        }
     };
 
     const getCurveMidpoint = (from: TreeNode | undefined, to: TreeNode | undefined): Position => {
@@ -181,21 +209,39 @@ export const MoleculeGraph: React.FC<MoleculeGraphProps> = ({nodes, edges, ctx, 
         const endX = to.x;
         const endY = to.y + BOX_HEIGHT / 2;
 
-        const t = 0.5;
-        const controlX1 = startX + (endX - startX) * 0.3;
-        const controlX2 = startX + (endX - startX) * 0.7;
+        // Check if parent node has a reaction
+        if (from.reaction) {
+            const reactionCircleBaseWidth = 60;
+            const reactionPadding = 40;
 
-        const x = Math.pow(1-t, 3) * startX +
-                    3 * Math.pow(1-t, 2) * t * controlX1 +
-                    3 * (1-t) * Math.pow(t, 2) * controlX2 +
-                    Math.pow(t, 3) * endX;
+            let reactionWidth = reactionCircleBaseWidth;
+            if (from.reaction.label) {
+                const labelWidth = estimateTextWidth(from.reaction.label);
+                reactionWidth = Math.max(reactionWidth, labelWidth);
+            }
 
-        const y = Math.pow(1-t, 3) * startY +
-                    3 * Math.pow(1-t, 2) * t * startY +
-                    3 * (1-t) * Math.pow(t, 2) * endY +
-                    Math.pow(t, 3) * endY;
+            const straightEndX = startX + reactionWidth + reactionPadding;
 
-        return { x, y };
+            // Midpoint is along the straight portion (for reaction label placement)
+            return { x: (startX + straightEndX) / 2, y: startY };
+        } else {
+            // Normal curved midpoint calculation
+            const t = 0.5;
+            const controlX1 = startX + (endX - startX) * 0.3;
+            const controlX2 = startX + (endX - startX) * 0.7;
+
+            const x = Math.pow(1-t, 3) * startX +
+                        3 * Math.pow(1-t, 2) * t * controlX1 +
+                        3 * (1-t) * Math.pow(t, 2) * controlX2 +
+                        Math.pow(t, 3) * endX;
+
+            const y = Math.pow(1-t, 3) * startY +
+                        3 * Math.pow(1-t, 2) * t * startY +
+                        3 * (1-t) * Math.pow(t, 2) * endY +
+                        Math.pow(t, 3) * endY;
+
+            return { x, y };
+        }
     };
 
     return (
@@ -219,17 +265,15 @@ export const MoleculeGraph: React.FC<MoleculeGraphProps> = ({nodes, edges, ctx, 
                     return (
                     <div key={edge.id} className="absolute pointer-events-none">
                         <svg className="absolute" style={{ width: '3000px', height: '2000px', top: 0, left: 0 }}>
-                        <g className="animate-fadeIn" style={{ animationDelay: `${idx * 50}ms` }}>
+                        <g className={`animate-fadeIn ${isEdgeHighlighted(edge.fromNode, hoveredReaction) ? 'edge-highlighted' : (edge.status === 'computing' ? 'edge-computing' : 'edge-normal')}`} style={{ animationDelay: `${idx * 50}ms` }}>
                             <path
                             d={getCurvedPath(getNode(edge.fromNode), getNode(edge.toNode))}
-                            stroke={edge.status === 'computing' ? '#F59E0B' : '#8B5CF6'}
                             strokeWidth="3"
                             fill="none"
                             strokeDasharray={edge.status === 'computing' ? '5,5' : 'none'}
                             className={edge.status === 'computing' ? 'animate-dash' : ''}
                             opacity="0.8"
                             />
-                            <circle cx={getNode(edge.toNode)!.x + 10} cy={getNode(edge.toNode)!.y + 50} r="5" fill={edge.status === 'computing' ? '#F59E0B' : '#EC4899'} />
                         </g>
                         </svg>
 
@@ -246,6 +290,7 @@ export const MoleculeGraph: React.FC<MoleculeGraphProps> = ({nodes, edges, ctx, 
                 })}
 
                 {nodes.map((node, idx) => (
+                    <>
                     <div
                     key={node.id}
                     data-node-id={node.id}
@@ -254,7 +299,6 @@ export const MoleculeGraph: React.FC<MoleculeGraphProps> = ({nodes, edges, ctx, 
                         left: `${node.x}px`,
                         top: `${node.y}px`,
                         width: `${BOX_WIDTH*1.05}px`,
-                        animationDelay: `${idx * 100}ms`,
                     }}
                     onMouseEnter={(e) => {
                         setHoveredNode(node);
@@ -281,6 +325,41 @@ export const MoleculeGraph: React.FC<MoleculeGraphProps> = ({nodes, edges, ctx, 
                         </div>
                     </div>
                     </div>
+                    {(node.reaction &&
+                       <div
+                        key={`reaction-${node.id}`}
+                        data-node-id={`reaction-${node.id}`}
+                        className="graph-reaction"
+                        style={{
+                            left: `${node.x+BOX_WIDTH*1.1}px`,
+                            top: `${node.y+BOX_HEIGHT*0.36}px`,
+                            width: `${Math.max(estimateTextWidth(node.reaction.label ?? ""), 25)}px`,
+                        }}
+                        onMouseEnter={(e) => {
+                            setHoveredReaction(node);
+                            const rect = containerRef.current?.getBoundingClientRect();
+                            if (rect) {
+                                setMousePos({ x: e.clientX - rect.left, y: e.clientY - rect.top });
+                            }
+                        }}
+                        onMouseMove={(e) => {
+                            if (hoveredReaction?.id === node.id) {
+                                const rect = containerRef.current?.getBoundingClientRect();
+                                if (rect) {
+                                    setMousePos({ x: e.clientX - rect.left, y: e.clientY - rect.top });
+                                }
+                            }
+                        }}
+                        onMouseLeave={() => setHoveredReaction(null)}
+                        onClick={(e) => handleReactionClick(e, node)}
+                        >
+                        <div className={`reaction-button ${REACTION_STYLES[node.reaction.highlight || 'normal']}`}>
+                            {node.reaction.label && (node.reaction.label)}
+                            {!node.reaction.label && (<>&nbsp;</>)}
+                        </div>
+                        </div>
+                    )}
+                    </>
                 ))}
                 </div>
 
@@ -309,6 +388,13 @@ export const MoleculeGraph: React.FC<MoleculeGraphProps> = ({nodes, edges, ctx, 
                 <div className="node-hover-tooltip" style={{ left: `${mousePos.x + 20}px`, top: `${mousePos.y + 20}px` }}>
                 <div className="node-hover-content custom-scrollbar">
                     <MarkdownText text={hoveredNode.hoverInfo} />
+                </div>
+                </div>
+            )}
+            {hoveredReaction && !ctx?.node && hoveredReaction.reaction?.hoverInfo && (
+                <div className="node-hover-tooltip" style={{ left: `${mousePos.x + 20}px`, top: `${mousePos.y + 20}px` }}>
+                <div className="node-hover-content custom-scrollbar">
+                    <MarkdownText text={hoveredReaction.reaction.hoverInfo} />
                 </div>
                 </div>
             )}
