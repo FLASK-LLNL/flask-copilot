@@ -37,7 +37,7 @@ const ChemistryTool: React.FC = () => {
   const [autoZoom, setAutoZoom] = useState<boolean>(true);
   const [treeNodes, setTreeNodes] = useState<TreeNode[]>([]);
   const [edges, setEdges] = useState<Edge[]>([]);
-  const [contextMenu, setContextMenu] = useState<ContextMenuState>({node: null, x: 0, y: 0});
+  const [contextMenu, setContextMenu] = useState<ContextMenuState>({node: null, isReaction: false, x: 0, y: 0});
   const [customQueryModal, setCustomQueryModal] = useState<TreeNode | null>(null);
   const [customQueryText, setCustomQueryText] = useState<string>('');
   const [customQueryType, setCustomQueryType] = useState<string | null>(null);
@@ -185,7 +185,7 @@ const ChemistryTool: React.FC = () => {
 
   useEffect(() => {
     const handleClickOutside = (): void => {
-      setContextMenu({node: null, x:0, y:0});
+      setContextMenu({node: null, isReaction: false, x:0, y:0});
       setSaveDropdownOpen(false);
       sidebarState.setSourceFilterOpen(false);
       setWsTooltipPinned(false);
@@ -518,7 +518,7 @@ const ChemistryTool: React.FC = () => {
     setIsComputing(false);
     graphState.setOffset({ x: 50, y: 50 });
     graphState.setZoom(1);
-    setContextMenu({node: null, x:0, y:0});
+    setContextMenu({node: null, isReaction: false, x:0, y:0});
     setCustomQueryModal(null);
     metricsDashboardState.setMetricsHistory([]);
     sidebarState.setMessages([]);
@@ -665,7 +665,7 @@ const ChemistryTool: React.FC = () => {
 
   const createNewRetrosynthesisExperiment = async (startingSmiles: string): Promise<void> => {
     // Close context menu
-    setContextMenu({node: null, x: 0, y: 0});
+    setContextMenu({node: null, isReaction: false, x: 0, y: 0});
 
     saveStateToExperiment();
 
@@ -695,6 +695,18 @@ const ChemistryTool: React.FC = () => {
       if (isComputing) return; // Don't open menu while computing
       setContextMenu({
           node,
+          isReaction: false,
+          x: e.clientX,
+          y: e.clientY
+      });
+  };
+
+  const handleReactionClick = (e: React.MouseEvent<HTMLDivElement>, node: TreeNode): void => {
+      e.stopPropagation();
+      if (isComputing) return; // Don't open menu while computing
+      setContextMenu({
+          node,
+          isReaction: true,
           x: e.clientX,
           y: e.clientY
       });
@@ -710,14 +722,14 @@ const ChemistryTool: React.FC = () => {
       ...data
     };
     wsRef.current.send(JSON.stringify(msg));
-    setContextMenu({node: null, x: 0, y: 0});
+    setContextMenu({node: null, isReaction: false, x: 0, y: 0});
   };
 
   const handleCustomQuery = (node: TreeNode, queryType: string | null): void => {
     setCustomQueryModal(node);
     setCustomQueryText('');
     setCustomQueryType(queryType);
-    setContextMenu({node: null, x: 0, y: 0});
+    setContextMenu({node: null, isReaction: false, x: 0, y: 0});
   };
 
 
@@ -1161,7 +1173,7 @@ const ChemistryTool: React.FC = () => {
                   )}
                 </div>
               ) : (
-                <MoleculeGraph {...graphState} nodes={treeNodes} edges={edges} autoZoom={autoZoom} setAutoZoom={setAutoZoom} ctx={contextMenu} handleNodeClick={handleNodeClick} rdkitModule={rdkitModule} />
+                <MoleculeGraph {...graphState} nodes={treeNodes} edges={edges} autoZoom={autoZoom} setAutoZoom={setAutoZoom} ctx={contextMenu} handleNodeClick={handleNodeClick} handleReactionClick={handleReactionClick} rdkitModule={rdkitModule} />
               )}
             </div>
 
