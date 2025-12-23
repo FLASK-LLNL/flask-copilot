@@ -750,14 +750,13 @@ export const ProfileButton: React.FC<ProfileButtonProps> = ({
             </div>
 
             {/* Tab Navigation */}
-            <div className="border-b border-border">
-              <div className="flex gap-1 px-6">
+            <div className="card-header" style={{ borderBottom: '1px solid rgba(168, 85, 247, 0.3)' }}>
+              <div className="flex gap-sm">
                 <button
                   onClick={() => setActiveTab('orchestrator')}
-                  className={`flex items-center gap-2 px-4 py-3 border-b-2 transition-colors ${
+                  className={`btn btn-sm transition-colors ${
                     activeTab === 'orchestrator'
-                      ? 'border-primary text-primary font-medium'
-                      : 'border-transparent text-muted hover:text-secondary'
+                      ? 'btn-primary' : 'btn-tertiary'
                   }`}
                 >
                   <Settings className="w-4 h-4" />
@@ -765,16 +764,15 @@ export const ProfileButton: React.FC<ProfileButtonProps> = ({
                 </button>
                 <button
                   onClick={() => setActiveTab('tools')}
-                  className={`flex items-center gap-2 px-4 py-3 border-b-2 transition-colors ${
+                  className={`btn btn-sm transition-colors ${
                     activeTab === 'tools'
-                      ? 'border-primary text-primary font-medium'
-                      : 'border-transparent text-muted hover:text-secondary'
+                      ? 'btn-primary' : 'btn-tertiary'
                   }`}
                 >
                   <Wrench className="w-4 h-4" />
                   <span>Tool Servers</span>
                   {tempSettings.toolServers && tempSettings.toolServers.length > 0 && (
-                    <span className="bg-primary text-white text-xs px-2 py-0.5 rounded-full">
+                    <span className="notification-badge">
                       {tempSettings.toolServers.length}
                     </span>
                   )}
@@ -806,7 +804,7 @@ export const ProfileButton: React.FC<ProfileButtonProps> = ({
 
                 {/* Use Custom URL Checkbox */}
                 <div>
-                  <label className="form-label flex items-center gap-2 cursor-pointer">
+                  <label className="form-label cursor-pointer">
                     <input
                       type="checkbox"
                       checked={tempSettings.useCustomUrl}
@@ -815,7 +813,7 @@ export const ProfileButton: React.FC<ProfileButtonProps> = ({
                     />
                     <span>Use custom URL for this backend</span>
                   </label>
-                  <p className="text-xs text-muted mt-1 ml-6">
+                  <p className="helper-text" style={{ marginLeft: '1.5rem' }}>
                     Override the default endpoint with a custom server URL
                   </p>
                 </div>
@@ -825,7 +823,7 @@ export const ProfileButton: React.FC<ProfileButtonProps> = ({
                   <div className="form-group animate-fadeIn">
                     <label className="form-label">
                       Custom URL
-                      <span className="text-muted text-xs ml-2">
+                      <span className="helper-text" style={{ marginLeft: '0.5rem' }}>
                         {tempSettings.backend === 'vllm' && '(vLLM endpoint)'}
                         {tempSettings.backend === 'ollama' && '(Ollama endpoint)'}
                         {(tempSettings.backend === 'livai') && '(LivAI base URL)'}
@@ -842,7 +840,7 @@ export const ProfileButton: React.FC<ProfileButtonProps> = ({
                       placeholder={currentBackendOption?.defaultUrl || 'http://localhost:8000'}
                       className="form-input"
                     />
-                    <p className="text-xs text-muted mt-1">
+                    <p className="helper-text">
                       Default: {currentBackendOption?.defaultUrl || 'Not set'}
                     </p>
                   </div>
@@ -852,7 +850,7 @@ export const ProfileButton: React.FC<ProfileButtonProps> = ({
                 <div className="form-group">
                   <label className="form-label">
                     Model
-                    <span className="text-muted text-xs ml-2">
+                    <span className="helper-text" style={{ marginLeft: '0.5rem' }}>
                       {tempSettings.backend === 'openai' && '(GPT models)'}
                       {tempSettings.backend === 'livai' && '(LLNL Enterprise models)'}
                       {tempSettings.backend === 'llamame' && '(LLNL Internal models)'}
@@ -867,7 +865,7 @@ export const ProfileButton: React.FC<ProfileButtonProps> = ({
                     <select
                       value={tempSettings.model}
                       onChange={(e) => handleModelSelect(e.target.value)}
-                      className="form-select text-mono"
+                      className="form-select"
                     >
                       {currentBackendOption?.models?.map(model => (
                         <option key={model} value={model}>
@@ -881,14 +879,14 @@ export const ProfileButton: React.FC<ProfileButtonProps> = ({
                       value={tempSettings.model}
                       onChange={(e) => handleCustomModelChange(e.target.value)}
                       placeholder="Enter custom model name"
-                      className="form-input text-mono"
+                      className="form-input"
                     />
                   )}
                 </div>
 
                 {/* Use Custom Model Checkbox */}
                 <div>
-                  <label className="form-label flex items-center gap-2 cursor-pointer">
+                  <label className="form-label cursor-pointer">
                     <input
                       type="checkbox"
                       checked={tempSettings.useCustomModel || false}
@@ -897,7 +895,7 @@ export const ProfileButton: React.FC<ProfileButtonProps> = ({
                     />
                     <span>Use custom model name</span>
                   </label>
-                  <p className="text-xs text-muted mt-1 ml-6">
+                  <p className="helper-text" style={{ marginLeft: '1.5rem' }}>
                     Enter a custom model identifier not in the preset list
                   </p>
                 </div>
@@ -906,7 +904,7 @@ export const ProfileButton: React.FC<ProfileButtonProps> = ({
                 <div className="form-group">
                   <label className="form-label">
                     API Key
-                    <span className="text-muted text-xs ml-2">
+                    <span className="helper-text" style={{ marginLeft: '0.5rem' }}>
                       {(tempSettings.backend === 'ollama' || tempSettings.backend === 'huggingface' || tempSettings.backend === 'vllm') && '(Optional for local backends)'}
                       {tempSettings.backend === 'openai' && '(OPENAI_API_KEY)'}
                       {tempSettings.backend === 'livai' && '(LIVAI_API_KEY)'}
@@ -920,12 +918,12 @@ export const ProfileButton: React.FC<ProfileButtonProps> = ({
                     value={tempSettings.apiKey}
                     onChange={(e) => setTempSettings({...tempSettings, apiKey: e.target.value})}
                     placeholder="Enter your API key"
-                    className="form-input text-mono"
+                    className="form-input"
                   />
                 </div>
 
                 {/* Divider */}
-                <div className="border-t border-border my-4"></div>
+                <div className="dropdown-divider"></div>
 
                 {/* Molecule Name Preference */}
                 <div className="form-group">
@@ -943,7 +941,7 @@ export const ProfileButton: React.FC<ProfileButtonProps> = ({
                       </option>
                     ))}
                   </select>
-                  <p className="text-xs text-muted mt-1">
+                  <p className="helper-text">
                     Choose how molecule names are displayed throughout the application
                   </p>
                 </div>
@@ -955,15 +953,15 @@ export const ProfileButton: React.FC<ProfileButtonProps> = ({
                 <div className="space-y-4">
                   <div className="flex-between">
                     <div>
-                      <h3 className="text-lg font-medium text-primary">Custom Tool Servers (MCP)</h3>
-                      <p className="text-xs text-muted mt-1">
+                      <h3 className="heading-3">Custom Tool Servers (MCP)</h3>
+                      <p className="helper-text">
                         Configure external MCP tool servers for extended functionality
                       </p>
                     </div>
                   {tempSettings.toolServers && tempSettings.toolServers.length > 0 && (
                     <button
                       onClick={handleClearAllServers}
-                      className="btn btn-tertiary btn-sm text-xs"
+                      className="btn btn-tertiary btn-sm"
                     >
                       <Trash2 className="w-3 h-3" />
                       Clear All
@@ -974,7 +972,7 @@ export const ProfileButton: React.FC<ProfileButtonProps> = ({
                 {/* Server List */}
                 <div className="space-y-2">
                   {tempSettings.toolServers?.map(server => (
-                    <div key={server.id} className="border border-border rounded p-3 bg-surface-secondary hover:bg-surface-tertiary transition-colors">
+                    <div key={server.id} className="glass-panel hover:bg-surface-hover transition-colors">
                       {editingServer === server.id ? (
                         <div className="space-y-2">
                           <input
@@ -989,13 +987,13 @@ export const ProfileButton: React.FC<ProfileButtonProps> = ({
                               }
                             }}
                             placeholder="https://example.com/sse"
-                            className="form-input text-sm text-mono"
+                            className="form-input"
                             autoFocus
                           />
-                          <div className="flex gap-2">
+                          <div className="flex gap-sm">
                             <button
                               onClick={() => handleSaveServerEdit(server.id)}
-                              className="btn btn-secondary btn-sm text-xs flex-1"
+                              className="btn btn-secondary btn-sm flex-1"
                             >
                               Save
                             </button>
@@ -1004,31 +1002,30 @@ export const ProfileButton: React.FC<ProfileButtonProps> = ({
                                 setEditingServer(null);
                                 setEditServerUrl('');
                               }}
-                              className="btn btn-tertiary btn-sm text-xs flex-1"
+                              className="btn btn-tertiary btn-sm flex-1"
                             >
                               Cancel
                             </button>
                           </div>
                         </div>
                       ) : (
-                        <div className="flex items-center gap-3">
+                        <div className="flex items-center gap-md">
                           {/* Connectivity Indicator */}
                           <div
-                            className="relative flex-shrink-0 connectivity-indicator"
+                            className="relative connectivity-indicator"
                             onMouseEnter={() => setHoveredServer(server.id)}
                             onMouseLeave={() => setHoveredServer(null)}
                             onClick={() => setPinnedServer(pinnedServer === server.id ? null : server.id)}
                             style={{ cursor: 'pointer' }}
                           >
                             {connectivityStatus[server.url]?.status === 'checking' ? (
-                              <Loader2 className="w-4 h-4 text-muted animate-spin" />
+                              <Loader2 className="icon-md text-muted animate-spin" />
                             ) : (
-                              <div
-                                className={`w-3 h-3 rounded-full ${
-                                  connectivityStatus[server.url]?.status === 'connected'
-                                    ? 'bg-green-500'
-                                    : 'bg-red-500'
-                                }`}
+                              <div className={`status-indicator ${
+                                connectivityStatus[server.url]?.status === 'connected'
+                                  ? 'status-indicator-connected'
+                                  : 'status-indicator-disconnected'
+                              }`}
                                 title={
                                   connectivityStatus[server.url]?.status === 'connected'
                                     ? 'Connected (click for tools)'
@@ -1043,13 +1040,13 @@ export const ProfileButton: React.FC<ProfileButtonProps> = ({
                              connectivityStatus[server.url]?.tools &&
                              connectivityStatus[server.url].tools!.length > 0 && (
                               <div ref={tooltipRef} className="ws-tooltip" style={{ left: 'auto', right: 0, top: '2.5rem' }}>
-                                <p className="text-xs font-semibold mb-2 text-primary">Available Tools:</p>
-                                <ul className="text-xs space-y-1.5 max-h-[200px] overflow-y-auto custom-scrollbar">
+                                <p className="text-sm font-semibold mb-2 text-primary">Available Tools:</p>
+                                <ul className="text-sm space-y-2 max-h-60 overflow-y-auto custom-scrollbar">
                                   {connectivityStatus[server.url].tools!.map((tool, idx) => (
                                     <li key={idx} className="text-secondary">
-                                      <span className="font-mono text-primary font-semibold">• {tool.name}</span>
+                                      <span className="text-mono emphasized-text">• {tool.name}</span>
                                       {tool.description && (
-                                        <p className="text-secondary text-[10px] ml-3 mt-0.5">
+                                        <p className="text-xs text-secondary" style={{ marginLeft: '0.75rem', marginTop: '0.125rem' }}>
                                           {tool.description.length > 80
                                             ? `${tool.description.substring(0, 80)}...`
                                             : tool.description}
@@ -1063,25 +1060,25 @@ export const ProfileButton: React.FC<ProfileButtonProps> = ({
                           </div>
 
                           {/* URL */}
-                          <div className="flex-1 min-w-0">
-                            <p className="text-sm text-mono truncate text-primary">{server.url}</p>
+                          <div className="flex-1">
+                            <p className="text-sm truncate text-primary">{server.url}</p>
                           </div>
 
                           {/* Action Buttons */}
-                          <div className="flex items-center gap-2 flex-shrink-0">
+                          <div className="flex items-center gap-sm">
                             <button
                               onClick={() => handleEditServer(server.id)}
-                              className="btn-icon p-1.5"
+                              className="btn-icon"
                               title="Edit server"
                             >
-                              <Edit2 className="w-4 h-4" />
+                              <Edit2 className="icon-md" />
                             </button>
                             <button
                               onClick={() => handleDeleteServer(server.id)}
-                              className="btn-icon p-1.5 hover:text-red-500"
+                              className="action-button action-button-danger"
                               title="Delete server"
                             >
-                              <Trash2 className="w-4 h-4" />
+                              <Trash2 className="icon-md" />
                             </button>
                           </div>
                         </div>
@@ -1091,18 +1088,18 @@ export const ProfileButton: React.FC<ProfileButtonProps> = ({
 
                   {/* Empty State */}
                   {(!tempSettings.toolServers || tempSettings.toolServers.length === 0) && !addingServer && (
-                    <div className="border border-border border-dashed rounded p-8 text-center">
-                      <Wrench className="w-12 h-12 text-muted mx-auto mb-3" />
-                      <p className="text-sm text-muted font-medium">No tool servers configured</p>
-                      <p className="text-xs text-tertiary mt-1">Add MCP servers to extend functionality</p>
+                    <div className="empty-state" style={{ padding: '2rem', border: '1px dashed rgba(168, 85, 247, 0.5)', borderRadius: '0.5rem' }}>
+                      <Wrench className="empty-state-icon" />
+                      <p className="empty-state-text">No tool servers configured</p>
+                      <p className="empty-state-subtext">Add MCP servers to extend functionality</p>
                     </div>
                   )}
                 </div>
 
                 {/* Add New Server */}
                 {addingServer ? (
-                  <div className="border border-primary rounded p-3 bg-surface-secondary space-y-2">
-                    <label className="text-xs text-muted font-medium">MCP Server URL</label>
+                  <div className="glass-panel space-y-2" style={{ border: '2px solid #a78bfa' }}>
+                    <label className="form-label-block">MCP Server URL</label>
                     <input
                       type="text"
                       value={newServerUrl}
@@ -1115,13 +1112,13 @@ export const ProfileButton: React.FC<ProfileButtonProps> = ({
                         }
                       }}
                       placeholder="https://example.com/sse"
-                      className="form-input text-sm text-mono"
+                      className="form-input"
                       autoFocus
                     />
-                    <div className="flex gap-2">
+                    <div className="flex gap-sm">
                       <button
                         onClick={handleAddServer}
-                        className="btn btn-secondary btn-sm flex-1 text-xs"
+                        className="btn btn-secondary btn-sm flex-1"
                       >
                         <Plus className="w-3 h-3" />
                         Add Server
@@ -1131,7 +1128,7 @@ export const ProfileButton: React.FC<ProfileButtonProps> = ({
                           setAddingServer(false);
                           setNewServerUrl('');
                         }}
-                        className="btn btn-tertiary btn-sm flex-1 text-xs"
+                        className="btn btn-tertiary btn-sm flex-1"
                       >
                         Cancel
                       </button>
@@ -1140,9 +1137,9 @@ export const ProfileButton: React.FC<ProfileButtonProps> = ({
                 ) : (
                   <button
                     onClick={() => setAddingServer(true)}
-                    className="btn btn-secondary btn-sm w-full group"
+                    className="btn btn-secondary btn-sm w-full"
                   >
-                    <Plus className="w-4 h-4 group-hover:scale-110 transition-transform" />
+                    <Plus className="icon-md" />
                     <span>Add Tool Server</span>
                   </button>
                 )}
