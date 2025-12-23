@@ -1,5 +1,5 @@
 import React from 'react';
-import { User, Plus, Trash2, Edit2, Loader2 } from 'lucide-react';
+import { User, Plus, Trash2, Edit2, Loader2, Settings, Wrench } from 'lucide-react';
 import { ProfileSettings, ToolServer } from '../types';
 import { HTTP_SERVER } from '../config';
 
@@ -87,6 +87,7 @@ export const ProfileButton: React.FC<ProfileButtonProps> = ({
   className = ''
 }) => {
   const [isModalOpen, setIsModalOpen] = React.useState(false);
+  const [activeTab, setActiveTab] = React.useState<'orchestrator' | 'tools'>('orchestrator');
   // Cache for storing backend-specific settings
   const [backendCache, setBackendCache] = React.useState<Record<string, {
     customUrl: string;
@@ -164,7 +165,7 @@ export const ProfileButton: React.FC<ProfileButtonProps> = ({
       activeConnectionsRef.current.forEach(controller => controller.abort());
       activeConnectionsRef.current.clear();
     };
-  }, [isModalOpen, tempSettings.toolServers]);
+  }, [isModalOpen]);
 
   // Handle click outside to close pinned tooltip
   React.useEffect(() => {
@@ -259,6 +260,7 @@ export const ProfileButton: React.FC<ProfileButtonProps> = ({
   const handleOpenModal = () => {
     setTempSettings(settings);
     setIsModalOpen(true);
+    setActiveTab('orchestrator');
     onClick?.();
   };
 
@@ -280,6 +282,7 @@ export const ProfileButton: React.FC<ProfileButtonProps> = ({
     setAddingServer(false);
     setEditingServer(null);
     setPinnedServer(null);
+    setActiveTab('orchestrator');
   };
 
   const handleBackendChange = (newBackend: string) => {
@@ -734,7 +737,7 @@ export const ProfileButton: React.FC<ProfileButtonProps> = ({
             <div className="modal-header">
               <div>
                 <h2 className="modal-title">{username}'s Profile Settings</h2>
-                <p className="modal-subtitle">Configure your connection and model settings</p>
+                <p className="modal-subtitle">Configure your connection and tools</p>
               </div>
               <button
                 onClick={handleCancel}
@@ -746,192 +749,230 @@ export const ProfileButton: React.FC<ProfileButtonProps> = ({
               </button>
             </div>
 
-            <div className="modal-body space-y-4">
-              {/* Backend Selector */}
-              <div className="form-group">
-                <label className="form-label">
-                  Backend
-                </label>
-                <select
-                  value={tempSettings.backend}
-                  onChange={(e) => handleBackendChange(e.target.value)}
-                  className="form-select"
+            {/* Tab Navigation */}
+            <div className="card-header" style={{ borderBottom: '1px solid rgba(168, 85, 247, 0.3)' }}>
+              <div className="flex gap-sm">
+                <button
+                  onClick={() => setActiveTab('orchestrator')}
+                  className={`btn btn-sm transition-colors ${
+                    activeTab === 'orchestrator'
+                      ? 'btn-primary' : 'btn-tertiary'
+                  }`}
                 >
-                  {BACKEND_OPTIONS.map(option => (
-                    <option key={option.value} value={option.value}>
-                      {option.label}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              {/* Use Custom URL Checkbox */}
-              <div>
-                <label className="form-label flex items-center gap-2 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={tempSettings.useCustomUrl}
-                    onChange={(e) => handleCustomUrlToggle(e.target.checked)}
-                    className="form-checkbox"
-                  />
-                  <span>Use custom URL for this backend</span>
-                </label>
-                <p className="text-xs text-muted mt-1 ml-6">
-                  Override the default endpoint with a custom server URL
-                </p>
-              </div>
-
-              {/* Custom URL Field (conditional) */}
-              {tempSettings.useCustomUrl && (
-                <div className="form-group animate-fadeIn">
-                  <label className="form-label">
-                    Custom URL
-                    <span className="text-muted text-xs ml-2">
-                      {tempSettings.backend === 'vllm' && '(vLLM endpoint)'}
-                      {tempSettings.backend === 'ollama' && '(Ollama endpoint)'}
-                      {(tempSettings.backend === 'livai') && '(LivAI base URL)'}
-                      {(tempSettings.backend === 'llamame') && '(LLamaMe base URL)'}
-                      {(tempSettings.backend === 'alcf') && '(ALCF Sophia base URL)'}
-                      {tempSettings.backend === 'openai' && '(OpenAI-compatible endpoint)'}
-                      {tempSettings.backend === 'gemini' && '(Gemini API endpoint)'}
+                  <Settings className="w-4 h-4" />
+                  <span>Orchestrator</span>
+                </button>
+                <button
+                  onClick={() => setActiveTab('tools')}
+                  className={`btn btn-sm transition-colors ${
+                    activeTab === 'tools'
+                      ? 'btn-primary' : 'btn-tertiary'
+                  }`}
+                >
+                  <Wrench className="w-4 h-4" />
+                  <span>Tool Servers</span>
+                  {tempSettings.toolServers && tempSettings.toolServers.length > 0 && (
+                    <span className="notification-badge">
+                      {tempSettings.toolServers.length}
                     </span>
+                  )}
+                </button>
+              </div>
+            </div>
+
+            <div className="modal-body space-y-4">
+              {/* Orchestrator Tab */}
+              {activeTab === 'orchestrator' && (
+                <div className="space-y-4">
+                {/* Backend Selector */}
+                <div className="form-group">
+                  <label className="form-label">
+                    Backend
                   </label>
-                  <input
-                    type="text"
-                    value={tempSettings.customUrl || ''}
-                    onChange={(e) => handleCustomUrlChange(e.target.value)}
-                    placeholder={currentBackendOption?.defaultUrl || 'http://localhost:8000'}
-                    className="form-input"
-                  />
-                  <p className="text-xs text-muted mt-1">
-                    Default: {currentBackendOption?.defaultUrl || 'Not set'}
-                  </p>
-                </div>
-              )}
-
-              {/* Model Selection */}
-              <div className="form-group">
-                <label className="form-label">
-                  Model
-                  <span className="text-muted text-xs ml-2">
-                    {tempSettings.backend === 'openai' && '(GPT models)'}
-                    {tempSettings.backend === 'livai' && '(LLNL Enterprise models)'}
-                    {tempSettings.backend === 'llamame' && '(LLNL Internal models)'}
-                    {tempSettings.backend === 'alcf' && '(ACLF Internal models)'}
-                    {tempSettings.backend === 'gemini' && '(Gemini models)'}
-                    {tempSettings.backend === 'ollama' && '(Local models)'}
-                    {tempSettings.backend === 'vllm' && '(vLLM models)'}
-                  </span>
-                </label>
-
-                {!tempSettings.useCustomModel ? (
                   <select
-                    value={tempSettings.model}
-                    onChange={(e) => handleModelSelect(e.target.value)}
-                    className="form-select text-mono"
+                    value={tempSettings.backend}
+                    onChange={(e) => handleBackendChange(e.target.value)}
+                    className="form-select"
                   >
-                    {currentBackendOption?.models?.map(model => (
-                      <option key={model} value={model}>
-                        {model}
+                    {BACKEND_OPTIONS.map(option => (
+                      <option key={option.value} value={option.value}>
+                        {option.label}
                       </option>
                     ))}
                   </select>
-                ) : (
-                  <input
-                    type="text"
-                    value={tempSettings.model}
-                    onChange={(e) => handleCustomModelChange(e.target.value)}
-                    placeholder="Enter custom model name"
-                    className="form-input text-mono"
-                  />
-                )}
-              </div>
+                </div>
 
-              {/* Use Custom Model Checkbox */}
-              <div>
-                <label className="form-label flex items-center gap-2 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={tempSettings.useCustomModel || false}
-                    onChange={(e) => handleCustomModelToggle(e.target.checked)}
-                    className="form-checkbox"
-                  />
-                  <span>Use custom model name</span>
-                </label>
-                <p className="text-xs text-muted mt-1 ml-6">
-                  Enter a custom model identifier not in the preset list
-                </p>
-              </div>
-
-              {/* API Key Field */}
-              <div className="form-group">
-                <label className="form-label">
-                  API Key
-                  <span className="text-muted text-xs ml-2">
-                    {(tempSettings.backend === 'ollama' || tempSettings.backend === 'huggingface' || tempSettings.backend === 'vllm') && '(Optional for local backends)'}
-                    {tempSettings.backend === 'openai' && '(OPENAI_API_KEY)'}
-                    {tempSettings.backend === 'livai' && '(LIVAI_API_KEY)'}
-                    {tempSettings.backend === 'llamame' && '(LLAMAME_API_KEY)'}
-                    {tempSettings.backend === 'alcf' && '(ALCF_API_KEY)'}
-                    {tempSettings.backend === 'gemini' && '(GOOGLE_API_KEY)'}
-                  </span>
-                </label>
-                <input
-                  type="password"
-                  value={tempSettings.apiKey}
-                  onChange={(e) => setTempSettings({...tempSettings, apiKey: e.target.value})}
-                  placeholder="Enter your API key"
-                  className="form-input text-mono"
-                />
-              </div>
-
-              {/* Divider */}
-              <div className="border-t border-border my-4"></div>
-
-              {/* Molecule Name Preference */}
-              <div className="form-group">
-                <label className="form-label">
-                  Preferred Molecule Name Format
-                </label>
-                <select
-                  value={tempSettings.moleculeName || 'brand'}
-                  onChange={(e) => setTempSettings({...tempSettings, moleculeName: e.target.value as any})}
-                  className="form-select"
-                >
-                  {MOLECULE_NAME_OPTIONS.map(option => (
-                    <option key={option.value} value={option.value}>
-                      {option.label}
-                    </option>
-                  ))}
-                </select>
-                <p className="text-xs text-muted mt-1">
-                  Choose how molecule names are displayed throughout the application
-                </p>
-              </div>
-
-              {/* Custom Tool Servers */}
-              <div className="form-group">
-                <div className="flex-between mb-2">
-                  <label className="form-label mb-0">
-                    Custom Tool Servers (MCP)
+                {/* Use Custom URL Checkbox */}
+                <div>
+                  <label className="form-label cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={tempSettings.useCustomUrl}
+                      onChange={(e) => handleCustomUrlToggle(e.target.checked)}
+                      className="form-checkbox"
+                    />
+                    <span>Use custom URL for this backend</span>
                   </label>
+                  <p className="helper-text" style={{ marginLeft: '1.5rem' }}>
+                    Override the default endpoint with a custom server URL
+                  </p>
+                </div>
+
+                {/* Custom URL Field (conditional) */}
+                {tempSettings.useCustomUrl && (
+                  <div className="form-group animate-fadeIn">
+                    <label className="form-label">
+                      Custom URL
+                      <span className="helper-text" style={{ marginLeft: '0.5rem' }}>
+                        {tempSettings.backend === 'vllm' && '(vLLM endpoint)'}
+                        {tempSettings.backend === 'ollama' && '(Ollama endpoint)'}
+                        {(tempSettings.backend === 'livai') && '(LivAI base URL)'}
+                        {(tempSettings.backend === 'llamame') && '(LLamaMe base URL)'}
+                        {(tempSettings.backend === 'alcf') && '(ALCF Sophia base URL)'}
+                        {tempSettings.backend === 'openai' && '(OpenAI-compatible endpoint)'}
+                        {tempSettings.backend === 'gemini' && '(Gemini API endpoint)'}
+                      </span>
+                    </label>
+                    <input
+                      type="text"
+                      value={tempSettings.customUrl || ''}
+                      onChange={(e) => handleCustomUrlChange(e.target.value)}
+                      placeholder={currentBackendOption?.defaultUrl || 'http://localhost:8000'}
+                      className="form-input"
+                    />
+                    <p className="helper-text">
+                      Default: {currentBackendOption?.defaultUrl || 'Not set'}
+                    </p>
+                  </div>
+                )}
+
+                {/* Model Selection */}
+                <div className="form-group">
+                  <label className="form-label">
+                    Model
+                    <span className="helper-text" style={{ marginLeft: '0.5rem' }}>
+                      {tempSettings.backend === 'openai' && '(GPT models)'}
+                      {tempSettings.backend === 'livai' && '(LLNL Enterprise models)'}
+                      {tempSettings.backend === 'llamame' && '(LLNL Internal models)'}
+                      {tempSettings.backend === 'alcf' && '(ACLF Internal models)'}
+                      {tempSettings.backend === 'gemini' && '(Gemini models)'}
+                      {tempSettings.backend === 'ollama' && '(Local models)'}
+                      {tempSettings.backend === 'vllm' && '(vLLM models)'}
+                    </span>
+                  </label>
+
+                  {!tempSettings.useCustomModel ? (
+                    <select
+                      value={tempSettings.model}
+                      onChange={(e) => handleModelSelect(e.target.value)}
+                      className="form-select"
+                    >
+                      {currentBackendOption?.models?.map(model => (
+                        <option key={model} value={model}>
+                          {model}
+                        </option>
+                      ))}
+                    </select>
+                  ) : (
+                    <input
+                      type="text"
+                      value={tempSettings.model}
+                      onChange={(e) => handleCustomModelChange(e.target.value)}
+                      placeholder="Enter custom model name"
+                      className="form-input"
+                    />
+                  )}
+                </div>
+
+                {/* Use Custom Model Checkbox */}
+                <div>
+                  <label className="form-label cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={tempSettings.useCustomModel || false}
+                      onChange={(e) => handleCustomModelToggle(e.target.checked)}
+                      className="form-checkbox"
+                    />
+                    <span>Use custom model name</span>
+                  </label>
+                  <p className="helper-text" style={{ marginLeft: '1.5rem' }}>
+                    Enter a custom model identifier not in the preset list
+                  </p>
+                </div>
+
+                {/* API Key Field */}
+                <div className="form-group">
+                  <label className="form-label">
+                    API Key
+                    <span className="helper-text" style={{ marginLeft: '0.5rem' }}>
+                      {(tempSettings.backend === 'ollama' || tempSettings.backend === 'huggingface' || tempSettings.backend === 'vllm') && '(Optional for local backends)'}
+                      {tempSettings.backend === 'openai' && '(OPENAI_API_KEY)'}
+                      {tempSettings.backend === 'livai' && '(LIVAI_API_KEY)'}
+                      {tempSettings.backend === 'llamame' && '(LLAMAME_API_KEY)'}
+                      {tempSettings.backend === 'alcf' && '(ALCF_API_KEY)'}
+                      {tempSettings.backend === 'gemini' && '(GOOGLE_API_KEY)'}
+                    </span>
+                  </label>
+                  <input
+                    type="password"
+                    value={tempSettings.apiKey}
+                    onChange={(e) => setTempSettings({...tempSettings, apiKey: e.target.value})}
+                    placeholder="Enter your API key"
+                    className="form-input"
+                  />
+                </div>
+
+                {/* Divider */}
+                <div className="dropdown-divider"></div>
+
+                {/* Molecule Name Preference */}
+                <div className="form-group">
+                  <label className="form-label">
+                    Preferred Molecule Name Format
+                  </label>
+                  <select
+                    value={tempSettings.moleculeName || 'brand'}
+                    onChange={(e) => setTempSettings({...tempSettings, moleculeName: e.target.value as any})}
+                    className="form-select"
+                  >
+                    {MOLECULE_NAME_OPTIONS.map(option => (
+                      <option key={option.value} value={option.value}>
+                        {option.label}
+                      </option>
+                    ))}
+                  </select>
+                  <p className="helper-text">
+                    Choose how molecule names are displayed throughout the application
+                  </p>
+                </div>
+                </div>
+              )}
+
+              {/* Tool Servers Tab */}
+              {activeTab === 'tools' && (
+                <div className="space-y-4">
+                  <div className="flex-between">
+                    <div>
+                      <h3 className="heading-3">Custom Tool Servers (MCP)</h3>
+                      <p className="helper-text">
+                        Configure external MCP tool servers for extended functionality
+                      </p>
+                    </div>
                   {tempSettings.toolServers && tempSettings.toolServers.length > 0 && (
                     <button
                       onClick={handleClearAllServers}
-                      className="btn btn-tertiary btn-sm text-xs"
+                      className="btn btn-tertiary btn-sm"
                     >
+                      <Trash2 className="w-3 h-3" />
                       Clear All
                     </button>
                   )}
                 </div>
-                <p className="text-xs text-muted mb-3">
-                  Configure external MCP tool servers for extended functionality
-                </p>
 
                 {/* Server List */}
-                <div className="space-y-2 mb-3">
+                <div className="space-y-2">
                   {tempSettings.toolServers?.map(server => (
-                    <div key={server.id} className="border border-border rounded p-3 bg-surface-secondary">
+                    <div key={server.id} className="glass-panel hover:bg-surface-hover transition-colors">
                       {editingServer === server.id ? (
                         <div className="space-y-2">
                           <input
@@ -946,13 +987,13 @@ export const ProfileButton: React.FC<ProfileButtonProps> = ({
                               }
                             }}
                             placeholder="https://example.com/sse"
-                            className="form-input text-sm text-mono"
+                            className="form-input"
                             autoFocus
                           />
-                          <div className="flex gap-2">
+                          <div className="flex gap-sm">
                             <button
                               onClick={() => handleSaveServerEdit(server.id)}
-                              className="btn btn-secondary btn-sm text-xs flex-1"
+                              className="btn btn-secondary btn-sm flex-1"
                             >
                               Save
                             </button>
@@ -961,31 +1002,30 @@ export const ProfileButton: React.FC<ProfileButtonProps> = ({
                                 setEditingServer(null);
                                 setEditServerUrl('');
                               }}
-                              className="btn btn-tertiary btn-sm text-xs flex-1"
+                              className="btn btn-tertiary btn-sm flex-1"
                             >
                               Cancel
                             </button>
                           </div>
                         </div>
                       ) : (
-                        <div className="flex items-center gap-3">
+                        <div className="flex items-center gap-md">
                           {/* Connectivity Indicator */}
                           <div
-                            className="relative flex-shrink-0 connectivity-indicator"
+                            className="relative connectivity-indicator"
                             onMouseEnter={() => setHoveredServer(server.id)}
                             onMouseLeave={() => setHoveredServer(null)}
                             onClick={() => setPinnedServer(pinnedServer === server.id ? null : server.id)}
                             style={{ cursor: 'pointer' }}
                           >
                             {connectivityStatus[server.url]?.status === 'checking' ? (
-                              <Loader2 className="w-4 h-4 text-muted animate-spin" />
+                              <Loader2 className="icon-md text-muted animate-spin" />
                             ) : (
-                              <div
-                                className={`w-3 h-3 rounded-full ${
-                                  connectivityStatus[server.url]?.status === 'connected'
-                                    ? 'bg-green-500'
-                                    : 'bg-red-500'
-                                }`}
+                              <div className={`status-indicator ${
+                                connectivityStatus[server.url]?.status === 'connected'
+                                  ? 'status-indicator-connected'
+                                  : 'status-indicator-disconnected'
+                              }`}
                                 title={
                                   connectivityStatus[server.url]?.status === 'connected'
                                     ? 'Connected (click for tools)'
@@ -1000,13 +1040,13 @@ export const ProfileButton: React.FC<ProfileButtonProps> = ({
                              connectivityStatus[server.url]?.tools &&
                              connectivityStatus[server.url].tools!.length > 0 && (
                               <div ref={tooltipRef} className="ws-tooltip" style={{ left: 'auto', right: 0, top: '2.5rem' }}>
-                                <p className="text-xs font-semibold mb-2 text-primary">Available Tools:</p>
-                                <ul className="text-xs space-y-1.5 max-h-[200px] overflow-y-auto custom-scrollbar">
+                                <p className="text-sm font-semibold mb-2 text-primary">Available Tools:</p>
+                                <ul className="text-sm space-y-2 max-h-60 overflow-y-auto custom-scrollbar">
                                   {connectivityStatus[server.url].tools!.map((tool, idx) => (
                                     <li key={idx} className="text-secondary">
-                                      <span className="font-mono text-primary font-semibold">• {tool.name}</span>
+                                      <span className="text-mono emphasized-text">• {tool.name}</span>
                                       {tool.description && (
-                                        <p className="text-secondary text-[10px] ml-3 mt-0.5">
+                                        <p className="text-xs text-secondary" style={{ marginLeft: '0.75rem', marginTop: '0.125rem' }}>
                                           {tool.description.length > 80
                                             ? `${tool.description.substring(0, 80)}...`
                                             : tool.description}
@@ -1020,25 +1060,25 @@ export const ProfileButton: React.FC<ProfileButtonProps> = ({
                           </div>
 
                           {/* URL */}
-                          <div className="flex-1 min-w-0">
-                            <p className="text-sm text-mono truncate text-primary">{server.url}</p>
+                          <div className="flex-1">
+                            <p className="text-sm truncate text-primary">{server.url}</p>
                           </div>
 
                           {/* Action Buttons */}
-                          <div className="flex items-center gap-2 flex-shrink-0">
+                          <div className="flex items-center gap-sm">
                             <button
                               onClick={() => handleEditServer(server.id)}
-                              className="btn-icon p-1.5"
+                              className="btn-icon"
                               title="Edit server"
                             >
-                              <Edit2 className="w-4 h-4" />
+                              <Edit2 className="icon-md" />
                             </button>
                             <button
                               onClick={() => handleDeleteServer(server.id)}
-                              className="btn-icon p-1.5 hover:text-red-500"
+                              className="action-button action-button-danger"
                               title="Delete server"
                             >
-                              <Trash2 className="w-4 h-4" />
+                              <Trash2 className="icon-md" />
                             </button>
                           </div>
                         </div>
@@ -1048,16 +1088,18 @@ export const ProfileButton: React.FC<ProfileButtonProps> = ({
 
                   {/* Empty State */}
                   {(!tempSettings.toolServers || tempSettings.toolServers.length === 0) && !addingServer && (
-                    <div className="border border-border border-dashed rounded p-8 text-center">
-                      <p className="text-sm text-muted">No tool servers configured</p>
-                      <p className="text-xs text-tertiary mt-1">Click "Add Tool Server" to get started</p>
+                    <div className="empty-state" style={{ padding: '2rem', border: '1px dashed rgba(168, 85, 247, 0.5)', borderRadius: '0.5rem' }}>
+                      <Wrench className="empty-state-icon" />
+                      <p className="empty-state-text">No tool servers configured</p>
+                      <p className="empty-state-subtext">Add MCP servers to extend functionality</p>
                     </div>
                   )}
                 </div>
 
                 {/* Add New Server */}
                 {addingServer ? (
-                  <div className="border border-border rounded p-3 bg-surface-secondary space-y-2">
+                  <div className="glass-panel space-y-2" style={{ border: '2px solid #a78bfa' }}>
+                    <label className="form-label-block">MCP Server URL</label>
                     <input
                       type="text"
                       value={newServerUrl}
@@ -1070,14 +1112,15 @@ export const ProfileButton: React.FC<ProfileButtonProps> = ({
                         }
                       }}
                       placeholder="https://example.com/sse"
-                      className="form-input text-sm text-mono"
+                      className="form-input"
                       autoFocus
                     />
-                    <div className="flex gap-2">
+                    <div className="flex gap-sm">
                       <button
                         onClick={handleAddServer}
-                        className="btn btn-secondary btn-sm flex-1 text-xs"
+                        className="btn btn-secondary btn-sm flex-1"
                       >
+                        <Plus className="w-3 h-3" />
                         Add Server
                       </button>
                       <button
@@ -1085,7 +1128,7 @@ export const ProfileButton: React.FC<ProfileButtonProps> = ({
                           setAddingServer(false);
                           setNewServerUrl('');
                         }}
-                        className="btn btn-tertiary btn-sm flex-1 text-xs"
+                        className="btn btn-tertiary btn-sm flex-1"
                       >
                         Cancel
                       </button>
@@ -1094,13 +1137,14 @@ export const ProfileButton: React.FC<ProfileButtonProps> = ({
                 ) : (
                   <button
                     onClick={() => setAddingServer(true)}
-                    className="btn btn-secondary btn-sm w-full group"
+                    className="btn btn-secondary btn-sm w-full"
                   >
-                    <Plus className="w-4 h-4 group-hover:scale-110 transition-transform" />
+                    <Plus className="icon-md" />
                     <span>Add Tool Server</span>
                   </button>
                 )}
               </div>
+              )}
             </div>
 
             <div className="modal-footer">
