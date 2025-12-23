@@ -247,7 +247,7 @@ async def websocket_endpoint(websocket: WebSocket):
         "recompute-reaction": action_manager.handle_recompute_reaction,
         "list-tools": action_manager.handle_list_tools,
         "select-tools-for-task": action_manager.handle_select_tools_for_task,
-        "update-profile-settings": action_manager.handle_profile_update,
+        "ui-update-orchestrator-settings": action_manager.handle_orchestrator_settings_update,
         "query-retro-product": action_manager.handle_custom_query_retro_product,
         "query-retro-reactant": action_manager.handle_custom_query_retro_reactant,
         "query-retro-molecule": action_manager.handle_custom_query_retro_molecule,

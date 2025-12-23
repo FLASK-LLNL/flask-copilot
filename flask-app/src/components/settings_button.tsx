@@ -1,14 +1,14 @@
 import React from 'react';
 import { User, Plus, Trash2, Edit2, Loader2, Settings, Wrench } from 'lucide-react';
-import { ProfileSettings, ToolServer } from '../types';
+import { OrchestratorSettings, ToolServer } from '../types';
 import { HTTP_SERVER } from '../config';
 
-interface ProfileButtonProps {
+interface SettingsButtonProps {
   onClick?: () => void;
-  onSettingsChange?: (settings: ProfileSettings) => void;
+  onSettingsChange?: (settings: OrchestratorSettings) => void;
   onServerAdded?: () => void;
   onServerRemoved?: () => void;
-  initialSettings?: Partial<ProfileSettings>;
+  initialSettings?: Partial<OrchestratorSettings>;
   username?: string;
   className?: string;
 }
@@ -77,7 +77,7 @@ export const MOLECULE_NAME_OPTIONS = [
   { value: 'smiles', label: 'SMILES' }
 ];
 
-export const ProfileButton: React.FC<ProfileButtonProps> = ({
+export const SettingsButton: React.FC<SettingsButtonProps> = ({
   onClick,
   onSettingsChange,
   onServerAdded,
@@ -96,7 +96,7 @@ export const ProfileButton: React.FC<ProfileButtonProps> = ({
   }>>({});
 
   // Default settings
-  const defaultSettings: ProfileSettings = {
+  const defaultSettings: OrchestratorSettings = {
     backend: 'openai',
     backendLabel: 'OpenAI',
     useCustomUrl: false,
@@ -109,8 +109,8 @@ export const ProfileButton: React.FC<ProfileButtonProps> = ({
     ...initialSettings
   };
 
-  const [settings, setSettings] = React.useState<ProfileSettings>(defaultSettings);
-  const [tempSettings, setTempSettings] = React.useState<ProfileSettings>(settings);
+  const [settings, setSettings] = React.useState<OrchestratorSettings>(defaultSettings);
+  const [tempSettings, setTempSettings] = React.useState<OrchestratorSettings>(settings);
 
   // Tool Servers state
   const [addingServer, setAddingServer] = React.useState(false);
@@ -723,20 +723,20 @@ export const ProfileButton: React.FC<ProfileButtonProps> = ({
         onClick={handleOpenModal}
         className={`btn btn-secondary btn-sm ${className}`}
       >
-        <User className="w-4 h-4" />
-        <span>Profile</span>
+        <Settings className="w-4 h-4" />
+        <span>Settings</span>
         <svg className="w-3 h-3 ml-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
         </svg>
       </button>
 
-      {/* Profile Settings Modal */}
+      {/* Orchestrator and Tools Settings Modal */}
       {isModalOpen && (
         <div className="modal-overlay">
           <div className="modal-content modal-content-lg">
             <div className="modal-header">
               <div>
-                <h2 className="modal-title">{username}'s Profile Settings</h2>
+                <h2 className="modal-title">{username}'s Orchestrator and Tools Settings</h2>
                 <p className="modal-subtitle">Configure your connection and tools</p>
               </div>
               <button

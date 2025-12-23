@@ -451,7 +451,7 @@ async def websocket_endpoint(websocket: WebSocket):
                         "username": username,
                     }
                 )
-            elif data["action"] == "update-profile-settings":
+            elif data["action"] == "ui-update-orchestrator-settings":
                 molecule_format = data["moleculeName"]
             else:
                 print("WARN: Unhandled message:", data)
