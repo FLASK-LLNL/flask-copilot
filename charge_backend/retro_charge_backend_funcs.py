@@ -17,6 +17,7 @@ from backend_helper_funcs import (
     RetrosynthesisContext,
     Node,
     Edge,
+    Reaction,
     loop_executor,
 )
 from molecule_naming import smiles_to_html
@@ -48,194 +49,6 @@ RETROSYNTH_CONSTRAINED_USER_PROMPT_TEMPLATE = (
     + "Do the evaluation step-by-step. Propose a retrosynthetic step, then evaluate it. "
     + "If the evaluation fails, propose a new retrosynthetic step and evaluate it again. "
 )
-
-
-def get_constrained_prompt(target_molecule: str, constrained_reactant: str) -> str:
-    """Generate a constrained retrosynthesis prompt."""
-    return RETROSYNTH_CONSTRAINED_USER_PROMPT_TEMPLATE.format(
-        target_molecule=target_molecule,
-        constrained_reactant=constrained_reactant,
-    )
-
-
-def get_unconstrained_prompt(target_molecule: str) -> str:
-    """Generate an unconstrained retrosynthesis prompt."""
-    return RETROSYNTH_UNCONSTRAINED_USER_PROMPT_TEMPLATE.format(
-        target_molecule=target_molecule,
-    )
-
-
-async def constrained_retro(
-    parent_id: str,
-    parent_smiles: str,
-    constraint_id: str,
-    constraint_smiles: str,
-    charge_runner: AutoGenAgent,
-    aizynth_planner: RetroPlanner,
-    retro_synth_context: RetrosynthesisContext,
-    websocket: WebSocket,
-):
-    """
-    Perform a constrained retrosynthetic optimization for a target molecule and
-    stream progress and results over a WebSocket.
-
-    This coroutine coordinates an automated retrosynthesis "charge" run and then
-    applies a user-specified constraint to prefer or filter routes that avoid a
-    given substructure/compound. It sends progress updates and final completion
-    status over the provided WebSocket connection. The progress updates through
-    websocket are sent by the charge_runner only and the runner must be set up
-    with the CallBackHandler to send progress updates.
-
-
-
-    Args:
-            parent_id (str): Identifier for the target (parent) molecule in the system.
-            parent_smiles (str): SMILES string of the target molecule to be synthesized.
-            constraint_id (str): Identifier for the constrained substructure/fragment.
-            constraint_smiles (str): SMILES string for the substructure/fragment to avoid
-                    in proposed synthetic routes.
-            charge_runner (AutoGenAgent): An asynchronous runner client that, when
-                    awaited (charge_runner.run()), performs the retrosynthesis / optimization
-                    and returns a result object with a to_dict() method. This object also wraps
-                    the task in task, which contains the prompts
-            aizynth_planner (RetroPlanner): AiZynthFinder-based planner instance
-            retro_synth_context (RetrosynthesisContext): Context/configuration object
-                    containing Node objects representing the retrosynthetic state.
-            websocket (WebSocket): Open WebSocket connection used to stream JSON messages
-                    back to the caller. Messages sent by this function include at minimum
-                    initial progress updates and a final completion message.
-
-    Returns:
-            None
-
-    Side effects:
-            - Sends JSON messages via websocket.send_json(...) describing progress,
-                intermediate results, and completion.
-            - Awaits charge_runner.run(), which may perform network or CPU-bound work.
-            - Potentially invokes planner methods that mutate or read retro_synth_context.
-            - Update the UI via websocket messages.
-            - Update the retro_synth_context with new nodes and edges.
-
-    Errors:
-            - Exceptions raised by charge_runner.run(), aizynth_planner methods, or
-                websocket.send_json() are propagated to the caller. Callers should handle
-                network errors, timeouts, and planner failures.
-    """
-
-    clogger = CallbackLogger(websocket, source="constrained_retrosynthesis")
-
-    await clogger.info(
-        f"Finding synthesis pathway for {parent_smiles}...", smiles=parent_smiles
-    )
-    await websocket.send_json(
-        {
-            "type": "response",
-            "message": {
-                "source": "System",
-                "message": f"Finding synthesis pathway for {parent_smiles}...",
-                "smiles": parent_smiles,
-            },
-        }
-    )
-    await websocket.send_json(
-        {
-            "type": "response",
-            "message": {
-                "source": "System",
-                "message": f"Searching for alternatives without {constraint_smiles}",
-                "smiles": constraint_smiles,
-            },
-        }
-    )
-
-    result = await charge_runner.run()
-    result = ReactionOutputSchema.model_validate_json(result)
-    retro_results = result.as_dict()
-
-    reactants = retro_results.get("reactants_smiles_list", [])
-    products = retro_results.get("products_smiles_list", [])
-    # Please implement constrained retrosynthesis here
-
-    await websocket.send_json({"type": "complete"})
-
-
-async def unconstrained_retro(
-    parent_id: str,
-    parent_smiles: str,
-    charge_runner: AutoGenAgent,
-    aizynth_planner: RetroPlanner,
-    retro_synth_context: RetrosynthesisContext,
-    websocket: WebSocket,
-):
-    """
-    Perform a constrained retrosynthetic optimization for a target molecule and
-    stream progress and results over a WebSocket.
-
-    This coroutine coordinates an automated retrosynthesis "charge" run and then
-    applies a user-specified constraint to prefer or filter routes that avoid a
-    given substructure/compound. It sends progress updates and final completion
-    status over the provided WebSocket connection. The progress updates through
-    websocket are sent by the charge_runner only and the runner must be set up
-    with the CallBackHandler to send progress updates.
-
-
-
-    Args:
-            parent_id (str): Identifier for the target (parent) molecule in the system.
-            parent_smiles (str): SMILES string of the target molecule to be synthesized.
-            constraint_id (str): Identifier for the constrained substructure/fragment.
-            constraint_smiles (str): SMILES string for the substructure/fragment to avoid
-                    in proposed synthetic routes.
-            charge_runner (AutoGenAgent): An asynchronous runner client that, when
-                    awaited (charge_runner.run()), performs the retrosynthesis / optimization
-                    and returns a result object with a to_dict() method. This object also wraps
-                    the task in task, which contains the prompts
-            aizynth_planner (RetroPlanner): AiZynthFinder-based planner instance
-            retro_synth_context (RetrosynthesisContext): Context/configuration object
-                    containing Node objects representing the retrosynthetic state.
-            websocket (WebSocket): Open WebSocket connection used to stream JSON messages
-                    back to the caller. Messages sent by this function include at minimum
-                    initial progress updates and a final completion message.
-
-    Returns:
-            None
-
-    Side effects:
-            - Sends JSON messages via websocket.send_json(...) describing progress,
-                intermediate results, and completion.
-            - Awaits charge_runner.run(), which may perform network or CPU-bound work.
-            - Potentially invokes planner methods that mutate or read retro_synth_context.
-            - Update the UI via websocket messages.
-            - Update the retro_synth_context with new nodes and edges.
-
-    Errors:
-            - Exceptions raised by charge_runner.run(), aizynth_planner methods, or
-                websocket.send_json() are propagated to the caller. Callers should handle
-                network errors, timeouts, and planner failures.
-    """
-
-    await websocket.send_json(
-        {
-            "type": "response",
-            "message": {
-                "source": "System",
-                "message": f"Finding synthesis pathway to {parent_smiles}...",
-                "smiles": parent_smiles,
-            },
-        }
-    )
-
-    result = await charge_runner.run()
-
-    result = ReactionOutputSchema.model_validate_json(result)
-    retro_results = result.as_dict()
-
-    reactants = retro_results.get("reactants_smiles_list", [])
-    products = retro_results.get("products_smiles_list", [])
-
-    # Please implement unconstrained retrosynthesis here
-
-    await websocket.send_json({"type": "complete"})
 
 
 def run_retro_planner(config_file, smiles):
@@ -323,38 +136,11 @@ async def generate_molecules(
     await websocket.send_json({"type": "complete"})
 
 
-async def constrained_opt(
-    parent_smiles, constraint_smiles, planner, websocket: WebSocket
-):
-    """Constrained optimization using retrosynthesis"""
-
-    clogger = CallbackLogger(websocket, source="constrained_opt")
-    await clogger.info(
-        f"Finding synthesis pathway for {parent_smiles}...",
-        smiles=parent_smiles,
-    )
-    await clogger.info(
-        f"Searching for alternatives without {constraint_smiles}",
-        smiles=constraint_smiles,
-    )
-
-    user_prompt = RETROSYNTH_CONSTRAINED_USER_PROMPT_TEMPLATE.format(
-        target_molecule=parent_smiles, constrained_reactant=constraint_smiles
-    )
-    retro_task = RetrosynthesisTask(user_prompt=user_prompt)
-    planner.task = retro_task
-    await clogger.info(
-        f"Optimizing {parent_smiles} without using {constraint_smiles} in the synthesis."
-    )
-    result = await planner.run()
-
-    await websocket.send_json({"type": "complete"})
-    return result
-
-
 async def optimize_molecule_retro(
     node_id: str,
     context: RetrosynthesisContext,
+    query: Optional[str],
+    constraint: Optional[str],
     websocket: WebSocket,
     experiment: AutoGenExperiment,
     config_file: str,
@@ -381,31 +167,45 @@ async def optimize_molecule_retro(
         runner = context.node_id_to_charge_client[node_id]
     else:
         # New context
-        user_prompt = RETROSYNTH_UNCONSTRAINED_USER_PROMPT_TEMPLATE.format(
-            target_molecule=current_node.smiles
-        )
-        user_prompt += "\nDouble check the reactants with the `predict_reaction_products` tool to see if the products are equivalent to the given product. If there is any inconsistency (canonicalize both sides of the equation first), log it and try some other set of reactants."
-        retro_task = RetrosynthesisTask(
-            user_prompt=user_prompt, server_urls=available_tools
-        )
-
-        if os.getenv("CHARGE_DISABLE_OUTPUT_VALIDATION", "0") == "1":
-            retro_task.structured_output_schema = None
-            await clogger.warning(
-                "Structure validation disabled for RetrosynthesisTask output schema."
-            )
         agent_name = experiment.agent_pool.create_agent_name(
             prefix=f"retrosynth_{node_id}_"
         )
         runner = experiment.create_agent_with_experiment_state(
-            task=retro_task,
+            task=None,
             agent_name=agent_name,
             callback=CallbackHandler(websocket),
         )
         context.node_id_to_charge_client[node_id] = runner
 
+    if constraint:
+        user_prompt = RETROSYNTH_CONSTRAINED_USER_PROMPT_TEMPLATE.format(
+            target_molecule=current_node.smiles,
+            constrained_reactant=constraint,
+        )
+    else:
+        user_prompt = RETROSYNTH_UNCONSTRAINED_USER_PROMPT_TEMPLATE.format(
+            target_molecule=current_node.smiles
+        )
+
+    user_prompt += "\nDouble check the reactants with the `predict_reaction_products` tool to see if the products are equivalent to the given product. If there is any inconsistency (canonicalize both sides of the equation first), log it and try some other set of reactants."
+    if query is not None:
+        user_prompt += (
+            f"\n\nAdditionally, adhere to the following requirements: {query}"
+        )
+
+    retro_task = RetrosynthesisTask(
+        user_prompt=user_prompt, server_urls=available_tools
+    )
+    runner.task = retro_task
+
+    if os.getenv("CHARGE_DISABLE_OUTPUT_VALIDATION", "0") == "1":
+        retro_task.structured_output_schema = None
+        await clogger.warning(
+            "Structure validation disabled for RetrosynthesisTask output schema."
+        )
+
     await clogger.info(
-        f"Optimizing {current_node.smiles} using retrosynthesis with available tools: {available_tools}."
+        f"Finding synthesis routes for {current_node.smiles} using available tools: {available_tools}."
     )
 
     # Run task
@@ -429,6 +229,22 @@ async def optimize_molecule_retro(
     reasoning_summary = result.reasoning_summary
     await clogger.info(
         f"Retrosynthesis reasoning summary for {current_node.smiles}:\n{reasoning_summary}",
+    )
+
+    # Update node with discovered reaction
+    await websocket.send_json(
+        {
+            "type": "node_update",
+            "node": {
+                "id": node_id,
+                "reaction": Reaction(
+                    "ai_reaction_0",
+                    reasoning_summary,
+                    highlight="red",
+                    label="AI",
+                ).json(),
+            },
+        }
     )
 
     nodes: list[Node] = []

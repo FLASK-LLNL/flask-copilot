@@ -14,6 +14,17 @@ from callback_logger import CallbackLogger
 
 
 @dataclass
+class Reaction:
+    id: str
+    hoverInfo: str
+    highlight: str = "normal"
+    label: Optional[str] = None
+
+    def json(self):
+        return asdict(self)
+
+
+@dataclass
 class Node:
     id: str
     smiles: str
@@ -23,13 +34,15 @@ class Node:
     parentId: Optional[str] = None
     x: Optional[int] = None
     y: Optional[int] = None
+    highlight: Optional[str] = "normal"
     # Properties
     cost: Optional[float] = None
     bandgap: Optional[float] = None
     yield_: Optional[float] = None
-    highlight: Optional[str] = "normal"
     density: Optional[float] = None
     sascore: Optional[float] = None
+    # Reaction properties
+    reaction: Optional[Reaction] = None
 
     def json(self):
         ret = asdict(self)

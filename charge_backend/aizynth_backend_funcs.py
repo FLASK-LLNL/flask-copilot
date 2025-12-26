@@ -6,7 +6,13 @@ import asyncio
 import copy
 from typing import Dict, Literal
 
-from backend_helper_funcs import Node, Edge, RetrosynthesisContext, calculate_positions
+from backend_helper_funcs import (
+    Node,
+    Edge,
+    Reaction,
+    RetrosynthesisContext,
+    calculate_positions,
+)
 import charge.servers.AiZynthTools as AiZynthFuncs
 from molecule_naming import smiles_to_html
 
@@ -99,7 +105,7 @@ async def aizynth_retro(
         cost=None,
         bandgap=None,
         yield_=None,
-        highlight=True,
+        highlight="yellow",
         x=100,
         y=100,
     )
@@ -120,6 +126,22 @@ async def aizynth_retro(
         return
     await clogger.info(f"Found {len(routes)} routes for {start_smiles}.")
 
+    await websocket.send_json(
+        {
+            "type": "node_update",
+            "node": {
+                "id": root.id,
+                "highlight": "normal",
+                "reaction": Reaction(
+                    "azf",
+                    "Reaction found with AiZynthFinder",
+                    highlight="yellow",
+                    label="Template",
+                ).json(),
+            },
+        }
+    )
+
     reaction_path = AiZynthFuncs.ReactionPath(route=routes[0])
     nodes, edges = generate_tree_structure(
         reaction_path.nodes,
@@ -132,8 +154,6 @@ async def aizynth_retro(
 
     # Create node map
     # Stream root first
-
-    await asyncio.sleep(0.8)
 
     # Stream remaining nodes with edges
     for i in range(1, len(nodes)):
@@ -152,8 +172,6 @@ async def aizynth_retro(
             edge_data["edge"]["toNode"] = node.id
             await websocket.send_json(edge_data)
 
-            await asyncio.sleep(0.6)
-
             # Send node
             await websocket.send_json({"type": "node", "node": node.json()})
 
@@ -167,10 +185,5 @@ async def aizynth_retro(
                 },
             }
             await websocket.send_json(edge_complete)
-
-            await asyncio.sleep(0.2)
-    await websocket.send_json(
-        {"type": "node_update", "node": {"id": root.id, "highlight": "normal"}}
-    )
 
     await websocket.send_json({"type": "complete"})
