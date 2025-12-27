@@ -1246,7 +1246,7 @@ const ChemistryTool: React.FC = () => {
                   </>
                 )}
               </button>
-              <button onClick={() => handleCustomQuery(contextMenu.node!, "query-molecule")} className="context-menu-item context-menu-divider">
+              <button onClick={() => handleCustomQuery(contextMenu.node!, "query-molecule")} className="context-menu-item">
                 <MessageCircleQuestion className="w-4 h-4" /> Ask about molecule...
               </button>
             </>
@@ -1280,7 +1280,7 @@ const ChemistryTool: React.FC = () => {
                 });
                 sendMessageToServer("optimize-from", {nodeId: nodeId, propertyType, customPropertyName, customPropertyDesc, customPropertyAscending, smiles: contextMenu.node!.smiles, xpos: contextMenu.node!.x});
                 setIsComputing(true);
-              }}  className="context-menu-item">
+              }}  className="context-menu-item context-menu-divider">
               <StepForward className="w-4 h-4" />
               Refine search from here
             </button>
@@ -1305,12 +1305,12 @@ const ChemistryTool: React.FC = () => {
           {/* Retrosynthesis (Molecule) */ (problemType == "retrosynthesis" && !contextMenu.isReaction) && (
             <>
               {!contextMenu.node.reaction && (
-                <button onClick={() => {sendMessageToServer("compute-reaction-from", {nodeId: contextMenu.node!.id});}} className="context-menu-item">
+                <button onClick={() => {sendMessageToServer("compute-reaction-from", {nodeId: contextMenu.node!.id});}} className="context-menu-item context-menu-divider">
                   <TestTubeDiagonal className="w-4 h-4" />How do I make this?
                 </button>
               )}
               {!isRootNode(contextMenu.node.id, treeNodes) && (
-                <button disabled={true} onClick={() => {sendMessageToServer("recompute-parent-reaction", {nodeId: contextMenu.node!.id});}} className="context-menu-item">
+                <button disabled={true} onClick={() => {sendMessageToServer("recompute-parent-reaction", {nodeId: contextMenu.node!.id});}} className="context-menu-item context-menu-divider">
                   <Network className="w-4 h-4" />Substitute Molecule
                 </button>
               )}
@@ -1322,10 +1322,10 @@ const ChemistryTool: React.FC = () => {
               <button onClick={() => handleCustomQuery(contextMenu.node!, "query-reaction")} className="context-menu-item">
                 <MessageCircleQuestion className="w-4 h-4" /> Ask about reaction...
               </button>
-              <button onClick={() => {sendMessageToServer("compute-reaction-from", {nodeId: contextMenu.node!.id});}} className="context-menu-item">
+              <button onClick={() => {sendMessageToServer("compute-reaction-from", {nodeId: contextMenu.node!.id});}} className="context-menu-item context-menu-divider">
                 <RefreshCw className="w-4 h-4" />Find Another Reaction
               </button>
-              <button onClick={() => handleCustomQuery(contextMenu.node!, "compute-reaction-from")} className="context-menu-item context-menu-divider">
+              <button onClick={() => handleCustomQuery(contextMenu.node!, "compute-reaction-from")} className="context-menu-item">
                 <Send className="w-4 h-4" />Find Another Reaction with Custom Prompt...
               </button>
             </>

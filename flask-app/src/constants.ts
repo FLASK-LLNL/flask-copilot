@@ -11,8 +11,8 @@ export const NODE_STYLES = {
 
 export const REACTION_STYLES = {
   "normal": 'reaction-normal',
-  "red": 'reaction-highlight2',
-  "yellow": 'reaction-highlight1',
+  "red": 'reaction-highlight',
+  "yellow": 'reaction-highlight2',
 } as const;
 
 export const PROPERTY_NAMES: Record<string, string> = {

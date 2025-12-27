@@ -932,8 +932,8 @@
 }
 
 .reaction-highlight2 {
-  background: linear-gradient(to bottom right, rgba(245, 158, 11, 0.4), rgba(239, 68, 68, 1));
-  border-color: #f87171;
+  background: linear-gradient(to bottom right, rgba(32, 255, 0, 0.61), rgba(3, 106, 240, 0.6));
+  border-color: #97ffd2;
   box-shadow: 0 0 0 4px rgba(248, 113, 113, 0.5);
 }
 
