@@ -41,9 +41,14 @@ export default defineConfig({
     'window.APP_CONFIG.VERSION': JSON.stringify(process.env.SERVER_VERSION || '')
   },
   optimizeDeps: {
-    // Force pre-bundling in dev AND specify for build
-    include: ['scheduler'],
-    force: true  // Force re-optimization
+    include: [
+      'scheduler',
+      'react-markdown',
+      'remark-gfm',
+      'react-syntax-highlighter',
+      'react-syntax-highlighter/dist/esm/styles/prism'
+    ],
+    force: true
   },
   build: {
     rollupOptions: {
