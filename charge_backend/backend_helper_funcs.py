@@ -175,6 +175,7 @@ class RetrosynthesisContext:
         self.node_ids: dict[str, Node] = {}
         self.node_id_to_planner: dict[str, aizynth_funcs.RetroPlanner] = {}
         self.node_id_to_charge_client: dict[str, AutoGenAgent] = {}
+        self.node_id_to_reasoning_summary: dict[str, str] = {}
         self.azf_nodes: dict[str, aizynth_funcs.Node] = {}
         self.nodes_per_level: dict[int, int] = defaultdict(int)
         self.parents: dict[str, str] = {}
@@ -183,6 +184,7 @@ class RetrosynthesisContext:
         self.node_ids.clear()
         self.node_id_to_planner.clear()
         self.node_id_to_charge_client.clear()
+        self.node_id_to_reasoning_summary.clear()
         self.azf_nodes.clear()
         self.nodes_per_level.clear()
         self.parents.clear()

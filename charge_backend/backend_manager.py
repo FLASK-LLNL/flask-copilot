@@ -599,30 +599,37 @@ class ActionManager:
             server_urls=self.task_manager.available_tools or list_server_urls(),
         )
 
-        if data["nodeId"] not in self.retro_synth_context.node_id_to_charge_client:
-            # No charge client (likely only AZF was run), add context from tree
-            child_nodes = [
-                nid
-                for nid, p in self.retro_synth_context.parents.items()
-                if p == data["nodeId"]
-            ]
-            reactants = [self.retro_synth_context.node_ids[nid] for nid in child_nodes]
-            reactants_str = "\n".join(reactant.smiles for reactant in reactants)
-            reaction_str = f"Product: {node.smiles}\nReactants:\n{reactants_str}"
-            task.system_prompt = f"You are a helpful chemical assistant who answers in concise but factual responses. Given the following reaction (as SMILES strings):\n{reaction_str}\n\nAnswer the following query."
+        # No charge client (likely only AZF was run), add context from tree
+        # if data["nodeId"] not in self.retro_synth_context.node_id_to_charge_client:
+        child_nodes = [
+            nid
+            for nid, p in self.retro_synth_context.parents.items()
+            if p == data["nodeId"]
+        ]
+        reactants = [self.retro_synth_context.node_ids[nid] for nid in child_nodes]
+        reactants_str = "\n".join(reactant.smiles for reactant in reactants)
+        reaction_str = f"Product: {node.smiles}\nReactants:\n{reactants_str}"
 
-            agent = self.experiment.create_agent_with_experiment_state(
-                task=task,
-                callback=CallbackHandler(self.websocket),
-            )
-            self.retro_synth_context.node_id_to_charge_client[data["nodeId"]] = agent
-        else:
-            task.system_prompt = "You are a helpful chemical assistant who answers in concise but factual responses."
-            task.user_prompt = (
-                "Given the last computed reaction, answer the following query."
-            )
-            agent = self.retro_synth_context.node_id_to_charge_client[data["nodeId"]]
-            agent.task = task
+        # Enrich context from prior discovery
+        if data["nodeId"] in self.retro_synth_context.node_id_to_reasoning_summary:
+            reaction_str += f"\nAdditionally, the following context is given: {self.retro_synth_context.node_id_to_reasoning_summary[data['nodeId']]}"
+
+        task.system_prompt = f"You are a helpful chemical assistant who answers in concise but factual responses. Given the following reaction (as SMILES strings):\n{reaction_str}\n\nAnswer the following query."
+
+        agent = self.experiment.create_agent_with_experiment_state(
+            task=task,
+            callback=CallbackHandler(self.websocket),
+        )
+        self.retro_synth_context.node_id_to_charge_client[data["nodeId"]] = agent
+
+        # TODO(later): For some reason the below code does not work because memory is not maintained
+        # else:
+        #     task.system_prompt = "You are a helpful chemical assistant who answers in concise but factual responses."
+        #     task.user_prompt = (
+        #         "Given the last computed reaction, answer the following query."
+        #     )
+        #     agent = self.retro_synth_context.node_id_to_charge_client[data["nodeId"]]
+        #     agent.task = task
 
         async def run_and_report():
             result = await agent.run()

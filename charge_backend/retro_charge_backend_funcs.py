@@ -120,6 +120,22 @@ async def generate_molecules(
 
     calculate_positions(nodes)
 
+    await websocket.send_json(
+        {
+            "type": "node_update",
+            "node": {
+                "id": root.id,
+                "highlight": "normal",
+                "reaction": Reaction(
+                    "azf",
+                    "Reaction found with AiZynthFinder",
+                    highlight="yellow",
+                    label="Template",
+                ).json(),
+            },
+        }
+    )
+
     # Stream remaining nodes with edges
     for node in nodes[1:]:
         # Find edge for this node
@@ -128,11 +144,9 @@ async def generate_molecules(
         # Send node
         await websocket.send_json({"type": "node", "node": node.json()})
         if edge:
+            context.parents[node.id] = edge.fromNode
             await websocket.send_json({"type": "edge", "edge": edge.json()})
 
-    await websocket.send_json(
-        {"type": "node_update", "node": {"id": root.id, "highlight": "normal"}}
-    )
     await websocket.send_json({"type": "complete"})
 
 
@@ -232,6 +246,7 @@ async def optimize_molecule_retro(
     )
 
     # Update node with discovered reaction
+    context.node_id_to_reasoning_summary[node_id] = reasoning_summary
     await websocket.send_json(
         {
             "type": "node_update",
@@ -259,6 +274,7 @@ async def optimize_molecule_retro(
             current_node.id,
         )
         context.node_ids[node.id] = node
+        context.parents[node.id] = node_id
 
         # Find paths for the leaf nodes
         routes, planner = run_retro_planner(config_file, smiles)
