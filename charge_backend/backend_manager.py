@@ -305,7 +305,7 @@ class ActionManager:
         """Handle retrosynthesis problem type."""
         available_tools = self.task_manager.available_tools or list_server_urls()
         await self.task_manager.clogger.info(
-            "Setting up retrosynthesis task... with available tools: {available_tools}."
+            f"Setting up retrosynthesis task... with available tools: {available_tools}."
         )
         await self.task_manager.clogger.info(f"Data: {data}")
 
