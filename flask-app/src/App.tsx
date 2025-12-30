@@ -1,6 +1,6 @@
 /* eslint-disable react-hooks/exhaustive-deps */
 import React, { useState, useRef, useEffect, useCallback } from 'react';
-import { Loader2, FlaskConical, TestTubeDiagonal, Network, Play, RotateCcw, X, Send, RefreshCw, Sparkles, MessageCircleQuestion, StepForward, MessageSquareShare, Brain } from 'lucide-react';
+import { Loader2, FlaskConical, TestTubeDiagonal, Network, Play, RotateCcw, X, Send, RefreshCw, Sparkles, MessageCircleQuestion, StepForward, MessageSquareShare, Brain, Sliders } from 'lucide-react';
 import 'recharts';
 import 'react-markdown';
 import 'remark-gfm';
@@ -9,7 +9,7 @@ import 'react-syntax-highlighter/dist/esm/styles/prism';
 
 import { WS_SERVER, VERSION } from './config';
 import { DEFAULT_CUSTOM_SYSTEM_PROMPT, PROPERTY_NAMES } from './constants';
-import { TreeNode, Edge, ContextMenuState, SidebarMessage, Tool, WebSocketMessageToServer, WebSocketMessage, SelectableTool, Experiment, OrchestratorSettings } from './types';
+import { TreeNode, Edge, ContextMenuState, SidebarMessage, Tool, WebSocketMessageToServer, WebSocketMessage, SelectableTool, Experiment, OrchestratorSettings, OptimizationCustomization } from './types';
 
 import { loadRDKit } from './components/molecule';
 import { ReasoningSidebar, useSidebarState } from './components/sidebar';
@@ -17,6 +17,7 @@ import { MoleculeGraph, useGraphState } from './components/graph';
 import { MultiSelectToolModal } from './components/multi_select_tools';
 import { ProjectSidebar, useProjectSidebar, useProjectManagement } from './components/project_sidebar';
 import { SettingsButton, BACKEND_OPTIONS } from './components/settings_button';
+import { CustomizationModal } from './components/customization_modal';
 
 import { findAllDescendants, hasDescendants, isRootNode, relayoutTree } from './tree_utils';
 import { copyToClipboard } from './utils';
@@ -35,6 +36,7 @@ const ChemistryTool: React.FC = () => {
   const [problemPrompt, setProblemPrompt] = useState<string>('');
   const [editPromptsModal, setEditPromptsModal] = useState<boolean>(false);
   const [editPropertyModal, setEditPropertyModal] = useState<boolean>(false);
+  const [editCustomizationModal, setEditCustomizationModal] = useState<boolean>(false);
   const [customPropertyName, setCustomPropertyName] = useState<string>('');
   const [customPropertyDesc, setCustomPropertyDesc] = useState<string>('');
   const [customPropertyAscending, setCustomPropertyAscending] = useState<boolean>(true);
@@ -58,6 +60,14 @@ const ChemistryTool: React.FC = () => {
   const [username, setUsername] = useState<string>('<LOCAL USER>');
 
   const wsRef = useRef<WebSocket | null>(null);
+
+  // Customization state
+  const [customization, setCustomization] = useState<OptimizationCustomization>({
+    molecularSimilarity: 0.7,
+    diversityPenalty: 0.0,
+    explorationRate: 0.5,
+    enableConstraints: false,
+  });
 
   // Function to refresh tools list from backend
   const refreshToolsList = useCallback(() => {
@@ -237,6 +247,7 @@ const ChemistryTool: React.FC = () => {
     (data.customPropertyName !== undefined) && setCustomPropertyName(data.customPropertyName);
     (data.customPropertyDesc !== undefined) && setCustomPropertyDesc(data.customPropertyDesc);
     (data.customPropertyAscending !== undefined) && setCustomPropertyAscending(data.customPropertyAscending);
+    data.customization && setCustomization(data.customization);
     data.treeNodes && setTreeNodes(data.treeNodes);
     data.edges && setEdges(data.edges);
     data.metricsHistory && metricsDashboardState.setMetricsHistory(data.metricsHistory);
@@ -342,7 +353,8 @@ const ChemistryTool: React.FC = () => {
       customPropertyDesc,
       customPropertyAscending,
       systemPrompt,
-      userPrompt: problemPrompt
+      userPrompt: problemPrompt,
+      customization
     };
 
     wsRef.current?.send(JSON.stringify(message));
@@ -572,6 +584,7 @@ const ChemistryTool: React.FC = () => {
             customPropertyName,
             customPropertyDesc,
             customPropertyAscending,
+            customization,
             treeNodes: treeNodesRef.current,
             edges: edgesRef.current,
             metricsHistory: metricsDashboardState.metricsHistory,
@@ -585,7 +598,7 @@ const ChemistryTool: React.FC = () => {
       throw "No experiment found";
     };
   }, [smiles, problemType, graphState, metricsDashboardState, autoZoom,
-      systemPrompt, problemPrompt, propertyType, customPropertyName, customPropertyDesc, customPropertyAscending, projectData, projectSidebar]);
+      systemPrompt, problemPrompt, propertyType, customPropertyName, customPropertyDesc, customPropertyAscending, customization, projectData, projectSidebar]);
 
 
 
@@ -608,7 +621,7 @@ const ChemistryTool: React.FC = () => {
 
   const saveFullContext = (experimentContext: string): void => {
     const data = { lastModified: new Date().toISOString(), smiles, problemType, systemPrompt, problemPrompt, propertyType, customPropertyName,
-                   customPropertyDesc, customPropertyAscending, treeNodes, edges, graphState, metricsDashboardState, sidebarState, experimentContext };
+                   customPropertyDesc, customPropertyAscending, customization, treeNodes, edges, graphState, metricsDashboardState, sidebarState, experimentContext };
     const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -651,6 +664,11 @@ const ChemistryTool: React.FC = () => {
     setCustomPropertyDesc(newPropertyDesc);
     setCustomPropertyAscending(newPropertyAscending);
     setEditPropertyModal(false);
+  };
+
+  const saveCustomization = (newCustomization: OptimizationCustomization): void => {
+    setCustomization(newCustomization);
+    setEditCustomizationModal(false);
   };
 
   const resetProblemType = (problem_type: string): void => {
@@ -752,7 +770,9 @@ const ChemistryTool: React.FC = () => {
         customPropertyName,
         customPropertyDesc,
         customPropertyAscending,
-        xpos: customQueryModal?.x
+        smiles: customQueryModal?.smiles,
+        xpos: customQueryModal?.x,
+        customization
       };
     }
 
@@ -1092,6 +1112,16 @@ const ChemistryTool: React.FC = () => {
                   >
                     Select Tools {selectedTools.length > 0 && `(${selectedTools.length})`}
                   </button>
+                  {problemType === "optimization" &&
+                    <button
+                      onClick={() => setEditCustomizationModal(true)}
+                      disabled={isComputing}
+                      className="btn btn-tertiary mt-5"
+                    >
+                      <Sliders className="w-4 h-4" />
+                      Customize
+                    </button>
+                  }
                 </div>
 
                 <div className="input-row-actions">
@@ -1474,6 +1504,14 @@ const ChemistryTool: React.FC = () => {
           </div>
         </div>
       )}
+
+      {/* Customization Modal */}
+      <CustomizationModal
+        isOpen={editCustomizationModal}
+        onClose={() => setEditCustomizationModal(false)}
+        initialCustomization={customization}
+        onSave={saveCustomization}
+      />
 
       {/* Use the MultiSelectToolModal component */}
       <MultiSelectToolModal

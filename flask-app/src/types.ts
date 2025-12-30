@@ -81,6 +81,13 @@ export interface OrchestratorSettings {
   toolServers?: ToolServer[];
 }
 
+export interface OptimizationCustomization {
+  molecularSimilarity?: number;
+  diversityPenalty?: number;
+  explorationRate?: number;
+  enableConstraints?: boolean;
+}
+
 export interface WebSocketMessageToServer {
   action?: string;
   smiles?: string;
@@ -96,6 +103,9 @@ export interface WebSocketMessageToServer {
   customPropertyDesc?: string;
   customPropertyAscending?: boolean;
   xpos?: number;
+
+  // Optimization customization
+  customization?: OptimizationCustomization;
 
   // Custom problem
   systemPrompt?: string;
@@ -231,6 +241,7 @@ export interface Experiment {
   customPropertyName?: string;
   customPropertyDesc?: string;
   customPropertyAscending?: boolean;
+  customization?: OptimizationCustomization;
   treeNodes?: TreeNode[];
   edges?: Edge[];
   metricsHistory?: MetricHistoryItem[];

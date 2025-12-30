@@ -62,6 +62,10 @@ async def generate_lead_molecule(
     initial_node_id: int = 0,
     initial_x_position: int = 50,
     molecule_name_format: Literal["brand", "iupac", "formula", "smiles"] = "brand",
+    molecular_similarity: float = 0.7,
+    diversity_penalty: float = 0.0,
+    exploration_rate: float = 0.5,
+    enable_constraints: bool = False,
 ) -> None:
     """Generate a lead molecule and stream its progress.
     Args:
