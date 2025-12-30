@@ -408,8 +408,7 @@ async def generate_lead_molecule(
                 },
             }
         )
-        # TODO: Compute here!!!
-        await asyncio.sleep(0.8)
+
     # Final summary
     await websocket.send_json(
         {
