@@ -10,6 +10,7 @@ COPY charge_backend /app/charge_backend
 
 ARG DATA_PATH=./data
 COPY ${DATA_PATH}/. /data
+RUN mkdir /data/db
 
 RUN . $HOME/.nvm/nvm.sh && \
     npm install -g npm@latest && \
