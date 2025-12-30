@@ -8,10 +8,7 @@ from concurrent.futures import ProcessPoolExecutor
 from charge.experiments.AutoGenExperiment import AutoGenExperiment
 from charge.clients.autogen_utils import chargeConnectionError
 from charge.tasks.Task import Task
-from backend_helper_funcs import (
-    RetrosynthesisContext,
-    CallbackHandler,
-)
+from backend_helper_funcs import RetrosynthesisContext, CallbackHandler, Reaction
 from lmo_charge_backend_funcs import generate_lead_molecule
 from charge_backend_custom import run_custom_problem
 from functools import partial
@@ -308,7 +305,7 @@ class ActionManager:
         """Handle retrosynthesis problem type."""
         available_tools = self.task_manager.available_tools or list_server_urls()
         await self.task_manager.clogger.info(
-            "Setting up retrosynthesis task... with available tools: {available_tools}."
+            f"Setting up retrosynthesis task... with available tools: {available_tools}."
         )
         await self.task_manager.clogger.info(f"Data: {data}")
 
@@ -350,11 +347,40 @@ class ActionManager:
 
         logger.info("Synthesize tree leaf action received")
         logger.info(f"Data: {data}")
+        node = self.retro_synth_context.node_ids[data["nodeId"]]
+
+        has_children = any(
+            v == data["nodeId"] for v in self.retro_synth_context.parents.values()
+        )
+
+        await self.websocket.send_json(
+            {"type": "subtree_delete", "node": {"id": data["nodeId"]}}
+        )
+        await self.websocket.send_json(
+            {
+                "type": "node_update",
+                "node": {
+                    "id": data["nodeId"],
+                    "reaction": Reaction(
+                        "ai_reaction_0",
+                        (
+                            "Recomputing with AI orchestrator"
+                            if has_children
+                            else "Computing with AI orchestrator"
+                        ),
+                        highlight="red",
+                        label="Recomputing" if has_children else "Computing",
+                    ).json(),
+                },
+            }
+        )
 
         run_func = partial(
             optimize_molecule_retro,
             data["nodeId"],
             self.retro_synth_context,
+            data.get("query", None),
+            None,  # Unconstrained
             self.task_manager.websocket,
             self.experiment,
             self.args.config_file,
@@ -391,15 +417,53 @@ class ActionManager:
 
     async def handle_recompute_reaction(self, data: dict) -> None:
         """Handle recompute-reaction action."""
-        prompt = data.get("query")
-        if prompt:
-            await self._send_processing_message(
-                f"Processing reaction query: {prompt} for node {data['nodeId']}"
-            )
+        if self.retro_synth_context is None:
+            raise ValueError("Retrosynthesis context not initialized")
 
-        logger.info("Recompute reaction action received")
-        logger.info(f"Data: {data}")
-        await self.websocket.send_json({"type": "complete"})
+        # Get parent
+        if data["nodeId"] not in self.retro_synth_context.parents:
+            await self._send_processing_message(
+                f"Cannot find parent reaction for node {data['nodeId']}", source="Agent"
+            )
+            await self.websocket.send_json({"type": "complete"})
+
+        parent_nodeid = self.retro_synth_context.parents[data["nodeId"]]
+        parent_node = self.retro_synth_context.node_ids[parent_nodeid]
+        smiles = self.retro_synth_context.node_ids[data["nodeId"]].smiles
+
+        # Clear subtree and levels for layouting
+        await self.websocket.send_json(
+            {"type": "subtree_delete", "node": {"id": parent_nodeid}}
+        )
+        await self.websocket.send_json(
+            {
+                "type": "node_update",
+                "node": {
+                    "id": parent_nodeid,
+                    "reaction": Reaction(
+                        "ai_reaction_0",
+                        "Recomputing with AI orchestrator",
+                        highlight="red",
+                        label="Recomputing",
+                    ).json(),
+                },
+            }
+        )
+
+        run_func = partial(
+            optimize_molecule_retro,
+            parent_nodeid,
+            self.retro_synth_context,
+            data.get("query", None),
+            smiles,
+            self.task_manager.websocket,
+            self.experiment,
+            self.args.config_file,
+            self.task_manager.available_tools or list_server_urls(),
+            self.molecule_name_format,
+        )
+
+        await self.task_manager.run_task(run_func())
 
     async def _send_processing_message(
         self, message: str, source: str | None = None, **kwargs
@@ -537,45 +601,24 @@ class ActionManager:
             available_tools.append(server["tool_server"]["server"])
         self.task_manager.available_tools = available_tools
 
-    async def handle_custom_query_retro_molecule(self, data: dict) -> None:
-        """Handle a query on the given molecule. First try to ask about the molecule as a reactant. If that is not available, ask about it in the context of it being a product."""
-        assert self.retro_synth_context is not None
-
+    async def handle_custom_query_molecule(self, data: dict) -> None:
+        """Handle a query on the given molecule."""
         await self._send_processing_message(
             f"Processing molecule query: {data['query']} for node {data['nodeId']}"
         )
-        node = self.retro_synth_context.node_ids[data["nodeId"]]
+        smiles = data["smiles"]
 
         task = Task(
-            system_prompt=f"You are a helpful chemical assistant who answers in concise but factual responses. Answer the following query about the molecule `{node.smiles}`.",
+            system_prompt=f"You are a helpful chemical assistant who answers in concise but factual responses. Answer the following query about the molecule given by the SMILES string `{smiles}`.",
             user_prompt=data["query"],
             server_urls=self.task_manager.available_tools or list_server_urls(),
         )
 
-        # First try finding the parent
-        agent = None
-        if data["nodeId"] in self.retro_synth_context.parents:
-            parent = self.retro_synth_context.parents[data["nodeId"]]
-
-            if parent in self.retro_synth_context.node_id_to_charge_client:
-                agent = self.retro_synth_context.node_id_to_charge_client[parent]
-
-        # If we could not find an agent, try as a product
-        if (
-            agent is None
-            and data["nodeId"] in self.retro_synth_context.node_id_to_charge_client
-        ):
-            agent = self.retro_synth_context.node_id_to_charge_client[data["nodeId"]]
-
-        # Otherwise, use the full experiment context
-        if agent is None:
-            agent = self.experiment.create_agent_with_experiment_state(
-                task=task,
-                callback=CallbackHandler(self.websocket),
-            )
-            self.retro_synth_context.node_id_to_charge_client[data["nodeId"]] = agent
-        else:
-            agent.task = task
+        # Use the full experiment state
+        agent = self.experiment.create_agent_with_experiment_state(
+            task=task,
+            callback=CallbackHandler(self.websocket),
+        )
 
         async def run_and_report():
             result = await agent.run()
@@ -585,97 +628,53 @@ class ActionManager:
 
         await self.task_manager.run_task(run_and_report())
 
-    async def handle_custom_query_retro_product(self, data: dict) -> None:
+    async def handle_custom_query_reaction(self, data: dict) -> None:
         """Handle a query on the reaction (from nodeId to its reactants)."""
         assert self.retro_synth_context is not None
 
         await self._send_processing_message(
-            f"Processing reaction query: {data['query']} for node {data['nodeId']} (as product)"
+            f"Processing reaction query: {data['query']} for node {data['nodeId']}"
         )
 
+        node = self.retro_synth_context.node_ids[data["nodeId"]]
+
         task = Task(
-            system_prompt="You are a helpful chemical assistant who answers in concise but factual responses. Answer the following query about the reaction.",
+            system_prompt="",
             user_prompt=data["query"],
             server_urls=self.task_manager.available_tools or list_server_urls(),
         )
 
-        node = self.retro_synth_context.node_ids[data["nodeId"]]
-        if data["nodeId"] not in self.retro_synth_context.node_id_to_charge_client:
-            # No charge client (likely only AZF was run), add context from tree
-            child_nodes = [
-                nid
-                for nid, p in self.retro_synth_context.parents.items()
-                if p == data["nodeId"]
-            ]
-            reactants = [self.retro_synth_context.node_ids[nid] for nid in child_nodes]
-            reactants_str = "\n".join(reactant.smiles for reactant in reactants)
-            task.system_prompt += f"\n\nThe reaction in question is:\nProduct: {node.smiles}\nReactants:\n{reactants_str}"
-            agent = self.experiment.create_agent_with_experiment_state(
-                task=task,
-                callback=CallbackHandler(self.websocket),
-            )
-            self.retro_synth_context.node_id_to_charge_client[data["nodeId"]] = agent
-        else:
-            agent = self.retro_synth_context.node_id_to_charge_client[data["nodeId"]]
-            agent.task = task
+        # No charge client (likely only AZF was run), add context from tree
+        # if data["nodeId"] not in self.retro_synth_context.node_id_to_charge_client:
+        child_nodes = [
+            nid
+            for nid, p in self.retro_synth_context.parents.items()
+            if p == data["nodeId"]
+        ]
+        reactants = [self.retro_synth_context.node_ids[nid] for nid in child_nodes]
+        reactants_str = "\n".join(reactant.smiles for reactant in reactants)
+        reaction_str = f"Product: {node.smiles}\nReactants:\n{reactants_str}"
 
-        async def run_and_report():
-            result = await agent.run()
-            await self.experiment.add_to_context(agent, task, result)
-            # Report answer
-            await self._send_processing_message(result, source="Agent")
-            await self.websocket.send_json({"type": "complete"})
+        # Enrich context from prior discovery
+        if data["nodeId"] in self.retro_synth_context.node_id_to_reasoning_summary:
+            reaction_str += f"\nAdditionally, the following context is given: {self.retro_synth_context.node_id_to_reasoning_summary[data['nodeId']]}"
 
-        await self.task_manager.run_task(run_and_report())
+        task.system_prompt = f"You are a helpful chemical assistant who answers in concise but factual responses. Given the following reaction (as SMILES strings):\n{reaction_str}\n\nAnswer the following query."
 
-    async def handle_custom_query_retro_reactant(self, data: dict) -> None:
-        """Handle a query on the reaction (from nodeId to its product)."""
-        assert self.retro_synth_context is not None
-
-        await self._send_processing_message(
-            f"Processing reaction query: {data['query']} for node {data['nodeId']} (as reactant)"
+        agent = self.experiment.create_agent_with_experiment_state(
+            task=task,
+            callback=CallbackHandler(self.websocket),
         )
+        self.retro_synth_context.node_id_to_charge_client[data["nodeId"]] = agent
 
-        node = self.retro_synth_context.node_ids[data["nodeId"]]
-        task = Task(
-            system_prompt=f"You are a helpful chemical assistant who answers in concise but factual responses. Answer the following query about the reaction in the context of reactant `{node.smiles}`.",
-            user_prompt=data["query"],
-            server_urls=self.task_manager.available_tools or list_server_urls(),
-        )
-
-        agent = None
-        if data["nodeId"] in self.retro_synth_context.parents:
-            parent = self.retro_synth_context.parents[data["nodeId"]]
-            parent_node = self.retro_synth_context.node_ids[parent]
-
-            if parent in self.retro_synth_context.node_id_to_charge_client:
-                # Context already exists
-                agent = self.retro_synth_context.node_id_to_charge_client[parent]
-            else:
-                # No charge client (likely only AZF was run), add context from tree
-                child_nodes = [
-                    nid
-                    for nid, p in self.retro_synth_context.parents.items()
-                    if p == parent
-                ]
-                reactants = [
-                    self.retro_synth_context.node_ids[nid] for nid in child_nodes
-                ]
-                reactants_str = "\n".join(reactant.smiles for reactant in reactants)
-                task.system_prompt += f"\n\nThe reaction in question is:\nProduct: {parent_node.smiles}\nReactants:\n{reactants_str}"
-                agent = self.experiment.create_agent_with_experiment_state(
-                    task=task,
-                    callback=CallbackHandler(self.websocket),
-                )
-                self.retro_synth_context.node_id_to_charge_client[parent] = agent
-        else:
-            await self._send_processing_message(
-                f"Molecule `{node.smiles}` has no parent reaction to query."
-            )
-            await self.websocket.send_json({"type": "complete"})
-            return
-
-        agent.task = task
+        # TODO(later): For some reason the below code does not work because memory is not maintained
+        # else:
+        #     task.system_prompt = "You are a helpful chemical assistant who answers in concise but factual responses."
+        #     task.user_prompt = (
+        #         "Given the last computed reaction, answer the following query."
+        #     )
+        #     agent = self.retro_synth_context.node_id_to_charge_client[data["nodeId"]]
+        #     agent.task = task
 
         async def run_and_report():
             result = await agent.run()

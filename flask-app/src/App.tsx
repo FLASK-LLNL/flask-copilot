@@ -20,6 +20,7 @@ import { copyToClipboard } from './utils';
 import './animations.css';
 import { MetricsDashboard, useMetricsDashboardState } from './components/metrics';
 import { useProjectData } from './hooks/useProjectData';
+import { MarkdownText } from './components/markdown';
 
 
 const ChemistryTool: React.FC = () => {
@@ -37,7 +38,7 @@ const ChemistryTool: React.FC = () => {
   const [autoZoom, setAutoZoom] = useState<boolean>(true);
   const [treeNodes, setTreeNodes] = useState<TreeNode[]>([]);
   const [edges, setEdges] = useState<Edge[]>([]);
-  const [contextMenu, setContextMenu] = useState<ContextMenuState>({node: null, x: 0, y: 0});
+  const [contextMenu, setContextMenu] = useState<ContextMenuState>({node: null, isReaction: false, x: 0, y: 0});
   const [customQueryModal, setCustomQueryModal] = useState<TreeNode | null>(null);
   const [customQueryText, setCustomQueryText] = useState<string>('');
   const [customQueryType, setCustomQueryType] = useState<string | null>(null);
@@ -185,7 +186,7 @@ const ChemistryTool: React.FC = () => {
 
   useEffect(() => {
     const handleClickOutside = (): void => {
-      setContextMenu({node: null, x:0, y:0});
+      setContextMenu({node: null, isReaction: false, x:0, y:0});
       setSaveDropdownOpen(false);
       sidebarState.setSourceFilterOpen(false);
       setWsTooltipPinned(false);
@@ -518,7 +519,7 @@ const ChemistryTool: React.FC = () => {
     setIsComputing(false);
     graphState.setOffset({ x: 50, y: 50 });
     graphState.setZoom(1);
-    setContextMenu({node: null, x:0, y:0});
+    setContextMenu({node: null, isReaction: false, x:0, y:0});
     setCustomQueryModal(null);
     metricsDashboardState.setMetricsHistory([]);
     sidebarState.setMessages([]);
@@ -665,7 +666,7 @@ const ChemistryTool: React.FC = () => {
 
   const createNewRetrosynthesisExperiment = async (startingSmiles: string): Promise<void> => {
     // Close context menu
-    setContextMenu({node: null, x: 0, y: 0});
+    setContextMenu({node: null, isReaction: false, x: 0, y: 0});
 
     saveStateToExperiment();
 
@@ -695,6 +696,18 @@ const ChemistryTool: React.FC = () => {
       if (isComputing) return; // Don't open menu while computing
       setContextMenu({
           node,
+          isReaction: false,
+          x: e.clientX,
+          y: e.clientY
+      });
+  };
+
+  const handleReactionClick = (e: React.MouseEvent<HTMLDivElement>, node: TreeNode): void => {
+      e.stopPropagation();
+      if (isComputing) return; // Don't open menu while computing
+      setContextMenu({
+          node,
+          isReaction: true,
           x: e.clientX,
           y: e.clientY
       });
@@ -710,14 +723,14 @@ const ChemistryTool: React.FC = () => {
       ...data
     };
     wsRef.current.send(JSON.stringify(msg));
-    setContextMenu({node: null, x: 0, y: 0});
+    setContextMenu({node: null, isReaction: false, x: 0, y: 0});
   };
 
   const handleCustomQuery = (node: TreeNode, queryType: string | null): void => {
     setCustomQueryModal(node);
     setCustomQueryText('');
     setCustomQueryType(queryType);
-    setContextMenu({node: null, x: 0, y: 0});
+    setContextMenu({node: null, isReaction: false, x: 0, y: 0});
   };
 
 
@@ -735,7 +748,6 @@ const ChemistryTool: React.FC = () => {
         customPropertyName,
         customPropertyDesc,
         customPropertyAscending,
-        smiles: customQueryModal?.smiles,
         xpos: customQueryModal?.x
       };
     }
@@ -743,6 +755,7 @@ const ChemistryTool: React.FC = () => {
     const message: WebSocketMessageToServer = {
       action: customQueryType ?? (problemType === "optimization" ? "optimize-from" : "recompute-reaction"),
       nodeId: customQueryModal?.id,
+      smiles: customQueryModal?.smiles,
       query: customQueryText,
       ...propertyDetails
     };
@@ -1161,7 +1174,7 @@ const ChemistryTool: React.FC = () => {
                   )}
                 </div>
               ) : (
-                <MoleculeGraph {...graphState} nodes={treeNodes} edges={edges} autoZoom={autoZoom} setAutoZoom={setAutoZoom} ctx={contextMenu} handleNodeClick={handleNodeClick} rdkitModule={rdkitModule} />
+                <MoleculeGraph {...graphState} nodes={treeNodes} edges={edges} autoZoom={autoZoom} setAutoZoom={setAutoZoom} ctx={contextMenu} handleNodeClick={handleNodeClick} handleReactionClick={handleReactionClick} rdkitModule={rdkitModule} />
               )}
             </div>
 
@@ -1213,11 +1226,52 @@ const ChemistryTool: React.FC = () => {
       {contextMenu && contextMenu.node && (
         <div className="context-menu" style={{ left: `${contextMenu.x + 10}px`, top: `${contextMenu.y + 10}px` }} onClick={(e) => e.stopPropagation()} onMouseDown={(e) => e.stopPropagation()}>
           <div className="context-menu-header">
-            <div className="context-menu-label">Actions for</div>
+            <div className="context-menu-label">Actions for {(contextMenu.isReaction ? "Reaction Resulting in" : "Molecule")}</div>
             <div className="context-menu-title" dangerouslySetInnerHTML={{__html: contextMenu.node.label}}></div>
           </div>
 
-          { (problemType === "optimization") && (
+          { !contextMenu.isReaction && (
+            <>
+              <button
+                onClick={() => copyToClipboard(contextMenu.node!.smiles, 'smiles', setCopiedField)}
+                className="context-menu-item"
+              >
+                {copiedField === 'smiles' ? (
+                  <>✓ Copied!</>
+                ) : (
+                  <>
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                    </svg>
+                    Copy SMILES
+                  </>
+                )}
+              </button>
+              <button onClick={() => handleCustomQuery(contextMenu.node!, "query-molecule")} className="context-menu-item">
+                <MessageCircleQuestion className="w-4 h-4" /> Ask about molecule...
+              </button>
+            </>
+          )}
+
+          { contextMenu.isReaction && (
+            <button
+              onClick={() => copyToClipboard(contextMenu.node!.reaction!.hoverInfo, 'reaction', setCopiedField)}
+              className="context-menu-item"
+            >
+              {copiedField === 'reaction' ? (
+                <>✓ Copied!</>
+              ) : (
+                <>
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                  </svg>
+                  Copy details
+                </>
+              )}
+            </button>
+          )}
+
+          {/* Lead Molecule Optimization */ (problemType === "optimization") && (
             <>
             <button onClick={() => {
               const nodeId = contextMenu.node!.id;
@@ -1227,7 +1281,7 @@ const ChemistryTool: React.FC = () => {
                 });
                 sendMessageToServer("optimize-from", {nodeId: nodeId, propertyType, customPropertyName, customPropertyDesc, customPropertyAscending, smiles: contextMenu.node!.smiles, xpos: contextMenu.node!.x});
                 setIsComputing(true);
-              }}  className="context-menu-item">
+              }}  className="context-menu-item context-menu-divider">
               <StepForward className="w-4 h-4" />
               Refine search from here
             </button>
@@ -1249,67 +1303,39 @@ const ChemistryTool: React.FC = () => {
             </>
           )}
 
-          <button
-            onClick={() => copyToClipboard(contextMenu.node!.smiles, 'smiles', setCopiedField)}
-            className="context-menu-item"
-          >
-            {copiedField === 'smiles' ? (
-              <>✓ Copied!</>
-            ) : (
-              <>
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
-                </svg>
-                Copy SMILES
-              </>
-            )}
-          </button>
-
-          { (problemType === "retrosynthesis" && !hasDescendants(contextMenu.node.id, treeNodes)) && (
-            <button onClick={() => {
-              sendMessageToServer("compute-reaction-from", {nodeId: contextMenu.node!.id});
-            }} className="context-menu-item">
-              <TestTubeDiagonal className="w-4 h-4" />
-              How do I make this?
-            </button>
-            ) }
-
-          { (problemType === "retrosynthesis" && hasDescendants(contextMenu.node.id, treeNodes)) && (
+          {/* Retrosynthesis (Molecule) */ (problemType == "retrosynthesis" && !contextMenu.isReaction) && (
             <>
-            <button disabled={true} onClick={() => {sendMessageToServer("recompute-reaction", {nodeId: contextMenu.node!.id});}} className="context-menu-item">
-              <RefreshCw className="w-4 h-4" />Find Another Reaction
-            </button>
-            </>
-          )}
-          { (problemType === "retrosynthesis" && !isRootNode(contextMenu.node.id, treeNodes)) && (
-            <>
-            <button disabled={true} onClick={() => {sendMessageToServer("recompute-parent-reaction", {nodeId: contextMenu.node!.id});}} className="context-menu-item">
-              <Network className="w-4 h-4" />Substitute Molecule
-            </button>
+              {!contextMenu.node.reaction && (
+                <button onClick={() => {sendMessageToServer("compute-reaction-from", {nodeId: contextMenu.node!.id});}} className="context-menu-item context-menu-divider">
+                  <TestTubeDiagonal className="w-4 h-4" />How do I make this?
+                </button>
+              )}
+              {!isRootNode(contextMenu.node.id, treeNodes) && (
+                <button onClick={() => {sendMessageToServer("recompute-parent-reaction", {nodeId: contextMenu.node!.id});}} className="context-menu-item context-menu-divider">
+                  <Network className="w-4 h-4" />Substitute Molecule
+                </button>
+              )}
             </>
           )}
 
-          { (problemType === "retrosynthesis" && hasDescendants(contextMenu.node.id, treeNodes)) && (
-          <button disabled={true} onClick={() => handleCustomQuery(contextMenu.node!, null)} className="context-menu-item context-menu-divider">
-            <Send className="w-4 h-4" />
-            { (problemType === "retrosynthesis" && hasDescendants(contextMenu.node.id, treeNodes)) ? (<>Find Another Reaction with Custom Prompt...</>) : (<>Custom Query...</>) }
-          </button>
+          {/* Retrosynthesis (Reaction) */ (problemType == "retrosynthesis" && contextMenu.isReaction) && (
+            <>
+              <button onClick={() => handleCustomQuery(contextMenu.node!, "query-reaction")} className="context-menu-item">
+                <MessageCircleQuestion className="w-4 h-4" /> Ask about reaction...
+              </button>
+              <button onClick={() => {sendMessageToServer("compute-reaction-from", {nodeId: contextMenu.node!.id});}} className="context-menu-item context-menu-divider">
+                <RefreshCw className="w-4 h-4" />Find Another Reaction
+              </button>
+              <button onClick={() => handleCustomQuery(contextMenu.node!, "compute-reaction-from")} className="context-menu-item">
+                <Send className="w-4 h-4" />Find Another Reaction with Custom Prompt...
+              </button>
+            </>
           )}
 
-          { (problemType === "retrosynthesis" && contextMenu.node) && (
-          <button onClick={() => handleCustomQuery(contextMenu.node!, "query-retro-molecule")} className="context-menu-item context-menu-divider">
-            <MessageCircleQuestion className="w-4 h-4" /> Ask about molecule...
-          </button>
-          )}
-          { (problemType === "retrosynthesis" && hasDescendants(contextMenu.node.id, treeNodes)) && (
-          <button onClick={() => handleCustomQuery(contextMenu.node!, "query-retro-product")} className="context-menu-item">
-            <MessageCircleQuestion className="w-4 h-4" /> Ask about reaction product...
-          </button>
-          )}
-          { (problemType === "retrosynthesis" && !isRootNode(contextMenu.node.id, treeNodes)) && (
-          <button onClick={() => handleCustomQuery(contextMenu.node!, "query-retro-reactant")} className="context-menu-item">
-            <MessageCircleQuestion className="w-4 h-4" /> Ask about reactant...
-          </button>
+          { contextMenu.isReaction && (
+              <div className="context-menu-details custom-scrollbar">
+                <MarkdownText text={contextMenu.node!.reaction!.hoverInfo} />
+              </div>
           )}
         </div>
       )}

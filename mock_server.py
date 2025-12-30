@@ -74,6 +74,14 @@ if os.path.exists(ASSETS_PATH):
 
 
 @dataclass
+class Reaction:
+    id: str
+    hoverInfo: str
+    highlight: str = "normal"
+    label: Optional[str] = None
+
+
+@dataclass
 class Node:
     id: str
     smiles: str
@@ -89,6 +97,7 @@ class Node:
     density: Optional[float] = None
     yield_: Optional[float] = None
     highlight: Optional[str] = "normal"
+    reaction: Optional[Reaction] = None
 
     def json(self):
         ret = asdict(self)
@@ -164,6 +173,24 @@ def generate_tree_structure(
                 level=level,
                 parentId=parent_id,
                 hoverInfo=f"# Molecule {level}-{i}\n**SMILES:** `{child_smiles}`\n**Level:** {level}",
+                reaction=(
+                    None
+                    if level == depth
+                    else Reaction(
+                        "reaction_0",
+                        "# Reaction (AI-based)\nSome information here",
+                        label=random.choice(
+                            [
+                                "",
+                                "Hydrogenation",
+                                "Oxidation",
+                                "Methylation",
+                                "Reduction",
+                                "Cyclization",
+                            ]
+                        ),
+                    )
+                ),
             )
             nodes.append(node)
 
@@ -172,15 +199,6 @@ def generate_tree_structure(
                 fromNode=parent_id,
                 toNode=node_id,
                 status="computing",
-                label=random.choice(
-                    [
-                        "Hydrogenation",
-                        "Oxidation",
-                        "Methylation",
-                        "Reduction",
-                        "Cyclization",
-                    ]
-                ),
             )
             edges.append(edge)
 
@@ -198,6 +216,19 @@ def generate_tree_structure(
         level=0,
         parentId=None,
         hoverInfo=f"# Root Molecule\n**SMILES:** `{start_smiles}`",
+        reaction=Reaction(
+            "reaction_0",
+            "# Reaction (AI-based)\nSome information here",
+            label=random.choice(
+                [
+                    "Hydrogenation",
+                    "Oxidation",
+                    "Methylation",
+                    "Reduction",
+                    "Cyclization",
+                ]
+            ),
+        ),
     )
     nodes.insert(0, root)
 
@@ -212,16 +243,26 @@ def calculate_positions(nodes: list[Node]):
     """
     BOX_WIDTH = 270  # Must match with javascript!
     BOX_GAP = 160  # Must match with javascript!
-    level_gap = BOX_WIDTH + BOX_GAP
+    TEXT_FACTOR = 8  # Must match with javascript!
     node_spacing = 150
 
     # Group by level
-    levels = {}
+    levels: dict[int, list[Node]] = {}
     for node in nodes:
         level = node.level
         if level not in levels:
             levels[level] = []
         levels[level].append(node)
+
+    # Compute level gaps based on reaction label length
+    level_gaps = [BOX_WIDTH + BOX_GAP] * len(levels)
+    for level, level_nodes in levels.items():
+        for node in level_nodes:
+            if node.reaction and node.reaction.label:
+                level_gaps[level + 1] = max(
+                    level_gaps[level + 1],
+                    BOX_WIDTH + BOX_GAP + len(node.reaction.label) * TEXT_FACTOR,
+                )
 
     # Position nodes
     positioned: list[Node] = []
@@ -230,7 +271,7 @@ def calculate_positions(nodes: list[Node]):
         index_in_level = level_nodes.index(node)
 
         positioned_node = copy.deepcopy(node)
-        positioned_node.x = 100 + node.level * level_gap
+        positioned_node.x = 100 + node.level * level_gaps[node.level]
         positioned_node.y = 100 + index_in_level * node_spacing
         positioned.append(positioned_node)
 
@@ -389,26 +430,15 @@ async def websocket_endpoint(websocket: WebSocket):
                         "withNode": True,
                     }
                 )
-            elif data["action"].startswith("query-retro-") and "query" not in data:
-                await websocket.send_json(
-                    {
-                        "type": "response",
-                        "message": {
-                            "source": "Some custom source",
-                            "message": f"Hi from server",
-                            "smiles": "CCO",
-                        },
-                    }
-                )
-                await websocket.send_json({"type": "complete"})
-            elif data["action"].startswith("query-retro-"):
+            elif data["action"].startswith("query-"):
+                message = f"Processing query: {data['query']} for {'molecule' if data['action'].endswith('molecule') else 'reaction'} {data['nodeId']}"
                 if "water" in data["query"].lower():
                     await websocket.send_json(
                         {
                             "type": "response",
                             "message": {
                                 "source": "System",
-                                "message": f"Processing query: {data['query']} for node {data['nodeId']}",
+                                "message": message,
                                 "smiles": "O",
                             },
                         }
@@ -417,12 +447,9 @@ async def websocket_endpoint(websocket: WebSocket):
                     await websocket.send_json(
                         {
                             "type": "response",
-                            "message": {
-                                "message": f"Processing query: {data['query']} for node {data['nodeId']}"
-                            },
+                            "message": {"message": message},
                         }
                     )
-                await asyncio.sleep(3)  # Random wait
                 await websocket.send_json({"type": "complete"})
             elif data["action"] == "list-tools":
                 tools = [
