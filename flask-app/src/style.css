@@ -923,7 +923,7 @@
 
 /* Node state styles */
 .reaction-normal {
-  background: linear-gradient(to bottom right, rgba(245, 158, 11, 0.4), rgba(234, 179, 8, 0.4));
+  background: linear-gradient(to bottom right, rgba(245, 158, 11, 0.8), rgba(234, 179, 8, 0.8));
   border-color: rgba(168, 85, 247, 0.3);
 }
 
@@ -932,7 +932,7 @@
 }
 
 .reaction-highlight2 {
-  background: linear-gradient(to bottom right, rgba(32, 255, 0, 0.61), rgba(3, 106, 240, 0.6));
+  background: linear-gradient(to bottom right, rgba(32, 255, 0, 0.8), rgba(3, 106, 240, 0.8));
   border-color: #97ffd2;
 }
 

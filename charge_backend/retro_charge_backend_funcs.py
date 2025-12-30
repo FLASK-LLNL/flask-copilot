@@ -256,7 +256,7 @@ async def optimize_molecule_retro(
                     "ai_reaction_0",
                     reasoning_summary,
                     highlight="red",
-                    label="AI",
+                    label="Orchestrator",
                 ).json(),
             },
         }
