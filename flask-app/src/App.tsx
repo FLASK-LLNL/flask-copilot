@@ -1310,7 +1310,7 @@ const ChemistryTool: React.FC = () => {
                 </button>
               )}
               {!isRootNode(contextMenu.node.id, treeNodes) && (
-                <button disabled={true} onClick={() => {sendMessageToServer("recompute-parent-reaction", {nodeId: contextMenu.node!.id});}} className="context-menu-item context-menu-divider">
+                <button onClick={() => {sendMessageToServer("recompute-parent-reaction", {nodeId: contextMenu.node!.id});}} className="context-menu-item context-menu-divider">
                   <Network className="w-4 h-4" />Substitute Molecule
                 </button>
               )}
