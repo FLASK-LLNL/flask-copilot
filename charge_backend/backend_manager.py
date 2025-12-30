@@ -349,6 +349,10 @@ class ActionManager:
         logger.info(f"Data: {data}")
         node = self.retro_synth_context.node_ids[data["nodeId"]]
 
+        has_children = any(
+            v == data["nodeId"] for v in self.retro_synth_context.parents.values()
+        )
+
         await self.websocket.send_json(
             {"type": "subtree_delete", "node": {"id": data["nodeId"]}}
         )
@@ -359,9 +363,13 @@ class ActionManager:
                     "id": data["nodeId"],
                     "reaction": Reaction(
                         "ai_reaction_0",
-                        "Recomputing with AI orchestrator",
+                        (
+                            "Recomputing with AI orchestrator"
+                            if has_children
+                            else "Computing with AI orchestrator"
+                        ),
                         highlight="red",
-                        label="Recomputing",
+                        label="Recomputing" if has_children else "Computing",
                     ).json(),
                 },
             }
