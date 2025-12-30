@@ -20,6 +20,7 @@ import { copyToClipboard } from './utils';
 import './animations.css';
 import { MetricsDashboard, useMetricsDashboardState } from './components/metrics';
 import { useProjectData } from './hooks/useProjectData';
+import { MarkdownText } from './components/markdown';
 
 
 const ChemistryTool: React.FC = () => {
@@ -1329,6 +1330,12 @@ const ChemistryTool: React.FC = () => {
                 <Send className="w-4 h-4" />Find Another Reaction with Custom Prompt...
               </button>
             </>
+          )}
+
+          { contextMenu.isReaction && (
+              <div className="context-menu-details custom-scrollbar">
+                <MarkdownText text={contextMenu.node!.reaction!.hoverInfo} />
+              </div>
           )}
         </div>
       )}

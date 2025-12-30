@@ -1031,6 +1031,7 @@
   box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
   padding: 0.5rem 0;
   min-width: 12rem;
+  max-width: 30rem;
 }
 
 .context-menu-header {
@@ -1079,6 +1080,52 @@
 
 .context-menu-divider {
   border-top: 1px solid rgba(168, 85, 247, 0.3);
+}
+
+.context-menu-details {
+  margin: 0.5rem 0.75rem;
+  padding: 0.75rem;
+  background: rgba(0, 0, 0, 0.3);
+  border-radius: 0.5rem;
+  max-height: 12rem;
+  overflow-y: auto;
+  overflow-x: hidden;
+  border: 1px solid rgba(168, 85, 247, 0.2);
+  word-wrap: break-word;
+  overflow-wrap: break-word;
+}
+
+.context-menu-details .markdown-content {
+  font-size: 0.8125rem;
+  line-height: 1.4;
+  word-wrap: break-word;
+  overflow-wrap: break-word;
+}
+
+.context-menu-details .markdown-paragraph {
+  font-size: 0.8125rem;
+  margin-bottom: 0.25rem;
+}
+
+.context-menu-details .markdown-heading-1,
+.context-menu-details .markdown-heading-2,
+.context-menu-details .markdown-heading-3 {
+  font-size: 0.875rem;
+  margin-bottom: 0.25rem;
+}
+
+.context-menu-details .markdown-list-item {
+  font-size: 0.8125rem;
+  margin-left: 0.75rem;
+}
+
+.context-menu-details .markdown-table {
+  font-size: 0.75rem;
+  width: 100%;
+}
+
+.context-menu-details code {
+  word-break: break-all;
 }
 
 /* ========================================
