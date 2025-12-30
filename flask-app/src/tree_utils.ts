@@ -24,7 +24,13 @@ export function isRootNode(nodeId: string, nodes: TreeNode[]): boolean {
     return !node?.parentId;
 }
 
-  // Relayouts the molecule graph for better visibility (assumes tree)
+// Helper function to estimate text width (rough approximation)
+export function estimateTextWidth(text: string): number {
+  // Rough estimate: 10 pixels per character
+  return text.length * 10;
+}
+
+// Relayouts the molecule graph for better visibility (assumes tree)
 export function relayoutTree(treeNodes: TreeNode[], edges: Edge[]): [TreeNode[], Edge[]] {
     if (treeNodes.length === 0) return [treeNodes, edges];
 
@@ -42,8 +48,10 @@ export function relayoutTree(treeNodes: TreeNode[], edges: Edge[]): [TreeNode[],
     // Find root node(s)
     const roots = treeNodes.filter(n => n.parentId === null || !treeNodes.find(t => t.id === n.parentId));
 
-    const levelGap = BOX_WIDTH + BOX_GAP;
+    const baseLevelGap = BOX_WIDTH + BOX_GAP;
     const nodeSpacing = 150;
+    const reactionCircleBaseWidth = 60; // Base width for reaction circle when no label
+    const reactionPadding = 40; // Extra padding around reaction
     const newPositions = new Map<string, Position>();
 
     // First pass: calculate subtree sizes (number of leaf descendants)
@@ -62,7 +70,7 @@ export function relayoutTree(treeNodes: TreeNode[], edges: Edge[]): [TreeNode[],
     roots.forEach(root => calculateSubtreeSize(root.id));
 
     // Second pass: assign positions based on subtree sizes
-    const assignPositions = (nodeId: string, level: number, startY: number): number => {
+    const assignPositions = (nodeId: string, parentX: number, startY: number): number => {
       const node = treeNodes.find(n => n.id === nodeId);
       if (!node) return startY;
 
@@ -71,25 +79,37 @@ export function relayoutTree(treeNodes: TreeNode[], edges: Edge[]): [TreeNode[],
       if (children.length === 0) {
         // Leaf node - place at next available Y
         newPositions.set(nodeId, {
-          x: 100 + level * levelGap,
+          x: parentX,
           y: startY
         });
         return startY + nodeSpacing;
       }
 
       // Internal node - place children first, then center parent
+      // Calculate child X position based on whether this node has a reaction
+      let childX = parentX + baseLevelGap;
+      if (node.reaction) {
+        // Add extra spacing for reaction
+        let reactionWidth = reactionCircleBaseWidth;
+        if (node.reaction.label) {
+          const labelWidth = estimateTextWidth(node.reaction.label);
+          reactionWidth = Math.max(reactionWidth, labelWidth);
+        }
+        childX += reactionWidth + reactionPadding;
+      }
+
       let currentY = startY;
       const childPositions: number[] = [];
 
       children.forEach(child => {
-        currentY = assignPositions(child.id, level + 1, currentY);
+        currentY = assignPositions(child.id, childX, currentY);
         childPositions.push(newPositions.get(child.id)!.y);
       });
 
       // Center parent among its children
       const avgChildY = childPositions.reduce((sum, y) => sum + y, 0) / childPositions.length;
       newPositions.set(nodeId, {
-        x: 100 + level * levelGap,
+        x: parentX,
         y: avgChildY
       });
 
@@ -98,7 +118,7 @@ export function relayoutTree(treeNodes: TreeNode[], edges: Edge[]): [TreeNode[],
 
     let currentY = 100;
     roots.forEach(root => {
-      currentY = assignPositions(root.id, 0, currentY);
+      currentY = assignPositions(root.id, 100, currentY);
     });
 
     // Update nodes with new positions

@@ -9,6 +9,12 @@ export const NODE_STYLES = {
   "yellow": 'node-computing',
 } as const;
 
+export const REACTION_STYLES = {
+  "normal": 'reaction-normal',
+  "red": 'reaction-highlight',
+  "yellow": 'reaction-highlight2',
+} as const;
+
 export const PROPERTY_NAMES: Record<string, string> = {
   "density": "Crystalline Density",
   "hof": "Heat of Formation",

@@ -3,6 +3,13 @@ import { RDKitModule } from '@rdkit/rdkit';
 import { NODE_STYLES } from "./constants";
 import { Dispatch, SetStateAction } from 'react';
 
+export interface Reaction {
+  id: string;
+  label?: string;
+  hoverInfo: string;
+  highlight: keyof typeof NODE_STYLES;
+}
+
 export interface TreeNode {
   id: string;
   smiles: string;
@@ -18,13 +25,13 @@ export interface TreeNode {
   x: number;
   y: number;
   highlight?: keyof typeof NODE_STYLES;
+  reaction?: Reaction;
 }
 
 export interface Edge {
   id: string;
   fromNode: string;
   toNode: string;
-  reactionType?: string;
   status?: 'complete' | 'computing';
   label?: string;
 }
@@ -135,6 +142,7 @@ export interface VisibleSources {
 
 export interface ContextMenuState {
   node: TreeNode | null;
+  isReaction: boolean;
   x: number;
   y: number;
 }
@@ -174,6 +182,7 @@ export interface MoleculeGraphProps extends MoleculeGraphState {
     autoZoom: boolean;
     setAutoZoom: Dispatch<SetStateAction<boolean>>;
     handleNodeClick: (e: React.MouseEvent<HTMLDivElement>, node: TreeNode) => void;
+    handleReactionClick: (e: React.MouseEvent<HTMLDivElement>, node: TreeNode) => void;
     rdkitModule: RDKitModule | null;
 }
 

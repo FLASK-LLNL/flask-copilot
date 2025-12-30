@@ -660,6 +660,7 @@
   display: flex;
   align-items: center;
   gap: 0.5rem;
+  position: relative;
 }
 
 .project-button {
@@ -873,6 +874,30 @@
   transform: scale(1.05);
 }
 
+.graph-reaction {
+  position: absolute;
+  animation: fadeInScale 0.5s ease-out;
+  transition: left 0.6s cubic-bezier(0.34, 1.56, 0.64, 1),
+              top 0.6s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.reaction-button {
+  backdrop-filter: blur(4px);
+  border-radius: 2rem;
+  border: 2px solid;
+  box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
+  transition: all 0.2s;
+  pointer-events: auto;
+  cursor: pointer;
+  text-align: center;
+  color: rgba(249, 240, 255, 0.8);
+}
+
+.reaction-button:hover {
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
+  transform: scale(1.05);
+}
+
 /* Node state styles */
 .node-normal {
   background: linear-gradient(to bottom right, rgba(249, 240, 255, 0.8), rgba(249, 168, 212, 0.8));
@@ -896,6 +921,26 @@
   animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
 }
 
+/* Node state styles */
+.reaction-normal {
+  background: linear-gradient(to bottom right, rgba(245, 158, 11, 0.8), rgba(234, 179, 8, 0.8));
+  border-color: rgba(168, 85, 247, 0.3);
+}
+
+.reaction-normal:hover {
+  border-color: #dce67d;
+}
+
+.reaction-highlight2 {
+  background: linear-gradient(to bottom right, rgba(32, 255, 0, 0.8), rgba(3, 106, 240, 0.8));
+  border-color: #97ffd2;
+}
+
+.reaction-highlight {
+  background: linear-gradient(to bottom right, rgba(146, 1, 242, 0.8), rgba(255, 0, 139, 0.8));
+  border-color: #fbbf24;
+}
+
 .node-label {
   margin-top: 0.5rem;
   text-align: center;
@@ -910,6 +955,45 @@
   padding: 0.25rem 0.5rem;
   white-space: pre-line;
 }
+
+/* Edge labels in graph */
+.edge-normal {
+  stroke: #8B5CF6;
+}
+
+.edge-computing {
+  stroke: #F59E0B;
+}
+
+.edge-highlighted {
+  stroke: #dce67d;
+}
+
+.edge-label {
+  position: absolute;
+  pointer-events: auto;
+  transform: translate(-50%, -50%);
+}
+
+.edge-label-badge {
+  padding: 0.375rem 0.75rem;
+  border-radius: 0.5rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
+}
+
+.edge-label-computing {
+  background: #f59e0b;
+  color: white;
+  animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+.edge-label-normal {
+  background: #a855f7;
+  color: white;
+}
+
 
 .graph-controls {
   position: absolute;
@@ -947,6 +1031,7 @@
   box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
   padding: 0.5rem 0;
   min-width: 12rem;
+  max-width: 30rem;
 }
 
 .context-menu-header {
@@ -995,6 +1080,52 @@
 
 .context-menu-divider {
   border-top: 1px solid rgba(168, 85, 247, 0.3);
+}
+
+.context-menu-details {
+  margin: 0.5rem 0.75rem;
+  padding: 0.75rem;
+  background: rgba(0, 0, 0, 0.3);
+  border-radius: 0.5rem;
+  max-height: 12rem;
+  overflow-y: auto;
+  overflow-x: hidden;
+  border: 1px solid rgba(168, 85, 247, 0.2);
+  word-wrap: break-word;
+  overflow-wrap: break-word;
+}
+
+.context-menu-details .markdown-content {
+  font-size: 0.8125rem;
+  line-height: 1.4;
+  word-wrap: break-word;
+  overflow-wrap: break-word;
+}
+
+.context-menu-details .markdown-paragraph {
+  font-size: 0.8125rem;
+  margin-bottom: 0.25rem;
+}
+
+.context-menu-details .markdown-heading-1,
+.context-menu-details .markdown-heading-2,
+.context-menu-details .markdown-heading-3 {
+  font-size: 0.875rem;
+  margin-bottom: 0.25rem;
+}
+
+.context-menu-details .markdown-list-item {
+  font-size: 0.8125rem;
+  margin-left: 0.75rem;
+}
+
+.context-menu-details .markdown-table {
+  font-size: 0.75rem;
+  width: 100%;
+}
+
+.context-menu-details code {
+  word-break: break-all;
 }
 
 /* ========================================
@@ -2013,30 +2144,4 @@
   border-top: 1px solid rgba(168, 85, 247, 0.3);
   display: flex;
   gap: 0.5rem;
-}
-
-/* Edge labels in graph */
-.edge-label {
-  position: absolute;
-  pointer-events: auto;
-  transform: translate(-50%, -50%);
-}
-
-.edge-label-badge {
-  padding: 0.375rem 0.75rem;
-  border-radius: 0.5rem;
-  font-size: 0.75rem;
-  font-weight: 600;
-  box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
-}
-
-.edge-label-computing {
-  background: #f59e0b;
-  color: white;
-  animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
-}
-
-.edge-label-normal {
-  background: #a855f7;
-  color: white;
 }

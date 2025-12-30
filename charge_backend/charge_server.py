@@ -241,21 +241,26 @@ async def websocket_endpoint(websocket: WebSocket):
     await action_manager.report_orchestrator_config()
 
     action_handlers = {
+        # General actions
+        "query-molecule": action_manager.handle_custom_query_molecule,
+        "query-reaction": action_manager.handle_custom_query_reaction,
         "compute": action_manager.handle_compute,
-        "compute-reaction-from": action_manager.handle_compute_reaction_from,
-        "optimize-from": action_manager.handle_optimize_from,
-        "recompute-reaction": action_manager.handle_recompute_reaction,
+        "reset": action_manager.handle_reset,
+        "stop": action_manager.handle_stop,
+        # Tools
         "list-tools": action_manager.handle_list_tools,
         "select-tools-for-task": action_manager.handle_select_tools_for_task,
+        # Settings
         "ui-update-orchestrator-settings": action_manager.handle_orchestrator_settings_update,
-        "query-retro-product": action_manager.handle_custom_query_retro_product,
-        "query-retro-reactant": action_manager.handle_custom_query_retro_reactant,
-        "query-retro-molecule": action_manager.handle_custom_query_retro_molecule,
-        "reset": action_manager.handle_reset,
+        "get-username": action_manager.handle_get_username,
+        # Context management
         "save-context": action_manager.handle_save_state,
         "load-context": action_manager.handle_load_state,
-        "stop": action_manager.handle_stop,
-        "get-username": action_manager.handle_get_username,
+        # Lead molecule optimization
+        "optimize-from": action_manager.handle_optimize_from,
+        # Retrosynthesis
+        "compute-reaction-from": action_manager.handle_compute_reaction_from,
+        "recompute-parent-reaction": action_manager.handle_recompute_reaction,
     }
 
     try:
