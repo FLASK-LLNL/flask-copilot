@@ -2,6 +2,10 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { Loader2, FlaskConical, TestTubeDiagonal, Network, Play, RotateCcw, X, Send, RefreshCw, Sparkles, MessageCircleQuestion, StepForward, MessageSquareShare, Brain } from 'lucide-react';
 import 'recharts';
+import 'react-markdown';
+import 'remark-gfm';
+import 'react-syntax-highlighter';
+import 'react-syntax-highlighter/dist/esm/styles/prism';
 
 import { WS_SERVER, VERSION } from './config';
 import { DEFAULT_CUSTOM_SYSTEM_PROMPT, PROPERTY_NAMES } from './constants';
