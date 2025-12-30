@@ -3,14 +3,14 @@ FROM python:3.11-bookworm
 RUN curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.3/install.sh | bash
 RUN . $HOME/.nvm/nvm.sh && nvm install 22
 
+ARG DATA_PATH=./data
+COPY ${DATA_PATH}/. /data
+RUN mkdir /data/db
+
 WORKDIR /app
 COPY requirements.txt /app
 COPY flask-app/. /app
 COPY charge_backend /app/charge_backend
-
-ARG DATA_PATH=./data
-COPY ${DATA_PATH}/. /data
-RUN mkdir /data/db
 
 RUN . $HOME/.nvm/nvm.sh && \
     npm install -g npm@latest && \
