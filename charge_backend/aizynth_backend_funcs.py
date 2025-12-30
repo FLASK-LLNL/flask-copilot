@@ -65,15 +65,22 @@ def generate_tree_structure(
         nodes.append(node)
 
         if current_node.parent_id is not None:
+            parent_node_id = f"node_{current_node.parent_id}"
             edge = Edge(
                 id=f"edge_{current_node.parent_id}_{node_id}",
-                fromNode=f"node_{current_node.parent_id}",
+                fromNode=parent_node_id,
                 toNode=node_id_str,
                 status="complete",
                 label=None,
             )
+            retro_synth_context.node_ids[parent_node_id].reaction = Reaction(
+                "azf",
+                "Reaction found with AiZynthFinder",
+                highlight="yellow",
+                label="Template",
+            )
             edges.append(edge)
-            retro_synth_context.parents[node_id_str] = f"node_{current_node.parent_id}"
+            retro_synth_context.parents[node_id_str] = parent_node_id
 
         for child_id in current_node.children:
             child_node = reaction_path_dict[child_id]

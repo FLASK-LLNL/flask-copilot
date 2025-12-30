@@ -8,10 +8,7 @@ from concurrent.futures import ProcessPoolExecutor
 from charge.experiments.AutoGenExperiment import AutoGenExperiment
 from charge.clients.autogen_utils import chargeConnectionError
 from charge.tasks.Task import Task
-from backend_helper_funcs import (
-    RetrosynthesisContext,
-    CallbackHandler,
-)
+from backend_helper_funcs import RetrosynthesisContext, CallbackHandler, Reaction
 from lmo_charge_backend_funcs import generate_lead_molecule
 from charge_backend_custom import run_custom_problem
 from functools import partial
@@ -350,6 +347,25 @@ class ActionManager:
 
         logger.info("Synthesize tree leaf action received")
         logger.info(f"Data: {data}")
+        node = self.retro_synth_context.node_ids[data["nodeId"]]
+
+        await self.websocket.send_json(
+            {"type": "subtree_delete", "node": {"id": data["nodeId"]}}
+        )
+        await self.websocket.send_json(
+            {
+                "type": "node_update",
+                "node": {
+                    "id": data["nodeId"],
+                    "reaction": Reaction(
+                        "ai_reaction_0",
+                        "Recomputing with AI orchestrator",
+                        highlight="red",
+                        label="Recomputing",
+                    ).json(),
+                },
+            }
+        )
 
         run_func = partial(
             optimize_molecule_retro,
@@ -404,13 +420,34 @@ class ActionManager:
             await self.websocket.send_json({"type": "complete"})
 
         parent_nodeid = self.retro_synth_context.parents[data["nodeId"]]
+        parent_node = self.retro_synth_context.node_ids[parent_nodeid]
+        smiles = self.retro_synth_context.node_ids[data["nodeId"]].smiles
+
+        # Clear subtree and levels for layouting
+        await self.websocket.send_json(
+            {"type": "subtree_delete", "node": {"id": parent_nodeid}}
+        )
+        await self.websocket.send_json(
+            {
+                "type": "node_update",
+                "node": {
+                    "id": parent_nodeid,
+                    "reaction": Reaction(
+                        "ai_reaction_0",
+                        "Recomputing with AI orchestrator",
+                        highlight="red",
+                        label="Recomputing",
+                    ).json(),
+                },
+            }
+        )
 
         run_func = partial(
             optimize_molecule_retro,
             parent_nodeid,
             self.retro_synth_context,
             data.get("query", None),
-            data["smiles"],
+            smiles,
             self.task_manager.websocket,
             self.experiment,
             self.args.config_file,
