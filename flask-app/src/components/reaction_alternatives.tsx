@@ -19,22 +19,34 @@ interface ReactionAlternativesSidebarProps {
 }
 
 // Mini molecule preview component
-const MiniMoleculeSVG: React.FC<{ smiles: string; rdkitModule: Promise<any> }> = ({ smiles, rdkitModule }) => {
+const MiniMoleculeSVG: React.FC<{ smiles: string; rdkitModule: RDKitModule | null }> = ({ smiles, rdkitModule }) => {
   const [svg, setSvg] = React.useState<string>('');
+  const renderedRef = React.useRef<string>('');
 
   React.useEffect(() => {
-    rdkitModule.then(RDKit => {
-      try {
-        const mol = RDKit.get_mol(smiles);
-        if (mol && mol.is_valid()) {
-          const svgStr = mol.get_svg(45, 45);
-          setSvg(svgStr);
-          mol.delete();
-        }
-      } catch (e) {
-        console.error('Error rendering mini molecule:', e);
+    if (!rdkitModule || renderedRef.current === smiles || !smiles) return;
+
+    try {
+      const mol = rdkitModule.get_mol(smiles);
+      if (mol && mol.is_valid()) {
+        // Configure drawing options for dark mode
+        const drawOpts = JSON.stringify({
+          width: 45,
+          height: 45,
+          backgroundColour: [1, 1, 1, 0.0], // Transparent [R, G, B, A]
+          // Lighter colors for dark backgrounds
+          bondLineWidth: 1,
+        });
+
+        const svgStr = mol.get_svg_with_highlights(drawOpts);
+        //const svgStr = mol.get_svg(45, 45);
+        setSvg(svgStr);
+        renderedRef.current = smiles;
+        mol.delete();
       }
-    });
+    } catch (e) {
+      console.error('Error rendering mini molecule:', e);
+    }
   }, [smiles, rdkitModule]);
 
   if (!svg) {
@@ -47,7 +59,7 @@ const MiniMoleculeSVG: React.FC<{ smiles: string; rdkitModule: Promise<any> }> =
 
   return (
     <div
-      className="w-9 h-9 rounded bg-white/10 flex items-center justify-center flex-shrink-0"
+      className="w-9 h-9 rounded bg-white/70 flex items-center justify-center flex-shrink-0"
       dangerouslySetInnerHTML={{ __html: svg }}
     />
   );
@@ -56,7 +68,7 @@ const MiniMoleculeSVG: React.FC<{ smiles: string; rdkitModule: Promise<any> }> =
 // Multi-step pathway preview with support for multiple reactants per step
 const PathwayPreview: React.FC<{
   alternative: ReactionAlternative;
-  rdkitModule: Promise<any>;
+  rdkitModule: RDKitModule | null;
   isActive: boolean;
   isDisabled: boolean;
 }> = ({ alternative, rdkitModule, isActive, isDisabled }) => {
@@ -244,8 +256,7 @@ export const ReactionAlternativesSidebar: React.FC<ReactionAlternativesSidebarPr
       style={{ width: '420px' }}
       onClick={(e) => e.stopPropagation()}
     >
-      <div className="h-full flex flex-col bg-surface backdrop-blur-lg border-l-2 border-primary shadow-2xl">
-        {/* Header */}
+      <div className="h-full flex flex-col sidebar-inner backdrop-blur-lg border-l-2 border-primary shadow-2xl">
         <div className="flex items-center justify-between p-4 border-b border-secondary">
           <div className="flex-1 min-w-0">
             <h3 className="text-lg font-semibold text-primary truncate">
@@ -287,7 +298,7 @@ export const ReactionAlternativesSidebar: React.FC<ReactionAlternativesSidebarPr
               <div className="flex items-start gap-2">
                 <AlertCircle className="w-4 h-4 text-warning flex-shrink-0 mt-0.5" />
                 <div className="text-sm text-warning">
-                  No exact matches found in literature
+                  No exact matches found in database
                 </div>
               </div>
             </div>

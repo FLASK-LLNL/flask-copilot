@@ -591,6 +591,10 @@
   border-left: 2px solid #a78bfa;
 }
 
+.sidebar-inner {
+  background: rgba(50, 34, 86, 0.9);
+}
+
 .sidebar-right.sidebar-collapsed {
   width: 3rem !important;
   min-width: 3rem;
