@@ -14,7 +14,12 @@ export const useGraphState = (): MoleculeGraphState => {
     return { offset, setOffset, zoom, setZoom };
 };
 
-export const MoleculeGraph: React.FC<MoleculeGraphProps> = ({nodes, edges, ctx, autoZoom, setAutoZoom, handleNodeClick, handleReactionClick, rdkitModule, offset, setOffset, zoom, setZoom}) => {
+export const MoleculeGraph: React.FC<MoleculeGraphProps> = ({
+  nodes, edges, ctx, autoZoom, setAutoZoom,
+  handleNodeClick, handleReactionClick, handleReactionCardClick,
+  selectedReactionNodeId, reactionSidebarOpen,
+  rdkitModule, offset, setOffset, zoom, setZoom
+}) => {
     const [isDragging, setIsDragging] = useState<boolean>(false);
     const [dragStart, setDragStart] = useState<Position>({ x: 0, y: 0 });
     const [hoveredNode, setHoveredNode] = useState<TreeNode | null>(null);
@@ -249,8 +254,8 @@ export const MoleculeGraph: React.FC<MoleculeGraphProps> = ({nodes, edges, ctx, 
             <div
                 ref={containerRef}
                 className={`graph-container ${
-                autoZoom ? 'graph-cursor-default' : isDragging ? 'graph-cursor-grabbing' : 'graph-cursor-grab'
-                }`}
+                    autoZoom ? 'graph-cursor-default' : isDragging ? 'graph-cursor-grabbing' : 'graph-cursor-grab'
+                } ${reactionSidebarOpen ? 'opacity-70' : ''}`}  // ADD DIMMING
                 onMouseDown={handleMouseDown}
                 style={{ userSelect: 'none' }}
             >
@@ -351,12 +356,30 @@ export const MoleculeGraph: React.FC<MoleculeGraphProps> = ({nodes, edges, ctx, 
                             }
                         }}
                         onMouseLeave={() => setHoveredReaction(null)}
-                        onClick={(e) => handleReactionClick(e, node)}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                            handleReactionCardClick(node);  // Left-click opens sidebar
+                        }}
+                        onContextMenu={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            handleReactionClick(e, node);  // Right-click for context menu
+                        }}
                         >
-                        <div className={`reaction-button ${REACTION_STYLES[node.reaction.highlight || 'normal']}`}>
-                            {node.reaction.label && (node.reaction.label)}
-                            {!node.reaction.label && (<>&nbsp;</>)}
-                        </div>
+                        <div className={`reaction-button ${REACTION_STYLES[node.reaction.highlight || 'normal']} ${
+                            selectedReactionNodeId === node.id ? 'ring-2 ring-white ring-offset-2 ring-offset-slate-900' : ''
+                        }`}>
+                            <div className="flex items-center justify-between gap-2">
+                                <span className="flex-1 truncate">
+                                {node.reaction.label || '\u00A0'}
+                                </span>
+                                {node.reaction.alternatives && node.reaction.alternatives.length > 1 && (
+                                <span className="flex-shrink-0 text-xs bg-white/20 px-2 py-0.5 rounded-full font-semibold">
+                                    +{node.reaction.alternatives.length - 1}
+                                </span>
+                                )}
+                            </div>
+                            </div>
                         </div>
                     )}
                     </>
