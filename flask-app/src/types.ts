@@ -3,11 +3,29 @@ import { RDKitModule } from '@rdkit/rdkit';
 import { NODE_STYLES } from "./constants";
 import { Dispatch, SetStateAction } from 'react';
 
+export interface PathwayStep {
+  smiles: string[];
+  label: string[];
+  isProduct?: boolean;
+}
+
+export interface ReactionAlternative {
+  id: string;
+  name: string;
+  type: 'exact' | 'template';
+  status: 'active' | 'available' | 'computing';
+  disabled?: boolean;
+  disabledReason?: string;
+  pathway: PathwayStep[];  // For UI preview
+}
+
 export interface Reaction {
   id: string;
   label?: string;
   hoverInfo: string;
   highlight: keyof typeof NODE_STYLES;
+  alternatives?: ReactionAlternative[];
+  templatesSearched?: boolean;  // Whether to show the "Search Templates" button
 }
 
 export interface TreeNode {
@@ -183,6 +201,9 @@ export interface MoleculeGraphProps extends MoleculeGraphState {
     setAutoZoom: Dispatch<SetStateAction<boolean>>;
     handleNodeClick: (e: React.MouseEvent<HTMLDivElement>, node: TreeNode) => void;
     handleReactionClick: (e: React.MouseEvent<HTMLDivElement>, node: TreeNode) => void;
+    handleReactionCardClick: (node: TreeNode) => void;
+    selectedReactionNodeId?: string;
+    reactionSidebarOpen: boolean;
     rdkitModule: RDKitModule | null;
 }
 

@@ -9,7 +9,7 @@ import 'react-syntax-highlighter/dist/esm/styles/prism';
 
 import { WS_SERVER, VERSION } from './config';
 import { DEFAULT_CUSTOM_SYSTEM_PROMPT, PROPERTY_NAMES } from './constants';
-import { TreeNode, Edge, ContextMenuState, SidebarMessage, Tool, WebSocketMessageToServer, WebSocketMessage, SelectableTool, Experiment, OrchestratorSettings } from './types';
+import { TreeNode, Edge, ContextMenuState, SidebarMessage, Tool, WebSocketMessageToServer, WebSocketMessage, SelectableTool, Experiment, OrchestratorSettings, ReactionAlternative } from './types';
 
 import { loadRDKit } from './components/molecule';
 import { ReasoningSidebar, useSidebarState } from './components/sidebar';
@@ -25,6 +25,7 @@ import './animations.css';
 import { MetricsDashboard, useMetricsDashboardState } from './components/metrics';
 import { useProjectData } from './hooks/useProjectData';
 import { MarkdownText } from './components/markdown';
+import { ReactionAlternativesSidebar } from './components/reaction_alternatives';
 
 
 const ChemistryTool: React.FC = () => {
@@ -85,6 +86,11 @@ const ChemistryTool: React.FC = () => {
   const [showToolSelectionModal, setShowToolSelectionModal] = useState<boolean>(false);
   const [selectedTools, setSelectedTools] = useState<number[]>([]);
   const [availableToolsMap, setAvailableToolsMap] = useState<SelectableTool[]>([]);
+
+  // Reaction alternatives sidebar state
+  const [reactionSidebarOpen, setReactionSidebarOpen] = useState<boolean>(false);
+  const [selectedReactionNode, setSelectedReactionNode] = useState<TreeNode | null>(null);
+  const [isComputingTemplates, setIsComputingTemplates] = useState<boolean>(false);
 
   // Update refs whenever state changes
   useEffect(() => {
@@ -397,6 +403,25 @@ const ChemistryTool: React.FC = () => {
         setTreeNodes(prev => prev.map(n =>
           n.id === data.node!.id ? { ...n, ...restData } : n
         ));
+
+        /*
+        // When a node update includes reaction info, preserve alternatives and templatesSearched:
+        setTreeNodes(prev => prev.map(n => {
+          if (n.id === data.node!.id) {
+            // Preserve existing alternatives and templatesSearched if not explicitly updated
+            if (restData.reaction && n.reaction) {
+              if (!restData.reaction.alternatives) {
+                restData.reaction.alternatives = n.reaction.alternatives;
+              }
+              if (restData.reaction.templatesSearched === undefined) {
+                restData.reaction.templatesSearched = n.reaction.templatesSearched;
+              }
+            }
+            return { ...n, ...restData };
+          }
+          return n;
+        }));
+        */
       } else if (data.type === 'node_delete') {
         setTreeNodes(prev => {
           const descendants = findAllDescendants(data.node!.id, prev);
@@ -472,6 +497,21 @@ const ChemistryTool: React.FC = () => {
         saveFullContext(data.experimentContext!);
       } else if (data.type === 'get-username-response') {
         setUsername(data.username!);
+      } else if (data.type === 'reaction-alternatives-response') {
+        // Backend sends template alternatives for a specific node
+        setTreeNodes(prev => prev.map(n =>
+          n.id === data.node!.id && n.reaction
+            ? {
+                ...n,
+                reaction: {
+                  ...n.reaction,
+                  alternatives: data.alternatives,
+                  templatesSearched: true  // Mark that templates have been searched
+                }
+              }
+            : n
+        ));
+        setIsComputingTemplates(false);
       }
     };
 
@@ -716,6 +756,47 @@ const ChemistryTool: React.FC = () => {
           y: e.clientY
       });
   };
+
+  const handleReactionCardClick = (node: TreeNode): void => {
+    if (isComputing) return; // Don't open during computation
+    setSelectedReactionNode(node);
+    setReactionSidebarOpen(true);
+  };
+
+  const handleSelectAlternative = (alt: ReactionAlternative): void => {
+    if (!selectedReactionNode) return;
+
+    // Send message to backend to switch to this alternative
+    sendMessageToServer("switch-reaction-alternative", {
+      nodeId: selectedReactionNode.id,
+      alternativeId: alt.id
+    });
+
+    // Close sidebar
+    setReactionSidebarOpen(false);
+    setIsComputing(true);
+  };
+
+  const handleComputeTemplates = (): void => {
+    if (!selectedReactionNode) return;
+
+    setIsComputingTemplates(true);
+    sendMessageToServer("compute-template-alternatives", {
+      nodeId: selectedReactionNode.id,
+      smiles: selectedReactionNode.smiles
+    });
+  };
+
+  const handleComputeFlaskAI = (): void => {
+    if (!selectedReactionNode) return;
+
+    // AI computation replaces the current reaction, so we send a recompute message
+    sendMessageToServer("compute-reaction-from", {
+      nodeId: selectedReactionNode.id
+    });
+    setIsComputing(true);
+  };
+
 
   const sendMessageToServer = (message: string, data?: Omit<WebSocketMessageToServer, 'action'>): void => {
     if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) {
@@ -1178,7 +1259,37 @@ const ChemistryTool: React.FC = () => {
                   )}
                 </div>
               ) : (
-                <MoleculeGraph {...graphState} nodes={treeNodes} edges={edges} autoZoom={autoZoom} setAutoZoom={setAutoZoom} ctx={contextMenu} handleNodeClick={handleNodeClick} handleReactionClick={handleReactionClick} rdkitModule={rdkitModule} />
+                <MoleculeGraph
+                  {...graphState}
+                  nodes={treeNodes}
+                  edges={edges}
+                  autoZoom={autoZoom}
+                  setAutoZoom={setAutoZoom}
+                  ctx={contextMenu}
+                  handleNodeClick={handleNodeClick}
+                  handleReactionClick={handleReactionClick}
+                  handleReactionCardClick={handleReactionCardClick}
+                  selectedReactionNodeId={selectedReactionNode?.id}
+                  reactionSidebarOpen={reactionSidebarOpen}
+                  rdkitModule={rdkitModule}
+                />
+              )}
+
+              {reactionSidebarOpen && selectedReactionNode?.reaction && (
+                <ReactionAlternativesSidebar
+                  isOpen={reactionSidebarOpen}
+                  onClose={() => setReactionSidebarOpen(false)}
+                  productMolecule={selectedReactionNode.label.replace(/<[^>]*>/g, '')} // Strip HTML
+                  productSmiles={selectedReactionNode.smiles}
+                  alternatives={selectedReactionNode.reaction.alternatives || []}
+                  onSelectAlternative={handleSelectAlternative}
+                  onComputeTemplates={handleComputeTemplates}
+                  onComputeFlaskAI={handleComputeFlaskAI}
+                  isComputingTemplates={isComputingTemplates}
+                  isComputing={isComputing || !wsConnected}
+                  templatesSearched={selectedReactionNode.reaction.templatesSearched || false}  // ADD THIS
+                  rdkitModule={rdkitModule}
+                />
               )}
             </div>
 
