@@ -324,7 +324,7 @@ async def generate_lead_molecule(
     generated_properties = []
 
     # Track generated molecules for diversity calculation
-    all_generated_smiles = set([lead_molecule_smiles])
+    all_generated_smiles = {lead_molecule_smiles}
 
     # Determine comparison function based on optimization direction
     is_better = (
