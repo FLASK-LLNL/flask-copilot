@@ -62,6 +62,11 @@ async def generate_lead_molecule(
     initial_node_id: int = 0,
     initial_x_position: int = 50,
     molecule_name_format: Literal["brand", "iupac", "formula", "smiles"] = "brand",
+    enable_constraints: bool = False,
+    molecular_similarity: float = 0.7,
+    diversity_penalty: float = 0.0,
+    exploration_rate: float = 0.5,
+    additional_constraints: list[str] = None,
 ) -> None:
     """Generate a lead molecule and stream its progress.
     Args:
@@ -72,6 +77,20 @@ async def generate_lead_molecule(
         available_tools (list[str]): List of available tools for molecule generation.
         depth (int): Depth of the generation tree.
         websocket (WebSocket): WebSocket connection for streaming updates.
+        property (str): Property to optimize.
+        property_description (str): Description of the property.
+        calculate_property_tool (str): Tool name for property calculation.
+        condition (str): Optimization direction ("greater" or "less").
+        custom_prompt (Optional[str]): Custom prompt for the LLM.
+        initial_level (int): Initial tree level.
+        initial_node_id (int): Initial node ID.
+        initial_x_position (int): Initial x-position for visualization.
+        molecule_name_format: Format for displaying molecule names.
+        enable_constraints (bool): Whether to use custom optimization strategy.
+        molecular_similarity (float): Similarity threshold to parent molecule (0.0-1.0).
+        diversity_penalty (float): Penalty for generating similar molecules (0.0-1.0).
+        exploration_rate (float): Balance between exploitation and exploration (0.0-1.0).
+        additional_constraints (list[str]): List of constraint types to apply.
 
     Returns:
         None
@@ -80,11 +99,31 @@ async def generate_lead_molecule(
     lead_molecule_smiles = start_smiles
     clogger = CallbackLogger(websocket)
 
-    await clogger.info(
-        f"Starting task with lead molecule: {lead_molecule_smiles} and available tools: {available_tools}",
-        smiles=lead_molecule_smiles,
-        source="generate_lead_molecule",
-    )
+    # Only log customization if enabled
+    if enable_constraints:
+        constraints_str = (
+            ", ".join(additional_constraints) if additional_constraints else "none"
+        )
+        await clogger.info(
+            f"Starting optimization with custom strategy:\n"
+            f"  - Lead molecule: {lead_molecule_smiles}\n"
+            f"  - Molecular similarity threshold: {molecular_similarity}\n"
+            f"  - Diversity penalty: {diversity_penalty}\n"
+            f"  - Exploration rate: {exploration_rate}\n"
+            f"  - Additional constraints: {constraints_str}\n"
+            f"  - Available tools: {available_tools}",
+            smiles=lead_molecule_smiles,
+            source="generate_lead_molecule",
+        )
+    else:
+        await clogger.info(
+            f"Starting optimization with default strategy for lead molecule: {lead_molecule_smiles} using available tools: {available_tools}",
+            smiles=lead_molecule_smiles,
+            source="generate_lead_molecule",
+        )
+
+    if additional_constraints is None:
+        additional_constraints = []
 
     parent_id = 0
     node_id = initial_node_id
@@ -165,6 +204,86 @@ async def generate_lead_molecule(
     direction = "higher" if condition == "greater" else "lower"
     ranking = "highest" if condition == "greater" else "lowest"
 
+    # Only apply customization guidance if enabled
+    customization_text = ""
+    if enable_constraints:
+        # Build customization guidance for the prompt
+        customization_guidance = []
+
+        if molecular_similarity < 0.5:
+            customization_guidance.append(
+                f"You should explore diverse chemical modifications, "
+                f"as the molecular similarity threshold is low ({molecular_similarity:.2f})."
+            )
+        elif molecular_similarity > 0.8:
+            customization_guidance.append(
+                f"You should make conservative modifications, "
+                f"keeping molecules very similar to the parent (similarity threshold: {molecular_similarity:.2f})."
+            )
+
+        if diversity_penalty > 0.5:
+            customization_guidance.append(
+                f"Prioritize generating chemically diverse molecules to explore different regions "
+                f"of chemical space (diversity penalty: {diversity_penalty:.2f})."
+            )
+
+        if exploration_rate > 0.7:
+            customization_guidance.append(
+                f"Focus on exploration - try novel structural modifications "
+                f"(exploration rate: {exploration_rate:.2f})."
+            )
+        elif exploration_rate < 0.3:
+            customization_guidance.append(
+                f"Focus on exploitation - make incremental improvements to known good structures "
+                f"(exploration rate: {exploration_rate:.2f})."
+            )
+
+        # Handle additional constraints
+        if additional_constraints:
+            constraint_guidance = []
+
+            if "drug-likeness" in additional_constraints:
+                constraint_guidance.append(
+                    "Ensure all molecules satisfy drug-likeness criteria (Lipinski's Rule of Five)"
+                )
+
+            if "synthesizability" in additional_constraints:
+                constraint_guidance.append(
+                    "Prioritize molecules with high synthetic accessibility scores (SA score < 3)"
+                )
+
+            if "lead-likeness" in additional_constraints:
+                constraint_guidance.append(
+                    "Apply lead-likeness criteria suitable for early drug discovery "
+                    "(MW 200-350, LogP 1-3)"
+                )
+
+            if "pan-assay-interference" in additional_constraints:
+                constraint_guidance.append(
+                    "Filter out Pan-Assay Interference Compounds (PAINS) and other promiscuous binders"
+                )
+
+            if "toxicity-rules" in additional_constraints:
+                constraint_guidance.append(
+                    "Apply structural alerts to avoid potential toxicity issues"
+                )
+
+            if "reactive-groups" in additional_constraints:
+                constraint_guidance.append(
+                    "Avoid molecules with highly reactive functional groups (epoxides, acyl halides, etc.)"
+                )
+
+            if constraint_guidance:
+                customization_guidance.extend(constraint_guidance)
+
+        customization_text = (
+            "\n\nOptimization Strategy:\n"
+            + "\n".join(f"- {g}" for g in customization_guidance)
+            + "\n"
+            if customization_guidance
+            else ""
+        )
+
     # TODO: Use refinement prompt if initial_level != 0 and custom_prompt is None?
     formatted_user_prompt = (
         custom_prompt
@@ -178,6 +297,7 @@ async def generate_lead_molecule(
             direction=direction,
             ranking=ranking,
         )
+        + customization_text
     )
 
     canonical_smiles = lead_molecule_smiles
@@ -202,6 +322,9 @@ async def generate_lead_molecule(
 
     generated_smiles_list = []
     generated_properties = []
+
+    # Track generated molecules for diversity calculation
+    all_generated_smiles = {lead_molecule_smiles}
 
     # Determine comparison function based on optimization direction
     is_better = (
@@ -264,6 +387,23 @@ async def generate_lead_molecule(
                         tool_properties={optimized_property: property_result},
                     )
                     canonical_smiles = processed_mol["smiles"]
+
+                    # Apply diversity penalty if enabled
+                    if (
+                        enable_constraints
+                        and diversity_penalty > 0
+                        and canonical_smiles in all_generated_smiles
+                    ):
+                        await clogger.info(
+                            f"Molecule {canonical_smiles} already generated - applying diversity penalty"
+                        )
+                        # Penalize the property value based on diversity_penalty
+                        if condition == "greater":
+                            property_result *= 1 - diversity_penalty
+                        else:
+                            property_result *= 1 + diversity_penalty
+                        processed_mol[optimized_property] = property_result
+
                     if (
                         canonical_smiles not in new_molecules
                         and canonical_smiles != "Invalid SMILES"
@@ -273,6 +413,7 @@ async def generate_lead_molecule(
                         generated_smiles_list.append(canonical_smiles)
                         property_value = processed_mol.get(optimized_property, 0.0)
                         generated_properties.append(property_value)
+                        all_generated_smiles.add(canonical_smiles)
 
                         mol_data.append(processed_mol)
                         lmo_helper_funcs.save_list_to_json_file(
@@ -338,15 +479,18 @@ async def generate_lead_molecule(
                         )
                         break
 
-                    formatted_refine_prompt = FURTHER_REFINE_PROMPT.format(
-                        previous_values=", ".join(map(str, generated_properties)),
-                        previous_smiles=", ".join(generated_smiles_list),
-                        property=property,
-                        property_description=property_description,
-                        calculate_property_tool=calculate_property_tool,
-                        condition=condition,
-                        direction=direction,
-                        ranking=ranking,
+                    formatted_refine_prompt = (
+                        FURTHER_REFINE_PROMPT.format(
+                            previous_values=", ".join(map(str, generated_properties)),
+                            previous_smiles=", ".join(generated_smiles_list),
+                            property=property,
+                            property_description=property_description,
+                            calculate_property_tool=calculate_property_tool,
+                            condition=condition,
+                            direction=direction,
+                            ranking=ranking,
+                        )
+                        + customization_text
                     )
 
                     formatted_refine_prompt = (
