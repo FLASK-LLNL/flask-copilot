@@ -81,11 +81,19 @@ export interface OrchestratorSettings {
   toolServers?: ToolServer[];
 }
 
+// Optimization customization options
 export interface OptimizationCustomization {
+  enableConstraints?: boolean;
   molecularSimilarity?: number;
   diversityPenalty?: number;
   explorationRate?: number;
-  enableConstraints?: boolean;
+  additionalConstraints?: string[];  // Array of constraint types
+}
+
+export interface ConstraintOption {
+  value: string;
+  label: string;
+  description: string;
 }
 
 export interface WebSocketMessageToServer {

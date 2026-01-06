@@ -285,10 +285,11 @@ class ActionManager:
 
         # Extract customization parameters
         customization = data.get("customization", {})
+        enable_constraints = customization.get("enableConstraints", False)
         molecular_similarity = customization.get("molecularSimilarity", 0.7)
         diversity_penalty = customization.get("diversityPenalty", 0.0)
         exploration_rate = customization.get("explorationRate", 0.5)
-        enable_constraints = customization.get("enableConstraints", False)
+        additional_constraints = customization.get("additionalConstraints", [])
 
         run_func = partial(
             generate_lead_molecule,
@@ -305,10 +306,11 @@ class ActionManager:
             initial_node_id,
             initial_x_position,
             self.molecule_name_format,
+            enable_constraints,
             molecular_similarity,
             diversity_penalty,
             exploration_rate,
-            enable_constraints,
+            additional_constraints,
         )
         await self.task_manager.run_task(run_func())
 

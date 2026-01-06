@@ -63,10 +63,11 @@ const ChemistryTool: React.FC = () => {
 
   // Customization state
   const [customization, setCustomization] = useState<OptimizationCustomization>({
+    enableConstraints: false,
     molecularSimilarity: 0.7,
     diversityPenalty: 0.0,
     explorationRate: 0.5,
-    enableConstraints: false,
+    additionalConstraints: [],
   });
 
   // Function to refresh tools list from backend
