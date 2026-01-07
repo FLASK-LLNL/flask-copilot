@@ -25,7 +25,7 @@ export interface Reaction {
   hoverInfo: string;
   highlight: keyof typeof NODE_STYLES;
   alternatives?: ReactionAlternative[];
-  templatesSearched?: boolean;  // Whether to show the "Search Templates" button
+  templatesSearched: boolean;  // Whether to show the "Search Templates" button
 }
 
 export interface TreeNode {
