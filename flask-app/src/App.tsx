@@ -14,10 +14,9 @@ import { TreeNode, Edge, ContextMenuState, SidebarMessage, Tool, WebSocketMessag
 import { loadRDKit } from './components/molecule';
 import { ReasoningSidebar, useSidebarState } from './components/sidebar';
 import { MoleculeGraph, useGraphState } from './components/graph';
-import { MultiSelectToolModal } from './components/multi_select_tools';
 import { ProjectSidebar, useProjectSidebar, useProjectManagement } from './components/project_sidebar';
 import { SettingsButton, BACKEND_OPTIONS } from './components/settings_button';
-import { CustomizationModal } from './components/customization_modal';
+import { CombinedCustomizationModal } from './components/combined_customization_modal';
 
 import { findAllDescendants, hasDescendants, isRootNode, relayoutTree } from './tree_utils';
 import { copyToClipboard } from './utils';
@@ -36,7 +35,7 @@ const ChemistryTool: React.FC = () => {
   const [problemPrompt, setProblemPrompt] = useState<string>('');
   const [editPromptsModal, setEditPromptsModal] = useState<boolean>(false);
   const [editPropertyModal, setEditPropertyModal] = useState<boolean>(false);
-  const [editCustomizationModal, setEditCustomizationModal] = useState<boolean>(false);
+  const [showCustomizationModal, setShowCustomizationModal] = useState<boolean>(false);
   const [customPropertyName, setCustomPropertyName] = useState<string>('');
   const [customPropertyDesc, setCustomPropertyDesc] = useState<string>('');
   const [customPropertyAscending, setCustomPropertyAscending] = useState<boolean>(true);
@@ -93,7 +92,6 @@ const ChemistryTool: React.FC = () => {
   const edgesRef = useRef(edges);
   const sidebarStateRef = useRef(sidebarState);
 
-  const [showToolSelectionModal, setShowToolSelectionModal] = useState<boolean>(false);
   const [selectedTools, setSelectedTools] = useState<number[]>([]);
   const [availableToolsMap, setAvailableToolsMap] = useState<SelectableTool[]>([]);
 
@@ -667,11 +665,6 @@ const ChemistryTool: React.FC = () => {
     setEditPropertyModal(false);
   };
 
-  const saveCustomization = (newCustomization: OptimizationCustomization): void => {
-    setCustomization(newCustomization);
-    setEditCustomizationModal(false);
-  };
-
   const resetProblemType = (problem_type: string): void => {
     setSystemPrompt('');
     setProblemPrompt('');
@@ -1107,22 +1100,20 @@ const ChemistryTool: React.FC = () => {
                     </button>
                   }
                   <button
-                    onClick={() => setShowToolSelectionModal(true)}
+                    onClick={() => setShowCustomizationModal(true)}
                     disabled={isComputing}
                     className="btn btn-tertiary mt-5"
                   >
-                    Select Tools {selectedTools.length > 0 && `(${selectedTools.length})`}
+                    <Sliders className="w-4 h-4" />
+                    Customize
+                    {(selectedTools.length > 0 || (problemType === "optimization" && customization.enableConstraints)) && (
+                      <span className="ml-1 px-2 py-0.5 text-xs rounded-full bg-blue-500/20 text-blue-400">
+                        {selectedTools.length > 0 && selectedTools.length}
+                        {selectedTools.length > 0 && problemType === "optimization" && customization.enableConstraints && " • "}
+                        {problemType === "optimization" && customization.enableConstraints && "ON"}
+                      </span>
+                    )}
                   </button>
-                  {problemType === "optimization" &&
-                    <button
-                      onClick={() => setEditCustomizationModal(true)}
-                      disabled={isComputing}
-                      className="btn btn-tertiary mt-5"
-                    >
-                      <Sliders className="w-4 h-4" />
-                      Customize
-                    </button>
-                  }
                 </div>
 
                 <div className="input-row-actions">
@@ -1506,23 +1497,17 @@ const ChemistryTool: React.FC = () => {
         </div>
       )}
 
-      {/* Customization Modal */}
-      <CustomizationModal
-        isOpen={editCustomizationModal}
-        onClose={() => setEditCustomizationModal(false)}
-        initialCustomization={customization}
-        onSave={saveCustomization}
-      />
-
-      {/* Use the MultiSelectToolModal component */}
-      <MultiSelectToolModal
-        isOpen={showToolSelectionModal}
-        onClose={() => setShowToolSelectionModal(false)}
+      {/* Combined Customization Modal */}
+      <CombinedCustomizationModal
+        isOpen={showCustomizationModal}
+        onClose={() => setShowCustomizationModal(false)}
         availableToolsMap={availableToolsMap}
         selectedTools={selectedTools}
-        onSelectionChange={setSelectedTools}
-        onConfirm={handleToolSelectionConfirm}
-        title="Select Tools to use for Task" // Optional, defaults to "Select Tools"
+        onToolSelectionChange={setSelectedTools}
+        onToolConfirm={handleToolSelectionConfirm}
+        initialCustomization={customization}
+        onCustomizationSave={setCustomization}
+        showOptimizationTab={problemType === "optimization"}
       />
 
     </div>
