@@ -74,11 +74,31 @@ if os.path.exists(ASSETS_PATH):
 
 
 @dataclass
+class PathwayStep:
+    smiles: list[str]
+    label: list[str]
+    isProduct: bool
+
+
+@dataclass
+class ReactionAlternative:
+    id: str
+    name: str
+    type: Literal["exact", "template"]
+    status: Literal["active", "available", "computing"]
+    pathway: list[PathwayStep]
+    disabled: Optional[bool] = None
+    disabledReason: Optional[str] = None
+
+
+@dataclass
 class Reaction:
     id: str
     hoverInfo: str
     highlight: str = "normal"
     label: Optional[str] = None
+    alternatives: Optional[list[ReactionAlternative]] = None
+    templatesSearched: bool = False
 
 
 @dataclass
@@ -178,7 +198,14 @@ def generate_tree_structure(
                     if level == depth
                     else Reaction(
                         "reaction_0",
-                        "# Reaction (AI-based)\nSome information here",
+                        """# Reaction (AI-based)\nSome information here
+
+| Column A | Column B |
+| -------- | -------- |
+| 1        | `def`    |
+| 2        | `ghi`    |
+| 3        | $a+b$    |
+                        """,
                         label=random.choice(
                             [
                                 "",
@@ -189,6 +216,31 @@ def generate_tree_structure(
                                 "Cyclization",
                             ]
                         ),
+                        alternatives=[
+                            ReactionAlternative(
+                                "a0",
+                                "Oxidation",
+                                "template",
+                                "active",
+                                [PathwayStep(["O", "CCO"], ["", ""], False)],
+                            ),
+                        ]
+                        + [
+                            # ReactionAlternative(f"a{2*i}", "bb", "template", "available", [PathwayStep(['CCO'], [''], False)]),
+                            ReactionAlternative(
+                                f"a{2*i+1}",
+                                "Something",
+                                "template",
+                                "available",
+                                [
+                                    PathwayStep(["CCO", "CCC"], [""], False),
+                                    PathwayStep(["CCI"], [""], True),
+                                ]
+                                * 5,
+                            )
+                            for i in range(1, 10)
+                        ],
+                        templatesSearched=True,
                     )
                 ),
             )
