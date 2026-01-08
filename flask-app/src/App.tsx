@@ -1,6 +1,6 @@
 /* eslint-disable react-hooks/exhaustive-deps */
 import React, { useState, useRef, useEffect, useCallback } from 'react';
-import { Loader2, FlaskConical, TestTubeDiagonal, Network, Play, RotateCcw, X, Send, RefreshCw, Sparkles, MessageCircleQuestion, StepForward, MessageSquareShare, Brain, Sliders } from 'lucide-react';
+import { Loader2, FlaskConical, TestTubeDiagonal, Network, Play, RotateCcw, X, Send, RefreshCw, Sparkles, MessageCircleQuestion, StepForward, MessageSquareShare, Brain, Sliders, Wrench, Settings } from 'lucide-react';
 import 'recharts';
 import 'react-markdown';
 import 'remark-gfm';
@@ -94,6 +94,15 @@ const ChemistryTool: React.FC = () => {
 
   const [selectedTools, setSelectedTools] = useState<number[]>([]);
   const [availableToolsMap, setAvailableToolsMap] = useState<SelectableTool[]>([]);
+
+  // Auto-select all tools when they first become available
+  useEffect(() => {
+    if (availableToolsMap.length > 0 && selectedTools.length === 0) {
+      const allToolIds = availableToolsMap.map(tool => tool.id);
+      setSelectedTools(allToolIds);
+      console.log('Auto-selected all tools:', allToolIds);
+    }
+  }, [availableToolsMap, selectedTools.length]);
 
   // Update refs whenever state changes
   useEffect(() => {
@@ -1107,10 +1116,20 @@ const ChemistryTool: React.FC = () => {
                     <Sliders className="w-4 h-4" />
                     Customize
                     {(selectedTools.length > 0 || (problemType === "optimization" && customization.enableConstraints)) && (
-                      <span className="ml-1 px-2 py-0.5 text-xs rounded-full bg-blue-500/20 text-blue-400">
-                        {selectedTools.length > 0 && selectedTools.length}
-                        {selectedTools.length > 0 && problemType === "optimization" && customization.enableConstraints && " • "}
-                        {problemType === "optimization" && customization.enableConstraints && "ON"}
+                      <span className="ml-1 px-2 py-0.5 text-xs rounded-full bg-blue-500/20 text-blue-400 flex items-center gap-1">
+                        {selectedTools.length > 0 && (
+                          <>
+                            {selectedTools.length}
+                            <Wrench className="w-3 h-3" />
+                          </>
+                        )}
+                        {selectedTools.length > 0 && problemType === "optimization" && customization.enableConstraints && <span className="mx-0.5">•</span>}
+                        {problemType === "optimization" && customization.enableConstraints && (
+                          <>
+                            ON
+                            <Settings className="w-3 h-3" />
+                          </>
+                        )}
                       </span>
                     )}
                   </button>
