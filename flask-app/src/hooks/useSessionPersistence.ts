@@ -1,0 +1,287 @@
+/**
+ * Session persistence hook for auto-saving experiment state to MariaDB.
+ * This provides automatic session save/restore functionality.
+ */
+import { useState, useEffect, useRef, useCallback } from 'react';
+import { TreeNode, Edge, MetricHistoryItem, VisibleMetrics, SidebarMessage, VisibleSources } from '../types';
+import { HTTP_SERVER } from '../config';
+
+// Auto-save interval in milliseconds
+const AUTO_SAVE_INTERVAL = 10000; // 10 seconds
+
+// Session expiry in hours (ignore sessions older than this)
+const SESSION_EXPIRY_HOURS = 24;
+
+// Session state interface matching the backend API
+export interface SessionState {
+  smiles?: string;
+  problemType?: string;
+  systemPrompt?: string;
+  problemPrompt?: string;
+  promptsModified?: boolean;
+  autoZoom?: boolean;
+  treeNodes?: TreeNode[];
+  edges?: Edge[];
+  offset?: { x: number; y: number };
+  zoom?: number;
+  metricsHistory?: MetricHistoryItem[];
+  visibleMetrics?: VisibleMetrics;
+  isComputing?: boolean;
+  serverSessionId?: string | null;
+  propertyType?: string;
+  customPropertyName?: string;
+  customPropertyDesc?: string;
+  customPropertyAscending?: boolean;
+  // Sidebar state
+  sidebarMessages?: SidebarMessage[];
+  sidebarSourceFilterOpen?: boolean;
+  sidebarVisibleSources?: VisibleSources;
+}
+
+interface SessionResponse {
+  sessionId: string;
+  name: string;
+  createdAt: string;
+  lastModified: string;
+  isRunning?: boolean;
+  state: SessionState;
+}
+
+export interface SessionPersistenceState {
+  dbSessionId: string | null;
+  sessionLoaded: boolean;
+  sessionRestored: boolean;
+  lastSaved: Date | null;
+  serverSessionId: string | null;
+  sessionWasComputing: boolean;
+  resumeAttempted: boolean;
+}
+
+export interface SessionPersistenceActions {
+  saveSession: (state: SessionState, force?: boolean) => Promise<void>;
+  loadSession: () => Promise<SessionState | null>;
+  clearSession: () => Promise<void>;
+  setServerSessionId: (id: string | null) => void;
+  setSessionWasComputing: (computing: boolean) => void;
+  setResumeAttempted: (attempted: boolean) => void;
+  getPendingResume: () => { sessionId: string | null; smiles: string; problemType: string } | null;
+  setPendingResume: (data: { sessionId: string | null; smiles: string; problemType: string } | null) => void;
+}
+
+export const useSessionPersistence = (): SessionPersistenceState & SessionPersistenceActions => {
+  const [dbSessionId, setDbSessionId] = useState<string | null>(null);
+  const [sessionLoaded, setSessionLoaded] = useState(false);
+  const [sessionRestored, setSessionRestored] = useState(false);
+  const [lastSaved, setLastSaved] = useState<Date | null>(null);
+  const [serverSessionId, setServerSessionId] = useState<string | null>(null);
+  const [sessionWasComputing, setSessionWasComputing] = useState(false);
+  const [resumeAttempted, setResumeAttempted] = useState(false);
+  
+  const isSavingRef = useRef(false);
+  const pendingResumeRef = useRef<{ sessionId: string | null; smiles: string; problemType: string } | null>(null);
+
+  const saveSession = useCallback(async (state: SessionState, force = false): Promise<void> => {
+    // Only save if there's meaningful data or force save
+    if (!force && (!state.treeNodes || state.treeNodes.length === 0) && !state.smiles) return;
+    
+    // Prevent concurrent saves
+    if (isSavingRef.current) return;
+    isSavingRef.current = true;
+    
+    try {
+      const response = await fetch(`${HTTP_SERVER}/api/sessions/save`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          sessionId: dbSessionId,
+          state: state,
+        }),
+      });
+      
+      if (response.ok) {
+        const data: SessionResponse = await response.json();
+        setDbSessionId(data.sessionId);
+        setLastSaved(new Date(data.lastModified));
+        console.log('Session saved to database:', data.sessionId);
+      } else {
+        console.error('Failed to save session to database:', response.status);
+      }
+    } catch (error) {
+      console.error('Failed to save session to database:', error);
+    } finally {
+      isSavingRef.current = false;
+    }
+  }, [dbSessionId]);
+
+  const loadSession = useCallback(async (): Promise<SessionState | null> => {
+    try {
+      const response = await fetch(`${HTTP_SERVER}/api/sessions/latest`);
+      
+      if (!response.ok) {
+        if (response.status === 404) {
+          console.log('No previous session found');
+        }
+        setSessionLoaded(true);
+        return null;
+      }
+      
+      const data: SessionResponse | null = await response.json();
+      
+      if (!data) {
+        setSessionLoaded(true);
+        return null;
+      }
+      
+      const state = data.state;
+      
+      // Check if session is recent (within SESSION_EXPIRY_HOURS)
+      const sessionTime = new Date(data.lastModified);
+      const now = new Date();
+      const hoursDiff = (now.getTime() - sessionTime.getTime()) / (1000 * 60 * 60);
+      
+      if (hoursDiff > SESSION_EXPIRY_HOURS) {
+        console.log('Session too old, ignoring');
+        setSessionLoaded(true);
+        return null;
+      }
+      
+      // Store the database session ID
+      setDbSessionId(data.sessionId);
+      
+      // Check if computation was in progress - either by isComputing flag or by detecting incomplete edges
+      const hasIncompleteEdges = state.edges && state.edges.some(e => 
+        e.status === 'computing'
+      );
+      const wasComputing = state.isComputing || hasIncompleteEdges;
+      
+      if (wasComputing && state.smiles) {
+        console.log('Detected incomplete computation, will attempt to resume');
+        setSessionWasComputing(true);
+        if (state.serverSessionId) {
+          setServerSessionId(state.serverSessionId);
+        }
+        pendingResumeRef.current = {
+          sessionId: state.serverSessionId || null,
+          smiles: state.smiles,
+          problemType: state.problemType || 'retrosynthesis'
+        };
+      }
+      
+      setSessionLoaded(true);
+      setSessionRestored(true);
+      setLastSaved(sessionTime);
+      
+      console.log('Session restored from database:', data.sessionId, state.serverSessionId ? `(server session: ${state.serverSessionId})` : '');
+      return state;
+    } catch (error) {
+      console.error('Failed to load session from database:', error);
+      setSessionLoaded(true);
+      return null;
+    }
+  }, []);
+
+  const clearSession = useCallback(async (): Promise<void> => {
+    if (dbSessionId) {
+      try {
+        await fetch(`${HTTP_SERVER}/api/sessions/${dbSessionId}`, {
+          method: 'DELETE',
+        });
+        console.log('Session deleted from database:', dbSessionId);
+      } catch (error) {
+        console.error('Failed to delete session from database:', error);
+      }
+    }
+    setDbSessionId(null);
+    setSessionRestored(false);
+    setLastSaved(null);
+    setServerSessionId(null);
+    setSessionWasComputing(false);
+    setResumeAttempted(false);
+    pendingResumeRef.current = null;
+    console.log('Session cleared');
+  }, [dbSessionId]);
+
+  const getPendingResume = useCallback(() => pendingResumeRef.current, []);
+  
+  const setPendingResume = useCallback((data: { sessionId: string | null; smiles: string; problemType: string } | null) => {
+    pendingResumeRef.current = data;
+  }, []);
+
+  return {
+    // State
+    dbSessionId,
+    sessionLoaded,
+    sessionRestored,
+    lastSaved,
+    serverSessionId,
+    sessionWasComputing,
+    resumeAttempted,
+    // Actions
+    saveSession,
+    loadSession,
+    clearSession,
+    setServerSessionId,
+    setSessionWasComputing,
+    setResumeAttempted,
+    getPendingResume,
+    setPendingResume,
+  };
+};
+
+/**
+ * Hook to set up auto-save functionality.
+ * Call this in the main component to enable periodic auto-saving.
+ */
+export const useAutoSave = (
+  sessionPersistence: SessionPersistenceState & SessionPersistenceActions,
+  getState: () => SessionState,
+  dependencies: unknown[]
+): void => {
+  const { sessionLoaded, saveSession, dbSessionId } = sessionPersistence;
+  const autoSaveTimerRef = useRef<NodeJS.Timeout | null>(null);
+
+  useEffect(() => {
+    if (!sessionLoaded) return;
+
+    // Clear existing timer
+    if (autoSaveTimerRef.current) {
+      clearInterval(autoSaveTimerRef.current);
+    }
+
+    // Set up auto-save
+    autoSaveTimerRef.current = setInterval(() => {
+      saveSession(getState());
+    }, AUTO_SAVE_INTERVAL);
+
+    return () => {
+      if (autoSaveTimerRef.current) {
+        clearInterval(autoSaveTimerRef.current);
+      }
+      // Save on unmount
+      saveSession(getState(), true);
+    };
+  }, [sessionLoaded, ...dependencies]);
+
+  // Save session before page unload (using sendBeacon for reliability)
+  useEffect(() => {
+    const handleBeforeUnload = () => {
+      const state = getState();
+      if ((!state.treeNodes || state.treeNodes.length === 0) && !state.smiles) return;
+      
+      const payload = JSON.stringify({
+        sessionId: dbSessionId,
+        state: state,
+      });
+      
+      // sendBeacon is more reliable than fetch for unload events
+      navigator.sendBeacon(`${HTTP_SERVER}/api/sessions/save`, new Blob([payload], { type: 'application/json' }));
+    };
+    
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => {
+      window.removeEventListener('beforeunload', handleBeforeUnload);
+    };
+  }, [getState, dbSessionId]);
+};
