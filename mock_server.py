@@ -395,10 +395,36 @@ async def generate_molecules(
     nodes, edges = generate_tree_structure(start_smiles, depth, molecule_name_format)
     positioned_nodes = calculate_positions(nodes)
 
+    # Send initial reasoning message
+    await websocket.send_json({
+        "type": "response",
+        "message": {
+            "source": "Reasoning",
+            "message": f"**Starting Retrosynthesis Analysis**\n\nTarget molecule: `{start_smiles}`\n\nExploring synthetic pathways with depth {depth}...",
+        }
+    })
+
     # Stream root first
     root = positioned_nodes[0]
     await websocket.send_json({"type": "node", "node": root.json()})
+    
+    await websocket.send_json({
+        "type": "response",
+        "message": {
+            "source": "Reasoning",
+            "message": f"Identified target molecule. Now analyzing possible disconnection strategies...",
+        }
+    })
     await asyncio.sleep(0.8)
+
+    # Retrosynthesis reasoning templates
+    retro_reasoning = [
+        "Analyzing bond disconnection possibilities in the target structure...",
+        "Identified potential synthetic precursors through retrosynthetic analysis.",
+        "Evaluating reaction feasibility and yield predictions for this transformation.",
+        "Cross-referencing with known chemical reactions in the database.",
+        "This disconnection follows established synthetic methodology.",
+    ]
 
     # Stream remaining nodes with edges
     for i in range(1, len(positioned_nodes)):
@@ -417,10 +443,30 @@ async def generate_molecules(
             edge_data["edge"]["toNode"] = node.id
             await websocket.send_json(edge_data)
 
+            # Send reasoning about this step
+            reasoning_msg = retro_reasoning[i % len(retro_reasoning)]
+            await websocket.send_json({
+                "type": "response",
+                "message": {
+                    "source": "Reasoning",
+                    "message": f"**Step {i}**: {reasoning_msg}",
+                }
+            })
+
             await asyncio.sleep(0.6)
 
             # Send node
             await websocket.send_json({"type": "node", "node": node.json()})
+            
+            # Send info about the discovered precursor
+            await websocket.send_json({
+                "type": "response",
+                "message": {
+                    "source": "Logger (Info)",
+                    "message": f"Found precursor: `{node.smiles}`",
+                    "smiles": node.smiles,
+                }
+            })
 
             # Update edge to complete
             edge_complete = {
@@ -435,6 +481,15 @@ async def generate_molecules(
 
             await asyncio.sleep(0.2)
 
+    # Send completion message
+    await websocket.send_json({
+        "type": "response",
+        "message": {
+            "source": "Reasoning",
+            "message": f"**Retrosynthesis Complete**\n\n✅ Successfully identified {len(positioned_nodes)} molecules in the synthetic pathway.",
+        }
+    })
+
     await websocket.send_json({"type": "complete"})
 
 
@@ -447,6 +502,27 @@ async def lead_molecule(
     """
     Stream positioned nodes and edges for the lead molecule optimization sample.
     """
+
+    # Sample reasoning messages to simulate LLM thinking
+    reasoning_templates = [
+        "Analyzing molecular structure and identifying potential modification sites...",
+        "Evaluating functional groups for optimization. The current molecule shows promising structural features.",
+        "Applying chemical intuition to extend the carbon chain. This modification should improve the target property.",
+        "Cross-referencing with known structure-activity relationships in the chemical space.",
+        "Validating the proposed modification against chemical feasibility constraints.",
+        "Computing predicted properties for the new molecular candidate...",
+        "The optimization step successfully generated a valid molecular structure with improved characteristics.",
+    ]
+
+    # Send initial reasoning message
+    await websocket.send_json({
+        "type": "response",
+        "message": {
+            "source": "Reasoning",
+            "message": f"**Starting Lead Molecule Optimization**\n\nInitial molecule: `{start_smiles}`\n\nPlanned optimization depth: {depth} iterations",
+        }
+    })
+    await asyncio.sleep(0.3)
 
     # Generate one node at a time
     for i in range(depth):
@@ -462,6 +538,17 @@ async def lead_molecule(
                 },
             }
             await websocket.send_json(edge_complete)
+        
+        # Send reasoning message for this iteration
+        reasoning_idx = i % len(reasoning_templates)
+        await websocket.send_json({
+            "type": "response",
+            "message": {
+                "source": "Reasoning",
+                "message": f"**Iteration {i + 1}/{depth}**\n\n{reasoning_templates[reasoning_idx]}",
+            }
+        })
+        
         node = dict(
             id=f"node_{i}",
             smiles=start_smiles + "C" * i,
@@ -473,6 +560,17 @@ async def lead_molecule(
             y=i * 150,
         )
         await websocket.send_json({"type": "node", "node": node})
+        
+        # Send a Logger (Info) message about the generated molecule
+        await websocket.send_json({
+            "type": "response",
+            "message": {
+                "source": "Logger (Info)",
+                "message": f"Generated molecule: `{start_smiles + 'C' * i}`",
+                "smiles": start_smiles + "C" * i,
+            }
+        })
+        
         if i == depth - 1:
             break
         edge_data = {
@@ -486,9 +584,17 @@ async def lead_molecule(
             },
         }
         await websocket.send_json(edge_data)
-        # TODO: Compute here
         await asyncio.sleep(0.8)
 
+    # Send completion reasoning message
+    await websocket.send_json({
+        "type": "response",
+        "message": {
+            "source": "Reasoning",
+            "message": f"**Optimization Complete**\n\n✅ Successfully generated {depth} molecules in the optimization pathway.",
+        }
+    })
+    
     await websocket.send_json({"type": "complete"})
 
 
@@ -680,5 +786,9 @@ async def websocket_endpoint(websocket: WebSocket):
 
 if __name__ == "__main__":
     import uvicorn
+    import logging
+
+    # Suppress noisy HTTP access logs for session save endpoint
+    logging.getLogger("uvicorn.access").setLevel(logging.WARNING)
 
     uvicorn.run(app, host="127.0.0.1", port=8001)
