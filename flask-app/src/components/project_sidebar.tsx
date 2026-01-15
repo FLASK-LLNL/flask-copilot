@@ -280,6 +280,11 @@ export const ProjectSidebar: React.FC<ProjectSidebarProps> = ({
   };
 
   const handleEditProject = (project: Project) => {
+    console.log('handleEditProject called with:', project);
+    if (!project || !project.id) {
+      console.error('Invalid project passed to handleEditProject');
+      return;
+    }
     setEditingProject(project.id);
     setEditProjectName(project.name);
   };
