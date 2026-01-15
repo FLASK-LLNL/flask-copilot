@@ -14,6 +14,13 @@ const SESSION_EXPIRY_HOURS = 24;
 
 // Session state interface matching the backend API
 export interface SessionState {
+  // Project/Experiment identification
+  projectId?: string;
+  projectName?: string;
+  experimentId?: string;
+  experimentName?: string;
+  
+  // Core experiment state
   smiles?: string;
   problemType?: string;
   systemPrompt?: string;
@@ -28,10 +35,13 @@ export interface SessionState {
   visibleMetrics?: VisibleMetrics;
   isComputing?: boolean;
   serverSessionId?: string | null;
+  
+  // Property optimization
   propertyType?: string;
   customPropertyName?: string;
   customPropertyDesc?: string;
   customPropertyAscending?: boolean;
+  
   // Sidebar state
   sidebarMessages?: SidebarMessage[];
   sidebarSourceFilterOpen?: boolean;
@@ -52,6 +62,8 @@ export interface SessionPersistenceState {
   sessionLoaded: boolean;
   sessionRestored: boolean;
   lastSaved: Date | null;
+  isSaving: boolean;
+  saveError: string | null;
   serverSessionId: string | null;
   sessionWasComputing: boolean;
   resumeAttempted: boolean;
@@ -73,6 +85,8 @@ export const useSessionPersistence = (): SessionPersistenceState & SessionPersis
   const [sessionLoaded, setSessionLoaded] = useState(false);
   const [sessionRestored, setSessionRestored] = useState(false);
   const [lastSaved, setLastSaved] = useState<Date | null>(null);
+  const [isSaving, setIsSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
   const [serverSessionId, setServerSessionId] = useState<string | null>(null);
   const [sessionWasComputing, setSessionWasComputing] = useState(false);
   const [resumeAttempted, setResumeAttempted] = useState(false);
@@ -87,6 +101,8 @@ export const useSessionPersistence = (): SessionPersistenceState & SessionPersis
     // Prevent concurrent saves
     if (isSavingRef.current) return;
     isSavingRef.current = true;
+    setIsSaving(true);
+    setSaveError(null);
     
     try {
       const response = await fetch(`${HTTP_SERVER}/api/sessions/save`, {
@@ -107,11 +123,14 @@ export const useSessionPersistence = (): SessionPersistenceState & SessionPersis
         console.log('Session saved to database:', data.sessionId);
       } else {
         console.error('Failed to save session to database:', response.status);
+        setSaveError(`Save failed: ${response.status}`);
       }
     } catch (error) {
       console.error('Failed to save session to database:', error);
+      setSaveError('Save failed: network error');
     } finally {
       isSavingRef.current = false;
+      setIsSaving(false);
     }
   }, [dbSessionId]);
 
@@ -215,6 +234,8 @@ export const useSessionPersistence = (): SessionPersistenceState & SessionPersis
     sessionLoaded,
     sessionRestored,
     lastSaved,
+    isSaving,
+    saveError,
     serverSessionId,
     sessionWasComputing,
     resumeAttempted,
@@ -231,43 +252,26 @@ export const useSessionPersistence = (): SessionPersistenceState & SessionPersis
 };
 
 /**
- * Hook to set up auto-save functionality.
- * Call this in the main component to enable periodic auto-saving.
+ * Hook to set up checkpoint save on page unload.
+ * Checkpoints are now triggered on-demand (e.g., when new molecules are generated)
+ * rather than at fixed intervals.
  */
-export const useAutoSave = (
+export const useCheckpointOnUnload = (
   sessionPersistence: SessionPersistenceState & SessionPersistenceActions,
-  getState: () => SessionState,
-  dependencies: unknown[]
+  getState: () => SessionState
 ): void => {
-  const { sessionLoaded, saveSession, dbSessionId } = sessionPersistence;
-  const autoSaveTimerRef = useRef<NodeJS.Timeout | null>(null);
-
+  const { dbSessionId, saveSession } = sessionPersistence;
+  const getStateRef = useRef(getState);
+  
+  // Keep the getState ref updated
   useEffect(() => {
-    if (!sessionLoaded) return;
-
-    // Clear existing timer
-    if (autoSaveTimerRef.current) {
-      clearInterval(autoSaveTimerRef.current);
-    }
-
-    // Set up auto-save
-    autoSaveTimerRef.current = setInterval(() => {
-      saveSession(getState());
-    }, AUTO_SAVE_INTERVAL);
-
-    return () => {
-      if (autoSaveTimerRef.current) {
-        clearInterval(autoSaveTimerRef.current);
-      }
-      // Save on unmount
-      saveSession(getState(), true);
-    };
-  }, [sessionLoaded, ...dependencies]);
+    getStateRef.current = getState;
+  }, [getState]);
 
   // Save session before page unload (using sendBeacon for reliability)
   useEffect(() => {
     const handleBeforeUnload = () => {
-      const state = getState();
+      const state = getStateRef.current();
       if ((!state.treeNodes || state.treeNodes.length === 0) && !state.smiles) return;
       
       const payload = JSON.stringify({
@@ -282,6 +286,11 @@ export const useAutoSave = (
     window.addEventListener('beforeunload', handleBeforeUnload);
     return () => {
       window.removeEventListener('beforeunload', handleBeforeUnload);
+      // Save on unmount
+      saveSession(getStateRef.current(), true);
     };
-  }, [getState, dbSessionId]);
+  }, [dbSessionId, saveSession]);
 };
+
+// Keep the old name for backward compatibility but it now just sets up unload handler
+export const useAutoSave = useCheckpointOnUnload;

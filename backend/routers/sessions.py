@@ -35,6 +35,13 @@ def generate_id(prefix: str) -> str:
 # Pydantic models for session API
 class SessionState(BaseModel):
     """The state to save/restore for a session"""
+    # Project/Experiment identification
+    projectId: Optional[str] = None
+    projectName: Optional[str] = None
+    experimentId: Optional[str] = None
+    experimentName: Optional[str] = None
+    
+    # Core experiment state
     smiles: Optional[str] = None
     problemType: Optional[str] = None
     systemPrompt: Optional[str] = None
@@ -49,6 +56,17 @@ class SessionState(BaseModel):
     visibleMetrics: Optional[Any] = None
     isComputing: Optional[bool] = None
     serverSessionId: Optional[str] = None
+    
+    # Property optimization
+    propertyType: Optional[str] = None
+    customPropertyName: Optional[str] = None
+    customPropertyDesc: Optional[str] = None
+    customPropertyAscending: Optional[bool] = None
+    
+    # Sidebar state
+    sidebarMessages: Optional[Any] = None
+    sidebarSourceFilterOpen: Optional[bool] = None
+    sidebarVisibleSources: Optional[Any] = None
 
 
 class SessionSaveRequest(BaseModel):
@@ -159,7 +177,16 @@ async def save_session(
                 "offset": state.offset,
                 "zoom": state.zoom,
                 "promptsModified": state.promptsModified,
-                "serverSessionId": state.serverSessionId
+                "serverSessionId": state.serverSessionId,
+                # Property optimization
+                "propertyType": state.propertyType,
+                "customPropertyName": state.customPropertyName,
+                "customPropertyDesc": state.customPropertyDesc,
+                "customPropertyAscending": state.customPropertyAscending,
+                # Sidebar state
+                "sidebarMessages": state.sidebarMessages,
+                "sidebarSourceFilterOpen": state.sidebarSourceFilterOpen,
+                "sidebarVisibleSources": state.sidebarVisibleSources,
             }
             experiment.last_modified = datetime.utcnow()
             
@@ -207,7 +234,16 @@ async def save_session(
             "offset": state.offset,
             "zoom": state.zoom,
             "promptsModified": state.promptsModified,
-            "serverSessionId": state.serverSessionId
+            "serverSessionId": state.serverSessionId,
+            # Property optimization
+            "propertyType": state.propertyType,
+            "customPropertyName": state.customPropertyName,
+            "customPropertyDesc": state.customPropertyDesc,
+            "customPropertyAscending": state.customPropertyAscending,
+            # Sidebar state
+            "sidebarMessages": state.sidebarMessages,
+            "sidebarSourceFilterOpen": state.sidebarSourceFilterOpen,
+            "sidebarVisibleSources": state.sidebarVisibleSources,
         }
     )
     
@@ -356,6 +392,12 @@ def _experiment_to_state(experiment: models.Experiment) -> SessionState:
     graph_state = experiment.graph_state or {}
     
     return SessionState(
+        # Project/Experiment identification
+        projectId=experiment.project_id,
+        experimentId=experiment.id,
+        experimentName=experiment.name,
+        
+        # Core experiment state
         smiles=experiment.smiles,
         problemType=experiment.problem_type,
         systemPrompt=experiment.system_prompt,
@@ -369,5 +411,16 @@ def _experiment_to_state(experiment: models.Experiment) -> SessionState:
         metricsHistory=experiment.metrics_history,
         visibleMetrics=experiment.visible_metrics,
         isComputing=experiment.is_running,
-        serverSessionId=graph_state.get("serverSessionId")
+        serverSessionId=graph_state.get("serverSessionId"),
+        
+        # Property optimization
+        propertyType=graph_state.get("propertyType"),
+        customPropertyName=graph_state.get("customPropertyName"),
+        customPropertyDesc=graph_state.get("customPropertyDesc"),
+        customPropertyAscending=graph_state.get("customPropertyAscending"),
+        
+        # Sidebar state
+        sidebarMessages=graph_state.get("sidebarMessages"),
+        sidebarSourceFilterOpen=graph_state.get("sidebarSourceFilterOpen"),
+        sidebarVisibleSources=graph_state.get("sidebarVisibleSources"),
     )
