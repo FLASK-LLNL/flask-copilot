@@ -19,18 +19,65 @@ from fastapi import FastAPI, Request, WebSocket, WebSocketDisconnect
 from fastapi.responses import JSONResponse, HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
+from contextlib import asynccontextmanager
 from dataclasses import dataclass, asdict
 import asyncio
 import copy
 import os
+import sys
 import random
+import uuid
 from typing import Any, Optional, Literal
+from dataclasses import dataclass, field
+from datetime import datetime, timedelta
 import requests
-from datetime import datetime
 from loguru import logger
 from charge_backend.moleculedb.molecule_naming import smiles_to_html, MolNameFormat
 
-app = FastAPI()
+# Import database components
+sys.path.insert(0, os.path.dirname(__file__))
+from backend.database.engine import engine, Base
+from backend.routers import sessions as sessionsrouter
+
+
+# Session tracking for computation resume
+@dataclass
+class ComputationSession:
+    """Track an active computation for potential resume"""
+    session_id: str
+    smiles: str
+    problem_type: str
+    depth: int
+    websocket: WebSocket
+    created_at: datetime = field(default_factory=datetime.now)
+    is_complete: bool = False
+    is_cancelled: bool = False
+    sent_nodes: list = field(default_factory=list)
+    sent_edges: list = field(default_factory=list)
+    pending_nodes: list = field(default_factory=list)
+    pending_edges: list = field(default_factory=list)
+    current_index: int = 0
+
+active_sessions: dict[str, ComputationSession] = {}
+SESSION_TIMEOUT_HOURS = 24
+
+def cleanup_old_sessions():
+    """Remove sessions older than SESSION_TIMEOUT_HOURS"""
+    cutoff = datetime.now() - timedelta(hours=SESSION_TIMEOUT_HOURS)
+    expired = [sid for sid, sess in active_sessions.items() if sess.created_at < cutoff]
+    for sid in expired:
+        del active_sessions[sid]
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Database initialization on startup"""
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
+    yield
+
+
+app = FastAPI(lifespan=lifespan)
 
 # CORS for development
 app.add_middleware(
@@ -40,6 +87,9 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Include the sessions router for database persistence
+app.include_router(sessionsrouter.router)
 
 if "FLASK_APPDIR" in os.environ:
     DIST_PATH = os.environ["FLASK_APPDIR"]
@@ -448,18 +498,94 @@ async def websocket_endpoint(websocket: WebSocket):
 
     molecule_format = "brand"
     username = "nobody"
+    current_session_id = None
+    
     if "x-forwarded-user" in websocket.headers:
         username = websocket.headers["x-forwarded-user"]
+    
+    # Cleanup old sessions periodically
+    cleanup_old_sessions()
 
     await websocket.accept()
     try:
         while True:
             data = await websocket.receive_json()
+            
+            # Handle session resume request
+            if data["action"] == "resume_session":
+                session_id = data.get("sessionId")
+                if session_id and session_id in active_sessions:
+                    session = active_sessions[session_id]
+                    if not session.is_complete and not session.is_cancelled:
+                        current_session_id = session_id
+                        session.websocket = websocket
+                        logger.info(f"Resuming session {session_id}")
+                        
+                        # Send session_resumed message with current state
+                        await websocket.send_json({
+                            "type": "session_resumed",
+                            "sessionId": session_id,
+                            "sentNodes": len(session.sent_nodes),
+                            "totalNodes": len(session.pending_nodes) if session.pending_nodes else 0,
+                            "isComplete": session.is_complete
+                        })
+                        
+                        # Resume the computation
+                        if session.problem_type == "optimization":
+                            await lead_molecule(
+                                session.smiles,
+                                session.depth,
+                                websocket=websocket,
+                                molecule_name_format=molecule_format
+                            )
+                        elif session.problem_type == "retrosynthesis":
+                            await generate_molecules(
+                                session.smiles,
+                                session.depth,
+                                websocket,
+                                molecule_format
+                            )
+                    else:
+                        # Session was already complete or cancelled
+                        await websocket.send_json({
+                            "type": "session_status",
+                            "sessionId": session_id,
+                            "status": "complete" if session.is_complete else "cancelled"
+                        })
+                else:
+                    # Session not found or expired
+                    await websocket.send_json({
+                        "type": "session_not_found",
+                        "sessionId": session_id
+                    })
+                continue
 
             if "runSettings" in data:
                 molecule_format = data["runSettings"]["moleculeName"]
 
             if data["action"] == "compute":
+                # Create new session
+                session_id = data.get("sessionId") or str(uuid.uuid4())
+                depth = data.get("depth", 10 if data["problemType"] == "optimization" else 3)
+                
+                session = ComputationSession(
+                    session_id=session_id,
+                    smiles=data["smiles"],
+                    problem_type=data["problemType"],
+                    depth=depth,
+                    websocket=websocket
+                )
+                active_sessions[session_id] = session
+                current_session_id = session_id
+                
+                # Send session ID to client
+                await websocket.send_json({
+                    "type": "session_started",
+                    "sessionId": session_id
+                })
+                
+                logger.info(f"Started new session {session_id} for {data['problemType']}")
+                
                 if data["problemType"] == "optimization":
                     await lead_molecule(
                         data["smiles"],
@@ -536,6 +662,16 @@ async def websocket_endpoint(websocket: WebSocket):
                 )
             elif data["action"] == "ui-update-orchestrator-settings":
                 molecule_format = data["moleculeName"]
+            elif data["action"] == "stop":
+                if current_session_id and current_session_id in active_sessions:
+                    active_sessions[current_session_id].is_cancelled = True
+                    logger.info(f"Session {current_session_id} stopped by user")
+            elif data["action"] == "reset":
+                if current_session_id and current_session_id in active_sessions:
+                    active_sessions[current_session_id].is_cancelled = True
+                    del active_sessions[current_session_id]
+                current_session_id = None
+                logger.info("Session reset by user")
             else:
                 print("WARN: Unhandled message:", data)
     except WebSocketDisconnect:
