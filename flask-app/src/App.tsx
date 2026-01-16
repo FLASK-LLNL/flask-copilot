@@ -107,7 +107,7 @@ const ChemistryTool: React.FC = () => {
   // Function to refresh tools list from backend
   const refreshToolsList = useCallback(() => {
     if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
-      console.log('🔄 Refreshing tools list from backend');
+      console.log('Refreshing tools list from backend');
       wsRef.current.send(JSON.stringify({ action: 'list-tools' }));
     }
   }, []);
@@ -260,7 +260,7 @@ const ChemistryTool: React.FC = () => {
       wsRef.current.send(JSON.stringify(message));
 
       // Refresh tools list after updating settings
-      console.log('🔄 Refreshing tools list after settings update');
+      console.log('Refreshing tools list after settings update');
       refreshToolsList();
      }
   };
@@ -1546,7 +1546,7 @@ const ChemistryTool: React.FC = () => {
                       Problem Type
                         {problemType === "custom" && (!systemPrompt || !problemPrompt) && (
                           <span className="warning-tooltip">
-                            ⚠️
+                            [!]
                           <div className="warning-tooltip-content">
                             <div className="warning-tooltip-box">
                               Custom problem description not given
@@ -1568,7 +1568,7 @@ const ChemistryTool: React.FC = () => {
                         Property
                         {propertyType === "custom" && (!customPropertyName || !customPropertyDesc) && (
                           <span className="warning-tooltip">
-                            ⚠️
+                            [!]
                           <div className="warning-tooltip-content">
                             <div className="warning-tooltip-box">
                               Property name or description not given
