@@ -413,8 +413,8 @@ export const ProjectSidebar: React.FC<ProjectSidebarProps> = ({
           <div className="alert alert-warning mt-2">
             <p className="text-warning text-xs">
               {!selection.projectId
-                ? '⚠️ No project selected. A new project will be created when you run.'
-                : '⚠️ No experiment selected. A new experiment will be created when you run.'}
+                ? 'Warning: No project selected. A new project will be created when you run.'
+                : 'Warning: No experiment selected. A new experiment will be created when you run.'}
             </p>
           </div>
         )}
