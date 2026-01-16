@@ -433,7 +433,7 @@ async def generate_molecules(
         "type": "response",
         "message": {
             "source": "Reasoning",
-            "message": f"**Retrosynthesis Complete**\n\n✅ Successfully identified {len(positioned_nodes)} molecules in the synthetic pathway.",
+            "message": f"**Retrosynthesis Complete**\n\nSuccessfully identified {len(positioned_nodes)} molecules in the synthetic pathway.",
         }
     })
 
@@ -538,7 +538,7 @@ async def lead_molecule(
         "type": "response",
         "message": {
             "source": "Reasoning",
-            "message": f"**Optimization Complete**\n\n✅ Successfully generated {depth} molecules in the optimization pathway.",
+            "message": f"**Optimization Complete**\n\nSuccessfully generated {depth} molecules in the optimization pathway.",
         }
     })
     

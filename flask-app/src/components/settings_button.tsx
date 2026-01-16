@@ -665,7 +665,7 @@ export const SettingsButton: React.FC<SettingsButtonProps> = ({
           onServerRemoved();
         }
 
-        console.log('✅ Server deleted successfully');
+        console.log('Server deleted successfully');
       } else {
         alert(`Failed to delete server: ${result.message}`);
       }
