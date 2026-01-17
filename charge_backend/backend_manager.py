@@ -312,7 +312,7 @@ class ActionManager:
             exploration_rate,
             additional_constraints,
         )
-        await self.task_manager.run_task(run_func())
+        asyncio.create_task(self.task_manager.run_task(run_func()))
 
     async def _handle_retrosynthesis(self, data: dict) -> None:
         """Handle retrosynthesis problem type."""
@@ -333,7 +333,7 @@ class ActionManager:
             self.molecule_name_format,
         )
 
-        await self.task_manager.run_task(run_func())
+        asyncio.create_task(self.task_manager.run_task(run_func()))
 
     async def _handle_custom_problem(self, data: dict) -> None:
         """Handle custom problem type."""
@@ -351,7 +351,7 @@ class ActionManager:
             self.molecule_name_format,
         )
 
-        await self.task_manager.run_task(run_func())
+        asyncio.create_task(self.task_manager.run_task(run_func()))
 
     async def handle_compute_reaction_from(self, data: dict) -> None:
         """Handle compute-reaction-from action."""
@@ -401,7 +401,7 @@ class ActionManager:
             self.molecule_name_format,
         )
 
-        await self.task_manager.run_task(run_func())
+        asyncio.create_task(self.task_manager.run_task(run_func()))
 
     async def handle_optimize_from(self, data: dict) -> None:
         """Handle optimize-from action."""
@@ -424,8 +424,13 @@ class ActionManager:
         level = node_id
         xpos = data["xpos"]
 
-        await self._handle_optimization(
-            data, initial_level=level, initial_node_id=node_id, initial_x_position=xpos
+        asyncio.create_task(
+            self._handle_optimization(
+                data,
+                initial_level=level,
+                initial_node_id=node_id,
+                initial_x_position=xpos,
+            )
         )
 
     async def handle_recompute_reaction(self, data: dict) -> None:
@@ -476,7 +481,7 @@ class ActionManager:
             self.molecule_name_format,
         )
 
-        await self.task_manager.run_task(run_func())
+        asyncio.create_task(self.task_manager.run_task(run_func()))
 
     async def _send_processing_message(
         self, message: str, source: str | None = None, **kwargs
