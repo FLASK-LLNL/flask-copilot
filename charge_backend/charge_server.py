@@ -83,7 +83,7 @@ parser.add_argument(
 
 # Add standard CLI arguments
 Client.add_std_parser_arguments(
-    parser, defaults=dict(backend="openai", model="gpt-5-nano")
+    parser, defaults=dict(backend="openai", model="gpt-5.1")
 )
 
 args, _ = parser.parse_known_args()
