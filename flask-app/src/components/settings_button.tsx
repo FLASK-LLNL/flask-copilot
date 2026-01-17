@@ -18,13 +18,13 @@ export const BACKEND_OPTIONS = [
     value: 'openai',
     label: 'OpenAI',
     defaultUrl: 'https://api.openai.com/v1',
-    models: ['gpt-5', 'gpt-5-mini', 'gpt-5-nano']
+    models: ['gpt-5.2', 'gpt-5.1', 'gpt-5', 'gpt-5-mini', 'gpt-5-nano']
   },
   {
     value: 'livai',
     label: 'LivAI',
     defaultUrl: '',
-    models: ['gpt-5', 'gpt-5-mini', 'gpt-5-nano', 'claude-sonnet-3.7']
+    models: ['gpt-5.2', 'gpt-5.1', 'gpt-5', 'gpt-5-mini', 'gpt-5-nano', 'claude-sonnet-4.5', 'claude-sonnet-3.7']
   },
   {
     value: 'llamame',
@@ -101,7 +101,7 @@ export const SettingsButton: React.FC<SettingsButtonProps> = ({
     backendLabel: 'OpenAI',
     useCustomUrl: false,
     customUrl: '',
-    model: 'gpt-5-nano',
+    model: 'gpt-5.1',
     useCustomModel: false,
     apiKey: '',
     moleculeName: 'brand',
