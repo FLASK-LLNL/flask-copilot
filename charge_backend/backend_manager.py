@@ -164,11 +164,11 @@ class ActionManager:
     async def handle_compute(self, data: dict) -> None:
         problem_type = data.get("problemType")
         if problem_type == "optimization":
-            await self._handle_optimization(data)
+            asyncio.create_task(self._handle_optimization(data))
         elif problem_type == "retrosynthesis":
-            await self._handle_retrosynthesis(data)
+            asyncio.create_task(self._handle_retrosynthesis(data))
         elif problem_type == "custom":
-            await self._handle_custom_problem(data)
+            asyncio.create_task(self._handle_custom_problem(data))
         else:
             raise ValueError(f"Unknown problem type: {problem_type}")
 
@@ -312,7 +312,7 @@ class ActionManager:
             exploration_rate,
             additional_constraints,
         )
-        asyncio.create_task(self.task_manager.run_task(run_func()))
+        await self.task_manager.run_task(run_func())
 
     async def _handle_retrosynthesis(self, data: dict) -> None:
         """Handle retrosynthesis problem type."""
@@ -333,7 +333,7 @@ class ActionManager:
             self.molecule_name_format,
         )
 
-        asyncio.create_task(self.task_manager.run_task(run_func()))
+        await self.task_manager.run_task(run_func())
 
     async def _handle_custom_problem(self, data: dict) -> None:
         """Handle custom problem type."""
@@ -351,7 +351,7 @@ class ActionManager:
             self.molecule_name_format,
         )
 
-        asyncio.create_task(self.task_manager.run_task(run_func()))
+        await self.task_manager.run_task(run_func())
 
     async def handle_compute_reaction_from(self, data: dict) -> None:
         """Handle compute-reaction-from action."""
@@ -602,13 +602,29 @@ class ActionManager:
 
     async def handle_stop(self, *args, **kwargs) -> None:
         """Handle stop action."""
-        if self.task_manager.current_task and not self.task_manager.current_task.done():
-            logger.info("Stopping current task as per user request.")
-            await self.task_manager.cancel_current_task()
+        logger.info("Stop action received")
+        if self.task_manager.current_task:
+            if not self.task_manager.current_task.done():
+                logger.info("Stopping current task as per user request.")
+                await self.task_manager.cancel_current_task()
+
+                # Send confirmation to frontend
+                try:
+                    await self.websocket.send_json({"type": "stopped"})
+                    logger.info("Sent 'stopped' confirmation to frontend")
+                except Exception as e:
+                    logger.error(f"Failed to send stopped confirmation: {e}")
+            else:
+                logger.info(f"Task already done: {self.task_manager.current_task}")
+                await self.websocket.send_json({"type": "stopped"})
         else:
             logger.info(
                 f"No active task to stop. Task done: {self.task_manager.current_task.done() if self.task_manager.current_task else 'N/A'}"
             )
+            try:
+                await self.websocket.send_json({"type": "stopped"})
+            except Exception as e:
+                logger.error(f"Failed to send stopped confirmation: {e}")
 
     async def handle_select_tools_for_task(self, data: dict) -> None:
         """Handle select-tools-for-task action."""
@@ -644,7 +660,7 @@ class ActionManager:
             await self._send_processing_message(result, source="Agent")
             await self.websocket.send_json({"type": "complete"})
 
-        await self.task_manager.run_task(run_and_report())
+        asyncio.create_task(self.task_manager.run_task(run_and_report()))
 
     async def handle_custom_query_reaction(self, data: dict) -> None:
         """Handle a query on the reaction (from nodeId to its reactants)."""
@@ -701,7 +717,7 @@ class ActionManager:
             await self._send_processing_message(result, source="Agent")
             await self.websocket.send_json({"type": "complete"})
 
-        await self.task_manager.run_task(run_and_report())
+        asyncio.create_task(self.task_manager.run_task(run_and_report()))
 
     async def handle_get_username(self, _: dict) -> None:
         await self.websocket.send_json(
