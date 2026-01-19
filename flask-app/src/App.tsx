@@ -462,10 +462,6 @@ const ChemistryTool: React.FC = () => {
         setEdges(prev => prev.filter(e =>
           !descendantsSet!.has(e.fromNode) && !descendantsSet!.has(e.toNode)
         ));
-      } else if (data.type === 'complete') {
-        setIsComputing(false);
-        unhighlightNodes();
-        saveStateToExperiment();  // Keep experiment up to date
       } else if (data.type === 'response') {
         addSidebarMessage(data.message!);
         console.log('Server response:', data.message);
