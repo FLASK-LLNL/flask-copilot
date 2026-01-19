@@ -406,6 +406,16 @@ const ChemistryTool: React.FC = () => {
 
       if (data.type === 'node') {
         setTreeNodes(prev => [...prev, data.node!]);
+      } else if (data.type === 'stopped') {
+        // Handle explicit stop from backend
+        console.log('Computation stopped by backend');
+        setIsComputing(false);
+        unhighlightNodes();
+        saveStateToExperiment();
+      } else if (data.type === 'complete') {
+        setIsComputing(false);
+        unhighlightNodes();
+        saveStateToExperiment();
       } else if (data.type === 'node_update') {
         const { id, ...restData } = data.node!;
 
@@ -452,10 +462,6 @@ const ChemistryTool: React.FC = () => {
         setEdges(prev => prev.filter(e =>
           !descendantsSet!.has(e.fromNode) && !descendantsSet!.has(e.toNode)
         ));
-      } else if (data.type === 'complete') {
-        setIsComputing(false);
-        unhighlightNodes();
-        saveStateToExperiment();  // Keep experiment up to date
       } else if (data.type === 'response') {
         addSidebarMessage(data.message!);
         console.log('Server response:', data.message);
@@ -563,15 +569,10 @@ const ChemistryTool: React.FC = () => {
 
   const stop = (): void => {
     if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) {
-      // alert('WebSocket not connected');
+      alert('WebSocket not connected');
       return;
     }
-
-    console.log('Sending stop command to server');
-    setIsComputing(false);
     wsRef.current.send(JSON.stringify({ action: 'stop' }));
-    unhighlightNodes();
-    saveStateToExperiment();
   };
 
   useEffect(() => {
