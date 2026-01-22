@@ -1,6 +1,6 @@
 // components/reaction_alternatives_sidebar.tsx
 import React, { useState, useRef, useMemo } from 'react';
-import { X, Loader2, FlaskConical, BookOpen, Check, ChevronDown, ChevronLeft, ChevronRight, AlertCircle, MessageSquareMore } from 'lucide-react';
+import { X, Loader2, FlaskConical, BookOpen, Check, ChevronDown, ChevronLeft, ChevronRight, AlertCircle, MessageSquareMore, Clock } from 'lucide-react';
 import { ReactionAlternative } from '../types';
 
 // Helper function to strip HTML tags from text for tooltips
@@ -20,6 +20,8 @@ interface ReactionAlternativesSidebarProps {
   onSelectAlternative: (alt: ReactionAlternative) => void;
   onComputeTemplates: () => void;
   onComputeFlaskAI: (customPrompt: boolean) => void;
+  wsConnected: boolean;
+  isComputing: boolean;
   isComputingTemplates: boolean;
   templatesSearched: boolean;
   rdkitModule: any;
@@ -185,6 +187,8 @@ export const ReactionAlternativesSidebar: React.FC<ReactionAlternativesSidebarPr
     onSelectAlternative,
     onComputeTemplates,
     onComputeFlaskAI,
+    wsConnected,
+    isComputing,
     isComputingTemplates,
     templatesSearched,
     rdkitModule
@@ -205,6 +209,7 @@ export const ReactionAlternativesSidebar: React.FC<ReactionAlternativesSidebarPr
       if (prev.onSelectAlternative !== onSelectAlternative) changes.push('onSelectAlternative (fn)');
       if (prev.onComputeTemplates !== onComputeTemplates) changes.push('onComputeTemplates (fn)');
       if (prev.onComputeFlaskAI !== onComputeFlaskAI) changes.push('onComputeFlaskAI (fn)');
+      if (prev.isComputing !== isComputing) changes.push('isComputing');
       if (prev.isComputingTemplates !== isComputingTemplates) changes.push('isComputingTemplates');
       if (prev.templatesSearched !== templatesSearched) changes.push('templatesSearched');
       if (prev.rdkitModule !== rdkitModule) changes.push('rdkitModule (ref)');
@@ -326,16 +331,24 @@ export const ReactionAlternativesSidebar: React.FC<ReactionAlternativesSidebarPr
           <div className="pb-2 border-b border-secondary">
             <div className="flex gap-2">
               <button
+                disabled={!wsConnected || isComputing || isComputingTemplates}
                 onClick={() => {
                   onComputeFlaskAI(false);
                   onClose();
                 }}
-                className="btn btn-primary flex-1"
+                className="btn btn-primary flex-1 flex-col items-center"
+                style={{ gap: 0 }}
               >
-                <FlaskConical className="w-4 h-4" />
-                Compute Novel Path with AI
+                <div className="flex items-center gap-2">
+                  <FlaskConical className="w-4 h-4" />
+                  <span>Compute Novel Path with AI</span>
+                </div>
+                <div className="text-[10px] text-tertiary mt-1 flex items-center gap-1">
+                  <Clock className="w-3 h-3 text-warning" /> <span>May take several minutes</span>
+                </div>
               </button>
               <button
+                disabled={!wsConnected || isComputing || isComputingTemplates}
                 onClick={() => {
                   onComputeFlaskAI(true);
                   onClose();
@@ -346,11 +359,6 @@ export const ReactionAlternativesSidebar: React.FC<ReactionAlternativesSidebarPr
                 <MessageSquareMore className="w-4 h-4" />
               </button>
             </div>
-            {/*(
-            <div className="text-xs text-tertiary mt-2 italic">
-              Discovers novel pathways using machine learning
-            </div>
-            )*/}
           </div>
 
           {/*!hasExactMatches && templatesSearched && (

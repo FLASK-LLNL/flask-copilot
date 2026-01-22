@@ -1318,6 +1318,8 @@ const ChemistryTool: React.FC = () => {
                   onSelectAlternative={handleSelectAlternative}
                   onComputeTemplates={handleComputeTemplates}
                   onComputeFlaskAI={handleComputeFlaskAI}
+                  wsConnected={wsConnected}
+                  isComputing={isComputing}
                   isComputingTemplates={isComputingTemplates}
                   templatesSearched={selectedReactionNode.reaction.templatesSearched}
                   rdkitModule={rdkitModule}
