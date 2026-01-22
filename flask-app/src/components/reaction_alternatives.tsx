@@ -1,6 +1,6 @@
 // components/reaction_alternatives_sidebar.tsx
 import React, { useState, useRef, useMemo } from 'react';
-import { X, Loader2, FlaskConical, BookOpen, Check, ChevronDown, ChevronLeft, ChevronRight, AlertCircle } from 'lucide-react';
+import { X, Loader2, FlaskConical, BookOpen, Check, ChevronDown, ChevronLeft, ChevronRight, AlertCircle, MessageSquareMore } from 'lucide-react';
 import { ReactionAlternative } from '../types';
 
 // Helper function to strip HTML tags from text for tooltips
@@ -19,7 +19,7 @@ interface ReactionAlternativesSidebarProps {
   alternatives: ReactionAlternative[];
   onSelectAlternative: (alt: ReactionAlternative) => void;
   onComputeTemplates: () => void;
-  onComputeFlaskAI: () => void;
+  onComputeFlaskAI: (customPrompt: boolean) => void;
   isComputingTemplates: boolean;
   templatesSearched: boolean;
   rdkitModule: any;
@@ -324,16 +324,28 @@ export const ReactionAlternativesSidebar: React.FC<ReactionAlternativesSidebarPr
 
         <div ref={scrollContainerRef} className="flex-1 overflow-y-auto custom-scrollbar p-4 space-y-4">
           <div className="pb-2 border-b border-secondary">
-            <button
-              onClick={() => {
-                onComputeFlaskAI();
-                onClose();
-              }}
-              className="btn btn-primary w-full"
-            >
-              <FlaskConical className="w-4 h-4" />
-              Compute Novel Path with AI Orchestrator (SLOW)
-            </button>
+            <div className="flex gap-2">
+              <button
+                onClick={() => {
+                  onComputeFlaskAI(false);
+                  onClose();
+                }}
+                className="btn btn-primary flex-1"
+              >
+                <FlaskConical className="w-4 h-4" />
+                Compute Novel Path with AI
+              </button>
+              <button
+                onClick={() => {
+                  onComputeFlaskAI(true);
+                  onClose();
+                }}
+                className="btn btn-secondary px-3"
+                title="Compute with Custom Prompt"
+              >
+                <MessageSquareMore className="w-4 h-4" />
+              </button>
+            </div>
             {/*(
             <div className="text-xs text-tertiary mt-2 italic">
               Discovers novel pathways using machine learning

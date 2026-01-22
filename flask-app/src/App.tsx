@@ -1,6 +1,6 @@
 /* eslint-disable react-hooks/exhaustive-deps */
 import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
-import { Loader2, FlaskConical, TestTubeDiagonal, Network, Play, RotateCcw, X, Send, RefreshCw, Sparkles, MessageCircleQuestion, StepForward, MessageSquareShare, Brain } from 'lucide-react';
+import { Loader2, FlaskConical, TestTubeDiagonal, Network, Play, RotateCcw, X, Send, RefreshCw, Sparkles, MessageCircleQuestion, StepForward, MessageSquareShare, Brain, PanelRightOpen } from 'lucide-react';
 import 'recharts';
 import 'react-markdown';
 import 'remark-gfm';
@@ -824,19 +824,22 @@ const ChemistryTool: React.FC = () => {
     }
   }, [selectedReactionNode?.id, selectedReactionNode?.smiles]);  // Only depend on primitive values
 
-  const handleComputeFlaskAI = useCallback(() => {
+  const handleComputeFlaskAI = useCallback((customPrompt: boolean) => {
     const nodeId = selectedReactionNode?.id;
     if (!nodeId) return;
 
     if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
-      wsRef.current.send(JSON.stringify({
-        action: "compute-reaction-from",
-        nodeId: nodeId
-      }));
+      if (customPrompt) {
+        handleCustomQuery(selectedReactionNode!, "compute-reaction-from")
+      } else {
+        wsRef.current.send(JSON.stringify({
+          action: "compute-reaction-from",
+          nodeId: nodeId
+        }));
+      }
     }
     setIsComputing(true);
   }, [selectedReactionNode?.id]);  // Only depend on the ID
-
 
   const stableAlternatives = useMemo(() => {
     return selectedReactionNode?.reaction?.alternatives || [];
@@ -849,8 +852,6 @@ const ChemistryTool: React.FC = () => {
     setCustomQueryType(queryType);
     setContextMenu({node: null, isReaction: false, x: 0, y: 0});
   };
-
-
 
   const submitCustomQuery = (): void => {
     if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) {
@@ -1469,11 +1470,8 @@ const ChemistryTool: React.FC = () => {
               <button onClick={() => handleCustomQuery(contextMenu.node!, "query-reaction")} className="context-menu-item">
                 <MessageCircleQuestion className="w-4 h-4" /> Ask about reaction...
               </button>
-              <button onClick={() => {sendMessageToServer("compute-reaction-from", {nodeId: contextMenu.node!.id});}} className="context-menu-item context-menu-divider">
-                <RefreshCw className="w-4 h-4" />Find Another Reaction
-              </button>
-              <button onClick={() => handleCustomQuery(contextMenu.node!, "compute-reaction-from")} className="context-menu-item">
-                <Send className="w-4 h-4" />Find Another Reaction with Custom Prompt...
+              <button onClick={() => {handleReactionCardClick(contextMenu.node!); setContextMenu({node: null, isReaction: false, x: 0, y: 0});}} className="context-menu-item context-menu-divider">
+                <PanelRightOpen className="w-4 h-4" />Other Reactions...
               </button>
             </>
           )}

@@ -358,12 +358,7 @@ export const MoleculeGraph: React.FC<MoleculeGraphProps> = ({
                         onMouseLeave={() => setHoveredReaction(null)}
                         onClick={(e) => {
                           e.stopPropagation();
-                            handleReactionCardClick(node);  // Left-click opens sidebar
-                        }}
-                        onContextMenu={(e) => {
-                            e.preventDefault();
-                            e.stopPropagation();
-                            handleReactionClick(e, node);  // Right-click for context menu
+                            handleReactionClick(e, node);  // Left-click opens sidebar
                         }}
                         >
                         <div className={`reaction-button ${REACTION_STYLES[node.reaction.highlight || 'normal']} ${
