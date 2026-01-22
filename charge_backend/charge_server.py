@@ -260,7 +260,9 @@ async def websocket_endpoint(websocket: WebSocket):
         "optimize-from": action_manager.handle_optimize_from,
         # Retrosynthesis
         "compute-reaction-from": action_manager.handle_compute_reaction_from,
+        "compute-reaction-templates": action_manager.handle_template_retrosynthesis,
         "recompute-parent-reaction": action_manager.handle_recompute_reaction,
+        "set-reaction-alternative": action_manager.handle_set_reaction_alternative,
     }
 
     try:

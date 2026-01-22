@@ -1,7 +1,15 @@
-import React from 'react';
-import { X, Loader2, FlaskConical, BookOpen, Check, ChevronDown, ChevronRight, AlertCircle } from 'lucide-react';
+// components/reaction_alternatives_sidebar.tsx
+import React, { useState, useRef, useMemo } from 'react';
+import { X, Loader2, FlaskConical, BookOpen, Check, ChevronDown, ChevronLeft, ChevronRight, AlertCircle } from 'lucide-react';
 import { ReactionAlternative } from '../types';
-import { RDKitModule } from '@rdkit/rdkit';
+
+// Helper function to strip HTML tags from text for tooltips
+const stripHtml = (html: string): string => {
+  const tmp = document.createElement('div');
+  tmp.innerHTML = html;
+  return tmp.textContent || tmp.innerText || '';
+};
+
 
 interface ReactionAlternativesSidebarProps {
   isOpen: boolean;
@@ -13,15 +21,14 @@ interface ReactionAlternativesSidebarProps {
   onComputeTemplates: () => void;
   onComputeFlaskAI: () => void;
   isComputingTemplates: boolean;
-  isComputing: boolean;
   templatesSearched: boolean;
-  rdkitModule: RDKitModule | null;
+  rdkitModule: any;
 }
 
 // Mini molecule preview component
-const MiniMoleculeSVG: React.FC<{ smiles: string; rdkitModule: RDKitModule | null }> = ({ smiles, rdkitModule }) => {
-  const [svg, setSvg] = React.useState<string>('');
-  const renderedRef = React.useRef<string>('');
+const MiniMoleculeSVG: React.FC<{ smiles: string; rdkitModule: any; moleculeName?: string }> = ({ smiles, rdkitModule, moleculeName }) => {
+  const [svg, setSvg] = useState<string>('');
+  const renderedRef = useRef<string>('');
 
   React.useEffect(() => {
     if (!rdkitModule || renderedRef.current === smiles || !smiles) return;
@@ -49,9 +56,16 @@ const MiniMoleculeSVG: React.FC<{ smiles: string; rdkitModule: RDKitModule | nul
     }
   }, [smiles, rdkitModule]);
 
+  const tooltipText = moleculeName
+    ? `${stripHtml(moleculeName)}\nSMILES: ${smiles}`
+    : `SMILES: ${smiles}`;
+
   if (!svg) {
     return (
-      <div className="w-9 h-9 rounded bg-surface flex items-center justify-center flex-shrink-0">
+      <div
+        className="w-9 h-9 rounded bg-surface flex items-center justify-center flex-shrink-0"
+        title={tooltipText}
+      >
         <div className="w-3 h-3 rounded-full bg-primary/30"></div>
       </div>
     );
@@ -61,14 +75,15 @@ const MiniMoleculeSVG: React.FC<{ smiles: string; rdkitModule: RDKitModule | nul
     <div
       className="w-9 h-9 rounded bg-white/70 flex items-center justify-center flex-shrink-0"
       dangerouslySetInnerHTML={{ __html: svg }}
+      title={tooltipText}
     />
   );
 };
 
-// Multi-step pathway preview with support for multiple reactants per step
+// Multi-step pathway preview
 const PathwayPreview: React.FC<{
   alternative: ReactionAlternative;
-  rdkitModule: RDKitModule | null;
+  rdkitModule: any;
   isActive: boolean;
   isDisabled: boolean;
 }> = ({ alternative, rdkitModule, isActive, isDisabled }) => {
@@ -84,25 +99,24 @@ const PathwayPreview: React.FC<{
 
   return (
     <div className={`flex flex-col gap-2 py-2 ${isDisabled ? 'opacity-50' : ''}`}>
-      {/* Step count indicator */}
       <div className="text-xs text-tertiary">
         {totalSteps} step{totalSteps !== 1 ? 's' : ''}
       </div>
 
-      {/* Pathway visualization */}
       <div className="flex items-center gap-1 overflow-x-auto custom-scrollbar pb-2">
         {alternative.pathway.map((step, stepIdx) => (
           <React.Fragment key={stepIdx}>
-            {/* Group of molecules at this step */}
             <div className="flex flex-col gap-1">
               <div className={`flex items-center gap-1 ${step.smiles.length > 1 ? 'flex-wrap max-w-[120px]' : ''}`}>
                 {step.smiles.map((smiles, molIdx) => (
                   <React.Fragment key={molIdx}>
                     <div className="flex flex-col items-center gap-0.5 flex-shrink-0">
-                      <MiniMoleculeSVG smiles={smiles} rdkitModule={rdkitModule} />
-                      <div className="text-[8px] text-tertiary max-w-[45px] truncate text-center" title={step.label[molIdx]}>
-                        {step.label[molIdx]}
-                      </div>
+                      <MiniMoleculeSVG smiles={smiles} rdkitModule={rdkitModule} moleculeName={step.label[molIdx]} />
+                      <div
+                        className="text-[8px] text-tertiary max-w-[45px] truncate text-center"
+                        title={stripHtml(step.label[molIdx])}
+                        dangerouslySetInnerHTML={{ __html: step.label[molIdx] }}
+                      />
                     </div>
                     {molIdx < step.smiles.length - 1 && (
                       <div className="text-[10px] text-muted">+</div>
@@ -112,9 +126,8 @@ const PathwayPreview: React.FC<{
               </div>
             </div>
 
-            {/* Arrow to next step */}
             {stepIdx < alternative.pathway.length - 1 && (
-              <ChevronRight className="w-3 h-3 text-muted flex-shrink-0 mx-0.5" />
+              <ChevronLeft className="w-3 h-3 text-muted flex-shrink-0 mx-0.5" />
             )}
           </React.Fragment>
         ))}
@@ -132,7 +145,7 @@ const CollapsibleSection: React.FC<{
   defaultExpanded?: boolean;
   children: React.ReactNode;
 }> = ({ title, count, dotColor, subtitle, defaultExpanded = false, children }) => {
-  const [isExpanded, setIsExpanded] = React.useState(defaultExpanded);
+  const [isExpanded, setIsExpanded] = useState(defaultExpanded);
 
   return (
     <div>
@@ -162,93 +175,131 @@ const CollapsibleSection: React.FC<{
   );
 };
 
-export const ReactionAlternativesSidebar: React.FC<ReactionAlternativesSidebarProps> = ({
-  isOpen,
-  onClose,
-  productMolecule,
-  productSmiles,
-  alternatives,
-  onSelectAlternative,
-  onComputeTemplates,
-  onComputeFlaskAI,
-  isComputingTemplates,
-  isComputing,
-  templatesSearched,
-  rdkitModule
-}) => {
-  const [hoveredDisabled, setHoveredDisabled] = React.useState<string | null>(null);
+export const ReactionAlternativesSidebar: React.FC<ReactionAlternativesSidebarProps> = (props) => {
+  const {
+    isOpen,
+    onClose,
+    productMolecule,
+    productSmiles,
+    alternatives,
+    onSelectAlternative,
+    onComputeTemplates,
+    onComputeFlaskAI,
+    isComputingTemplates,
+    templatesSearched,
+    rdkitModule
+  } = props;
 
-  if (!isOpen) return null;
+  // DEBUG: Track prop changes
+  const prevPropsRef = useRef<ReactionAlternativesSidebarProps>();
+  React.useEffect(() => {
+    if (prevPropsRef.current) {
+      const prev = prevPropsRef.current;
+      const changes: string[] = [];
 
-  const exactMatches = alternatives.filter(a => a.type === 'exact');
-  const templateMatches = alternatives.filter(a => a.type === 'template');
+      if (prev.isOpen !== isOpen) changes.push('isOpen');
+      if (prev.productMolecule !== productMolecule) changes.push('productMolecule');
+      if (prev.productSmiles !== productSmiles) changes.push('productSmiles');
+      if (prev.alternatives !== alternatives) changes.push('alternatives (ref)');
+      if (prev.onClose !== onClose) changes.push('onClose (fn)');
+      if (prev.onSelectAlternative !== onSelectAlternative) changes.push('onSelectAlternative (fn)');
+      if (prev.onComputeTemplates !== onComputeTemplates) changes.push('onComputeTemplates (fn)');
+      if (prev.onComputeFlaskAI !== onComputeFlaskAI) changes.push('onComputeFlaskAI (fn)');
+      if (prev.isComputingTemplates !== isComputingTemplates) changes.push('isComputingTemplates');
+      if (prev.templatesSearched !== templatesSearched) changes.push('templatesSearched');
+      if (prev.rdkitModule !== rdkitModule) changes.push('rdkitModule (ref)');
 
-  const hasExactMatches = exactMatches.length > 0;
-  const hasTemplateMatches = templateMatches.length > 0;
+      if (changes.length > 0) {
+        console.log('🔄 Sidebar rerender caused by:', changes.join(', '));
+      }
+    }
+    prevPropsRef.current = props;
+  });
 
-  // Show template button only if templates haven't been searched yet
-  const showTemplateButton = !templatesSearched;
+  const [hoveredDisabled, setHoveredDisabled] = useState<string | null>(null);
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
 
-  const AlternativeCard: React.FC<{ alt: ReactionAlternative }> = ({ alt }) => {
-    const isActive = alt.status === 'active';
-    const isDisabled = alt.disabled || false;
-    const canClick = !isActive && !alt.disabled && alt.status !== 'computing';
+  // Memoize computed values to prevent recalculation
+  const { exactMatches, templateMatches, hasExactMatches, hasTemplateMatches, showTemplateButton } = useMemo(() => {
+    const exact = alternatives.filter(a => a.type === 'exact');
+    const template = alternatives.filter(a => a.type === 'template');
+    const hasExact = exact.length > 0;
+    const hasTemplate = template.length > 0;
+    const showButton = !templatesSearched;
 
-    return (
-      <div className="relative">
-        <button
-          onClick={() => canClick && onSelectAlternative(alt)}
-          disabled={!canClick}
-          onMouseEnter={() => isDisabled && alt.disabledReason && setHoveredDisabled(alt.id)}
-          onMouseLeave={() => setHoveredDisabled(null)}
-          className={`w-full glass-panel transition-all text-left relative ${
-            isActive ? 'border-2 border-primary bg-primary/10' : ''
-          } ${
-            isDisabled ? 'opacity-60 cursor-not-allowed' : 'hover:bg-surface-hover'
-          } ${
-            alt.status === 'computing' || isActive ? 'cursor-default' : ''
-          }`}
-        >
-          <div className="flex items-start justify-between mb-1">
-            <div className="flex items-center gap-2 flex-1 min-w-0">
-              {isDisabled ? (
-                <AlertCircle className="w-3.5 h-3.5 text-warning flex-shrink-0" />
-              ) : (
-                <BookOpen className="w-3.5 h-3.5 text-muted flex-shrink-0" />
+    return {
+      exactMatches: exact,
+      templateMatches: template,
+      hasExactMatches: hasExact,
+      hasTemplateMatches: hasTemplate,
+      showTemplateButton: showButton
+    };
+  }, [alternatives, templatesSearched]);
+
+  // Memoize the AlternativeCard to prevent recreation
+  const AlternativeCard = useMemo(() => {
+    return ({ alt }: { alt: ReactionAlternative }) => {
+      const isActive = alt.status === 'active';
+      const isDisabled = alt.disabled || false;
+      const canClick = !isActive && !alt.disabled && alt.status !== 'computing';
+
+      return (
+        <div className="relative">
+          <button
+            onClick={() => canClick && onSelectAlternative(alt)}
+            disabled={!canClick}
+            onMouseEnter={() => isDisabled && alt.disabledReason && setHoveredDisabled(alt.id)}
+            onMouseLeave={() => setHoveredDisabled(null)}
+            className={`w-full glass-panel transition-all text-left relative ${
+              isActive ? 'border-2 border-primary bg-primary/10' : ''
+            } ${
+              isDisabled ? 'opacity-60 cursor-not-allowed' : 'hover:bg-surface-hover'
+            } ${
+              alt.status === 'computing' || isActive ? 'cursor-default' : ''
+            }`}
+          >
+            <div className="flex items-start justify-between mb-1">
+              <div className="flex items-center gap-2 flex-1 min-w-0">
+                {isDisabled ? (
+                  <AlertCircle className="w-3.5 h-3.5 text-warning flex-shrink-0" />
+                ) : (
+                  <BookOpen className="w-3.5 h-3.5 text-muted flex-shrink-0" />
+                )}
+                <span className={`text-sm font-medium truncate ${isDisabled ? 'text-muted' : 'text-primary'}`}>
+                  {alt.name}
+                </span>
+              </div>
+              {isActive && !isDisabled && (
+                <Check className="w-4 h-4 text-success flex-shrink-0" />
               )}
-              <span className={`text-sm font-medium truncate ${isDisabled ? 'text-muted' : 'text-primary'}`}>
-                {alt.name}
-              </span>
+              {alt.status === 'computing' && (
+                <Loader2 className="w-4 h-4 animate-spin text-warning flex-shrink-0" />
+              )}
             </div>
-            {isActive && !isDisabled && (
-              <Check className="w-4 h-4 text-success flex-shrink-0" />
-            )}
-            {alt.status === 'computing' && (
-              <Loader2 className="w-4 h-4 animate-spin text-warning flex-shrink-0" />
-            )}
-          </div>
-          <PathwayPreview
-            alternative={alt}
-            rdkitModule={rdkitModule}
-            isActive={isActive}
-            isDisabled={isDisabled}
-          />
-        </button>
+            <PathwayPreview
+              alternative={alt}
+              rdkitModule={rdkitModule}
+              isActive={isActive}
+              isDisabled={isDisabled}
+            />
+          </button>
 
-        {/* Disabled reason tooltip */}
-        {hoveredDisabled === alt.id && alt.disabledReason && (
-          <div className="absolute left-0 right-0 top-full mt-1 z-50 pointer-events-none">
-            <div className="bg-warning/20 border border-warning/50 rounded px-3 py-2 text-xs text-warning backdrop-blur-sm">
-              <div className="flex items-start gap-2">
-                <AlertCircle className="w-3 h-3 flex-shrink-0 mt-0.5" />
-                <span>{alt.disabledReason}</span>
+          {hoveredDisabled === alt.id && alt.disabledReason && (
+            <div className="absolute left-0 right-0 top-full mt-1 z-50 pointer-events-none">
+              <div className="bg-warning/20 border border-warning/50 rounded px-3 py-2 text-xs text-warning backdrop-blur-sm">
+                <div className="flex items-start gap-2">
+                  <AlertCircle className="w-3 h-3 flex-shrink-0 mt-0.5" />
+                  <span>{alt.disabledReason}</span>
+                </div>
               </div>
             </div>
-          </div>
-        )}
-      </div>
-    );
-  };
+          )}
+        </div>
+      );
+    };
+  }, [onSelectAlternative, rdkitModule, hoveredDisabled]);
+
+  if (!isOpen) return null;
 
   return (
     <div
@@ -263,7 +314,7 @@ export const ReactionAlternativesSidebar: React.FC<ReactionAlternativesSidebarPr
               Synthesis Pathways
             </h3>
             <p className="text-sm text-secondary truncate" title={productMolecule}>
-              for {productMolecule}
+              <div className="modal-subtitle" dangerouslySetInnerHTML={{__html: "for " + productMolecule}}></div>
             </p>
           </div>
           <button onClick={onClose} className="btn-icon ml-2">
@@ -271,10 +322,7 @@ export const ReactionAlternativesSidebar: React.FC<ReactionAlternativesSidebarPr
           </button>
         </div>
 
-        {/* Content */}
-        <div className="flex-1 overflow-y-auto custom-scrollbar p-4 space-y-4">
-
-          {/* AI Computation Button - Top Priority */}
+        <div ref={scrollContainerRef} className="flex-1 overflow-y-auto custom-scrollbar p-4 space-y-4">
           <div className="pb-2 border-b border-secondary">
             <button
               onClick={() => {
@@ -282,18 +330,18 @@ export const ReactionAlternativesSidebar: React.FC<ReactionAlternativesSidebarPr
                 onClose();
               }}
               className="btn btn-primary w-full"
-              disabled={isComputing}
             >
               <FlaskConical className="w-4 h-4" />
-              Compute New Path with AI
+              Compute Novel Path with AI Orchestrator (SLOW)
             </button>
+            {/*(
             <div className="text-xs text-tertiary mt-2 italic">
               Discovers novel pathways using machine learning
             </div>
+            )*/}
           </div>
 
-          {/* No Exact Matches Message */}
-          {!hasExactMatches && templatesSearched && (
+          {/*!hasExactMatches && templatesSearched && (
             <div className="glass-panel bg-warning/10 border border-warning/30 p-3">
               <div className="flex items-start gap-2">
                 <AlertCircle className="w-4 h-4 text-warning flex-shrink-0 mt-0.5" />
@@ -302,15 +350,14 @@ export const ReactionAlternativesSidebar: React.FC<ReactionAlternativesSidebarPr
                 </div>
               </div>
             </div>
-          )}
+          )*/}
 
-          {/* Exact Matches Section */}
           {hasExactMatches && (
             <CollapsibleSection
               title="EXACT MATCHES"
               count={exactMatches.length}
               dotColor="bg-success"
-              subtitle="Known literature reactions"
+              subtitle="Known reactions in database"
               defaultExpanded={true}
             >
               {exactMatches.map(alt => (
@@ -319,7 +366,6 @@ export const ReactionAlternativesSidebar: React.FC<ReactionAlternativesSidebarPr
             </CollapsibleSection>
           )}
 
-          {/* Template-Based Matches Section */}
           {(hasTemplateMatches || isComputingTemplates) && (
             <CollapsibleSection
               title="TEMPLATE-BASED MATCHES"
@@ -340,19 +386,17 @@ export const ReactionAlternativesSidebar: React.FC<ReactionAlternativesSidebarPr
             </CollapsibleSection>
           )}
 
-          {/* No alternatives yet */}
           {!hasExactMatches && !hasTemplateMatches && !isComputingTemplates && templatesSearched && (
             <div className="text-sm text-tertiary italic p-4 text-center glass-panel">
               No alternative pathways found
             </div>
           )}
 
-          {/* Find Template-Based Matches Button */}
           {showTemplateButton && (
             <div className="pt-2">
               <button
                 onClick={onComputeTemplates}
-                disabled={isComputingTemplates || isComputing}
+                disabled={isComputingTemplates}
                 className="btn btn-secondary w-full"
               >
                 {isComputingTemplates ? (

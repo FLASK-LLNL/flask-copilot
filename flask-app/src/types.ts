@@ -3,17 +3,18 @@ import { RDKitModule } from '@rdkit/rdkit';
 import { NODE_STYLES } from "./constants";
 import { Dispatch, SetStateAction } from 'react';
 
+// Class that only exists for UI preview purposes
 export interface PathwayStep {
   smiles: string[];
   label: string[];
-  isProduct?: boolean;
 }
 
 export interface ReactionAlternative {
   id: string;
   name: string;
-  type: 'exact' | 'template';
+  type: 'exact' | 'template' | 'ai';
   status: 'active' | 'available' | 'computing';
+  hoverInfo: string;
   disabled?: boolean;
   disabledReason?: string;
   pathway: PathwayStep[];  // For UI preview
@@ -95,8 +96,7 @@ export interface OrchestratorSettings {
   useCustomModel?: boolean;
   apiKey: string;
   backendLabel: string;
-  moleculeName?: MoleculeNameFormat;
-  toolServers?: ToolServer[];
+  moleculeName?: MoleculeNameFormat;  toolServers?: ToolServer[];
 }
 
 export interface WebSocketMessageToServer {
@@ -118,6 +118,9 @@ export interface WebSocketMessageToServer {
   // Custom problem
   systemPrompt?: string;
   userPrompt?: string;
+
+  // Retrosynthesis
+  alternativeId?: string;
 }
 
 // Messages received from backend
@@ -133,6 +136,8 @@ export interface WebSocketMessage {
 
   withNode?: boolean;
   username?: string;
+
+  alternatives?: ReactionAlternative[];
 }
 
 

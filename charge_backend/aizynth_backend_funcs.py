@@ -18,7 +18,7 @@ from molecule_naming import smiles_to_html
 
 
 def generate_tree_structure(
-    reaction_path_dict: Dict[int, Node],
+    reaction_path_dict: Dict[int, AiZynthFuncs.Node],
     retro_synth_context: RetrosynthesisContext,
     start_level: int = 0,
     molecule_name_format: Literal["brand", "iupac", "formula", "smiles"] = "brand",
@@ -60,7 +60,6 @@ def generate_tree_structure(
         )
 
         retro_synth_context.node_ids[node_id_str] = node
-        retro_synth_context.azf_nodes[node_id_str] = current_node
         retro_synth_context.nodes_per_level[level] += 1
         nodes.append(node)
 

@@ -7,7 +7,8 @@ from charge.servers.AiZynthTools import RetroPlanner, ReactionPath
 from aizynth_backend_funcs import generate_tree_structure
 from loguru import logger
 from callback_logger import CallbackLogger
-from typing import Literal, Optional, Union
+from typing import Any, Literal, Optional, Union, TYPE_CHECKING
+from collections import deque
 
 from backend_helper_funcs import (
     CallbackHandler,
@@ -18,7 +19,8 @@ from backend_helper_funcs import (
     Node,
     Edge,
     Reaction,
-    loop_executor,
+    ReactionAlternative,
+    PathwayStep,
 )
 from molecule_naming import smiles_to_html
 
@@ -28,6 +30,9 @@ from charge.tasks.RetrosynthesisTask import (
 )
 
 from charge.experiments.AutoGenExperiment import AutoGenExperiment
+
+if TYPE_CHECKING:
+    import aizynthfinder.reactiontree
 
 RETROSYNTH_UNCONSTRAINED_USER_PROMPT_TEMPLATE = (
     "Provide a retrosynthetic pathway for the target molecule {target_molecule}. "
@@ -56,7 +61,7 @@ def run_retro_planner(config_file, smiles):
     planner = RetroPlanner(configfile=config_file)
 
     _, _, routes = planner.plan(smiles)
-    return routes, planner
+    return routes, planner, planner.finder.routes.reaction_trees
 
 
 async def generate_molecules(
@@ -94,15 +99,8 @@ async def generate_molecules(
 
     await clogger.info("Starting planning in executor...")
 
-    # Disable executor for now due to bad interaction with task_done callbacks
-    # routes, planner = await loop_executor(
-    #     executor, run_retro_planner, config_file, start_smiles
-    # )
-
-    routes, planner = run_retro_planner(config_file, start_smiles)
+    routes, planner, trees = run_retro_planner(config_file, start_smiles)
     await clogger.info(f"Running RetroPlanner for SMILES: {start_smiles}")
-
-    context.node_id_to_planner[root.id] = planner
 
     if not routes:
         await clogger.info(
@@ -113,12 +111,75 @@ async def generate_molecules(
         return
     await clogger.info(f"Found {len(routes)} routes for {start_smiles}.")
 
-    planner.last_route_used = 0
+    # Use first route by default
     reaction_path = ReactionPath(route=routes[0])
     nodes, edges = generate_tree_structure(reaction_path.nodes, context)
     logger.info(f"Generated {len(nodes)} nodes and {len(edges)} edges.")
 
+    # All other routes become reaction alternatives
+    def make_reaction_alternative(
+        route: dict[str, Any], id: int, tree: "aizynthfinder.reactiontree.ReactionTree"
+    ) -> ReactionAlternative:
+
+        rpath = ReactionPath(route)
+        smarts = next(iter(tree.reactions())).metadata["template"]
+        prevalence = next(iter(tree.reactions())).metadata["library_occurence"]
+        pathway = []
+
+        # BFS traversal over tree, merging precursors of each child for visualization purposes
+        queue = deque([rpath.root])
+
+        while queue:
+            level_size = len(queue)
+            level_smiles = []
+
+            for _ in range(level_size):
+                node = queue.popleft()
+                level_smiles.append(node.smiles)
+
+                # Add children to queue for next level
+                if node.children:
+                    for child_id in node.children:
+                        # Get the actual node from rpath.nodes using the child_id
+                        if hasattr(rpath, "nodes") and child_id in rpath.nodes:
+                            queue.append(rpath.nodes[child_id])
+
+            # Add this level as a pathway step
+            pathway.append(
+                PathwayStep(
+                    level_smiles,
+                    [smiles_to_html(s, molecule_name_format) for s in level_smiles],
+                )
+            )
+
+        return ReactionAlternative(
+            f"reaction_{rpath.root.node_id}_{id}",
+            f"AiZynthFinder Reaction {id+1} ({prevalence} occurences in database)",
+            "template",
+            "active" if id == 0 else "available",
+            pathway,
+            disabled=False,
+            hoverInfo=f"Reaction SMARTS: `{smarts}`\n\nPattern appears {prevalence} times in database.",
+        )
+
+    alts = []
+    for i, route in enumerate(routes):
+        alts.append(make_reaction_alternative(route, i, trees[i]))
+
     calculate_positions(nodes)
+
+    root_smarts = next(iter(trees[0].reactions())).metadata["template"]
+    root_prevalence = next(iter(trees[0].reactions())).metadata["library_occurence"]
+
+    reaction = Reaction(
+        "azf",
+        f"Reaction found with AiZynthFinder\n\nPattern occurrences in database: {root_prevalence}\n\nReaction SMARTS: `{root_smarts}`",
+        highlight="yellow",
+        label="Template",
+        alternatives=alts,
+        templatesSearched=True,
+    )
+    context.node_ids[root.id].reaction = reaction
 
     await websocket.send_json(
         {
@@ -126,12 +187,7 @@ async def generate_molecules(
             "node": {
                 "id": root.id,
                 "highlight": "normal",
-                "reaction": Reaction(
-                    "azf",
-                    "Reaction found with AiZynthFinder",
-                    highlight="yellow",
-                    label="Template",
-                ).json(),
+                "reaction": reaction.json(),
             },
         }
     )
@@ -163,11 +219,9 @@ async def optimize_molecule_retro(
 ):
     """Optimize a molecule using retrosynthesis by node ID"""
     current_node = context.node_ids.get(node_id)
-    cur_node_id = context.azf_nodes.get(node_id)
     assert current_node is not None, f"Node ID {node_id} not found"
-    assert cur_node_id is not None, f"AZF Node ID {node_id} not found"
 
-    cur_node_id = cur_node_id.node_id
+    cur_node_id = node_id
 
     clogger = CallbackLogger(websocket, source="optimize_molecule_retro")
 
@@ -277,7 +331,7 @@ async def optimize_molecule_retro(
         context.parents[node.id] = node_id
 
         # Find paths for the leaf nodes
-        routes, planner = run_retro_planner(config_file, smiles)
+        routes, planner, trees = run_retro_planner(config_file, smiles)
 
         if not routes:
             await clogger.warning(f"No routes found for {smiles}. Skipping...")
@@ -285,7 +339,6 @@ async def optimize_molecule_retro(
 
         await clogger.info(f"Found {len(routes)} routes for {smiles}.")
 
-        context.node_id_to_planner[node.id] = planner
         planner.last_route_used = 0
 
         reaction_path = ReactionPath(

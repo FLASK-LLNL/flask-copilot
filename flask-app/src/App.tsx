@@ -1,5 +1,5 @@
 /* eslint-disable react-hooks/exhaustive-deps */
-import React, { useState, useRef, useEffect, useCallback } from 'react';
+import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import { Loader2, FlaskConical, TestTubeDiagonal, Network, Play, RotateCcw, X, Send, RefreshCw, Sparkles, MessageCircleQuestion, StepForward, MessageSquareShare, Brain } from 'lucide-react';
 import 'recharts';
 import 'react-markdown';
@@ -505,7 +505,7 @@ const ChemistryTool: React.FC = () => {
                 ...n,
                 reaction: {
                   ...n.reaction,
-                  alternatives: data.alternatives,
+                  alternatives: data.alternatives ?? [],
                   templatesSearched: true  // Mark that templates have been searched
                 }
               }
@@ -570,6 +570,10 @@ const ChemistryTool: React.FC = () => {
     setSaveDropdownOpen(false);
     sidebarState.setSourceFilterOpen(false);
     setWsTooltipPinned(false);
+    // Clear and close reaction alternatives sidebar
+    setReactionSidebarOpen(false);
+    setSelectedReactionNode(null);
+    setIsComputingTemplates(false);
     if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
       wsRef.current.send(JSON.stringify({ action: 'reset' }));
     }
@@ -757,48 +761,7 @@ const ChemistryTool: React.FC = () => {
       });
   };
 
-  const handleReactionCardClick = (node: TreeNode): void => {
-    if (isComputing) return; // Don't open during computation
-    setSelectedReactionNode(node);
-    setReactionSidebarOpen(true);
-  };
-
-  const handleSelectAlternative = (alt: ReactionAlternative): void => {
-    if (!selectedReactionNode) return;
-
-    // Send message to backend to switch to this alternative
-    sendMessageToServer("switch-reaction-alternative", {
-      nodeId: selectedReactionNode.id,
-      alternativeId: alt.id
-    });
-
-    // Close sidebar
-    setReactionSidebarOpen(false);
-    setIsComputing(true);
-  };
-
-  const handleComputeTemplates = (): void => {
-    if (!selectedReactionNode) return;
-
-    setIsComputingTemplates(true);
-    sendMessageToServer("compute-template-alternatives", {
-      nodeId: selectedReactionNode.id,
-      smiles: selectedReactionNode.smiles
-    });
-  };
-
-  const handleComputeFlaskAI = (): void => {
-    if (!selectedReactionNode) return;
-
-    // AI computation replaces the current reaction, so we send a recompute message
-    sendMessageToServer("compute-reaction-from", {
-      nodeId: selectedReactionNode.id
-    });
-    setIsComputing(true);
-  };
-
-
-  const sendMessageToServer = (message: string, data?: Omit<WebSocketMessageToServer, 'action'>): void => {
+  const sendMessageToServer = useCallback((message: string, data?: Omit<WebSocketMessageToServer, 'action'>): void => {
     if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) {
       alert('WebSocket not connected');
       return;
@@ -809,7 +772,76 @@ const ChemistryTool: React.FC = () => {
     };
     wsRef.current.send(JSON.stringify(msg));
     setContextMenu({node: null, isReaction: false, x: 0, y: 0});
-  };
+  }, []);
+
+  const handleReactionCardClick = useCallback((node: TreeNode) => {
+    if (isComputing) return;
+    setSelectedReactionNode(node);
+    setReactionSidebarOpen(true);
+  }, [isComputing]);  // Only depend on isComputing boolean
+
+  const handleSelectAlternative = useCallback((alt: ReactionAlternative) => {
+    const nodeId = selectedReactionNode?.id;
+    if (!nodeId) return;
+    if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) return;
+
+    // Delete subtree locally
+    setTreeNodes(prev => {
+      const descendants = findAllDescendants(nodeId, prev);
+      return prev.filter(n => !descendants.has(n.id) && n.id !== nodeId);
+    });
+    setEdges(prev => prev.filter(e =>
+      e.fromNode !== nodeId && e.toNode !== nodeId
+    ));
+
+    // Tell backend that the alternative subtree has been chosen
+    wsRef.current.send(JSON.stringify({
+      action: "set-reaction-alternative",
+      nodeId: nodeId,
+      alternativeId: alt.id
+    }));
+
+    setReactionSidebarOpen(false);
+    setIsComputing(true);
+  }, [selectedReactionNode?.id]);  // Only depend on the ID, not the whole node
+
+  const handleCloseReactionAlternativesSidebar = useCallback(() => {
+    setReactionSidebarOpen(false);
+  }, []);  // No dependencies - just a state setter
+
+  const handleComputeTemplates = useCallback(() => {
+    const nodeId = selectedReactionNode?.id;
+    const smiles = selectedReactionNode?.smiles;
+    if (!nodeId || !smiles) return;
+
+    setIsComputingTemplates(true);
+    if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+      wsRef.current.send(JSON.stringify({
+        action: "compute-reaction-templates",
+        nodeId: nodeId,
+        smiles: smiles
+      }));
+    }
+  }, [selectedReactionNode?.id, selectedReactionNode?.smiles]);  // Only depend on primitive values
+
+  const handleComputeFlaskAI = useCallback(() => {
+    const nodeId = selectedReactionNode?.id;
+    if (!nodeId) return;
+
+    if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+      wsRef.current.send(JSON.stringify({
+        action: "compute-reaction-from",
+        nodeId: nodeId
+      }));
+    }
+    setIsComputing(true);
+  }, [selectedReactionNode?.id]);  // Only depend on the ID
+
+
+  const stableAlternatives = useMemo(() => {
+    return selectedReactionNode?.reaction?.alternatives || [];
+  }, [selectedReactionNode?.id, selectedReactionNode?.reaction?.alternatives?.length]);
+
 
   const handleCustomQuery = (node: TreeNode, queryType: string | null): void => {
     setCustomQueryModal(node);
@@ -1278,16 +1310,15 @@ const ChemistryTool: React.FC = () => {
               {reactionSidebarOpen && selectedReactionNode?.reaction && (
                 <ReactionAlternativesSidebar
                   isOpen={reactionSidebarOpen}
-                  onClose={() => setReactionSidebarOpen(false)}
-                  productMolecule={selectedReactionNode.label.replace(/<[^>]*>/g, '')} // Strip HTML
+                  onClose={handleCloseReactionAlternativesSidebar}
+                  productMolecule={selectedReactionNode.label} // Strip HTML
                   productSmiles={selectedReactionNode.smiles}
-                  alternatives={selectedReactionNode.reaction.alternatives || []}
+                  alternatives={stableAlternatives}
                   onSelectAlternative={handleSelectAlternative}
                   onComputeTemplates={handleComputeTemplates}
                   onComputeFlaskAI={handleComputeFlaskAI}
                   isComputingTemplates={isComputingTemplates}
-                  isComputing={isComputing || !wsConnected}
-                  templatesSearched={selectedReactionNode.reaction.templatesSearched || false}  // ADD THIS
+                  templatesSearched={selectedReactionNode.reaction.templatesSearched}
                   rdkitModule={rdkitModule}
                 />
               )}
@@ -1313,7 +1344,7 @@ const ChemistryTool: React.FC = () => {
             )}
 
             {/* Metrics Dashboard */}
-            {treeNodes.length > 0 && (
+            {(problemType === "optimization") && (treeNodes.length > 0) && (
               <MetricsDashboard {...metricsDashboardState} treeNodes={treeNodes} />
             )}
 

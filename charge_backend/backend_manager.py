@@ -390,6 +390,21 @@ class ActionManager:
 
         await self.task_manager.run_task(run_func())
 
+    async def handle_template_retrosynthesis(self, data: dict) -> None:
+        """Handle compute-reaction-templates action."""
+        if self.retro_synth_context is None:
+            raise ValueError("Retrosynthesis context not initialized")
+
+        logger.info("Synthesize tree leaf action received")
+        logger.info(f"Data: {data}")
+        node = self.retro_synth_context.node_ids[data["nodeId"]]
+
+        # TODO: Invoke AZF
+        await self._send_processing_message(
+            f"NOT YET IMPLEMENTED. node {data['nodeId']}", source="Agent"
+        )
+        await self.websocket.send_json({"type": "complete"})
+
     async def handle_optimize_from(self, data: dict) -> None:
         """Handle optimize-from action."""
         prompt = data.get("query")
@@ -464,6 +479,63 @@ class ActionManager:
         )
 
         await self.task_manager.run_task(run_func())
+
+    async def handle_set_reaction_alternative(self, data: dict) -> None:
+        """Handle set-reaction-alternative action."""
+        if self.retro_synth_context is None:
+            raise ValueError("Retrosynthesis context not initialized")
+
+        # Get node
+        if data["nodeId"] not in self.retro_synth_context.node_ids:
+            await self._send_processing_message(
+                f"Cannot find node {data['nodeId']}", source="Agent"
+            )
+            await self.websocket.send_json({"type": "complete"})
+            return
+        node = self.retro_synth_context.node_ids[data["nodeId"]]
+        alt = data["alternativeId"]
+        if not node.reaction or not node.reaction.alternatives:
+            await self._send_processing_message(
+                f"No alternative found for {data['nodeId']}", source="Agent"
+            )
+            await self.websocket.send_json({"type": "complete"})
+            return
+        try:
+            alternative = next(a for a in node.reaction.alternatives if a.id == alt)
+        except StopIteration:
+            await self._send_processing_message(
+                f"Alternative {alt} not found for {data['nodeId']}", source="Agent"
+            )
+            await self.websocket.send_json({"type": "complete"})
+            return
+
+        node.reaction.hoverInfo = alternative.hoverInfo
+
+        # Clear subtree and levels for layouting
+        await self.websocket.send_json(
+            {"type": "subtree_delete", "node": {"id": data["nodeId"]}}
+        )
+
+        # Send new reaction label and subtree
+
+        await self.websocket.send_json(
+            {
+                "type": "node_update",
+                "node": {
+                    "id": data["nodeId"],
+                    "reaction": Reaction(
+                        f"reaction_{data['nodeId']}_{data['alternativeId']}",
+                        alternative.hoverInfo,
+                        highlight="red",
+                        label=alternative.type,
+                    ).json(),
+                },
+            }
+        )
+
+        # TODO: Loop over new nodes/edges (refactor function)
+
+        await self.websocket.send_json({"type": "complete"})
 
     async def _send_processing_message(
         self, message: str, source: str | None = None, **kwargs

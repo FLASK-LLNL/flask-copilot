@@ -374,7 +374,7 @@ export const MoleculeGraph: React.FC<MoleculeGraphProps> = ({
                                 {node.reaction.label || '\u00A0'}
                                 </span>
                                 {node.reaction.alternatives && node.reaction.alternatives.length > 1 && (
-                                <span className="flex-shrink-0 text-xs bg-white/20 px-2 py-0.5 rounded-full font-semibold">
+                                <span className="absolute -top-3 -right-3 min-w-[18px] h-[18px] flex items-center justify-center text-[9px] bg-white/90 text-purple-900 px-1 rounded-full font-bold shadow-md">
                                     +{node.reaction.alternatives.length - 1}
                                 </span>
                                 )}

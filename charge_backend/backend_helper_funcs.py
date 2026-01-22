@@ -14,11 +14,37 @@ from callback_logger import CallbackLogger
 
 
 @dataclass
+class PathwayStep:
+    smiles: list[str]
+    label: list[str]
+
+    def json(self):
+        return asdict(self)
+
+
+@dataclass
+class ReactionAlternative:
+    id: str
+    name: str
+    type: Literal["exact", "template", "ai"]
+    status: Literal["active", "available", "computing"]
+    pathway: list[PathwayStep]
+    hoverInfo: str
+    disabled: Optional[bool] = None
+    disabledReason: Optional[str] = None
+
+    def json(self):
+        return asdict(self)
+
+
+@dataclass
 class Reaction:
     id: str
     hoverInfo: str
     highlight: str = "normal"
     label: Optional[str] = None
+    alternatives: Optional[list[ReactionAlternative]] = None
+    templatesSearched: bool = False
 
     def json(self):
         return asdict(self)
@@ -173,19 +199,15 @@ class RetrosynthesisContext:
 
     def __init__(self):
         self.node_ids: dict[str, Node] = {}
-        self.node_id_to_planner: dict[str, aizynth_funcs.RetroPlanner] = {}
         self.node_id_to_charge_client: dict[str, AutoGenAgent] = {}
         self.node_id_to_reasoning_summary: dict[str, str] = {}
-        self.azf_nodes: dict[str, aizynth_funcs.Node] = {}
         self.nodes_per_level: dict[int, int] = defaultdict(int)
         self.parents: dict[str, str] = {}
 
     def reset(self):
         self.node_ids.clear()
-        self.node_id_to_planner.clear()
         self.node_id_to_charge_client.clear()
         self.node_id_to_reasoning_summary.clear()
-        self.azf_nodes.clear()
         self.nodes_per_level.clear()
         self.parents.clear()
 

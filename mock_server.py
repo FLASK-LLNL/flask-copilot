@@ -77,16 +77,16 @@ if os.path.exists(ASSETS_PATH):
 class PathwayStep:
     smiles: list[str]
     label: list[str]
-    isProduct: bool
 
 
 @dataclass
 class ReactionAlternative:
     id: str
     name: str
-    type: Literal["exact", "template"]
+    type: Literal["exact", "template", "ai"]
     status: Literal["active", "available", "computing"]
     pathway: list[PathwayStep]
+    hoverInfo: str
     disabled: Optional[bool] = None
     disabledReason: Optional[str] = None
 
@@ -222,21 +222,22 @@ def generate_tree_structure(
                                 "Oxidation",
                                 "template",
                                 "active",
-                                [PathwayStep(["O", "CCO"], ["", ""], False)],
+                                [PathwayStep(["O", "CCO"], ["", ""])],
+                                "Info",
                             ),
                         ]
                         + [
-                            # ReactionAlternative(f"a{2*i}", "bb", "template", "available", [PathwayStep(['CCO'], [''], False)]),
                             ReactionAlternative(
                                 f"a{2*i+1}",
                                 "Something",
                                 "template",
                                 "available",
                                 [
-                                    PathwayStep(["CCO", "CCC"], [""], False),
-                                    PathwayStep(["CCI"], [""], True),
+                                    PathwayStep(["CCO", "CCC"], ["", ""]),
+                                    PathwayStep(["CCI"], [""]),
                                 ]
                                 * 5,
+                                "Info",
                             )
                             for i in range(1, 10)
                         ],
