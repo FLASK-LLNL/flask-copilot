@@ -19,7 +19,10 @@ import re
 import json
 import os
 import requests
-from typing import Literal
+
+from typing import Literal, TypeAlias
+
+MolNameFormat: TypeAlias = Literal["brand", "iupac", "formula", "smiles"]
 
 _DATABASE_PATH = os.getenv("FLASK_INCHI_DB", "/data/inchi_mapping.json")
 if os.path.exists(_DATABASE_PATH):
@@ -52,7 +55,7 @@ def inchi_lookup(inchi: str, prefer_iupac: bool = False) -> str | None:
 
 def smiles_to_html(
     smiles: str,
-    molecule_name_format: Literal["brand", "iupac", "formula", "smiles"] = "brand",
+    molecule_name_format: MolNameFormat = "brand",
 ) -> str:
     if molecule_name_format == "smiles":
         return smiles

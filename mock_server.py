@@ -334,7 +334,7 @@ def calculate_positions(nodes: list[Node]):
 async def generate_molecules(
     start_smiles: str,
     depth: int = 3,
-    websocket: WebSocket = None,
+    websocket: WebSocket | None = None,
     molecule_name_format: Literal["brand", "iupac", "formula", "smiles"] = "brand",
 ):
     """

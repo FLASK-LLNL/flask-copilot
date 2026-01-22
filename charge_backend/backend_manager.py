@@ -18,7 +18,7 @@ from tool_registration import (
     list_server_tools,
 )
 from retro_charge_backend_funcs import (
-    generate_molecules,
+    template_based_retrosynthesis,
     optimize_molecule_retro,
 )
 
@@ -310,7 +310,7 @@ class ActionManager:
         await self.task_manager.clogger.info(f"Data: {data}")
 
         run_func = partial(
-            generate_molecules,
+            template_based_retrosynthesis,
             data["smiles"],
             self.args.config_file,
             self.get_retro_synth_context(),
