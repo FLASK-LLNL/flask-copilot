@@ -399,6 +399,7 @@ const ChemistryTool: React.FC = () => {
            setIsComputing(true);
         }else {
            setIsComputing(false);
+           setIsComputingTemplates(false);
         }
         setTreeNodes(prev => prev.map(n =>
           n.id === data.node!.id ? { ...n, ...restData } : n
@@ -459,6 +460,7 @@ const ChemistryTool: React.FC = () => {
         ));
       } else if (data.type === 'complete') {
         setIsComputing(false);
+        setIsComputingTemplates(false);
         unhighlightNodes();
         saveStateToExperiment();  // Keep experiment up to date
       } else if (data.type === 'response') {
@@ -522,6 +524,7 @@ const ChemistryTool: React.FC = () => {
       if (wsRef.current === socket) {
         setWsReconnecting(false);
         setIsComputing(false);
+        setIsComputingTemplates(false);
         setWsError((error as any).message || 'Connection failed');
         setAvailableTools([]);
         setSelectedTools([]);
@@ -537,6 +540,7 @@ const ChemistryTool: React.FC = () => {
         wsRef.current = null;
         setWsConnected(false);
         setIsComputing(false);
+        setIsComputingTemplates(false);
         setWsReconnecting(false);
         setAvailableTools([]);
         setSelectedTools([]);
@@ -593,6 +597,7 @@ const ChemistryTool: React.FC = () => {
 
     console.log('Sending stop command to server');
     setIsComputing(false);
+    setIsComputingTemplates(false);
     wsRef.current.send(JSON.stringify({ action: 'stop' }));
     unhighlightNodes();
     saveStateToExperiment();
