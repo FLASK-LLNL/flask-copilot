@@ -88,7 +88,7 @@ const PathwayPreview: React.FC<{
   rdkitModule: any;
   isActive: boolean;
   isDisabled: boolean;
-}> = ({ alternative, rdkitModule, isActive, isDisabled }) => {
+}> = ({ alternative, rdkitModule, isDisabled }) => {
   if (!alternative.pathway || alternative.pathway.length === 0) {
     return (
       <div className="flex items-center gap-2 py-2 text-xs text-tertiary italic">

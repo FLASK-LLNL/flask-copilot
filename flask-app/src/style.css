@@ -811,11 +811,18 @@
   border-radius: 0.5rem;
   padding: 1rem;
   border: 1px solid rgba(168, 85, 247, 0.3);
+  overflow-x: auto;
+  word-break: break-word;
+}
+
+.message-card-new {
   animation: slideIn 0.3s ease-out;
   animation-fill-mode: forwards;
   opacity: 0;
-  overflow-x: auto;
-  word-break: break-word;
+}
+
+.message-card-existing {
+  opacity: 1;
 }
 
 /* ========================================

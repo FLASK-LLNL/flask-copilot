@@ -50,6 +50,7 @@ export const ReasoningSidebar: React.FC<ReasoningSidebarPropsExtended> = ({
     const [isResizing, setIsResizing] = useState(false);
 
     const sidebarRef = useRef<HTMLDivElement>(null);
+    const animatedMessagesRef = useRef<Set<string>>(new Set());
 
     // Save width to localStorage when it changes
     useEffect(() => {
@@ -218,26 +219,37 @@ export const ReasoningSidebar: React.FC<ReasoningSidebarPropsExtended> = ({
               </p>
             </div>
           ) : (
-            messages.filter(msg => visibleSources[msg.source]).map((msg, idx) => (
-              <div key={`${msg.id}-${idx}`} className="message-card" style={{ animationDelay: `${idx * 50}ms` }}>
-                <div className="flex items-center justify-between mb-2">
-                  <div className="text-xs text-muted">
-                    {new Date(msg.timestamp).toLocaleTimeString()}
+            messages.filter(msg => visibleSources[msg.source]).map((msg, idx) => {
+              const messageId = msg.id ? String(msg.id) : `${msg.timestamp}-${idx}`;
+              const isNew = !animatedMessagesRef.current.has(messageId);
+              if (isNew) {
+                animatedMessagesRef.current.add(messageId);
+              }
+
+              return (
+                <div
+                  key={messageId}
+                  className={isNew ? "message-card message-card-new" : "message-card message-card-existing"}
+                >
+                  <div className="flex items-center justify-between mb-2">
+                    <div className="text-xs text-muted">
+                      {new Date(msg.timestamp).toLocaleTimeString()}
+                    </div>
+                    <div className="badge badge-primary">
+                      {msg.source}
+                    </div>
                   </div>
-                  <div className="badge badge-primary">
-                    {msg.source}
+                  <div className="text-sm text-secondary">
+                    <MarkdownText text={msg.message} />
                   </div>
+                  {msg.smiles && (
+                    <div className="mt-3 bg-white/50 rounded-lg p-2 flex justify-center">
+                      <MoleculeSVG smiles={msg.smiles} height={120} rdkitModule={rdkitModule} />
+                    </div>
+                  )}
                 </div>
-                <div className="text-sm text-secondary">
-                  <MarkdownText text={msg.message} />
-                </div>
-                {msg.smiles && (
-                  <div className="mt-3 bg-white/50 rounded-lg p-2 flex justify-center">
-                    <MoleculeSVG smiles={msg.smiles} height={120} rdkitModule={rdkitModule} />
-                  </div>
-                )}
-              </div>
-            ))
+              );
+            })
           )}
         </div>
       </div>
