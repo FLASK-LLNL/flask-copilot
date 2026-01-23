@@ -436,9 +436,33 @@
   background: rgba(168, 85, 247, 0.5);
 }
 
+.dropdown-item:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.dropdown-item:disabled:hover {
+  background: transparent;
+}
+
+.dropdown-item-static {
+  padding: 0.5rem 1rem;
+  font-size: 0.875rem;
+  color: white;
+}
+
 .dropdown-divider {
   border-top: 1px solid rgba(168, 85, 247, 0.3);
   margin: 0.5rem 0;
+}
+
+.checkpoint-dropdown {
+  min-width: 14rem;
+}
+
+.checkpoint-dropdown .dropdown-item {
+  display: flex;
+  align-items: center;
 }
 
 /* ========================================
@@ -733,6 +757,7 @@
   gap: 0.125rem;
   opacity: 0;
   transition: opacity 0.2s;
+  z-index: 10;
 }
 
 .project-item:hover .project-actions {
