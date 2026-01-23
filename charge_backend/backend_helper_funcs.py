@@ -212,6 +212,77 @@ class RetrosynthesisContext:
         self.parents.clear()
 
 
+def recalculate_nodes_per_level(context: RetrosynthesisContext) -> None:
+    """
+    Recalculate the nodes_per_level counts from scratch based on current nodes.
+
+    This ensures accurate node counts at each level after deletions and is useful
+    for proper positioning of newly added nodes.
+
+    Args:
+        context: The RetrosynthesisContext to update
+    """
+    # Clear and recalculate from scratch
+    context.nodes_per_level.clear()
+    for node in context.node_ids.values():
+        context.nodes_per_level[node.level] += 1
+
+
+def delete_subtree(context: RetrosynthesisContext, node_id: str) -> list[str]:
+    """
+    Delete a subtree rooted at node_id from the retrosynthesis context.
+
+    This function removes all descendant nodes (children, grandchildren, etc.)
+    of the given node_id from all data structures in the RetrosynthesisContext,
+    and recalculates the nodes_per_level counts to ensure proper positioning
+    of future nodes.
+
+    Args:
+        context: The RetrosynthesisContext containing the tree structure
+        node_id: The ID of the root node whose descendants should be deleted
+
+    Returns:
+        List of deleted node IDs (including the descendants, but not the root node itself)
+    """
+    # Find all descendants using BFS
+    descendants = []
+    queue = [node_id]
+
+    while queue:
+        current = queue.pop(0)
+        # Find all children of the current node
+        children = [
+            child_id
+            for child_id, parent_id in context.parents.items()
+            if parent_id == current
+        ]
+        descendants.extend(children)
+        queue.extend(children)
+
+    # Remove descendants from all data structures
+    for desc_id in descendants:
+        # Remove from node_ids
+        if desc_id in context.node_ids:
+            del context.node_ids[desc_id]
+
+        # Remove from node_id_to_charge_client
+        if desc_id in context.node_id_to_charge_client:
+            del context.node_id_to_charge_client[desc_id]
+
+        # Remove from node_id_to_reasoning_summary
+        if desc_id in context.node_id_to_reasoning_summary:
+            del context.node_id_to_reasoning_summary[desc_id]
+
+        # Remove from parents
+        if desc_id in context.parents:
+            del context.parents[desc_id]
+
+    # Recalculate nodes_per_level to ensure accurate counts for positioning
+    recalculate_nodes_per_level(context)
+
+    return descendants
+
+
 def calculate_positions(nodes: list[Node], y_offset: int = 0):
     """
     Calculate positions for all nodes (matching frontend logic).

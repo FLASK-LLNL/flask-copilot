@@ -8,7 +8,13 @@ from concurrent.futures import ProcessPoolExecutor
 from charge.experiments.AutoGenExperiment import AutoGenExperiment
 from charge.clients.autogen_utils import chargeConnectionError
 from charge.tasks.Task import Task
-from backend_helper_funcs import RetrosynthesisContext, CallbackHandler, Reaction
+from backend_helper_funcs import (
+    RetrosynthesisContext,
+    CallbackHandler,
+    Reaction,
+    delete_subtree,
+    recalculate_nodes_per_level,
+)
 from lmo_charge_backend_funcs import generate_lead_molecule
 from charge_backend_custom import run_custom_problem
 from functools import partial
@@ -19,7 +25,7 @@ from tool_registration import (
 )
 from retro_charge_backend_funcs import (
     template_based_retrosynthesis,
-    optimize_molecule_retro,
+    ai_based_retrosynthesis,
 )
 
 # Mapping from backend name to human-readable labels. Mirrored from the frontend
@@ -356,6 +362,7 @@ class ActionManager:
         await self.websocket.send_json(
             {"type": "subtree_delete", "node": {"id": data["nodeId"]}}
         )
+        delete_subtree(self.retro_synth_context, data["nodeId"])
         await self.websocket.send_json(
             {
                 "type": "node_update",
@@ -376,7 +383,7 @@ class ActionManager:
         )
 
         run_func = partial(
-            optimize_molecule_retro,
+            ai_based_retrosynthesis,
             data["nodeId"],
             self.retro_synth_context,
             data.get("query", None),
@@ -450,6 +457,7 @@ class ActionManager:
         await self.websocket.send_json(
             {"type": "subtree_delete", "node": {"id": parent_nodeid}}
         )
+        delete_subtree(self.retro_synth_context, parent_nodeid)
         await self.websocket.send_json(
             {
                 "type": "node_update",
@@ -466,7 +474,7 @@ class ActionManager:
         )
 
         run_func = partial(
-            optimize_molecule_retro,
+            ai_based_retrosynthesis,
             parent_nodeid,
             self.retro_synth_context,
             data.get("query", None),
@@ -515,6 +523,7 @@ class ActionManager:
         await self.websocket.send_json(
             {"type": "subtree_delete", "node": {"id": data["nodeId"]}}
         )
+        delete_subtree(self.retro_synth_context, data["nodeId"])
 
         # Send new reaction label and subtree
 

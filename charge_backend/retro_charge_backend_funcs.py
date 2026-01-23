@@ -20,6 +20,7 @@ from backend_helper_funcs import (
     Reaction,
     ReactionAlternative,
     PathwayStep,
+    recalculate_nodes_per_level,
 )
 from molecule_naming import smiles_to_html, MolNameFormat
 
@@ -60,6 +61,9 @@ def generate_nodes_for_molecular_graph(
     retro_synth_context: RetrosynthesisContext,
     start_level: int = 0,
     molecule_name_format: Literal["brand", "iupac", "formula", "smiles"] = "brand",
+    include_root_node: bool = True,
+    root_node_id: str | None = None,
+    id_offset: int = 0,
 ) -> tuple[list[Node], list[Edge]]:
     """Generate nodes and edges from reaction path dict"""
     nodes = []
@@ -74,7 +78,7 @@ def generate_nodes_for_molecular_graph(
         smiles = current_node.smiles
         purchasable = current_node.purchasable
         leaf = current_node.is_leaf
-        node_id_str = f"node_{node_id}"
+        node_id_str = f"node_{node_id+id_offset}"
         hover_info = f"# Molecule \n **SMILES:** {smiles}\n"
         if leaf:
             if purchasable:
@@ -83,28 +87,32 @@ def generate_nodes_for_molecular_graph(
             else:
                 hover_info += " - This molecule is NOT purchasable.\n"
 
-        node = Node(
-            id=node_id_str,
-            smiles=smiles,
-            label=smiles_to_html(smiles, molecule_name_format),
-            hoverInfo=hover_info,
-            level=level,
-            parentId=(
-                f"node_{current_node.parent_id}"
-                if current_node.parent_id is not None
-                else None
-            ),
-            highlight=("red" if (leaf and not purchasable) else "normal"),
-        )
+        # A bit of an ugly way of dealing with this
+        if current_node.parent_id is None:
+            parent_node_id = None
+        elif root_node_id is not None and current_node.parent_id == root_id:
+            parent_node_id = root_node_id
+        else:
+            parent_node_id = f"node_{current_node.parent_id+id_offset}"
 
-        retro_synth_context.node_ids[node_id_str] = node
-        retro_synth_context.nodes_per_level[level] += 1
-        nodes.append(node)
+        if node_id != root_id or include_root_node:
+            node = Node(
+                id=node_id_str,
+                smiles=smiles,
+                label=smiles_to_html(smiles, molecule_name_format),
+                hoverInfo=hover_info,
+                level=level,
+                parentId=parent_node_id,
+                highlight=("red" if (leaf and not purchasable) else "normal"),
+            )
+
+            retro_synth_context.node_ids[node_id_str] = node
+            nodes.append(node)
 
         if current_node.parent_id is not None:
-            parent_node_id = f"node_{current_node.parent_id}"
+            assert parent_node_id is not None
             edge = Edge(
-                id=f"edge_{current_node.parent_id}_{node_id}",
+                id=f"edge_{current_node.parent_id+id_offset}_{node_id+id_offset}",
                 fromNode=parent_node_id,
                 toNode=node_id_str,
                 status="complete",
@@ -115,6 +123,7 @@ def generate_nodes_for_molecular_graph(
                 "Reaction found with AiZynthFinder",
                 highlight="yellow",
                 label="Template",
+                templatesSearched=False,
             )
             edges.append(edge)
             retro_synth_context.parents[node_id_str] = parent_node_id
@@ -131,12 +140,18 @@ def make_reaction_alternative(
     id: int,
     tree: "aizynthfinder.reactiontree.ReactionTree",
     molecule_name_format: MolNameFormat,
-) -> ReactionAlternative:
+) -> ReactionAlternative | None:
     """
     Creates a reaction alternative object from a given route
     """
-    smarts = next(iter(tree.reactions())).metadata["template"]
-    prevalence = next(iter(tree.reactions())).metadata["library_occurence"]
+    try:
+        smarts = next(iter(tree.reactions())).metadata.get("template")
+    except StopIteration:
+        return None  # No reaction in tree
+    try:
+        prevalence = next(iter(tree.reactions())).metadata.get("library_occurence")
+    except StopIteration:
+        return None  # No reaction in tree
     pathway = []
 
     # BFS traversal over tree, merging precursors of each child for visualization purposes
@@ -167,7 +182,7 @@ def make_reaction_alternative(
 
     return ReactionAlternative(
         f"reaction_{rpath.root.node_id}_{id}",
-        f"AiZynthFinder Reaction {id+1} ({prevalence} occurences in database)",
+        f"Reaction {id+1} ({prevalence} occurences)",
         "template",
         "active" if id == 0 else "available",
         pathway,
@@ -209,12 +224,22 @@ async def run_retro_planner(
     rpaths = [azf.ReactionPath(route) for route in routes]
 
     # All other routes become reaction alternatives
-    alts = []
+    alts: list[ReactionAlternative] = []
     for i, rpath in enumerate(rpaths):
-        alts.append(make_reaction_alternative(rpath, i, trees[i], molecule_name_format))
+        alt = make_reaction_alternative(rpath, i, trees[i], molecule_name_format)
+        if alt is not None:
+            alts.append(alt)
 
-    root_smarts = next(iter(trees[0].reactions())).metadata["template"]
-    root_prevalence = next(iter(trees[0].reactions())).metadata["library_occurence"]
+    try:
+        root_smarts = next(iter(trees[0].reactions())).metadata.get("template")
+    except StopIteration:
+        return None, []
+    try:
+        root_prevalence = next(iter(trees[0].reactions())).metadata.get(
+            "library_occurence"
+        )
+    except StopIteration:
+        return None, []
     return (
         Reaction(
             reaction_id,
@@ -294,7 +319,10 @@ async def template_based_retrosynthesis(
         return
 
     # Use first route by default
-    nodes, edges = generate_nodes_for_molecular_graph(routes[0].nodes, context)
+    recalculate_nodes_per_level(context)
+    nodes, edges = generate_nodes_for_molecular_graph(
+        routes[-1].nodes, context, molecule_name_format=molecule_name_format
+    )
     calculate_positions(nodes)
 
     # Notify frontend that computation completed
@@ -324,7 +352,7 @@ async def template_based_retrosynthesis(
     await websocket.send_json({"type": "complete"})
 
 
-async def optimize_molecule_retro(
+async def ai_based_retrosynthesis(
     node_id: str,
     context: RetrosynthesisContext,
     query: Optional[str],
@@ -335,13 +363,13 @@ async def optimize_molecule_retro(
     available_tools: Optional[Union[str, list[str]]] = None,
     molecule_name_format: Literal["brand", "iupac", "formula", "smiles"] = "brand",
 ):
-    """Optimize a molecule using retrosynthesis by node ID"""
+    """Performs template-free retrosynthesis using the AI orchestrator."""
+    clogger = CallbackLogger(websocket, source="ai_based_retrosynthesis")
     current_node = context.node_ids.get(node_id)
-    assert current_node is not None, f"Node ID {node_id} not found"
-
-    cur_node_id = node_id
-
-    clogger = CallbackLogger(websocket, source="optimize_molecule_retro")
+    if current_node is None:
+        await clogger.error(f"Node ID {node_id} not found")
+        await websocket.send_json({"type": "complete"})
+        return
 
     await clogger.info(
         f"Finding synthesis pathway to {current_node.smiles}... with available tools: {available_tools}.",
@@ -417,64 +445,110 @@ async def optimize_molecule_retro(
         f"Retrosynthesis reasoning summary for {current_node.smiles}:\n{reasoning_summary}",
     )
 
+    # Add reaction alternative
+    ai_alternative = ReactionAlternative(
+        "ai_reaction_0",
+        "AI-Generated Reaction",
+        "ai",
+        "active",
+        [
+            PathwayStep([current_node.smiles], [current_node.label]),
+            PathwayStep(
+                list(result.reactants_smiles_list),
+                [
+                    smiles_to_html(s, molecule_name_format)
+                    for s in result.reactants_smiles_list
+                ],
+            ),
+        ],
+        reasoning_summary,
+        disabled=False,
+    )
+    if current_node.reaction is not None:
+        if current_node.reaction.alternatives is None:
+            current_node.reaction.alternatives = []
+        current_node.reaction.alternatives.insert(0, ai_alternative)
+        alternatives = current_node.reaction.alternatives
+        templates_searched = current_node.reaction.templatesSearched
+    else:
+        alternatives = [ai_alternative]
+        templates_searched = False
+
+    ai_reaction = Reaction(
+        "ai_reaction_0",
+        reasoning_summary,
+        highlight="red",
+        label="FLASK AI",
+        alternatives=alternatives,
+        templatesSearched=templates_searched,
+    )
+    current_node.reaction = ai_reaction
+
     # Update node with discovered reaction
     context.node_id_to_reasoning_summary[node_id] = reasoning_summary
     await websocket.send_json(
         {
             "type": "node_update",
-            "node": {
-                "id": node_id,
-                "reaction": Reaction(
-                    "ai_reaction_0",
-                    reasoning_summary,
-                    highlight="red",
-                    label="FLASK AI",
-                ).json(),
-            },
+            "node": {"id": node_id, "reaction": ai_reaction.json()},
         }
     )
 
-    nodes: list[Node] = []
-    edges: list[Edge] = []
+    recalculate_nodes_per_level(context)
+
     for i, smiles in enumerate(result.reactants_smiles_list):
         node = Node(
             f"node_{num_nodes+i}",
             smiles,
             smiles_to_html(smiles, molecule_name_format),
-            "Discovered",
+            f"Discovered by {runner.model}",
             level,
             current_node.id,
         )
+        edge = Edge(
+            f"edge_{current_node.id}_{num_nodes + i}", node_id, node.id, "complete"
+        )
+        if node.id in context.node_ids:
+            await clogger.warning(f"{node.id} already found in context: {node}")
         context.node_ids[node.id] = node
         context.parents[node.id] = node_id
 
-        # Find paths for the leaf nodes
-        routes, planner, trees = run_retro_planner(config_file, smiles)
-
-        if not routes:
-            await clogger.warning(f"No routes found for {smiles}. Skipping...")
-            continue
-
-        planner.last_route_used = 0
-
-        reaction_path = azf.ReactionPath(
-            route=routes[0],
-            cur_num_nodes=num_nodes,
-            root_parent_node_id=num_nodes + i,
-        )
-        child_nodes, child_edges = generate_nodes_for_molecular_graph(
-            reaction_path.nodes, context, start_level=level
-        )
-
-        # Stream child nodes and edges
-        nodes.extend(child_nodes)
-        edges.extend(child_edges)
-
-        num_nodes = reaction_path.num_nodes
-
-    calculate_positions(nodes, context.nodes_per_level[level])
-
-    for node, edge in zip(nodes, edges):
+        # Stream node directly
+        calculate_positions([node], context.nodes_per_level[level])
+        context.nodes_per_level[level] += 1
+        node.highlight = "yellow"
         await websocket.send_json({"type": "node", "node": node.json()})
         await websocket.send_json({"type": "edge", "edge": edge.json()})
+
+        # Find paths for the leaf nodes
+        reaction, routes = await run_retro_planner(
+            config_file, smiles, clogger, molecule_name_format
+        )
+        if reaction is None:
+            await clogger.warning(f"No routes found for {smiles}. Skipping...")
+            continue
+        node.reaction = reaction
+
+        # Use child nodes and edges of the first route
+        child_nodes, child_edges = generate_nodes_for_molecular_graph(
+            routes[0].nodes,
+            context,
+            start_level=level,
+            include_root_node=False,
+            root_node_id=node.id,
+            id_offset=num_nodes,
+        )
+        node.highlight = "normal"
+        await highlight_node(node, websocket, False)
+
+        calculate_positions(child_nodes, context.nodes_per_level[level + 1])
+        context.nodes_per_level[level + 1] += len(child_nodes)
+
+        # Stream nodes back
+        for cnode in child_nodes:
+            await websocket.send_json({"type": "node", "node": cnode.json()})
+        for cedge in child_edges:
+            await websocket.send_json({"type": "edge", "edge": cedge.json()})
+
+        num_nodes += routes[0].num_nodes
+
     await websocket.send_json({"type": "complete"})
