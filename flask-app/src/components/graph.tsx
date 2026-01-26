@@ -270,7 +270,7 @@ export const MoleculeGraph: React.FC<MoleculeGraphProps> = ({
                     return (
                     <div key={edge.id} className="absolute pointer-events-none">
                         <svg className="absolute" style={{ width: '3000px', height: '2000px', top: 0, left: 0 }}>
-                        <g className={`animate-fadeIn ${isEdgeHighlighted(edge.fromNode, hoveredReaction) ? 'edge-highlighted' : (edge.status === 'computing' ? 'edge-computing' : 'edge-normal')}`} style={{ animationDelay: `${idx * 50}ms` }}>
+                        <g className={`animate-fadeIn ${isEdgeHighlighted(edge.fromNode) ? 'edge-highlighted' : (edge.status === 'computing' ? 'edge-computing' : 'edge-normal')}`} style={{ animationDelay: `${idx * 50}ms` }}>
                             <path
                             d={getCurvedPath(getNode(edge.fromNode), getNode(edge.toNode))}
                             strokeWidth="3"
