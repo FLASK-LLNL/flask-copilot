@@ -9,7 +9,7 @@ from charge.clients.autogen import AutoGenAgent
 import charge.servers.AiZynthTools as aizynth_funcs
 from charge.servers import SMILES_utils
 from charge.servers.molecular_property_utils import get_density
-from callback_logger import CallbackLogger
+from lc_conductor import CallbackLogger
 from charge_backend.moleculedb.molecule_naming import MolNameFormat
 
 
