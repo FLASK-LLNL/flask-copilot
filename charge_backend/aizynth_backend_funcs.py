@@ -1,5 +1,5 @@
 from loguru import logger
-from callback_logger import CallbackLogger
+from lc_conductor import CallbackLogger
 
 from fastapi import WebSocket
 import asyncio

@@ -6,7 +6,7 @@ from charge.clients.autogen import AutoGenAgent
 from charge.servers.AiZynthTools import RetroPlanner, ReactionPath
 from aizynth_backend_funcs import generate_tree_structure
 from loguru import logger
-from callback_logger import CallbackLogger
+from lc_conductor import CallbackLogger
 from typing import Literal, Optional, Union
 
 from backend_helper_funcs import (
