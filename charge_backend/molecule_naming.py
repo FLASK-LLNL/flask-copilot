@@ -111,11 +111,14 @@ def smiles_to_iupac_online(smiles):
 
 
 _STOCK_DATABASE_PATH = os.getenv("FLASK_STOCK_DB", "/data/zinc_stock.hdf5")
-df = pd.read_hdf(_STOCK_DATABASE_PATH, "table")
+if os.path.exists(_STOCK_DATABASE_PATH):
+    STOCK_DATABASE = pd.read_hdf(_STOCK_DATABASE_PATH, "table")
+else:
+    STOCK_DATABASE = None
 
 
 def is_purchasable(smiles: str) -> bool:
-    if Chem is None:
+    if Chem is None or STOCK_DATABASE is None:
         return False
 
     mol = Chem.MolFromSmiles(smiles)
@@ -123,4 +126,4 @@ def is_purchasable(smiles: str) -> bool:
         return False
     inchi: str = str(Chem.MolToInchi(mol))
     inchi_key = Chem.InchiToInchiKey(inchi)
-    return len(df[df.inchi_key == inchi_key]) > 0
+    return len(STOCK_DATABASE[STOCK_DATABASE.inchi_key == inchi_key]) > 0

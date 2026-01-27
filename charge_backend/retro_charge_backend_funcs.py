@@ -16,7 +16,7 @@ from backend_helper_funcs import (
     ReactionAlternative,
     PathwayStep,
 )
-from charge_backend.retrosynthesis.context import RetrosynthesisContext
+from retrosynthesis.context import RetrosynthesisContext
 from molecule_naming import smiles_to_html, MolNameFormat, is_purchasable
 
 from charge.tasks.RetrosynthesisTask import (
