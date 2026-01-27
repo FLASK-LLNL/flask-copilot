@@ -1,6 +1,6 @@
 // components/reaction_alternatives_sidebar.tsx
 import React, { useState, useRef, useMemo } from 'react';
-import { X, Loader2, FlaskConical, BookOpen, Check, ChevronDown, ChevronLeft, ChevronRight, AlertCircle, MessageSquareMore, Clock } from 'lucide-react';
+import { X, Loader2, FlaskConical, BookOpen, Check, ChevronDown, ChevronLeft, ChevronRight, AlertCircle, MessageSquareMore, Clock, Sparkles } from 'lucide-react';
 import { ReactionAlternative } from '../types';
 
 // Helper function to strip HTML tags from text for tooltips
@@ -194,49 +194,27 @@ export const ReactionAlternativesSidebar: React.FC<ReactionAlternativesSidebarPr
     rdkitModule
   } = props;
 
-  // DEBUG: Track prop changes
-  const prevPropsRef = useRef<ReactionAlternativesSidebarProps>();
-  React.useEffect(() => {
-    if (prevPropsRef.current) {
-      const prev = prevPropsRef.current;
-      const changes: string[] = [];
-
-      if (prev.isOpen !== isOpen) changes.push('isOpen');
-      if (prev.productMolecule !== productMolecule) changes.push('productMolecule');
-      if (prev.productSmiles !== productSmiles) changes.push('productSmiles');
-      if (prev.alternatives !== alternatives) changes.push('alternatives (ref)');
-      if (prev.onClose !== onClose) changes.push('onClose (fn)');
-      if (prev.onSelectAlternative !== onSelectAlternative) changes.push('onSelectAlternative (fn)');
-      if (prev.onComputeTemplates !== onComputeTemplates) changes.push('onComputeTemplates (fn)');
-      if (prev.onComputeFlaskAI !== onComputeFlaskAI) changes.push('onComputeFlaskAI (fn)');
-      if (prev.isComputing !== isComputing) changes.push('isComputing');
-      if (prev.isComputingTemplates !== isComputingTemplates) changes.push('isComputingTemplates');
-      if (prev.templatesSearched !== templatesSearched) changes.push('templatesSearched');
-      if (prev.rdkitModule !== rdkitModule) changes.push('rdkitModule (ref)');
-
-      if (changes.length > 0) {
-        console.log('🔄 Sidebar rerender caused by:', changes.join(', '));
-      }
-    }
-    prevPropsRef.current = props;
-  });
 
   const [hoveredDisabled, setHoveredDisabled] = useState<string | null>(null);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
 
   // Memoize computed values to prevent recalculation
-  const { exactMatches, templateMatches, hasExactMatches, hasTemplateMatches, showTemplateButton } = useMemo(() => {
+  const { exactMatches, templateMatches, aiMatches, hasExactMatches, hasTemplateMatches, hasAiMatches, showTemplateButton } = useMemo(() => {
     const exact = alternatives.filter(a => a.type === 'exact');
     const template = alternatives.filter(a => a.type === 'template');
+    const ai = alternatives.filter(a => a.type === 'ai');
     const hasExact = exact.length > 0;
     const hasTemplate = template.length > 0;
+    const hasAi = ai.length > 0;
     const showButton = !templatesSearched;
 
     return {
       exactMatches: exact,
       templateMatches: template,
+      aiMatches: ai,
       hasExactMatches: hasExact,
       hasTemplateMatches: hasTemplate,
+      hasAiMatches: hasAi,
       showTemplateButton: showButton
     };
   }, [alternatives, templatesSearched]);
@@ -267,10 +245,12 @@ export const ReactionAlternativesSidebar: React.FC<ReactionAlternativesSidebarPr
               <div className="flex items-center gap-2 flex-1 min-w-0">
                 {isDisabled ? (
                   <AlertCircle className="w-3.5 h-3.5 text-warning flex-shrink-0" />
+                ) : alt.type === 'ai' ? (
+                  <Sparkles className="w-3.5 h-3.5 text-accent flex-shrink-0" />
                 ) : (
                   <BookOpen className="w-3.5 h-3.5 text-muted flex-shrink-0" />
                 )}
-                <span className={`text-sm font-medium truncate ${isDisabled ? 'text-muted' : 'text-primary'}`}>
+                <span className={`text-sm font-medium truncate ${isDisabled ? 'text-muted' : alt.type === 'ai' ? 'text-accent' : 'text-primary'}`}>
                   {alt.name}
                 </span>
               </div>
@@ -371,6 +351,27 @@ export const ReactionAlternativesSidebar: React.FC<ReactionAlternativesSidebarPr
               </div>
             </div>
           )*/}
+
+          {hasAiMatches && (
+            <CollapsibleSection
+              title="AI-GENERATED PATHWAY"
+              count={aiMatches.length}
+              dotColor="bg-primary"
+              subtitle="Novel pathway discovered by AI"
+              defaultExpanded={true}
+            >
+              <div className="space-y-2">
+                {aiMatches.map(alt => (
+                  <div key={alt.id} className="relative">
+                    <div className="absolute -left-1 -right-1 -top-1 -bottom-1 rounded-lg blur-sm" style={{background: 'linear-gradient(to right, rgba(147, 51, 234, 0.2), rgba(236, 72, 153, 0.2))'}}></div>
+                    <div className="relative">
+                      <AlternativeCard alt={alt} />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </CollapsibleSection>
+          )}
 
           {hasExactMatches && (
             <CollapsibleSection
