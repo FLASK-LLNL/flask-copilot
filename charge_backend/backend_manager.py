@@ -171,11 +171,11 @@ class ActionManager:
     async def handle_compute(self, data: dict) -> None:
         problem_type = data.get("problemType")
         if problem_type == "optimization":
-            await self._handle_optimization(data)
+            asyncio.create_task(self._handle_optimization(data))
         elif problem_type == "retrosynthesis":
-            await self._handle_retrosynthesis(data)
+            asyncio.create_task(self._handle_retrosynthesis(data))
         elif problem_type == "custom":
-            await self._handle_custom_problem(data)
+            asyncio.create_task(self._handle_custom_problem(data))
         else:
             raise ValueError(f"Unknown problem type: {problem_type}")
 
@@ -290,6 +290,14 @@ class ActionManager:
                 return
             property_attributes = DEFAULT_PROPERTIES[property_name]
 
+        # Extract customization parameters
+        customization = data.get("customization", {})
+        enable_constraints = customization.get("enableConstraints", False)
+        molecular_similarity = customization.get("molecularSimilarity", 0.7)
+        diversity_penalty = customization.get("diversityPenalty", 0.0)
+        exploration_rate = customization.get("explorationRate", 0.5)
+        additional_constraints = customization.get("additionalConstraints", [])
+
         run_func = partial(
             generate_lead_molecule,
             data["smiles"],
@@ -305,6 +313,11 @@ class ActionManager:
             initial_node_id,
             initial_x_position,
             self.molecule_name_format,
+            enable_constraints,
+            molecular_similarity,
+            diversity_penalty,
+            exploration_rate,
+            additional_constraints,
         )
         await self.task_manager.run_task(run_func())
 
@@ -392,7 +405,7 @@ class ActionManager:
             self.molecule_name_format,
         )
 
-        await self.task_manager.run_task(run_func())
+        asyncio.create_task(self.task_manager.run_task(run_func()))
 
     async def handle_template_retrosynthesis(self, data: dict) -> None:
         """Handle compute-reaction-templates action."""
@@ -436,8 +449,13 @@ class ActionManager:
         level = node_id
         xpos = data["xpos"]
 
-        await self._handle_optimization(
-            data, initial_level=level, initial_node_id=node_id, initial_x_position=xpos
+        asyncio.create_task(
+            self._handle_optimization(
+                data,
+                initial_level=level,
+                initial_node_id=node_id,
+                initial_x_position=xpos,
+            )
         )
 
     async def handle_recompute_reaction(self, data: dict) -> None:
@@ -486,7 +504,7 @@ class ActionManager:
             self.molecule_name_format,
         )
 
-        await self.task_manager.run_task(run_func())
+        asyncio.create_task(self.task_manager.run_task(run_func()))
 
     async def handle_set_reaction_alternative(self, data: dict) -> None:
         """Handle set-reaction-alternative action."""
@@ -632,13 +650,29 @@ class ActionManager:
 
     async def handle_stop(self, *args, **kwargs) -> None:
         """Handle stop action."""
-        if self.task_manager.current_task and not self.task_manager.current_task.done():
-            logger.info("Stopping current task as per user request.")
-            await self.task_manager.cancel_current_task()
+        logger.info("Stop action received")
+        if self.task_manager.current_task:
+            if not self.task_manager.current_task.done():
+                logger.info("Stopping current task as per user request.")
+                await self.task_manager.cancel_current_task()
+
+                # Send confirmation to frontend
+                try:
+                    await self.websocket.send_json({"type": "stopped"})
+                    logger.info("Sent 'stopped' confirmation to frontend")
+                except Exception as e:
+                    logger.error(f"Failed to send stopped confirmation: {e}")
+            else:
+                logger.info(f"Task already done: {self.task_manager.current_task}")
+                await self.websocket.send_json({"type": "stopped"})
         else:
             logger.info(
                 f"No active task to stop. Task done: {self.task_manager.current_task.done() if self.task_manager.current_task else 'N/A'}"
             )
+            try:
+                await self.websocket.send_json({"type": "stopped"})
+            except Exception as e:
+                logger.error(f"Failed to send stopped confirmation: {e}")
 
     async def handle_select_tools_for_task(self, data: dict) -> None:
         """Handle select-tools-for-task action."""
@@ -674,7 +708,7 @@ class ActionManager:
             await self._send_processing_message(result, source="Agent")
             await self.websocket.send_json({"type": "complete"})
 
-        await self.task_manager.run_task(run_and_report())
+        asyncio.create_task(self.task_manager.run_task(run_and_report()))
 
     async def handle_custom_query_reaction(self, data: dict) -> None:
         """Handle a query on the reaction (from nodeId to its reactants)."""
@@ -731,7 +765,7 @@ class ActionManager:
             await self._send_processing_message(result, source="Agent")
             await self.websocket.send_json({"type": "complete"})
 
-        await self.task_manager.run_task(run_and_report())
+        asyncio.create_task(self.task_manager.run_task(run_and_report()))
 
     async def handle_get_username(self, _: dict) -> None:
         await self.websocket.send_json(

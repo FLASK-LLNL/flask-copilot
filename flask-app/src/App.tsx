@@ -1,6 +1,6 @@
 /* eslint-disable react-hooks/exhaustive-deps */
 import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
-import { Loader2, FlaskConical, TestTubeDiagonal, Network, Play, RotateCcw, X, Send, RefreshCw, Sparkles, MessageCircleQuestion, StepForward, MessageSquareShare, Brain, PanelRightOpen } from 'lucide-react';
+import { Loader2, FlaskConical, TestTubeDiagonal, Network, Play, RotateCcw, X, Send, RefreshCw, Sparkles, MessageCircleQuestion, StepForward, MessageSquareShare, Brain, PanelRightOpen, Sliders, Wrench, Settings } from 'lucide-react';
 import 'recharts';
 import 'react-markdown';
 import 'remark-gfm';
@@ -9,14 +9,14 @@ import 'react-syntax-highlighter/dist/esm/styles/prism';
 
 import { WS_SERVER, VERSION } from './config';
 import { DEFAULT_CUSTOM_SYSTEM_PROMPT, PROPERTY_NAMES } from './constants';
-import { TreeNode, Edge, ContextMenuState, SidebarMessage, Tool, WebSocketMessageToServer, WebSocketMessage, SelectableTool, Experiment, OrchestratorSettings, ReactionAlternative } from './types';
+import { TreeNode, Edge, ContextMenuState, SidebarMessage, Tool, WebSocketMessageToServer, WebSocketMessage, SelectableTool, Experiment, OrchestratorSettings, OptimizationCustomization, ReactionAlternative } from './types';
 
 import { loadRDKit } from './components/molecule';
 import { ReasoningSidebar, useSidebarState } from './components/sidebar';
 import { MoleculeGraph, useGraphState } from './components/graph';
-import { MultiSelectToolModal } from './components/multi_select_tools';
 import { ProjectSidebar, useProjectSidebar, useProjectManagement } from './components/project_sidebar';
 import { SettingsButton, BACKEND_OPTIONS } from './components/settings_button';
+import { CombinedCustomizationModal } from './components/combined_customization_modal';
 
 import { findAllDescendants, hasDescendants, isRootNode, relayoutTree } from './tree_utils';
 import { copyToClipboard } from './utils';
@@ -36,6 +36,7 @@ const ChemistryTool: React.FC = () => {
   const [problemPrompt, setProblemPrompt] = useState<string>('');
   const [editPromptsModal, setEditPromptsModal] = useState<boolean>(false);
   const [editPropertyModal, setEditPropertyModal] = useState<boolean>(false);
+  const [showCustomizationModal, setShowCustomizationModal] = useState<boolean>(false);
   const [customPropertyName, setCustomPropertyName] = useState<string>('');
   const [customPropertyDesc, setCustomPropertyDesc] = useState<string>('');
   const [customPropertyAscending, setCustomPropertyAscending] = useState<boolean>(true);
@@ -60,6 +61,15 @@ const ChemistryTool: React.FC = () => {
 
   const wsRef = useRef<WebSocket | null>(null);
 
+  // Customization state
+  const [customization, setCustomization] = useState<OptimizationCustomization>({
+    enableConstraints: false,
+    molecularSimilarity: 0.7,
+    diversityPenalty: 0.0,
+    explorationRate: 0.5,
+    additionalConstraints: [],
+  });
+
   // Function to refresh tools list from backend
   const refreshToolsList = useCallback(() => {
     if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
@@ -83,7 +93,6 @@ const ChemistryTool: React.FC = () => {
   const edgesRef = useRef(edges);
   const sidebarStateRef = useRef(sidebarState);
 
-  const [showToolSelectionModal, setShowToolSelectionModal] = useState<boolean>(false);
   const [selectedTools, setSelectedTools] = useState<number[]>([]);
   const [availableToolsMap, setAvailableToolsMap] = useState<SelectableTool[]>([]);
 
@@ -91,6 +100,15 @@ const ChemistryTool: React.FC = () => {
   const [reactionSidebarOpen, setReactionSidebarOpen] = useState<boolean>(false);
   const [selectedReactionNode, setSelectedReactionNode] = useState<TreeNode | null>(null);
   const [isComputingTemplates, setIsComputingTemplates] = useState<boolean>(false);
+
+  // Auto-select all tools when they first become available
+  useEffect(() => {
+    if (availableToolsMap.length > 0 && selectedTools.length === 0) {
+      const allToolIds = availableToolsMap.map(tool => tool.id);
+      setSelectedTools(allToolIds);
+      console.log('Auto-selected all tools:', allToolIds);
+    }
+  }, [availableToolsMap, selectedTools.length]);
 
   // Update refs whenever state changes
   useEffect(() => {
@@ -243,6 +261,7 @@ const ChemistryTool: React.FC = () => {
     (data.customPropertyName !== undefined) && setCustomPropertyName(data.customPropertyName);
     (data.customPropertyDesc !== undefined) && setCustomPropertyDesc(data.customPropertyDesc);
     (data.customPropertyAscending !== undefined) && setCustomPropertyAscending(data.customPropertyAscending);
+    data.customization && setCustomization(data.customization);
     data.treeNodes && setTreeNodes(data.treeNodes);
     data.edges && setEdges(data.edges);
     data.metricsHistory && metricsDashboardState.setMetricsHistory(data.metricsHistory);
@@ -348,7 +367,8 @@ const ChemistryTool: React.FC = () => {
       customPropertyDesc,
       customPropertyAscending,
       systemPrompt,
-      userPrompt: problemPrompt
+      userPrompt: problemPrompt,
+      customization
     };
 
     wsRef.current?.send(JSON.stringify(message));
@@ -392,6 +412,18 @@ const ChemistryTool: React.FC = () => {
 
       if (data.type === 'node') {
         setTreeNodes(prev => [...prev, data.node!]);
+      } else if (data.type === 'stopped') {
+        // Handle explicit stop from backend
+        console.log('Computation stopped by backend');
+        setIsComputing(false);
+        setIsComputingTemplates(false);
+        unhighlightNodes();
+        saveStateToExperiment();
+      } else if (data.type === 'complete') {
+        setIsComputing(false);
+        setIsComputingTemplates(false);
+        unhighlightNodes();
+        saveStateToExperiment();
       } else if (data.type === 'node_update') {
         const { id, ...restData } = data.node!;
 
@@ -439,11 +471,6 @@ const ChemistryTool: React.FC = () => {
         setEdges(prev => prev.filter(e =>
           !descendantsSet!.has(e.fromNode) && !descendantsSet!.has(e.toNode)
         ));
-      } else if (data.type === 'complete') {
-        setIsComputing(false);
-        setIsComputingTemplates(false);
-        unhighlightNodes();
-        saveStateToExperiment();  // Keep experiment up to date
       } else if (data.type === 'response') {
         addSidebarMessage(data.message!);
         console.log('Server response:', data.message);
@@ -557,16 +584,10 @@ const ChemistryTool: React.FC = () => {
 
   const stop = (): void => {
     if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) {
-      // alert('WebSocket not connected');
+      alert('WebSocket not connected');
       return;
     }
-
-    console.log('Sending stop command to server');
-    setIsComputing(false);
-    setIsComputingTemplates(false);
     wsRef.current.send(JSON.stringify({ action: 'stop' }));
-    unhighlightNodes();
-    saveStateToExperiment();
   };
 
   useEffect(() => {
@@ -587,6 +608,7 @@ const ChemistryTool: React.FC = () => {
             customPropertyName,
             customPropertyDesc,
             customPropertyAscending,
+            customization,
             treeNodes: treeNodesRef.current,
             edges: edgesRef.current,
             metricsHistory: metricsDashboardState.metricsHistory,
@@ -600,7 +622,7 @@ const ChemistryTool: React.FC = () => {
       throw "No experiment found";
     };
   }, [smiles, problemType, graphState, metricsDashboardState, autoZoom,
-      systemPrompt, problemPrompt, propertyType, customPropertyName, customPropertyDesc, customPropertyAscending, projectData, projectSidebar]);
+      systemPrompt, problemPrompt, propertyType, customPropertyName, customPropertyDesc, customPropertyAscending, customization, projectData, projectSidebar]);
 
 
 
@@ -623,7 +645,7 @@ const ChemistryTool: React.FC = () => {
 
   const saveFullContext = (experimentContext: string): void => {
     const data = { lastModified: new Date().toISOString(), smiles, problemType, systemPrompt, problemPrompt, propertyType, customPropertyName,
-                   customPropertyDesc, customPropertyAscending, treeNodes, edges, graphState, metricsDashboardState, sidebarState, experimentContext };
+                   customPropertyDesc, customPropertyAscending, customization, treeNodes, edges, graphState, metricsDashboardState, sidebarState, experimentContext };
     const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -828,7 +850,9 @@ const ChemistryTool: React.FC = () => {
         customPropertyName,
         customPropertyDesc,
         customPropertyAscending,
-        xpos: customQueryModal?.x
+        smiles: customQueryModal?.smiles,
+        xpos: customQueryModal?.x,
+        customization
       };
     }
 
@@ -1162,11 +1186,29 @@ const ChemistryTool: React.FC = () => {
                     </button>
                   }
                   <button
-                    onClick={() => setShowToolSelectionModal(true)}
+                    onClick={() => setShowCustomizationModal(true)}
                     disabled={isComputing}
                     className="btn btn-tertiary mt-5"
                   >
-                    Select Tools {selectedTools.length > 0 && `(${selectedTools.length})`}
+                    <Sliders className="w-4 h-4" />
+                    Customize
+                    {(selectedTools.length > 0 || (problemType === "optimization" && customization.enableConstraints)) && (
+                      <span className="ml-1 px-2 py-0.5 text-xs rounded-full bg-blue-500/20 text-blue-400 flex items-center gap-1">
+                        {selectedTools.length > 0 && (
+                          <>
+                            {selectedTools.length}
+                            <Wrench className="w-3 h-3" />
+                          </>
+                        )}
+                        {selectedTools.length > 0 && problemType === "optimization" && customization.enableConstraints && <span className="mx-0.5">•</span>}
+                        {problemType === "optimization" && customization.enableConstraints && (
+                          <>
+                            ON
+                            <Settings className="w-3 h-3" />
+                          </>
+                        )}
+                      </span>
+                    )}
                   </button>
                 </div>
 
@@ -1579,15 +1621,17 @@ const ChemistryTool: React.FC = () => {
         </div>
       )}
 
-      {/* Use the MultiSelectToolModal component */}
-      <MultiSelectToolModal
-        isOpen={showToolSelectionModal}
-        onClose={() => setShowToolSelectionModal(false)}
+      {/* Combined Customization Modal */}
+      <CombinedCustomizationModal
+        isOpen={showCustomizationModal}
+        onClose={() => setShowCustomizationModal(false)}
         availableToolsMap={availableToolsMap}
         selectedTools={selectedTools}
-        onSelectionChange={setSelectedTools}
-        onConfirm={handleToolSelectionConfirm}
-        title="Select Tools to use for Task" // Optional, defaults to "Select Tools"
+        onToolSelectionChange={setSelectedTools}
+        onToolConfirm={handleToolSelectionConfirm}
+        initialCustomization={customization}
+        onCustomizationSave={setCustomization}
+        showOptimizationTab={problemType === "optimization"}
       />
 
     </div>
