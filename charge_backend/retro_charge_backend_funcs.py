@@ -126,6 +126,7 @@ def make_reaction_alternative(
     id: int,
     tree: "aizynthfinder.reactiontree.ReactionTree",
     molecule_name_format: MolNameFormat,
+    all_inactive: bool = False,
 ) -> ReactionAlternative | None:
     """
     Creates a reaction alternative object from a given route
@@ -170,7 +171,7 @@ def make_reaction_alternative(
         f"reaction_{rpath.root.node_id}_{id}",
         f"Reaction {id+1} ({prevalence} occurences)",
         "template",
-        "active" if id == 0 else "available",
+        "active" if id == 0 and not all_inactive else "available",
         pathway,
         disabled=False,
         hoverInfo=f"Reaction SMARTS: `{smarts}`\n\nPattern appears {prevalence} times in database.",
@@ -183,6 +184,7 @@ async def run_retro_planner(
     clogger: CallbackLogger,
     molecule_name_format: MolNameFormat,
     reaction_id: str = "azf",
+    all_inactive: bool = False,
 ) -> tuple[Reaction | None, list[azf.ReactionPath]]:
     """
     Runs AiZynthFinder (template-based multi-step retrosynthesis) on the given
@@ -193,6 +195,7 @@ async def run_retro_planner(
     :param clogger: Logger object that can return messages to the UI
     :param molecule_name_format: Desired default formatting for molecule names
     :param reaction_id: An optional string for a unique reaction ID
+    :param all_inactive: If True, does not activate the first alternative
     :return: A 2-tuple of (Reaction object, list of routes) if routes found, or
              ``(None, [])`` if nothing was discovered.
     """
@@ -218,7 +221,9 @@ async def run_retro_planner(
     # All other routes become reaction alternatives
     alts: list[ReactionAlternative] = []
     for i, rpath in enumerate(rpaths):
-        alt = make_reaction_alternative(rpath, i, trees[i], molecule_name_format)
+        alt = make_reaction_alternative(
+            rpath, i, trees[i], molecule_name_format, all_inactive
+        )
         if alt is not None:
             alts.append(alt)
 
@@ -336,7 +341,11 @@ async def compute_templates_for_node(
     )
     await clogger.info("Running AiZynthFinder...")
     reaction, routes = await run_retro_planner(
-        config_file, node.smiles, clogger, molecule_name_format
+        config_file,
+        node.smiles,
+        clogger,
+        molecule_name_format,
+        all_inactive=True,
     )
 
     if not reaction:
@@ -358,10 +367,14 @@ async def compute_templates_for_node(
 
     if node.reaction is None or node.reaction.id == "azf":
         node.reaction = reaction
+    else:
+        if not node.reaction.alternatives:
+            node.reaction.alternatives = []
+        if reaction.alternatives:
+            node.reaction.alternatives.extend(reaction.alternatives)
+        node.reaction.templatesSearched = True
 
     # Notify frontend that template reactions were computed
-    node.reaction.alternatives = reaction.alternatives
-    node.reaction.templatesSearched = True
     await context.update_node(node, websocket)
     await websocket.send_json({"type": "complete"})
 
@@ -480,6 +493,9 @@ async def ai_based_retrosynthesis(
     if current_node.reaction is not None:
         if current_node.reaction.alternatives is None:
             current_node.reaction.alternatives = []
+        for alt in current_node.reaction.alternatives:
+            if alt.status == "active":
+                alt.status = "available"
         current_node.reaction.alternatives.insert(0, ai_alternative)
         alternatives = current_node.reaction.alternatives
         templates_searched = current_node.reaction.templatesSearched
