@@ -1,8 +1,5 @@
-import asyncio
-from concurrent.futures import ProcessPoolExecutor
 import os
 from fastapi import WebSocket
-from charge.clients.autogen import AutoGenAgent
 from charge.servers import AiZynthTools as azf
 from loguru import logger
 from callback_logger import CallbackLogger
@@ -11,18 +8,16 @@ from collections import deque
 
 from backend_helper_funcs import (
     CallbackHandler,
-    RetrosynthesisContext,
     calculate_positions,
     highlight_node,
-    RetrosynthesisContext,
     Node,
     Edge,
     Reaction,
     ReactionAlternative,
     PathwayStep,
-    recalculate_nodes_per_level,
 )
-from molecule_naming import smiles_to_html, MolNameFormat
+from charge_backend.retrosynthesis.context import RetrosynthesisContext
+from molecule_naming import smiles_to_html, MolNameFormat, is_purchasable
 
 from charge.tasks.RetrosynthesisTask import (
     TemplateFreeRetrosynthesisTask as RetrosynthesisTask,
@@ -56,83 +51,74 @@ RETROSYNTH_CONSTRAINED_USER_PROMPT_TEMPLATE = (
 )
 
 
-def generate_nodes_for_molecular_graph(
+async def generate_nodes_for_molecular_graph(
     reaction_path_dict: dict[int, azf.Node],
     retro_synth_context: RetrosynthesisContext,
+    websocket: WebSocket,
     start_level: int = 0,
     molecule_name_format: Literal["brand", "iupac", "formula", "smiles"] = "brand",
     include_root_node: bool = True,
     root_node_id: str | None = None,
-    id_offset: int = 0,
-) -> tuple[list[Node], list[Edge]]:
+) -> list[Node]:
     """Generate nodes and edges from reaction path dict"""
     nodes = []
-    edges = []
 
-    root_id = 0
-    node_queue = [(reaction_path_dict[root_id], start_level)]  # (node, level)
+    # (node, level, parent node)
+    node_queue: list[tuple[azf.Node, int, Optional[Node]]] = []
+
+    # Determine traversal start
+    if not include_root_node:
+        if root_node_id is None:
+            raise ValueError(
+                "If include_root_node is False, a root node ID must be provided"
+            )
+        parent = retro_synth_context.node_ids[root_node_id]
+
+        # Start from AZF node 0's children
+        for child_id in reaction_path_dict[0].children:
+            child_node = reaction_path_dict[child_id]
+            node_queue.append((child_node, start_level + 1, parent))
+    else:
+        node_queue.append((reaction_path_dict[0], start_level, None))
 
     while node_queue:
-        current_node, level = node_queue.pop(0)
-        node_id = current_node.node_id
+        current_node, level, parent = node_queue.pop(0)
         smiles = current_node.smiles
         purchasable = current_node.purchasable
         leaf = current_node.is_leaf
-        node_id_str = f"node_{node_id+id_offset}"
-        hover_info = f"# Molecule \n **SMILES:** {smiles}\n"
-        if leaf:
-            if purchasable:
-                hover_info += " - This molecule is purchasable.\n"
-                # TODO: For ... chemprice
-            else:
-                hover_info += " - This molecule is NOT purchasable.\n"
-
-        # A bit of an ugly way of dealing with this
-        if current_node.parent_id is None:
-            parent_node_id = None
-        elif root_node_id is not None and current_node.parent_id == root_id:
-            parent_node_id = root_node_id
+        node_id_str = retro_synth_context.new_node_id()
+        hover_info = f"# Molecule \n **SMILES:** {smiles}\n\n"
+        if purchasable:
+            hover_info += "**Purchasable**? Yes\n"
         else:
-            parent_node_id = f"node_{current_node.parent_id+id_offset}"
+            hover_info += "**Purchasable**? No\n"
 
-        if node_id != root_id or include_root_node:
-            node = Node(
-                id=node_id_str,
-                smiles=smiles,
-                label=smiles_to_html(smiles, molecule_name_format),
-                hoverInfo=hover_info,
-                level=level,
-                parentId=parent_node_id,
-                highlight=("red" if (leaf and not purchasable) else "normal"),
-            )
+        node = Node(
+            id=node_id_str,
+            smiles=smiles,
+            label=smiles_to_html(smiles, molecule_name_format),
+            hoverInfo=hover_info,
+            level=level,
+            parentId=parent.id if parent is not None else None,
+            highlight=("red" if (leaf and not purchasable) else "normal"),
+        )
+        await retro_synth_context.add_node(node, parent, websocket)
 
-            retro_synth_context.node_ids[node_id_str] = node
-            nodes.append(node)
-
-        if current_node.parent_id is not None:
-            assert parent_node_id is not None
-            edge = Edge(
-                id=f"edge_{current_node.parent_id+id_offset}_{node_id+id_offset}",
-                fromNode=parent_node_id,
-                toNode=node_id_str,
-                status="complete",
-                label=None,
-            )
-            retro_synth_context.node_ids[parent_node_id].reaction = Reaction(
+        if parent is not None and parent.reaction is None:
+            parent.reaction = Reaction(
                 "azf",
                 "Reaction found with AiZynthFinder",
                 highlight="yellow",
                 label="Template",
                 templatesSearched=False,
             )
-            edges.append(edge)
-            retro_synth_context.parents[node_id_str] = parent_node_id
+            await retro_synth_context.update_node(parent, websocket)
 
         for child_id in current_node.children:
             child_node = reaction_path_dict[child_id]
-            node_queue.append((child_node, level + 1))
+            node_queue.append((child_node, level + 1, node))
 
-    return nodes, edges
+    return nodes
 
 
 def make_reaction_alternative(
@@ -211,7 +197,13 @@ async def run_retro_planner(
              ``(None, [])`` if nothing was discovered.
     """
     await clogger.info(f"Running RetroPlanner for SMILES: {smiles}")
+    report_init = False
+    if azf.RetroPlanner.finder is None:
+        report_init = True
+        await clogger.info("Initializing AiZynthFinder")
     planner = azf.RetroPlanner(configfile=config_file)
+    if report_init:
+        await clogger.info("AiZynthFinder initialization complete")
 
     _, _, routes = planner.plan(smiles)
     if len(routes) == 0:  # No routes found
@@ -261,7 +253,6 @@ async def template_based_retrosynthesis(
     start_smiles: str,
     config_file: str,
     context: RetrosynthesisContext,
-    executor: ProcessPoolExecutor,
     websocket: WebSocket,
     available_tools: Optional[Union[str, list[str]]] = None,
     molecule_name_format: Literal["brand", "iupac", "formula", "smiles"] = "brand",
@@ -277,7 +268,10 @@ async def template_based_retrosynthesis(
         id="node_0",
         smiles=start_smiles,
         label=smiles_to_html(start_smiles, molecule_name_format),
-        hoverInfo=f"# Root molecule \n **SMILES:** {start_smiles}",
+        hoverInfo=f"""# Root molecule
+**SMILES:** {start_smiles}
+
+**Purchasable**? {'Yes' if is_purchasable(start_smiles) else 'No'}""",
         level=0,
         parentId=None,
         cost=None,
@@ -287,9 +281,10 @@ async def template_based_retrosynthesis(
         x=100,
         y=100,
     )
-    await websocket.send_json({"type": "node", "node": root.json()})
+    context.reset()  # Clear context
+    await context.add_node(root, parent=None, websocket=websocket)
 
-    await clogger.info("Starting planning in executor...")
+    await clogger.info("Running AiZynthFinder...")
     reaction, routes = await run_retro_planner(
         config_file, start_smiles, clogger, molecule_name_format
     )
@@ -299,56 +294,30 @@ async def template_based_retrosynthesis(
             smiles=start_smiles,
         )
         # Send empty reaction
-        await websocket.send_json(
-            {
-                "type": "node_update",
-                "node": {
-                    "id": root.id,
-                    "highlight": "normal",
-                    "reaction": Reaction(
-                        "none",
-                        'No exact or template-based reactions found.\n\nClick "Other Reactions..." to compute a path with FLASK AI.',
-                        "empty",
-                        label="No reaction",
-                        templatesSearched=True,
-                    ).json(),
-                },
-            }
+        root.reaction = Reaction(
+            "none",
+            'No exact or template-based reactions found.\n\nClick "Other Reactions..." to compute a path with FLASK AI.',
+            "empty",
+            label="No reaction",
+            templatesSearched=True,
         )
+        await context.update_node(root, websocket)
         await websocket.send_json({"type": "complete"})
         return
 
     # Use first route by default
-    recalculate_nodes_per_level(context)
-    nodes, edges = generate_nodes_for_molecular_graph(
-        routes[-1].nodes, context, molecule_name_format=molecule_name_format
+    await generate_nodes_for_molecular_graph(
+        routes[0].nodes,
+        context,
+        websocket=websocket,
+        molecule_name_format=molecule_name_format,
+        include_root_node=False,
+        root_node_id=root.id,
     )
-    calculate_positions(nodes)
 
     # Notify frontend that computation completed
-    context.node_ids[root.id].reaction = reaction
-    await websocket.send_json(
-        {
-            "type": "node_update",
-            "node": {
-                "id": root.id,
-                "highlight": "normal",
-                "reaction": reaction.json(),
-            },
-        }
-    )
-
-    # Stream nodes from reaction path 0 with edges
-    for node in nodes[1:]:
-        # Find edge for this node
-        edge = next((e for e in edges if e.toNode == node.id), None)
-
-        # Send node
-        await websocket.send_json({"type": "node", "node": node.json()})
-        if edge:
-            context.parents[node.id] = edge.fromNode
-            await websocket.send_json({"type": "edge", "edge": edge.json()})
-
+    root.reaction = reaction
+    await context.update_node(root, websocket)
     await websocket.send_json({"type": "complete"})
 
 
@@ -438,7 +407,6 @@ async def ai_based_retrosynthesis(
     await highlight_node(current_node, websocket, False)
 
     level = current_node.level + 1
-    num_nodes = len(context.node_ids)
 
     reasoning_summary = result.reasoning_summary
     await clogger.info(
@@ -447,7 +415,7 @@ async def ai_based_retrosynthesis(
 
     # Add reaction alternative
     ai_alternative = ReactionAlternative(
-        "ai_reaction_0",
+        f"ai_reaction_{node_id}",
         "AI-Generated Reaction",
         "ai",
         "active",
@@ -486,69 +454,53 @@ async def ai_based_retrosynthesis(
 
     # Update node with discovered reaction
     context.node_id_to_reasoning_summary[node_id] = reasoning_summary
-    await websocket.send_json(
-        {
-            "type": "node_update",
-            "node": {"id": node_id, "reaction": ai_reaction.json()},
-        }
-    )
+    await context.update_node(current_node, websocket)
 
-    recalculate_nodes_per_level(context)
+    context.recalculate_nodes_per_level()
 
-    for i, smiles in enumerate(result.reactants_smiles_list):
+    new_nodes: list[Node] = []
+    purchasable: list[bool] = []
+    for smiles in result.reactants_smiles_list:
+        node_id_str = context.new_node_id()
+        purch = is_purchasable(smiles)
         node = Node(
-            f"node_{num_nodes+i}",
+            node_id_str,
             smiles,
             smiles_to_html(smiles, molecule_name_format),
-            f"Discovered by {runner.model}",
+            f"Discovered by {runner.model}.\n\n**Purchasable**? {'Yes' if purch else 'No'}",
             level,
             current_node.id,
         )
-        edge = Edge(
-            f"edge_{current_node.id}_{num_nodes + i}", node_id, node.id, "complete"
-        )
-        if node.id in context.node_ids:
-            await clogger.warning(f"{node.id} already found in context: {node}")
-        context.node_ids[node.id] = node
-        context.parents[node.id] = node_id
+        new_nodes.append(node)
+        purchasable.append(purch)
+        # Add and stream node directly
+        await context.add_node(node, current_node, websocket)
 
-        # Stream node directly
-        calculate_positions([node], context.nodes_per_level[level])
-        context.nodes_per_level[level] += 1
-        node.highlight = "yellow"
-        await websocket.send_json({"type": "node", "node": node.json()})
-        await websocket.send_json({"type": "edge", "edge": edge.json()})
+    for node, purch in zip(new_nodes, purchasable):
+        if purch:  # Skip purchasable nodes unless explicitly asked for
+            continue
+
+        # Highlight node because we are looking for templates
+        await highlight_node(node, websocket, True)
 
         # Find paths for the leaf nodes
         reaction, routes = await run_retro_planner(
-            config_file, smiles, clogger, molecule_name_format
+            config_file, node.smiles, clogger, molecule_name_format
         )
         if reaction is None:
-            await clogger.warning(f"No routes found for {smiles}. Skipping...")
+            await clogger.warning(f"No routes found for {node.smiles}. Skipping...")
             continue
         node.reaction = reaction
 
         # Use child nodes and edges of the first route
-        child_nodes, child_edges = generate_nodes_for_molecular_graph(
+        await generate_nodes_for_molecular_graph(
             routes[0].nodes,
             context,
+            websocket,
             start_level=level,
             include_root_node=False,
             root_node_id=node.id,
-            id_offset=num_nodes,
         )
-        node.highlight = "normal"
-        await highlight_node(node, websocket, False)
-
-        calculate_positions(child_nodes, context.nodes_per_level[level + 1])
-        context.nodes_per_level[level + 1] += len(child_nodes)
-
-        # Stream nodes back
-        for cnode in child_nodes:
-            await websocket.send_json({"type": "node", "node": cnode.json()})
-        for cedge in child_edges:
-            await websocket.send_json({"type": "edge", "edge": cedge.json()})
-
-        num_nodes += routes[0].num_nodes
+        await context.update_node(node, websocket)  # Also disables highlight
 
     await websocket.send_json({"type": "complete"})

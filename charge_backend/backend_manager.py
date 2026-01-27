@@ -9,12 +9,10 @@ from charge.experiments.AutoGenExperiment import AutoGenExperiment
 from charge.clients.autogen_utils import chargeConnectionError
 from charge.tasks.Task import Task
 from backend_helper_funcs import (
-    RetrosynthesisContext,
     CallbackHandler,
     Reaction,
-    delete_subtree,
-    recalculate_nodes_per_level,
 )
+from charge_backend.retrosynthesis.context import RetrosynthesisContext
 from lmo_charge_backend_funcs import generate_lead_molecule
 from charge_backend_custom import run_custom_problem
 from functools import partial
@@ -320,7 +318,6 @@ class ActionManager:
             data["smiles"],
             self.args.config_file,
             self.get_retro_synth_context(),
-            self.task_manager.executor,
             self.task_manager.websocket,
             available_tools,
             self.molecule_name_format,
@@ -359,10 +356,7 @@ class ActionManager:
             v == data["nodeId"] for v in self.retro_synth_context.parents.values()
         )
 
-        await self.websocket.send_json(
-            {"type": "subtree_delete", "node": {"id": data["nodeId"]}}
-        )
-        delete_subtree(self.retro_synth_context, data["nodeId"])
+        await self.retro_synth_context.delete_subtree(data["nodeId"], self.websocket)
         await self.websocket.send_json(
             {
                 "type": "node_update",
@@ -454,10 +448,7 @@ class ActionManager:
         smiles = self.retro_synth_context.node_ids[data["nodeId"]].smiles
 
         # Clear subtree and levels for layouting
-        await self.websocket.send_json(
-            {"type": "subtree_delete", "node": {"id": parent_nodeid}}
-        )
-        delete_subtree(self.retro_synth_context, parent_nodeid)
+        await self.retro_synth_context.delete_subtree(parent_nodeid, self.websocket)
         await self.websocket.send_json(
             {
                 "type": "node_update",
@@ -520,10 +511,7 @@ class ActionManager:
         node.reaction.hoverInfo = alternative.hoverInfo
 
         # Clear subtree and levels for layouting
-        await self.websocket.send_json(
-            {"type": "subtree_delete", "node": {"id": data["nodeId"]}}
-        )
-        delete_subtree(self.retro_synth_context, data["nodeId"])
+        await self.retro_synth_context.delete_subtree(data["nodeId"], self.websocket)
 
         # Send new reaction label and subtree
 

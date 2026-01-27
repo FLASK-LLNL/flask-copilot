@@ -19,6 +19,7 @@ import re
 import json
 import os
 import requests
+import pandas as pd
 
 from typing import Literal, TypeAlias
 
@@ -107,3 +108,19 @@ def smiles_to_iupac_online(smiles):
         return response.text
     except requests.exceptions.HTTPError:
         return smiles
+
+
+_STOCK_DATABASE_PATH = os.getenv("FLASK_STOCK_DB", "/data/zinc_stock.hdf5")
+df = pd.read_hdf(_STOCK_DATABASE_PATH, "table")
+
+
+def is_purchasable(smiles: str) -> bool:
+    if Chem is None:
+        return False
+
+    mol = Chem.MolFromSmiles(smiles)
+    if mol is None:  # Invalid SMILES
+        return False
+    inchi: str = str(Chem.MolToInchi(mol))
+    inchi_key = Chem.InchiToInchiKey(inchi)
+    return len(df[df.inchi_key == inchi_key]) > 0
