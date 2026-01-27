@@ -795,7 +795,7 @@ const ChemistryTool: React.FC = () => {
       alternativeId: alt.id
     }));
 
-    setReactionSidebarOpen(false);
+    // Don't close the sidebar - let user see the active status update
     setIsComputing(true);
   }, [selectedReactionNode?.id]);  // Only depend on the ID, not the whole node
 
@@ -837,7 +837,7 @@ const ChemistryTool: React.FC = () => {
 
   const stableAlternatives = useMemo(() => {
     return selectedReactionNode?.reaction?.alternatives || [];
-  }, [selectedReactionNode?.id, selectedReactionNode?.reaction?.alternatives?.length]);
+  }, [selectedReactionNode?.id, selectedReactionNode?.reaction?.alternatives]);
 
 
   const handleCustomQuery = (node: TreeNode, queryType: string | null): void => {
