@@ -425,7 +425,7 @@ class ActionManager:
             self.molecule_name_format,
         )
 
-        await self.task_manager.run_task(run_func())
+        asyncio.create_task(self.task_manager.run_task(run_func()))
 
     async def handle_optimize_from(self, data: dict) -> None:
         """Handle optimize-from action."""
