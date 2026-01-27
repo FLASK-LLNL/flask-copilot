@@ -321,6 +321,51 @@ async def template_based_retrosynthesis(
     await websocket.send_json({"type": "complete"})
 
 
+async def compute_templates_for_node(
+    node: Node,
+    config_file: str,
+    context: RetrosynthesisContext,
+    websocket: WebSocket,
+    available_tools: Optional[Union[str, list[str]]] = None,
+    molecule_name_format: Literal["brand", "iupac", "formula", "smiles"] = "brand",
+):
+    """Computes all templates for node"""
+    clogger = CallbackLogger(websocket, source="compute_templates_for_node")
+    await clogger.info(
+        f"Planning retrosynthesis for node {node.id} with available tools: {available_tools}."
+    )
+    await clogger.info("Running AiZynthFinder...")
+    reaction, routes = await run_retro_planner(
+        config_file, node.smiles, clogger, molecule_name_format
+    )
+
+    if not reaction:
+        await clogger.info(f"No template-based synthesis routes found for {node.id}.")
+        # Send empty reaction
+        if node.reaction is None:
+            node.reaction = Reaction(
+                "none",
+                'No exact or template-based reactions found.\n\nClick "Other Reactions..." to compute a path with FLASK AI.',
+                "empty",
+                label="No reaction",
+                templatesSearched=True,
+            )
+        else:
+            node.reaction.templatesSearched = True
+        await context.update_node(node, websocket)
+        await websocket.send_json({"type": "complete"})
+        return
+
+    if node.reaction is None or node.reaction.id == "azf":
+        node.reaction = reaction
+
+    # Notify frontend that template reactions were computed
+    node.reaction.alternatives = reaction.alternatives
+    node.reaction.templatesSearched = True
+    await context.update_node(node, websocket)
+    await websocket.send_json({"type": "complete"})
+
+
 async def ai_based_retrosynthesis(
     node_id: str,
     context: RetrosynthesisContext,

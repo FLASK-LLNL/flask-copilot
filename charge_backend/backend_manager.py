@@ -24,6 +24,7 @@ from tool_registration import (
 from retro_charge_backend_funcs import (
     template_based_retrosynthesis,
     ai_based_retrosynthesis,
+    compute_templates_for_node,
 )
 
 # Mapping from backend name to human-readable labels. Mirrored from the frontend
@@ -400,11 +401,17 @@ class ActionManager:
         logger.info(f"Data: {data}")
         node = self.retro_synth_context.node_ids[data["nodeId"]]
 
-        # TODO: Invoke AZF
-        await self._send_processing_message(
-            f"NOT YET IMPLEMENTED. node {data['nodeId']}", source="Agent"
+        run_func = partial(
+            compute_templates_for_node,
+            node,
+            self.args.config_file,
+            self.retro_synth_context,
+            self.task_manager.websocket,
+            self.task_manager.available_tools or list_server_urls(),
+            self.molecule_name_format,
         )
-        await self.websocket.send_json({"type": "complete"})
+
+        await self.task_manager.run_task(run_func())
 
     async def handle_optimize_from(self, data: dict) -> None:
         """Handle optimize-from action."""
