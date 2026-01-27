@@ -99,6 +99,21 @@ export interface OrchestratorSettings {
   moleculeName?: MoleculeNameFormat;  toolServers?: ToolServer[];
 }
 
+// Optimization customization options
+export interface OptimizationCustomization {
+  enableConstraints?: boolean;
+  molecularSimilarity?: number;
+  diversityPenalty?: number;
+  explorationRate?: number;
+  additionalConstraints?: string[];  // Array of constraint types
+}
+
+export interface ConstraintOption {
+  value: string;
+  label: string;
+  description: string;
+}
+
 export interface WebSocketMessageToServer {
   action?: string;
   smiles?: string;
@@ -114,6 +129,9 @@ export interface WebSocketMessageToServer {
   customPropertyDesc?: string;
   customPropertyAscending?: boolean;
   xpos?: number;
+
+  // Optimization customization
+  customization?: OptimizationCustomization;
 
   // Custom problem
   systemPrompt?: string;
@@ -257,6 +275,7 @@ export interface Experiment {
   customPropertyName?: string;
   customPropertyDesc?: string;
   customPropertyAscending?: boolean;
+  customization?: OptimizationCustomization;
   treeNodes?: TreeNode[];
   edges?: Edge[];
   metricsHistory?: MetricHistoryItem[];
