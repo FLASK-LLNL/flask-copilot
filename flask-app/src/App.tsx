@@ -101,6 +101,16 @@ const ChemistryTool: React.FC = () => {
   const [selectedReactionNode, setSelectedReactionNode] = useState<TreeNode | null>(null);
   const [isComputingTemplates, setIsComputingTemplates] = useState<boolean>(false);
 
+  // Keep selectedReactionNode in sync with treeNodes updates
+  useEffect(() => {
+    if (selectedReactionNode) {
+      const updatedNode = treeNodes.find(n => n.id === selectedReactionNode.id);
+      if (updatedNode && updatedNode !== selectedReactionNode) {
+        setSelectedReactionNode(updatedNode);
+      }
+    }
+  }, [treeNodes, selectedReactionNode]);
+
   // Auto-select all tools when they first become available
   useEffect(() => {
     if (availableToolsMap.length > 0 && selectedTools.length === 0) {
