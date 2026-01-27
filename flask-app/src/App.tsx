@@ -404,25 +404,6 @@ const ChemistryTool: React.FC = () => {
         setTreeNodes(prev => prev.map(n =>
           n.id === data.node!.id ? { ...n, ...restData } : n
         ));
-
-        /*
-        // When a node update includes reaction info, preserve alternatives and templatesSearched:
-        setTreeNodes(prev => prev.map(n => {
-          if (n.id === data.node!.id) {
-            // Preserve existing alternatives and templatesSearched if not explicitly updated
-            if (restData.reaction && n.reaction) {
-              if (!restData.reaction.alternatives) {
-                restData.reaction.alternatives = n.reaction.alternatives;
-              }
-              if (restData.reaction.templatesSearched === undefined) {
-                restData.reaction.templatesSearched = n.reaction.templatesSearched;
-              }
-            }
-            return { ...n, ...restData };
-          }
-          return n;
-        }));
-        */
       } else if (data.type === 'node_delete') {
         setTreeNodes(prev => {
           const descendants = findAllDescendants(data.node!.id, prev);
@@ -499,21 +480,6 @@ const ChemistryTool: React.FC = () => {
         saveFullContext(data.experimentContext!);
       } else if (data.type === 'get-username-response') {
         setUsername(data.username!);
-      } else if (data.type === 'reaction-alternatives-response') {
-        // Backend sends template alternatives for a specific node
-        setTreeNodes(prev => prev.map(n =>
-          n.id === data.node!.id && n.reaction
-            ? {
-                ...n,
-                reaction: {
-                  ...n.reaction,
-                  alternatives: data.alternatives ?? [],
-                  templatesSearched: true  // Mark that templates have been searched
-                }
-              }
-            : n
-        ));
-        setIsComputingTemplates(false);
       }
     };
 
@@ -789,15 +755,6 @@ const ChemistryTool: React.FC = () => {
     const nodeId = selectedReactionNode?.id;
     if (!nodeId) return;
     if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) return;
-
-    // Delete subtree locally
-    setTreeNodes(prev => {
-      const descendants = findAllDescendants(nodeId, prev);
-      return prev.filter(n => !descendants.has(n.id) && n.id !== nodeId);
-    });
-    setEdges(prev => prev.filter(e =>
-      e.fromNode !== nodeId && e.toNode !== nodeId
-    ));
 
     // Tell backend that the alternative subtree has been chosen
     wsRef.current.send(JSON.stringify({

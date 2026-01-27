@@ -11,6 +11,7 @@ from charge.tasks.Task import Task
 from backend_helper_funcs import (
     CallbackHandler,
     Reaction,
+    Node,
 )
 from charge_backend.retrosynthesis.context import RetrosynthesisContext
 from lmo_charge_backend_funcs import generate_lead_molecule
@@ -25,6 +26,7 @@ from retro_charge_backend_funcs import (
     template_based_retrosynthesis,
     ai_based_retrosynthesis,
     compute_templates_for_node,
+    set_reaction_alternative,
 )
 
 # Mapping from backend name to human-readable labels. Mirrored from the frontend
@@ -506,40 +508,10 @@ class ActionManager:
             )
             await self.websocket.send_json({"type": "complete"})
             return
-        try:
-            alternative = next(a for a in node.reaction.alternatives if a.id == alt)
-        except StopIteration:
-            await self._send_processing_message(
-                f"Alternative {alt} not found for {data['nodeId']}", source="Agent"
-            )
-            await self.websocket.send_json({"type": "complete"})
-            return
 
-        node.reaction.hoverInfo = alternative.hoverInfo
-
-        # Clear subtree and levels for layouting
-        await self.retro_synth_context.delete_subtree(data["nodeId"], self.websocket)
-
-        # Send new reaction label and subtree
-
-        await self.websocket.send_json(
-            {
-                "type": "node_update",
-                "node": {
-                    "id": data["nodeId"],
-                    "reaction": Reaction(
-                        f"reaction_{data['nodeId']}_{data['alternativeId']}",
-                        alternative.hoverInfo,
-                        highlight="red",
-                        label=alternative.type,
-                    ).json(),
-                },
-            }
+        await set_reaction_alternative(
+            node, alt, self.retro_synth_context, self.websocket
         )
-
-        # TODO: Loop over new nodes/edges (refactor function)
-
-        await self.websocket.send_json({"type": "complete"})
 
     async def _send_processing_message(
         self, message: str, source: str | None = None, **kwargs
