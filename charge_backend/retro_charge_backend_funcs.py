@@ -4,7 +4,7 @@ from charge.servers import AiZynthTools as azf
 from loguru import logger
 from callback_logger import CallbackLogger
 from typing import Any, Literal, Optional, Union, TYPE_CHECKING
-from collections import deque
+from collections import defaultdict, deque
 
 from backend_helper_funcs import (
     CallbackHandler,
@@ -87,7 +87,7 @@ async def generate_nodes_for_molecular_graph(
         purchasable = current_node.purchasable
         leaf = current_node.is_leaf
         node_id_str = retro_synth_context.new_node_id()
-        hover_info = f"# Molecule \n **SMILES:** {smiles}\n\n"
+        hover_info = f"# Molecule\n\n**SMILES:** {smiles}\n\n"
         if purchasable:
             hover_info += "**Purchasable**? Yes\n"
         else:
@@ -142,28 +142,33 @@ def make_reaction_alternative(
     pathway = []
 
     # BFS traversal over tree, merging precursors of each child for visualization purposes
-    queue = deque([rpath.root])
+    # Each queue item is a tuple: (node, parent_index_in_previous_level)
+    queue = deque([(rpath.root, -1)])  # Root has no parent, use -1
 
     while queue:
         level_size = len(queue)
         level_smiles = []
+        level_parents = []
 
-        for _ in range(level_size):
-            node = queue.popleft()
+        for i in range(level_size):
+            node, parent_idx = queue.popleft()
             level_smiles.append(node.smiles)
+            level_parents.append(parent_idx)
 
             # Add children to queue for next level
             if node.children:
                 for child_id in node.children:
                     # Get the actual node from rpath.nodes using the child_id
                     if hasattr(rpath, "nodes") and child_id in rpath.nodes:
-                        queue.append(rpath.nodes[child_id])
+                        # Child's parent is at index i in the current level
+                        queue.append((rpath.nodes[child_id], i))
 
         # Add this level as a pathway step
         pathway.append(
             PathwayStep(
                 level_smiles,
                 [smiles_to_html(s, molecule_name_format) for s in level_smiles],
+                level_parents,
             )
         )
 
@@ -478,13 +483,14 @@ async def ai_based_retrosynthesis(
         "ai",
         "active",
         [
-            PathwayStep([current_node.smiles], [current_node.label]),
+            PathwayStep([current_node.smiles], [current_node.label], [-1]),
             PathwayStep(
                 list(result.reactants_smiles_list),
                 [
                     smiles_to_html(s, molecule_name_format)
                     for s in result.reactants_smiles_list
                 ],
+                [0 for _ in range(len(result.reactants_smiles_list))],
             ),
         ],
         reasoning_summary,
@@ -616,22 +622,44 @@ async def set_reaction_alternative(
     node.highlight = "normal"
     await context.update_node(node, websocket)
 
-    # Loop over new nodes/edges (one level only)
-    if len(alternative.pathway) > 1:
-        for smiles, label in zip(
-            alternative.pathway[1].smiles, alternative.pathway[1].label
-        ):
-            child_node = Node(
-                id=context.new_node_id(),
-                smiles=smiles,
-                label=label,
-                hoverInfo=f"""# Molecule
+    # Loop over new nodes/edges (from the second level onwards)
+    step_nodes: dict[int, list[Node]] = defaultdict(list)
+    step_nodes[0].append(node)
+    for i, step in enumerate(alternative.pathway):
+        if i == 0:  # Skip root
+            continue
+        for smiles, label, parent in zip(step.smiles, step.label, step.parents):
+            try:
+                parent_node = step_nodes[i - 1][parent]
+
+                child_node = Node(
+                    id=context.new_node_id(),
+                    smiles=smiles,
+                    label=label,
+                    hoverInfo=f"""# Molecule
 **SMILES:** {smiles}
 
 **Purchasable**? {'Yes' if is_purchasable(smiles) else 'No'}""",
-                level=node.level + 1,
-                parentId=node.id,
-            )
-            await context.add_node(child_node, node, websocket)
+                    level=node.level + i,
+                    parentId=parent_node.id,
+                )
+                step_nodes[i].append(child_node)
+                await context.add_node(child_node, parent_node, websocket)
+
+                # Create reaction for parent node if there are children
+                if parent_node.reaction is None:
+                    parent_node.reaction = Reaction(
+                        "subreaction",
+                        'Click "Other Reactions..." to compute alternative paths',
+                        highlight=node.reaction.highlight,
+                        label=node.reaction.label,
+                        templatesSearched=False,
+                    )
+                    await context.update_node(parent_node, websocket)
+            except IndexError as e:
+                await clogger.error(
+                    f"Index error when setting reaction alternative: parent index {parent} "
+                    f"out of range for step {i-1}. Error: {e}"
+                )
 
     await websocket.send_json({"type": "complete"})

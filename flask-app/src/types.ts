@@ -7,6 +7,7 @@ import { Dispatch, SetStateAction } from 'react';
 export interface PathwayStep {
   smiles: string[];
   label: string[];
+  parents: number[];
 }
 
 export interface ReactionAlternative {

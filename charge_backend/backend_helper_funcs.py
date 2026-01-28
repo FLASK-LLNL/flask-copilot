@@ -17,6 +17,7 @@ from callback_logger import CallbackLogger
 class PathwayStep:
     smiles: list[str]
     label: list[str]
+    parents: list[int]
 
     def json(self):
         return asdict(self)
