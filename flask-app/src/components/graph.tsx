@@ -249,6 +249,24 @@ export const MoleculeGraph: React.FC<MoleculeGraphProps> = ({
         }
     };
 
+    // Calculate SVG dimensions based on node positions
+    const getSvgDimensions = (): { width: number, height: number } => {
+        if (nodes.length === 0) return { width: 3000, height: 2000 };
+
+        let maxX = 0;
+        let maxY = 0;
+
+        nodes.forEach(node => {
+            maxX = Math.max(maxX, node.x + BOX_WIDTH + 500); // Add buffer for curves
+            maxY = Math.max(maxY, node.y + BOX_HEIGHT + 200);
+        });
+
+        return {
+            width: Math.max(maxX, 3000),
+            height: Math.max(maxY, 2000)
+        };
+    };
+
     return (
         <>
             <div
@@ -267,9 +285,10 @@ export const MoleculeGraph: React.FC<MoleculeGraphProps> = ({
                 >
                 {edges.filter(edge => getNode(edge.fromNode) && getNode(edge.toNode)).map((edge, idx) => {
                     const midpoint = getCurveMidpoint(getNode(edge.fromNode), getNode(edge.toNode));
+                    const svgDims = getSvgDimensions();
                     return (
                     <div key={edge.id} className="absolute pointer-events-none">
-                        <svg className="absolute" style={{ width: '3000px', height: '2000px', top: 0, left: 0 }}>
+                        <svg className="absolute" style={{ width: `${svgDims.width}px`, height: `${svgDims.height}px`, top: 0, left: 0 }}>
                         <g className={`animate-fadeIn ${isEdgeHighlighted(edge.fromNode) ? 'edge-highlighted' : (edge.status === 'computing' ? 'edge-computing' : 'edge-normal')}`} style={{ animationDelay: `${idx * 50}ms` }}>
                             <path
                             d={getCurvedPath(getNode(edge.fromNode), getNode(edge.toNode))}
