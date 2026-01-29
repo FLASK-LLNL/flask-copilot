@@ -19,7 +19,11 @@ import re
 import json
 import os
 import requests
-from typing import Literal
+import pandas as pd
+
+from typing import Literal, TypeAlias
+
+MolNameFormat: TypeAlias = Literal["brand", "iupac", "formula", "smiles"]
 
 _DATABASE_PATH = os.getenv("FLASK_INCHI_DB", "/data/inchi_mapping.json")
 if os.path.exists(_DATABASE_PATH):
@@ -52,7 +56,7 @@ def inchi_lookup(inchi: str, prefer_iupac: bool = False) -> str | None:
 
 def smiles_to_html(
     smiles: str,
-    molecule_name_format: Literal["brand", "iupac", "formula", "smiles"] = "brand",
+    molecule_name_format: MolNameFormat = "brand",
 ) -> str:
     if molecule_name_format == "smiles":
         return smiles
@@ -104,3 +108,22 @@ def smiles_to_iupac_online(smiles):
         return response.text
     except requests.exceptions.HTTPError:
         return smiles
+
+
+_STOCK_DATABASE_PATH = os.getenv("FLASK_STOCK_DB", "/data/zinc_stock.hdf5")
+if os.path.exists(_STOCK_DATABASE_PATH):
+    STOCK_DATABASE = pd.read_hdf(_STOCK_DATABASE_PATH, "table")
+else:
+    STOCK_DATABASE = None
+
+
+def is_purchasable(smiles: str) -> bool:
+    if Chem is None or STOCK_DATABASE is None:
+        return False
+
+    mol = Chem.MolFromSmiles(smiles)
+    if mol is None:  # Invalid SMILES
+        return False
+    inchi: str = str(Chem.MolToInchi(mol))
+    inchi_key = Chem.InchiToInchiKey(inchi)
+    return len(STOCK_DATABASE[STOCK_DATABASE.inchi_key == inchi_key]) > 0

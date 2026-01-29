@@ -1,6 +1,6 @@
 /* eslint-disable react-hooks/exhaustive-deps */
-import React, { useState, useRef, useEffect, useCallback } from 'react';
-import { Loader2, FlaskConical, TestTubeDiagonal, Network, Play, RotateCcw, X, Send, RefreshCw, Sparkles, MessageCircleQuestion, StepForward, MessageSquareShare, Brain, Sliders, Wrench, Settings } from 'lucide-react';
+import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
+import { Loader2, FlaskConical, TestTubeDiagonal, Network, Play, RotateCcw, X, Send, RefreshCw, Sparkles, MessageCircleQuestion, StepForward, MessageSquareShare, Brain, PanelRightOpen, Sliders, Wrench, Settings } from 'lucide-react';
 import 'recharts';
 import 'react-markdown';
 import 'remark-gfm';
@@ -9,7 +9,7 @@ import 'react-syntax-highlighter/dist/esm/styles/prism';
 
 import { WS_SERVER, VERSION } from './config';
 import { DEFAULT_CUSTOM_SYSTEM_PROMPT, PROPERTY_NAMES } from './constants';
-import { TreeNode, Edge, ContextMenuState, SidebarMessage, Tool, WebSocketMessageToServer, WebSocketMessage, SelectableTool, Experiment, OrchestratorSettings, OptimizationCustomization } from './types';
+import { TreeNode, Edge, ContextMenuState, SidebarMessage, Tool, WebSocketMessageToServer, WebSocketMessage, SelectableTool, Experiment, OrchestratorSettings, OptimizationCustomization, ReactionAlternative } from './types';
 
 import { loadRDKit } from './components/molecule';
 import { ReasoningSidebar, useSidebarState } from './components/sidebar';
@@ -25,6 +25,7 @@ import './animations.css';
 import { MetricsDashboard, useMetricsDashboardState } from './components/metrics';
 import { useProjectData } from './hooks/useProjectData';
 import { MarkdownText } from './components/markdown';
+import { ReactionAlternativesSidebar } from './components/reaction_alternatives';
 
 
 const ChemistryTool: React.FC = () => {
@@ -94,6 +95,21 @@ const ChemistryTool: React.FC = () => {
 
   const [selectedTools, setSelectedTools] = useState<number[]>([]);
   const [availableToolsMap, setAvailableToolsMap] = useState<SelectableTool[]>([]);
+
+  // Reaction alternatives sidebar state
+  const [reactionSidebarOpen, setReactionSidebarOpen] = useState<boolean>(false);
+  const [selectedReactionNode, setSelectedReactionNode] = useState<TreeNode | null>(null);
+  const [isComputingTemplates, setIsComputingTemplates] = useState<boolean>(false);
+
+  // Keep selectedReactionNode in sync with treeNodes updates
+  useEffect(() => {
+    if (selectedReactionNode) {
+      const updatedNode = treeNodes.find(n => n.id === selectedReactionNode.id);
+      if (updatedNode && updatedNode !== selectedReactionNode) {
+        setSelectedReactionNode(updatedNode);
+      }
+    }
+  }, [treeNodes, selectedReactionNode]);
 
   // Auto-select all tools when they first become available
   useEffect(() => {
@@ -410,10 +426,12 @@ const ChemistryTool: React.FC = () => {
         // Handle explicit stop from backend
         console.log('Computation stopped by backend');
         setIsComputing(false);
+        setIsComputingTemplates(false);
         unhighlightNodes();
         saveStateToExperiment();
       } else if (data.type === 'complete') {
         setIsComputing(false);
+        setIsComputingTemplates(false);
         unhighlightNodes();
         saveStateToExperiment();
       } else if (data.type === 'node_update') {
@@ -423,6 +441,7 @@ const ChemistryTool: React.FC = () => {
            setIsComputing(true);
         }else {
            setIsComputing(false);
+           setIsComputingTemplates(false);
         }
         setTreeNodes(prev => prev.map(n =>
           n.id === data.node!.id ? { ...n, ...restData } : n
@@ -508,6 +527,7 @@ const ChemistryTool: React.FC = () => {
       if (wsRef.current === socket) {
         setWsReconnecting(false);
         setIsComputing(false);
+        setIsComputingTemplates(false);
         setWsError((error as any).message || 'Connection failed');
         setAvailableTools([]);
         setSelectedTools([]);
@@ -523,6 +543,7 @@ const ChemistryTool: React.FC = () => {
         wsRef.current = null;
         setWsConnected(false);
         setIsComputing(false);
+        setIsComputingTemplates(false);
         setWsReconnecting(false);
         setAvailableTools([]);
         setSelectedTools([]);
@@ -556,6 +577,10 @@ const ChemistryTool: React.FC = () => {
     setSaveDropdownOpen(false);
     sidebarState.setSourceFilterOpen(false);
     setWsTooltipPinned(false);
+    // Clear and close reaction alternatives sidebar
+    setReactionSidebarOpen(false);
+    setSelectedReactionNode(null);
+    setIsComputingTemplates(false);
     if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
       wsRef.current.send(JSON.stringify({ action: 'reset' }));
     }
@@ -739,7 +764,7 @@ const ChemistryTool: React.FC = () => {
       });
   };
 
-  const sendMessageToServer = (message: string, data?: Omit<WebSocketMessageToServer, 'action'>): void => {
+  const sendMessageToServer = useCallback((message: string, data?: Omit<WebSocketMessageToServer, 'action'>): void => {
     if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) {
       alert('WebSocket not connected');
       return;
@@ -750,7 +775,70 @@ const ChemistryTool: React.FC = () => {
     };
     wsRef.current.send(JSON.stringify(msg));
     setContextMenu({node: null, isReaction: false, x: 0, y: 0});
-  };
+  }, []);
+
+  const handleReactionCardClick = useCallback((node: TreeNode) => {
+    if (isComputing) return;
+    setSelectedReactionNode(node);
+    setReactionSidebarOpen(true);
+  }, [isComputing]);  // Only depend on isComputing boolean
+
+  const handleSelectAlternative = useCallback((alt: ReactionAlternative) => {
+    const nodeId = selectedReactionNode?.id;
+    if (!nodeId) return;
+    if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) return;
+
+    // Tell backend that the alternative subtree has been chosen
+    wsRef.current.send(JSON.stringify({
+      action: "set-reaction-alternative",
+      nodeId: nodeId,
+      alternativeId: alt.id
+    }));
+
+    // Don't close the sidebar - let user see the active status update
+    setIsComputing(true);
+  }, [selectedReactionNode?.id]);  // Only depend on the ID, not the whole node
+
+  const handleCloseReactionAlternativesSidebar = useCallback(() => {
+    setReactionSidebarOpen(false);
+  }, []);  // No dependencies - just a state setter
+
+  const handleComputeTemplates = useCallback(() => {
+    const nodeId = selectedReactionNode?.id;
+    const smiles = selectedReactionNode?.smiles;
+    if (!nodeId || !smiles) return;
+
+    setIsComputingTemplates(true);
+    if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+      wsRef.current.send(JSON.stringify({
+        action: "compute-reaction-templates",
+        nodeId: nodeId,
+        smiles: smiles
+      }));
+    }
+  }, [selectedReactionNode?.id, selectedReactionNode?.smiles]);  // Only depend on primitive values
+
+  const handleComputeFlaskAI = useCallback((customPrompt: boolean) => {
+    const nodeId = selectedReactionNode?.id;
+    if (!nodeId) return;
+
+    if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+      if (customPrompt) {
+        handleCustomQuery(selectedReactionNode!, "compute-reaction-from")
+      } else {
+        wsRef.current.send(JSON.stringify({
+          action: "compute-reaction-from",
+          nodeId: nodeId
+        }));
+      }
+    }
+    setIsComputing(true);
+  }, [selectedReactionNode?.id]);  // Only depend on the ID
+
+  const stableAlternatives = useMemo(() => {
+    return selectedReactionNode?.reaction?.alternatives || [];
+  }, [selectedReactionNode?.id, selectedReactionNode?.reaction?.alternatives]);
+
 
   const handleCustomQuery = (node: TreeNode, queryType: string | null): void => {
     setCustomQueryModal(node);
@@ -758,8 +846,6 @@ const ChemistryTool: React.FC = () => {
     setCustomQueryType(queryType);
     setContextMenu({node: null, isReaction: false, x: 0, y: 0});
   };
-
-
 
   const submitCustomQuery = (): void => {
     if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) {
@@ -1220,7 +1306,38 @@ const ChemistryTool: React.FC = () => {
                   )}
                 </div>
               ) : (
-                <MoleculeGraph {...graphState} nodes={treeNodes} edges={edges} autoZoom={autoZoom} setAutoZoom={setAutoZoom} ctx={contextMenu} handleNodeClick={handleNodeClick} handleReactionClick={handleReactionClick} rdkitModule={rdkitModule} />
+                <MoleculeGraph
+                  {...graphState}
+                  nodes={treeNodes}
+                  edges={edges}
+                  autoZoom={autoZoom}
+                  setAutoZoom={setAutoZoom}
+                  ctx={contextMenu}
+                  handleNodeClick={handleNodeClick}
+                  handleReactionClick={handleReactionClick}
+                  handleReactionCardClick={handleReactionCardClick}
+                  selectedReactionNodeId={selectedReactionNode?.id}
+                  reactionSidebarOpen={reactionSidebarOpen}
+                  rdkitModule={rdkitModule}
+                />
+              )}
+
+              {reactionSidebarOpen && selectedReactionNode?.reaction && (
+                <ReactionAlternativesSidebar
+                  isOpen={reactionSidebarOpen}
+                  onClose={handleCloseReactionAlternativesSidebar}
+                  productMolecule={selectedReactionNode.label} // Strip HTML
+                  productSmiles={selectedReactionNode.smiles}
+                  alternatives={stableAlternatives}
+                  onSelectAlternative={handleSelectAlternative}
+                  onComputeTemplates={handleComputeTemplates}
+                  onComputeFlaskAI={handleComputeFlaskAI}
+                  wsConnected={wsConnected}
+                  isComputing={isComputing}
+                  isComputingTemplates={isComputingTemplates}
+                  templatesSearched={selectedReactionNode.reaction.templatesSearched}
+                  rdkitModule={rdkitModule}
+                />
               )}
             </div>
 
@@ -1244,7 +1361,7 @@ const ChemistryTool: React.FC = () => {
             )}
 
             {/* Metrics Dashboard */}
-            {treeNodes.length > 0 && (
+            {(problemType === "optimization") && (treeNodes.length > 0) && (
               <MetricsDashboard {...metricsDashboardState} treeNodes={treeNodes} />
             )}
 
@@ -1369,11 +1486,8 @@ const ChemistryTool: React.FC = () => {
               <button onClick={() => handleCustomQuery(contextMenu.node!, "query-reaction")} className="context-menu-item">
                 <MessageCircleQuestion className="w-4 h-4" /> Ask about reaction...
               </button>
-              <button onClick={() => {sendMessageToServer("compute-reaction-from", {nodeId: contextMenu.node!.id});}} className="context-menu-item context-menu-divider">
-                <RefreshCw className="w-4 h-4" />Find Another Reaction
-              </button>
-              <button onClick={() => handleCustomQuery(contextMenu.node!, "compute-reaction-from")} className="context-menu-item">
-                <Send className="w-4 h-4" />Find Another Reaction with Custom Prompt...
+              <button onClick={() => {handleReactionCardClick(contextMenu.node!); setContextMenu({node: null, isReaction: false, x: 0, y: 0});}} className="context-menu-item context-menu-divider">
+                <PanelRightOpen className="w-4 h-4" />Other Reactions...
               </button>
             </>
           )}

@@ -3,11 +3,31 @@ import { RDKitModule } from '@rdkit/rdkit';
 import { NODE_STYLES } from "./constants";
 import { Dispatch, SetStateAction } from 'react';
 
+// Class that only exists for UI preview purposes
+export interface PathwayStep {
+  smiles: string[];
+  label: string[];
+  parents: number[];
+}
+
+export interface ReactionAlternative {
+  id: string;
+  name: string;
+  type: 'exact' | 'template' | 'ai';
+  status: 'active' | 'available' | 'computing';
+  hoverInfo: string;
+  disabled?: boolean;
+  disabledReason?: string;
+  pathway: PathwayStep[];  // For UI preview
+}
+
 export interface Reaction {
   id: string;
   label?: string;
   hoverInfo: string;
   highlight: keyof typeof NODE_STYLES;
+  alternatives?: ReactionAlternative[];
+  templatesSearched: boolean;  // Whether to show the "Search Templates" button
 }
 
 export interface TreeNode {
@@ -77,8 +97,7 @@ export interface OrchestratorSettings {
   useCustomModel?: boolean;
   apiKey: string;
   backendLabel: string;
-  moleculeName?: MoleculeNameFormat;
-  toolServers?: ToolServer[];
+  moleculeName?: MoleculeNameFormat;  toolServers?: ToolServer[];
 }
 
 // Optimization customization options
@@ -118,6 +137,9 @@ export interface WebSocketMessageToServer {
   // Custom problem
   systemPrompt?: string;
   userPrompt?: string;
+
+  // Retrosynthesis
+  alternativeId?: string;
 }
 
 // Messages received from backend
@@ -133,6 +155,8 @@ export interface WebSocketMessage {
 
   withNode?: boolean;
   username?: string;
+
+  alternatives?: ReactionAlternative[];
 }
 
 
@@ -201,6 +225,9 @@ export interface MoleculeGraphProps extends MoleculeGraphState {
     setAutoZoom: Dispatch<SetStateAction<boolean>>;
     handleNodeClick: (e: React.MouseEvent<HTMLDivElement>, node: TreeNode) => void;
     handleReactionClick: (e: React.MouseEvent<HTMLDivElement>, node: TreeNode) => void;
+    handleReactionCardClick: (node: TreeNode) => void;
+    selectedReactionNodeId?: string;
+    reactionSidebarOpen: boolean;
     rdkitModule: RDKitModule | null;
 }
 

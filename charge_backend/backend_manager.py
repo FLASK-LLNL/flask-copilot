@@ -8,7 +8,11 @@ from concurrent.futures import ProcessPoolExecutor
 from charge.experiments.AutoGenExperiment import AutoGenExperiment
 from charge.clients.autogen_utils import chargeConnectionError
 from charge.tasks.Task import Task
-from backend_helper_funcs import RetrosynthesisContext, CallbackHandler, Reaction
+from backend_helper_funcs import (
+    CallbackHandler,
+    Reaction,
+)
+from retrosynthesis.context import RetrosynthesisContext
 from lmo_charge_backend_funcs import generate_lead_molecule
 from charge_backend_custom import run_custom_problem
 from functools import partial
@@ -18,8 +22,10 @@ from tool_registration import (
     list_server_tools,
 )
 from retro_charge_backend_funcs import (
-    generate_molecules,
-    optimize_molecule_retro,
+    template_based_retrosynthesis,
+    ai_based_retrosynthesis,
+    compute_templates_for_node,
+    set_reaction_alternative,
 )
 
 # Mapping from backend name to human-readable labels. Mirrored from the frontend
@@ -323,11 +329,10 @@ class ActionManager:
         await self.task_manager.clogger.info(f"Data: {data}")
 
         run_func = partial(
-            generate_molecules,
+            template_based_retrosynthesis,
             data["smiles"],
             self.args.config_file,
             self.get_retro_synth_context(),
-            self.task_manager.executor,
             self.task_manager.websocket,
             available_tools,
             self.molecule_name_format,
@@ -366,9 +371,7 @@ class ActionManager:
             v == data["nodeId"] for v in self.retro_synth_context.parents.values()
         )
 
-        await self.websocket.send_json(
-            {"type": "subtree_delete", "node": {"id": data["nodeId"]}}
-        )
+        await self.retro_synth_context.delete_subtree(data["nodeId"], self.websocket)
         await self.websocket.send_json(
             {
                 "type": "node_update",
@@ -389,7 +392,7 @@ class ActionManager:
         )
 
         run_func = partial(
-            optimize_molecule_retro,
+            ai_based_retrosynthesis,
             data["nodeId"],
             self.retro_synth_context,
             data.get("query", None),
@@ -397,6 +400,27 @@ class ActionManager:
             self.task_manager.websocket,
             self.experiment,
             self.args.config_file,
+            self.task_manager.available_tools or list_server_urls(),
+            self.molecule_name_format,
+        )
+
+        asyncio.create_task(self.task_manager.run_task(run_func()))
+
+    async def handle_template_retrosynthesis(self, data: dict) -> None:
+        """Handle compute-reaction-templates action."""
+        if self.retro_synth_context is None:
+            raise ValueError("Retrosynthesis context not initialized")
+
+        logger.info("Synthesize tree leaf action received")
+        logger.info(f"Data: {data}")
+        node = self.retro_synth_context.node_ids[data["nodeId"]]
+
+        run_func = partial(
+            compute_templates_for_node,
+            node,
+            self.args.config_file,
+            self.retro_synth_context,
+            self.task_manager.websocket,
             self.task_manager.available_tools or list_server_urls(),
             self.molecule_name_format,
         )
@@ -450,9 +474,7 @@ class ActionManager:
         smiles = self.retro_synth_context.node_ids[data["nodeId"]].smiles
 
         # Clear subtree and levels for layouting
-        await self.websocket.send_json(
-            {"type": "subtree_delete", "node": {"id": parent_nodeid}}
-        )
+        await self.retro_synth_context.delete_subtree(parent_nodeid, self.websocket)
         await self.websocket.send_json(
             {
                 "type": "node_update",
@@ -469,7 +491,7 @@ class ActionManager:
         )
 
         run_func = partial(
-            optimize_molecule_retro,
+            ai_based_retrosynthesis,
             parent_nodeid,
             self.retro_synth_context,
             data.get("query", None),
@@ -482,6 +504,31 @@ class ActionManager:
         )
 
         asyncio.create_task(self.task_manager.run_task(run_func()))
+
+    async def handle_set_reaction_alternative(self, data: dict) -> None:
+        """Handle set-reaction-alternative action."""
+        if self.retro_synth_context is None:
+            raise ValueError("Retrosynthesis context not initialized")
+
+        # Get node
+        if data["nodeId"] not in self.retro_synth_context.node_ids:
+            await self._send_processing_message(
+                f"Cannot find node {data['nodeId']}", source="Agent"
+            )
+            await self.websocket.send_json({"type": "complete"})
+            return
+        node = self.retro_synth_context.node_ids[data["nodeId"]]
+        alt = data["alternativeId"]
+        if not node.reaction or not node.reaction.alternatives:
+            await self._send_processing_message(
+                f"No alternative found for {data['nodeId']}", source="Agent"
+            )
+            await self.websocket.send_json({"type": "complete"})
+            return
+
+        await set_reaction_alternative(
+            node, alt, self.retro_synth_context, self.websocket
+        )
 
     async def _send_processing_message(
         self, message: str, source: str | None = None, **kwargs

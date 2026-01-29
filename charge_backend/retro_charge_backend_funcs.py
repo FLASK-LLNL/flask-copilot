@@ -1,26 +1,23 @@
-import asyncio
-from concurrent.futures import ProcessPoolExecutor
 import os
 from fastapi import WebSocket
-from charge.clients.autogen import AutoGenAgent
-from charge.servers.AiZynthTools import RetroPlanner, ReactionPath
-from aizynth_backend_funcs import generate_tree_structure
+from charge.servers import AiZynthTools as azf
 from loguru import logger
 from callback_logger import CallbackLogger
-from typing import Literal, Optional, Union
+from typing import Any, Literal, Optional, Union, TYPE_CHECKING
+from collections import defaultdict, deque
 
 from backend_helper_funcs import (
     CallbackHandler,
-    RetrosynthesisContext,
     calculate_positions,
     highlight_node,
-    RetrosynthesisContext,
     Node,
     Edge,
     Reaction,
-    loop_executor,
+    ReactionAlternative,
+    PathwayStep,
 )
-from molecule_naming import smiles_to_html
+from retrosynthesis.context import RetrosynthesisContext
+from molecule_naming import smiles_to_html, MolNameFormat, is_purchasable
 
 from charge.tasks.RetrosynthesisTask import (
     TemplateFreeRetrosynthesisTask as RetrosynthesisTask,
@@ -28,6 +25,9 @@ from charge.tasks.RetrosynthesisTask import (
 )
 
 from charge.experiments.AutoGenExperiment import AutoGenExperiment
+
+if TYPE_CHECKING:
+    import aizynthfinder.reactiontree
 
 RETROSYNTH_UNCONSTRAINED_USER_PROMPT_TEMPLATE = (
     "Provide a retrosynthetic pathway for the target molecule {target_molecule}. "
@@ -51,36 +51,237 @@ RETROSYNTH_CONSTRAINED_USER_PROMPT_TEMPLATE = (
 )
 
 
-def run_retro_planner(config_file, smiles):
-    logger.info(f"Running RetroPlanner for SMILES: {smiles}")
-    planner = RetroPlanner(configfile=config_file)
+async def generate_nodes_for_molecular_graph(
+    reaction_path_dict: dict[int, azf.Node],
+    retro_synth_context: RetrosynthesisContext,
+    websocket: WebSocket,
+    start_level: int = 0,
+    molecule_name_format: Literal["brand", "iupac", "formula", "smiles"] = "brand",
+    include_root_node: bool = True,
+    root_node_id: str | None = None,
+) -> list[Node]:
+    """Generate nodes and edges from reaction path dict"""
+    nodes = []
+
+    # (node, level, parent node)
+    node_queue: list[tuple[azf.Node, int, Optional[Node]]] = []
+
+    # Determine traversal start
+    if not include_root_node:
+        if root_node_id is None:
+            raise ValueError(
+                "If include_root_node is False, a root node ID must be provided"
+            )
+        parent = retro_synth_context.node_ids[root_node_id]
+
+        # Start from AZF node 0's children
+        for child_id in reaction_path_dict[0].children:
+            child_node = reaction_path_dict[child_id]
+            node_queue.append((child_node, start_level + 1, parent))
+    else:
+        node_queue.append((reaction_path_dict[0], start_level, None))
+
+    while node_queue:
+        current_node, level, parent = node_queue.pop(0)
+        smiles = current_node.smiles
+        purchasable = current_node.purchasable
+        leaf = current_node.is_leaf
+        node_id_str = retro_synth_context.new_node_id()
+        hover_info = f"# Molecule\n\n**SMILES:** {smiles}\n\n"
+        if purchasable:
+            hover_info += "**Purchasable**? Yes\n"
+        else:
+            hover_info += "**Purchasable**? No\n"
+
+        node = Node(
+            id=node_id_str,
+            smiles=smiles,
+            label=smiles_to_html(smiles, molecule_name_format),
+            hoverInfo=hover_info,
+            level=level,
+            parentId=parent.id if parent is not None else None,
+            highlight=("red" if (leaf and not purchasable) else "normal"),
+        )
+        await retro_synth_context.add_node(node, parent, websocket)
+
+        if parent is not None and parent.reaction is None:
+            parent.reaction = Reaction(
+                "azf",
+                "Reaction found with AiZynthFinder",
+                highlight="yellow",
+                label="Template",
+                templatesSearched=False,
+            )
+            await retro_synth_context.update_node(parent, websocket)
+
+        for child_id in current_node.children:
+            child_node = reaction_path_dict[child_id]
+            node_queue.append((child_node, level + 1, node))
+
+    return nodes
+
+
+def make_reaction_alternative(
+    rpath: azf.ReactionPath,
+    id: int,
+    tree: "aizynthfinder.reactiontree.ReactionTree",
+    molecule_name_format: MolNameFormat,
+    all_inactive: bool = False,
+) -> ReactionAlternative | None:
+    """
+    Creates a reaction alternative object from a given route
+    """
+    try:
+        smarts = next(iter(tree.reactions())).metadata.get("template")
+    except StopIteration:
+        return None  # No reaction in tree
+    try:
+        prevalence = next(iter(tree.reactions())).metadata.get("library_occurence")
+    except StopIteration:
+        return None  # No reaction in tree
+    pathway = []
+
+    # BFS traversal over tree, merging precursors of each child for visualization purposes
+    # Each queue item is a tuple: (node, parent_index_in_previous_level)
+    queue = deque([(rpath.root, -1)])  # Root has no parent, use -1
+
+    while queue:
+        level_size = len(queue)
+        level_smiles = []
+        level_parents = []
+
+        for i in range(level_size):
+            node, parent_idx = queue.popleft()
+            level_smiles.append(node.smiles)
+            level_parents.append(parent_idx)
+
+            # Add children to queue for next level
+            if node.children:
+                for child_id in node.children:
+                    # Get the actual node from rpath.nodes using the child_id
+                    if hasattr(rpath, "nodes") and child_id in rpath.nodes:
+                        # Child's parent is at index i in the current level
+                        queue.append((rpath.nodes[child_id], i))
+
+        # Add this level as a pathway step
+        pathway.append(
+            PathwayStep(
+                level_smiles,
+                [smiles_to_html(s, molecule_name_format) for s in level_smiles],
+                level_parents,
+            )
+        )
+
+    return ReactionAlternative(
+        f"reaction_{rpath.root.node_id}_{id}",
+        f"Reaction {id+1} ({prevalence} occurences)",
+        "template",
+        "active" if id == 0 and not all_inactive else "available",
+        pathway,
+        disabled=False,
+        hoverInfo=f"Reaction SMARTS: `{smarts}`\n\nPattern appears {prevalence} times in database.",
+    )
+
+
+async def run_retro_planner(
+    config_file: str,
+    smiles: str,
+    clogger: CallbackLogger,
+    molecule_name_format: MolNameFormat,
+    reaction_id: str = "azf",
+    all_inactive: bool = False,
+) -> tuple[Reaction | None, list[azf.ReactionPath]]:
+    """
+    Runs AiZynthFinder (template-based multi-step retrosynthesis) on the given
+    SMILES string and returns a Reaction object with all the alternatives found.
+
+    :param config_file: Path to AiZynthFinder configuration yml file
+    :param smiles: SMILES string to use
+    :param clogger: Logger object that can return messages to the UI
+    :param molecule_name_format: Desired default formatting for molecule names
+    :param reaction_id: An optional string for a unique reaction ID
+    :param all_inactive: If True, does not activate the first alternative
+    :return: A 2-tuple of (Reaction object, list of routes) if routes found, or
+             ``(None, [])`` if nothing was discovered.
+    """
+    await clogger.info(f"Running RetroPlanner for SMILES: {smiles}")
+    report_init = False
+    if azf.RetroPlanner.finder is None:
+        report_init = True
+        await clogger.info("Initializing AiZynthFinder")
+    planner = azf.RetroPlanner(configfile=config_file)
+    if report_init:
+        await clogger.info("AiZynthFinder initialization complete")
 
     _, _, routes = planner.plan(smiles)
-    return routes, planner
+    if len(routes) == 0:  # No routes found
+        return None, []
+
+    assert planner.finder is not None
+    await clogger.info(f"Found {len(routes)} routes for {smiles}.")
+
+    trees = planner.finder.routes.reaction_trees
+    rpaths = [azf.ReactionPath(route) for route in routes]
+
+    # All other routes become reaction alternatives
+    alts: list[ReactionAlternative] = []
+    for i, rpath in enumerate(rpaths):
+        alt = make_reaction_alternative(
+            rpath, i, trees[i], molecule_name_format, all_inactive
+        )
+        if alt is not None:
+            alts.append(alt)
+
+    try:
+        root_smarts = next(iter(trees[0].reactions())).metadata.get("template")
+    except StopIteration:
+        return None, []
+    try:
+        root_prevalence = next(iter(trees[0].reactions())).metadata.get(
+            "library_occurence"
+        )
+    except StopIteration:
+        return None, []
+    return (
+        Reaction(
+            reaction_id,
+            f"""Reaction found with AiZynthFinder
+
+Pattern occurrences in database: {root_prevalence}
+
+Reaction SMARTS: `{root_smarts}`""",
+            highlight="yellow",
+            label="Template",
+            alternatives=alts,
+            templatesSearched=True,
+        ),
+        rpaths,
+    )
 
 
-async def generate_molecules(
+async def template_based_retrosynthesis(
     start_smiles: str,
     config_file: str,
     context: RetrosynthesisContext,
-    executor: ProcessPoolExecutor,
     websocket: WebSocket,
     available_tools: Optional[Union[str, list[str]]] = None,
     molecule_name_format: Literal["brand", "iupac", "formula", "smiles"] = "brand",
 ):
     """Stream positioned nodes and edges"""
-    clogger = CallbackLogger(websocket, source="generate_molecules")
+    clogger = CallbackLogger(websocket, source="template_based_retrosynthesis")
     await clogger.info(
         f"Planning retrosynthesis for: {start_smiles} with available tools: {available_tools}."
     )
 
-    # Generate and position entire tree upfront
-
+    # Generate root node
     root = Node(
         id="node_0",
         smiles=start_smiles,
         label=smiles_to_html(start_smiles, molecule_name_format),
-        hoverInfo=f"# Root molecule \n **SMILES:** {start_smiles}",
+        hoverInfo=f"""# Root molecule
+**SMILES:** {start_smiles}
+
+**Purchasable**? {'Yes' if is_purchasable(start_smiles) else 'No'}""",
         level=0,
         parentId=None,
         cost=None,
@@ -90,67 +291,100 @@ async def generate_molecules(
         x=100,
         y=100,
     )
-    await websocket.send_json({"type": "node", "node": root.json()})
+    context.reset()  # Clear context
+    await context.add_node(root, parent=None, websocket=websocket)
 
-    await clogger.info("Starting planning in executor...")
-
-    # Disable executor for now due to bad interaction with task_done callbacks
-    # routes, planner = await loop_executor(
-    #     executor, run_retro_planner, config_file, start_smiles
-    # )
-
-    routes, planner = run_retro_planner(config_file, start_smiles)
-    await clogger.info(f"Running RetroPlanner for SMILES: {start_smiles}")
-
-    context.node_id_to_planner[root.id] = planner
-
-    if not routes:
+    await clogger.info("Running AiZynthFinder...")
+    reaction, routes = await run_retro_planner(
+        config_file, start_smiles, clogger, molecule_name_format
+    )
+    if not reaction:
         await clogger.info(
             f"No synthesis routes found for {start_smiles}.",
             smiles=start_smiles,
         )
+        # Send empty reaction
+        root.reaction = Reaction(
+            "none",
+            'No exact or template-based reactions found.\n\nClick "Other Reactions..." to compute a path with FLASK AI.',
+            "empty",
+            label="No reaction",
+            templatesSearched=True,
+        )
+        await context.update_node(root, websocket)
         await websocket.send_json({"type": "complete"})
         return
-    await clogger.info(f"Found {len(routes)} routes for {start_smiles}.")
 
-    planner.last_route_used = 0
-    reaction_path = ReactionPath(route=routes[0])
-    nodes, edges = generate_tree_structure(reaction_path.nodes, context)
-    logger.info(f"Generated {len(nodes)} nodes and {len(edges)} edges.")
-
-    calculate_positions(nodes)
-
-    await websocket.send_json(
-        {
-            "type": "node_update",
-            "node": {
-                "id": root.id,
-                "highlight": "normal",
-                "reaction": Reaction(
-                    "azf",
-                    "Reaction found with AiZynthFinder",
-                    highlight="yellow",
-                    label="Template",
-                ).json(),
-            },
-        }
+    # Use first route by default
+    await generate_nodes_for_molecular_graph(
+        routes[0].nodes,
+        context,
+        websocket=websocket,
+        molecule_name_format=molecule_name_format,
+        include_root_node=False,
+        root_node_id=root.id,
     )
 
-    # Stream remaining nodes with edges
-    for node in nodes[1:]:
-        # Find edge for this node
-        edge = next((e for e in edges if e.toNode == node.id), None)
-
-        # Send node
-        await websocket.send_json({"type": "node", "node": node.json()})
-        if edge:
-            context.parents[node.id] = edge.fromNode
-            await websocket.send_json({"type": "edge", "edge": edge.json()})
-
+    # Notify frontend that computation completed
+    root.reaction = reaction
+    await context.update_node(root, websocket)
     await websocket.send_json({"type": "complete"})
 
 
-async def optimize_molecule_retro(
+async def compute_templates_for_node(
+    node: Node,
+    config_file: str,
+    context: RetrosynthesisContext,
+    websocket: WebSocket,
+    available_tools: Optional[Union[str, list[str]]] = None,
+    molecule_name_format: Literal["brand", "iupac", "formula", "smiles"] = "brand",
+):
+    """Computes all templates for node"""
+    clogger = CallbackLogger(websocket, source="compute_templates_for_node")
+    await clogger.info(
+        f"Planning retrosynthesis for node {node.id} with available tools: {available_tools}."
+    )
+    await clogger.info("Running AiZynthFinder...")
+    reaction, routes = await run_retro_planner(
+        config_file,
+        node.smiles,
+        clogger,
+        molecule_name_format,
+        all_inactive=True,
+    )
+
+    if not reaction:
+        await clogger.info(f"No template-based synthesis routes found for {node.id}.")
+        # Send empty reaction
+        if node.reaction is None:
+            node.reaction = Reaction(
+                "none",
+                'No exact or template-based reactions found.\n\nClick "Other Reactions..." to compute a path with FLASK AI.',
+                "empty",
+                label="No reaction",
+                templatesSearched=True,
+            )
+        else:
+            node.reaction.templatesSearched = True
+        await context.update_node(node, websocket)
+        await websocket.send_json({"type": "complete"})
+        return
+
+    if node.reaction is None or node.reaction.id == "azf":
+        node.reaction = reaction
+    else:
+        if not node.reaction.alternatives:
+            node.reaction.alternatives = []
+        if reaction.alternatives:
+            node.reaction.alternatives.extend(reaction.alternatives)
+        node.reaction.templatesSearched = True
+
+    # Notify frontend that template reactions were computed
+    await context.update_node(node, websocket)
+    await websocket.send_json({"type": "complete"})
+
+
+async def ai_based_retrosynthesis(
     node_id: str,
     context: RetrosynthesisContext,
     query: Optional[str],
@@ -161,15 +395,13 @@ async def optimize_molecule_retro(
     available_tools: Optional[Union[str, list[str]]] = None,
     molecule_name_format: Literal["brand", "iupac", "formula", "smiles"] = "brand",
 ):
-    """Optimize a molecule using retrosynthesis by node ID"""
+    """Performs template-free retrosynthesis using the AI orchestrator."""
+    clogger = CallbackLogger(websocket, source="ai_based_retrosynthesis")
     current_node = context.node_ids.get(node_id)
-    cur_node_id = context.azf_nodes.get(node_id)
-    assert current_node is not None, f"Node ID {node_id} not found"
-    assert cur_node_id is not None, f"AZF Node ID {node_id} not found"
-
-    cur_node_id = cur_node_id.node_id
-
-    clogger = CallbackLogger(websocket, source="optimize_molecule_retro")
+    if current_node is None:
+        await clogger.error(f"Node ID {node_id} not found")
+        await websocket.send_json({"type": "complete"})
+        return
 
     await clogger.info(
         f"Finding synthesis pathway to {current_node.smiles}... with available tools: {available_tools}.",
@@ -238,74 +470,196 @@ async def optimize_molecule_retro(
     await highlight_node(current_node, websocket, False)
 
     level = current_node.level + 1
-    num_nodes = len(context.node_ids)
 
     reasoning_summary = result.reasoning_summary
     await clogger.info(
         f"Retrosynthesis reasoning summary for {current_node.smiles}:\n{reasoning_summary}",
     )
 
+    # Add reaction alternative
+    ai_alternative = ReactionAlternative(
+        f"ai_reaction_{node_id}",
+        "AI-Generated Reaction",
+        "ai",
+        "active",
+        [
+            PathwayStep([current_node.smiles], [current_node.label], [-1]),
+            PathwayStep(
+                list(result.reactants_smiles_list),
+                [
+                    smiles_to_html(s, molecule_name_format)
+                    for s in result.reactants_smiles_list
+                ],
+                [0 for _ in range(len(result.reactants_smiles_list))],
+            ),
+        ],
+        reasoning_summary,
+        disabled=False,
+    )
+    if current_node.reaction is not None:
+        if current_node.reaction.alternatives is None:
+            current_node.reaction.alternatives = []
+        for alt in current_node.reaction.alternatives:
+            if alt.status == "active":
+                alt.status = "available"
+        current_node.reaction.alternatives.insert(0, ai_alternative)
+        alternatives = current_node.reaction.alternatives
+        templates_searched = current_node.reaction.templatesSearched
+    else:
+        alternatives = [ai_alternative]
+        templates_searched = False
+
+    ai_reaction = Reaction(
+        "ai_reaction_0",
+        reasoning_summary,
+        highlight="red",
+        label="FLASK AI",
+        alternatives=alternatives,
+        templatesSearched=templates_searched,
+    )
+    current_node.reaction = ai_reaction
+
     # Update node with discovered reaction
     context.node_id_to_reasoning_summary[node_id] = reasoning_summary
-    await websocket.send_json(
-        {
-            "type": "node_update",
-            "node": {
-                "id": node_id,
-                "reaction": Reaction(
-                    "ai_reaction_0",
-                    reasoning_summary,
-                    highlight="red",
-                    label="FLASK AI",
-                ).json(),
-            },
-        }
-    )
+    await context.update_node(current_node, websocket)
 
-    nodes: list[Node] = []
-    edges: list[Edge] = []
-    for i, smiles in enumerate(result.reactants_smiles_list):
+    context.recalculate_nodes_per_level()
+
+    new_nodes: list[Node] = []
+    purchasable: list[bool] = []
+    for smiles in result.reactants_smiles_list:
+        node_id_str = context.new_node_id()
+        purch = is_purchasable(smiles)
         node = Node(
-            f"node_{num_nodes+i}",
+            node_id_str,
             smiles,
             smiles_to_html(smiles, molecule_name_format),
-            "Discovered",
+            f"Discovered by {runner.model}.\n\n**Purchasable**? {'Yes' if purch else 'No'}",
             level,
             current_node.id,
         )
-        context.node_ids[node.id] = node
-        context.parents[node.id] = node_id
+        new_nodes.append(node)
+        purchasable.append(purch)
+        # Add and stream node directly
+        await context.add_node(node, current_node, websocket)
 
-        # Find paths for the leaf nodes
-        routes, planner = run_retro_planner(config_file, smiles)
-
-        if not routes:
-            await clogger.warning(f"No routes found for {smiles}. Skipping...")
+    for node, purch in zip(new_nodes, purchasable):
+        if purch:  # Skip purchasable nodes unless explicitly asked for
             continue
 
-        await clogger.info(f"Found {len(routes)} routes for {smiles}.")
+        # Highlight node because we are looking for templates
+        await highlight_node(node, websocket, True)
 
-        context.node_id_to_planner[node.id] = planner
-        planner.last_route_used = 0
-
-        reaction_path = ReactionPath(
-            route=routes[0],
-            cur_num_nodes=num_nodes,
-            root_parent_node_id=cur_node_id,
+        # Find paths for the leaf nodes
+        reaction, routes = await run_retro_planner(
+            config_file, node.smiles, clogger, molecule_name_format
         )
-        child_nodes, child_edges = generate_tree_structure(
-            reaction_path.nodes, context, start_level=level
+        if reaction is None:
+            await clogger.warning(f"No routes found for {node.smiles}. Skipping...")
+            continue
+        node.reaction = reaction
+
+        # Use child nodes and edges of the first route
+        await generate_nodes_for_molecular_graph(
+            routes[0].nodes,
+            context,
+            websocket,
+            start_level=level,
+            include_root_node=False,
+            root_node_id=node.id,
         )
+        await context.update_node(node, websocket)  # Also disables highlight
 
-        # Stream child nodes and edges
-        nodes.extend(child_nodes)
-        edges.extend(child_edges)
+    await websocket.send_json({"type": "complete"})
 
-        num_nodes = reaction_path.num_nodes
 
-    calculate_positions(nodes, context.nodes_per_level[level])
+async def set_reaction_alternative(
+    node: Node,
+    alternative_id: str,
+    context: RetrosynthesisContext,
+    websocket: WebSocket,
+):
+    """
+    Sets a reaction alternative
 
-    for node, edge in zip(nodes, edges):
-        await websocket.send_json({"type": "node", "node": node.json()})
-        await websocket.send_json({"type": "edge", "edge": edge.json()})
+    :param node: Parent node to reset the reaction thereof
+    :param alternative_id: The unique ID of the alternative to choose
+    :param context: Retrosynthesis context object
+    :param websocket: Websocket to client
+    """
+    clogger = CallbackLogger(websocket, source="set_reaction_alternative")
+    assert node.reaction is not None
+    assert node.reaction.alternatives is not None
+    try:
+        alternative = next(
+            a for a in node.reaction.alternatives if a.id == alternative_id
+        )
+    except StopIteration:
+        await clogger.info(f"Alternative {alternative_id} not found for {node.id}")
+        await websocket.send_json({"type": "complete"})
+        return
+
+    node.reaction.hoverInfo = alternative.hoverInfo
+
+    # Clear subtree and levels for layouting
+    await context.delete_subtree(node.id, websocket)
+
+    # Update reaction information
+    for alt in node.reaction.alternatives:
+        if alt.status == "active":
+            alt.status = "available"
+    alternative.status = "active"
+    if alternative.type == "ai":
+        node.reaction.label = "FLASK AI"
+        node.reaction.highlight = "red"
+    elif alternative.type == "template":
+        node.reaction.label = "Template"
+        node.reaction.highlight = "yellow"
+    elif alternative.type == "exact":
+        node.reaction.label = "Exact"
+        node.reaction.highlight = "normal"
+
+    node.highlight = "normal"
+    await context.update_node(node, websocket)
+
+    # Loop over new nodes/edges (from the second level onwards)
+    step_nodes: dict[int, list[Node]] = defaultdict(list)
+    step_nodes[0].append(node)
+    for i, step in enumerate(alternative.pathway):
+        if i == 0:  # Skip root
+            continue
+        for smiles, label, parent in zip(step.smiles, step.label, step.parents):
+            try:
+                parent_node = step_nodes[i - 1][parent]
+
+                child_node = Node(
+                    id=context.new_node_id(),
+                    smiles=smiles,
+                    label=label,
+                    hoverInfo=f"""# Molecule
+**SMILES:** {smiles}
+
+**Purchasable**? {'Yes' if is_purchasable(smiles) else 'No'}""",
+                    level=node.level + i,
+                    parentId=parent_node.id,
+                )
+                step_nodes[i].append(child_node)
+                await context.add_node(child_node, parent_node, websocket)
+
+                # Create reaction for parent node if there are children
+                if parent_node.reaction is None:
+                    parent_node.reaction = Reaction(
+                        "subreaction",
+                        'Click "Other Reactions..." to compute alternative paths',
+                        highlight=node.reaction.highlight,
+                        label=node.reaction.label,
+                        templatesSearched=False,
+                    )
+                    await context.update_node(parent_node, websocket)
+            except IndexError as e:
+                await clogger.error(
+                    f"Index error when setting reaction alternative: parent index {parent} "
+                    f"out of range for step {i-1}. Error: {e}"
+                )
+
     await websocket.send_json({"type": "complete"})

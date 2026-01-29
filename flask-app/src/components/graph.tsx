@@ -14,7 +14,12 @@ export const useGraphState = (): MoleculeGraphState => {
     return { offset, setOffset, zoom, setZoom };
 };
 
-export const MoleculeGraph: React.FC<MoleculeGraphProps> = ({nodes, edges, ctx, autoZoom, setAutoZoom, handleNodeClick, handleReactionClick, rdkitModule, offset, setOffset, zoom, setZoom}) => {
+export const MoleculeGraph: React.FC<MoleculeGraphProps> = ({
+  nodes, edges, ctx, autoZoom, setAutoZoom,
+  handleNodeClick, handleReactionClick, handleReactionCardClick,
+  selectedReactionNodeId, reactionSidebarOpen,
+  rdkitModule, offset, setOffset, zoom, setZoom
+}) => {
     const [isDragging, setIsDragging] = useState<boolean>(false);
     const [dragStart, setDragStart] = useState<Position>({ x: 0, y: 0 });
     const [hoveredNode, setHoveredNode] = useState<TreeNode | null>(null);
@@ -244,13 +249,31 @@ export const MoleculeGraph: React.FC<MoleculeGraphProps> = ({nodes, edges, ctx, 
         }
     };
 
+    // Calculate SVG dimensions based on node positions
+    const getSvgDimensions = (): { width: number, height: number } => {
+        if (nodes.length === 0) return { width: 3000, height: 2000 };
+
+        let maxX = 0;
+        let maxY = 0;
+
+        nodes.forEach(node => {
+            maxX = Math.max(maxX, node.x + BOX_WIDTH + 500); // Add buffer for curves
+            maxY = Math.max(maxY, node.y + BOX_HEIGHT + 200);
+        });
+
+        return {
+            width: Math.max(maxX, 3000),
+            height: Math.max(maxY, 2000)
+        };
+    };
+
     return (
         <>
             <div
                 ref={containerRef}
                 className={`graph-container ${
-                autoZoom ? 'graph-cursor-default' : isDragging ? 'graph-cursor-grabbing' : 'graph-cursor-grab'
-                }`}
+                    autoZoom ? 'graph-cursor-default' : isDragging ? 'graph-cursor-grabbing' : 'graph-cursor-grab'
+                } ${reactionSidebarOpen ? 'opacity-70' : ''}`}  // ADD DIMMING
                 onMouseDown={handleMouseDown}
                 style={{ userSelect: 'none' }}
             >
@@ -262,10 +285,11 @@ export const MoleculeGraph: React.FC<MoleculeGraphProps> = ({nodes, edges, ctx, 
                 >
                 {edges.filter(edge => getNode(edge.fromNode) && getNode(edge.toNode)).map((edge, idx) => {
                     const midpoint = getCurveMidpoint(getNode(edge.fromNode), getNode(edge.toNode));
+                    const svgDims = getSvgDimensions();
                     return (
                     <div key={edge.id} className="absolute pointer-events-none">
-                        <svg className="absolute" style={{ width: '3000px', height: '2000px', top: 0, left: 0 }}>
-                        <g className={`animate-fadeIn ${isEdgeHighlighted(edge.fromNode, hoveredReaction) ? 'edge-highlighted' : (edge.status === 'computing' ? 'edge-computing' : 'edge-normal')}`} style={{ animationDelay: `${idx * 50}ms` }}>
+                        <svg className="absolute" style={{ width: `${svgDims.width}px`, height: `${svgDims.height}px`, top: 0, left: 0 }}>
+                        <g className={`animate-fadeIn ${isEdgeHighlighted(edge.fromNode) ? 'edge-highlighted' : (edge.status === 'computing' ? 'edge-computing' : 'edge-normal')}`} style={{ animationDelay: `${idx * 50}ms` }}>
                             <path
                             d={getCurvedPath(getNode(edge.fromNode), getNode(edge.toNode))}
                             strokeWidth="3"
@@ -351,12 +375,25 @@ export const MoleculeGraph: React.FC<MoleculeGraphProps> = ({nodes, edges, ctx, 
                             }
                         }}
                         onMouseLeave={() => setHoveredReaction(null)}
-                        onClick={(e) => handleReactionClick(e, node)}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                            handleReactionClick(e, node);  // Left-click opens sidebar
+                        }}
                         >
-                        <div className={`reaction-button ${REACTION_STYLES[node.reaction.highlight || 'normal']}`}>
-                            {node.reaction.label && (node.reaction.label)}
-                            {!node.reaction.label && (<>&nbsp;</>)}
-                        </div>
+                        <div className={`reaction-button ${REACTION_STYLES[node.reaction.highlight || 'normal']} ${
+                            selectedReactionNodeId === node.id ? 'ring-2 ring-white ring-offset-2 ring-offset-slate-900' : ''
+                        }`}>
+                            <div className="flex items-center justify-between gap-2">
+                                <span className="flex-1 truncate">
+                                {node.reaction.label || '\u00A0'}
+                                </span>
+                                {node.reaction.alternatives && node.reaction.alternatives.length > 1 && (
+                                <span className="absolute -top-3 -right-3 min-w-[18px] h-[18px] flex items-center justify-center text-[9px] bg-white/90 text-purple-900 px-1 rounded-full font-bold shadow-md">
+                                    +{node.reaction.alternatives.length - 1}
+                                </span>
+                                )}
+                            </div>
+                            </div>
                         </div>
                     )}
                     </>
