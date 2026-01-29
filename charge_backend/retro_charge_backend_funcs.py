@@ -85,7 +85,6 @@ async def generate_nodes_for_molecular_graph(
         current_node, level, parent = node_queue.pop(0)
         smiles = current_node.smiles
         purchasable = current_node.purchasable
-        leaf = current_node.is_leaf
         node_id_str = retro_synth_context.new_node_id()
         hover_info = f"# Molecule\n\n**SMILES:** {smiles}\n\n"
         if purchasable:
@@ -100,7 +99,8 @@ async def generate_nodes_for_molecular_graph(
             hoverInfo=hover_info,
             level=level,
             parentId=parent.id if parent is not None else None,
-            highlight=("red" if (leaf and not purchasable) else "normal"),
+            highlight="normal",
+            purchasable=purchasable,
         )
         await retro_synth_context.add_node(node, parent, websocket)
 
@@ -274,6 +274,7 @@ async def template_based_retrosynthesis(
     )
 
     # Generate root node
+    purchasable = is_purchasable(start_smiles)
     root = Node(
         id="node_0",
         smiles=start_smiles,
@@ -281,12 +282,13 @@ async def template_based_retrosynthesis(
         hoverInfo=f"""# Root molecule
 **SMILES:** {start_smiles}
 
-**Purchasable**? {'Yes' if is_purchasable(start_smiles) else 'No'}""",
+**Purchasable**? {'Yes' if purchasable else 'No'}""",
         level=0,
         parentId=None,
         cost=None,
         bandgap=None,
         yield_=None,
+        purchasable=purchasable,
         highlight="yellow",
         x=100,
         y=100,
@@ -537,6 +539,7 @@ async def ai_based_retrosynthesis(
             f"Discovered by {runner.model}.\n\n**Purchasable**? {'Yes' if purch else 'No'}",
             level,
             current_node.id,
+            purchasable=purch,
         )
         new_nodes.append(node)
         purchasable.append(purch)
@@ -632,6 +635,7 @@ async def set_reaction_alternative(
             try:
                 parent_node = step_nodes[i - 1][parent]
 
+                purchasable = is_purchasable(smiles)
                 child_node = Node(
                     id=context.new_node_id(),
                     smiles=smiles,
@@ -639,9 +643,10 @@ async def set_reaction_alternative(
                     hoverInfo=f"""# Molecule
 **SMILES:** {smiles}
 
-**Purchasable**? {'Yes' if is_purchasable(smiles) else 'No'}""",
+**Purchasable**? {'Yes' if purchasable else 'No'}""",
                     level=node.level + i,
                     parentId=parent_node.id,
+                    purchasable=purchasable,
                 )
                 step_nodes[i].append(child_node)
                 await context.add_node(child_node, parent_node, websocket)
