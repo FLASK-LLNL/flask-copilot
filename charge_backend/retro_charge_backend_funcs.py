@@ -85,7 +85,6 @@ async def generate_nodes_for_molecular_graph(
         current_node, level, parent = node_queue.pop(0)
         smiles = current_node.smiles
         purchasable = current_node.purchasable
-        leaf = current_node.is_leaf
         node_id_str = retro_synth_context.new_node_id()
         hover_info = f"# Molecule\n\n**SMILES:** {smiles}\n\n"
         if purchasable:
@@ -100,7 +99,8 @@ async def generate_nodes_for_molecular_graph(
             hoverInfo=hover_info,
             level=level,
             parentId=parent.id if parent is not None else None,
-            highlight=("red" if (leaf and not purchasable) else "normal"),
+            highlight="normal",
+            purchasable=purchasable,
         )
         await retro_synth_context.add_node(node, parent, websocket)
 

@@ -1,6 +1,6 @@
 // Molecule graph view
 import { Loader2, Move } from "lucide-react";
-import { useRef, useCallback, useEffect, useState } from "react";
+import { useRef, useCallback, useEffect, useState, useMemo } from "react";
 import { BOX_HEIGHT, BOX_WIDTH, NODE_STYLES, REACTION_STYLES } from "../constants";
 import {MoleculeGraphProps, MoleculeGraphState, Position, Reaction, TreeNode} from "../types";
 import { MoleculeSVG } from "./molecule";
@@ -13,6 +13,15 @@ export const useGraphState = (): MoleculeGraphState => {
 
     return { offset, setOffset, zoom, setZoom };
 };
+
+type NodeStyleKey = keyof typeof NODE_STYLES;
+function getNodeStyle(highlight: NodeStyleKey, purchasable: boolean | null,
+                      leaf: boolean): string {
+    if (highlight === "normal" && leaf && purchasable === false) {
+        return NODE_STYLES['red'];
+    }
+    return NODE_STYLES[highlight];
+}
 
 export const MoleculeGraph: React.FC<MoleculeGraphProps> = ({
   nodes, edges, ctx, autoZoom, setAutoZoom,
@@ -34,6 +43,13 @@ export const MoleculeGraph: React.FC<MoleculeGraphProps> = ({
     const isEdgeHighlighted = useCallback((nodeId: string): boolean => {
         return hoveredReaction?.id == nodeId;
     }, [hoveredReaction]);
+
+    const nodesWithChildren = useMemo(
+    () => new Set(edges.map(e => e.fromNode)),
+    [edges]
+    );
+
+    const isLeaf = (nodeId: string) => !nodesWithChildren.has(nodeId);
 
     const handleMouseDown = (e: React.MouseEvent<HTMLDivElement>): void => {
     if (e.button !== 0) return;
@@ -342,7 +358,7 @@ export const MoleculeGraph: React.FC<MoleculeGraphProps> = ({
                     onMouseLeave={() => setHoveredNode(null)}
                     onClick={(e) => handleNodeClick(e, node)}
                     >
-                    <div className={`node-card ${NODE_STYLES[node.highlight || 'normal']}`}>
+                    <div className={`node-card ${getNodeStyle(node.highlight || "normal", node.purchasable ?? null, isLeaf(node.id))}`}>
                         <MoleculeSVG smiles={node.smiles} height={80} rdkitModule={rdkitModule} />
                         <div className="node-label">
                         <div className="node-label-text" dangerouslySetInnerHTML={{ __html: node.label }}></div>
