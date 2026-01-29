@@ -42,6 +42,7 @@ export interface TreeNode {
   density?: number | null;
   yield?: number | null;
   sascore?: number | null;
+  purchasable?: boolean | null;
   x: number;
   y: number;
   highlight?: keyof typeof NODE_STYLES;

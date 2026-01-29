@@ -68,6 +68,7 @@ class Node:
     yield_: Optional[float] = None
     density: Optional[float] = None
     sascore: Optional[float] = None
+    purchasable: Optional[bool] = None
     # Reaction properties
     reaction: Optional[Reaction] = None
 
