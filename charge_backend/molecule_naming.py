@@ -113,7 +113,10 @@ def smiles_to_iupac_online(smiles):
 _STOCK_DATABASE_PATH = os.getenv("FLASK_STOCK_DB", "/data/zinc_stock.hdf5")
 if os.path.exists(_STOCK_DATABASE_PATH):
     STOCK_DATABASE = pd.read_hdf(_STOCK_DATABASE_PATH, "table")
-    STOCK_DATABASE.set_index("inchi_key", inplace=True)  # Optimize InChI key queries
+    # The below line does not work in a uvicorn setting because the Pandas
+    # dataframe does not survive the fork well
+    # STOCK_DATABASE.set_index("inchi_key", inplace=True)  # Optimize InChI key queries
+    STOCK_DATABASE = set(STOCK_DATABASE["inchi_key"])
 else:
     STOCK_DATABASE = None
 
@@ -127,4 +130,6 @@ def is_purchasable(smiles: str) -> bool:
     inchi: str = str(Chem.MolToInchi(mol))
     inchi_key = Chem.InchiToInchiKey(inchi)
 
-    return inchi_key in STOCK_DATABASE.index
+    return (
+        inchi_key in STOCK_DATABASE
+    )  # or `STOCK_DATABASE.index` if using dataframe directly
