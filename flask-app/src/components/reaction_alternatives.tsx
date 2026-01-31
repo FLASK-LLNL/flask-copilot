@@ -1,7 +1,7 @@
 // components/reaction_alternatives_sidebar.tsx
 import React, { useState, useRef, useMemo } from 'react';
 import { X, Loader2, FlaskConical, BookOpen, Check, ChevronDown, ChevronLeft, ChevronRight, AlertCircle, MessageSquareMore, Clock, Sparkles } from 'lucide-react';
-import { ReactionAlternative } from '../types';
+import { ReactionAlternative, RdkitjsReactionPayload } from '../types';
 
 // Helper function to strip HTML tags from text for tooltips
 const stripHtml = (html: string): string => {
@@ -25,6 +25,7 @@ interface ReactionAlternativesSidebarProps {
   isComputingTemplates: boolean;
   templatesSearched: boolean;
   rdkitModule: any;
+  reactionPayload?: RdkitjsReactionPayload;
 }
 
 // Mini molecule preview component
@@ -191,7 +192,8 @@ export const ReactionAlternativesSidebar: React.FC<ReactionAlternativesSidebarPr
     isComputing,
     isComputingTemplates,
     templatesSearched,
-    rdkitModule
+    rdkitModule,
+    reactionPayload
   } = props;
 
 
@@ -308,6 +310,7 @@ export const ReactionAlternativesSidebar: React.FC<ReactionAlternativesSidebarPr
         </div>
 
         <div ref={scrollContainerRef} className="flex-1 overflow-y-auto custom-scrollbar p-4 space-y-4">
+          {/* Atom-diff highlighting moved to main graph hover */}
           <div className="pb-2 border-b border-secondary">
             <div className="flex gap-2">
               <button
