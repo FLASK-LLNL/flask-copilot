@@ -435,11 +435,18 @@ def _reaction_atom_changes_mols(
     product_atoms_mapped: Set[int] = set()
     reactant_instance_maps: List[List[Dict[int, int]]] = [[] for _ in reactants]
 
-    # Policy: exclude carbon atoms from highlights unless a bond ORDER changes
-    # at that atom (single<->double, aromatic<->single, etc.). Bond formation/
-    # cleavage (bond present vs missing) does not qualify.
+    # Highlight policy:
+    # - Only highlight atoms that are local to the reaction center (bond changes),
+    #   plus immediate leaving group atoms attached to those centers.
+    # - Exclude carbon atoms unless a bond ORDER changes at that atom
+    #   (single<->double, aromatic<->single, etc.). Bond formation/cleavage
+    #   (bond present vs missing) does not qualify.
     reactant_bond_order_changed_atoms: List[Set[int]] = [set() for _ in reactants]
     product_bond_order_changed_atoms_main: Set[int] = set()
+    reactant_bond_change_endpoints: List[Set[int]] = [set() for _ in reactants]
+    product_bond_change_endpoints_main: Set[int] = set()
+    reactant_sig_changed_atoms: List[Set[int]] = [set() for _ in reactants]
+    product_sig_changed_atoms_main: Set[int] = set()
 
     # For product atoms that map back to reactant atoms, keep a single source:
     # (reactant_index, reactant_atom_index, reactant_instance_id)
@@ -600,6 +607,8 @@ def _reaction_atom_changes_mols(
                 if pb is None or r_bt != p_bt:
                     reactant_changed[ri].update([a1, a2])
                     product_changed_main.update([int(p1), int(p2)])
+                    reactant_bond_change_endpoints[ri].update([a1, a2])
+                    product_bond_change_endpoints_main.update([int(p1), int(p2)])
 
                 # Track bond ORDER changes (but not bond formation/cleavage)
                 if pb is not None and r_bt != p_bt:
@@ -613,6 +622,8 @@ def _reaction_atom_changes_mols(
                 if r_sig != p_sig:
                     reactant_changed[ri].add(int(a_r))
                     product_changed_main.add(int(a_p))
+                    reactant_sig_changed_atoms[ri].add(int(a_r))
+                    product_sig_changed_atoms_main.add(int(a_p))
 
     # New bonds formed in the product between mapped atoms.
     # This catches bond formation between atoms originating from different reactants
@@ -637,12 +648,17 @@ def _reaction_atom_changes_mols(
             product_changed_main.update([p1, p2])
             reactant_changed[r1i].add(r1a)
             reactant_changed[r2i].add(r2a)
+            product_bond_change_endpoints_main.update([p1, p2])
+            reactant_bond_change_endpoints[r1i].add(r1a)
+            reactant_bond_change_endpoints[r2i].add(r2a)
             continue
 
         rb = reactants[r1i].GetBondBetweenAtoms(int(r1a), int(r2a))
         if rb is None or rb.GetBondType() != b.GetBondType():
             product_changed_main.update([p1, p2])
             reactant_changed[r1i].update([r1a, r2a])
+            product_bond_change_endpoints_main.update([p1, p2])
+            reactant_bond_change_endpoints[r1i].update([r1a, r2a])
 
         # Track bond ORDER changes (but not bond formation)
         if rb is not None and rb.GetBondType() != b.GetBondType():
@@ -650,6 +666,45 @@ def _reaction_atom_changes_mols(
             reactant_bond_order_changed_atoms[r1i].update([r1a, r2a])
 
     product_changed[main_pi] = product_changed_main
+
+    # Restrict highlights to reaction-center neighborhood.
+    # - Keep atoms that are endpoints of bond changes.
+    # - Also keep atoms whose local signature changed (e.g., proton transfers,
+    #   new bonds to previously-unmapped atoms).
+    # - Also keep immediate neighbors of those endpoints, but only if those
+    #   neighbors are currently marked as changed (this captures leaving groups
+    #   like halides which are often unmapped).
+    def neighborhood_keep(m: Chem.Mol, seeds: Set[int]) -> Set[int]:
+        keep = set(int(i) for i in seeds)
+        for ai in list(keep):
+            a = m.GetAtomWithIdx(int(ai))
+            for nb in a.GetNeighbors():
+                keep.add(int(nb.GetIdx()))
+        return keep
+
+    # First, apply neighborhood restriction.
+    for ri, r in enumerate(reactants):
+        seeds = (
+            set(reactant_bond_change_endpoints[ri])
+            | set(reactant_sig_changed_atoms[ri])
+            | set(reactant_bond_order_changed_atoms[ri])
+        )
+        keep = neighborhood_keep(r, seeds)
+        reactant_changed[ri] = set(int(i) for i in reactant_changed[ri] if int(i) in keep)
+
+    for pi, pm in enumerate(products):
+        if pi == main_pi:
+            seeds = (
+                set(product_bond_change_endpoints_main)
+                | set(product_sig_changed_atoms_main)
+                | set(product_bond_order_changed_atoms_main)
+            )
+            keep = neighborhood_keep(pm, seeds)
+            product_changed[pi] = set(int(i) for i in product_changed[pi] if int(i) in keep)
+        else:
+            # We don't currently compute bond-change endpoints for side products.
+            # Suppress their highlights to avoid unrelated/spectator groups.
+            product_changed[pi] = set()
 
     # Apply carbon-filter rule: exclude carbon unless bond ORDER changed.
     def filter_carbons(m: Chem.Mol, changed: Set[int], allow: Set[int]) -> Set[int]:
