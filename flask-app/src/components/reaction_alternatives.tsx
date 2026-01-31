@@ -1,7 +1,7 @@
 // components/reaction_alternatives_sidebar.tsx
 import React, { useState, useRef, useMemo } from 'react';
 import { X, Loader2, FlaskConical, BookOpen, Check, ChevronDown, ChevronLeft, ChevronRight, AlertCircle, MessageSquareMore, Clock, Sparkles } from 'lucide-react';
-import { ReactionAlternative, RdkitjsReactionPayload } from '../types';
+import { ReactionAlternative } from '../types';
 
 // Helper function to strip HTML tags from text for tooltips
 const stripHtml = (html: string): string => {
@@ -25,7 +25,6 @@ interface ReactionAlternativesSidebarProps {
   isComputingTemplates: boolean;
   templatesSearched: boolean;
   rdkitModule: any;
-  reactionPayload?: RdkitjsReactionPayload;
 }
 
 // Mini molecule preview component
@@ -192,8 +191,7 @@ export const ReactionAlternativesSidebar: React.FC<ReactionAlternativesSidebarPr
     isComputing,
     isComputingTemplates,
     templatesSearched,
-    rdkitModule,
-    reactionPayload
+    rdkitModule
   } = props;
 
 

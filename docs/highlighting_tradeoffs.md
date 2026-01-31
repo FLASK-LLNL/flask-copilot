@@ -31,9 +31,9 @@ Pros:
 
 Cons:
 - **Atom index mismatch risk**: backend computes `highlight_atom_idxs` against its RDKit molecule ordering, but the frontend recreates molecules from SMILES in rdkit.js.
-- When atom ordering differs, highlights may land on the wrong atoms (e.g., highlighted carbons instead of the intended oxygen/leaving group).
+- When atom ordering differs, highlights may land on the wrong atoms.
 
-### MolBlock-based highlights (rejected)
+### MolBlock-based highlights
 
 Pros:
 - Correctness: atom indices from the backend match the rendered molecule exactly.

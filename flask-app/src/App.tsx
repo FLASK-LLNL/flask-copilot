@@ -1337,7 +1337,6 @@ const ChemistryTool: React.FC = () => {
                   isComputingTemplates={isComputingTemplates}
                   templatesSearched={(treeNodes.find(n => n.id === selectedReactionNode.id)?.reaction?.templatesSearched) ?? selectedReactionNode.reaction.templatesSearched}
                   rdkitModule={rdkitModule}
-                  reactionPayload={treeNodes.find(n => n.id === selectedReactionNode.id)?.reaction?.reactionPayload || selectedReactionNode.reaction.reactionPayload}
                 />
               )}
             </div>

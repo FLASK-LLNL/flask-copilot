@@ -95,31 +95,4 @@ export function renderMolWithHighlights(
   }
 }
 
-export function renderReactionPayload(
-  RDKit: RdkitModule,
-  payload: RdkitjsReactionPayload,
-  opts?: { width?: number; height?: number },
-): { reactantsSvg: string[]; productsSvg: string[] } {
-  const width = opts?.width ?? 120
-  const height = opts?.height ?? 90
-
-  const reactantsSvg = payload.reactants.map((m) =>
-    renderMolWithHighlights(RDKit, m.molblock, m.highlight_atom_idxs, {
-      highlightRgb: payload.highlight_rgb,
-      highlightAlpha: payload.highlight_alpha,
-      width,
-      height,
-    }),
-  )
-
-  const productsSvg = payload.products.map((m) =>
-    renderMolWithHighlights(RDKit, m.molblock, m.highlight_atom_idxs, {
-      highlightRgb: payload.highlight_rgb,
-      highlightAlpha: payload.highlight_alpha,
-      width,
-      height,
-    }),
-  )
-
-  return { reactantsSvg, productsSvg }
-}
+// Note: reaction-level rendering moved into the main graph hover highlighting.
