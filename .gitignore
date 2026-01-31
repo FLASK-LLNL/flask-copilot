@@ -149,6 +149,3 @@ __pycache__/
 
 # Public assets
 flask-app/public/rdkit/
-/rdkitjs_bundle
-tal_run_server.sh
-/azf
