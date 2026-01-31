@@ -28,6 +28,7 @@ export interface Reaction {
   highlight: keyof typeof NODE_STYLES;
   alternatives?: ReactionAlternative[];
   templatesSearched: boolean;  // Whether to show the "Search Templates" button
+  reactionPayload?: RdkitjsReactionPayload;
 }
 
 export interface TreeNode {
@@ -205,6 +206,28 @@ export interface MoleculeSVGProps {
   smiles: string;
   height?: number;
   rdkitModule: RDKitModule | null;
+  highlightAtomIdxs?: number[];
+  highlightRgb?: RGB;
+  highlightAlpha?: number;
+}
+
+// rdkit.js payload types for reaction highlighting
+export type RGB = [number, number, number];
+
+export interface RdkitjsMolPayload {
+  molblock: string;
+  smiles: string;
+  highlight_atom_idxs: number[];
+  highlight_atom_mapnums: number[];
+}
+
+export interface RdkitjsReactionPayload {
+  version: 'rdkitjs-reaction-payload/v1';
+  reactants: RdkitjsMolPayload[];
+  products: RdkitjsMolPayload[];
+  main_product_index: number;
+  highlight_rgb: RGB;
+  highlight_alpha: number;
 }
 
 export interface MarkdownTextProps {
