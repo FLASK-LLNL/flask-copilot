@@ -1326,16 +1326,16 @@ const ChemistryTool: React.FC = () => {
                 <ReactionAlternativesSidebar
                   isOpen={reactionSidebarOpen}
                   onClose={handleCloseReactionAlternativesSidebar}
-                  productMolecule={selectedReactionNode.label} // Strip HTML
-                  productSmiles={selectedReactionNode.smiles}
-                  alternatives={stableAlternatives}
+                  productMolecule={(treeNodes.find(n => n.id === selectedReactionNode.id)?.label) || selectedReactionNode.label}
+                  productSmiles={(treeNodes.find(n => n.id === selectedReactionNode.id)?.smiles) || selectedReactionNode.smiles}
+                  alternatives={(treeNodes.find(n => n.id === selectedReactionNode.id)?.reaction?.alternatives) || stableAlternatives}
                   onSelectAlternative={handleSelectAlternative}
                   onComputeTemplates={handleComputeTemplates}
                   onComputeFlaskAI={handleComputeFlaskAI}
                   wsConnected={wsConnected}
                   isComputing={isComputing}
                   isComputingTemplates={isComputingTemplates}
-                  templatesSearched={selectedReactionNode.reaction.templatesSearched}
+                  templatesSearched={(treeNodes.find(n => n.id === selectedReactionNode.id)?.reaction?.templatesSearched) ?? selectedReactionNode.reaction.templatesSearched}
                   rdkitModule={rdkitModule}
                 />
               )}
