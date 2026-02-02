@@ -9,6 +9,7 @@ import os
 import click
 import sys
 from loguru import logger
+import uvicorn
 
 from charge.servers.server_utils import update_mcp_network, get_hostname
 from tool_registration import register_tool_server
@@ -57,9 +58,11 @@ def main(
     )
     mcp.tool()(calculate_property_hf)
 
-    update_mcp_network(mcp, host, port)
-
-    mcp.run(transport="sse")
+    asgi_app = mcp.get_asgi_app()
+    if asgi_app:
+        uvicorn.run(asgi_app, host=host or "0.0.0.0", port=port)
+    else:
+        logger.error("Could not access FastMCP ASGI app")
 
 
 if __name__ == "__main__":
