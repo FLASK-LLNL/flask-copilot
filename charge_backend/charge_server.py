@@ -128,7 +128,7 @@ async def check_mcp_servers_endpoint(data: CheckServersRequest):
 
     Uses existing workbench utilities for validation.
     """
-    from tool_registration import _check_mcp_connectivity
+    from lc_conductor.tool_registration import _check_mcp_connectivity
 
     results = {}
 
