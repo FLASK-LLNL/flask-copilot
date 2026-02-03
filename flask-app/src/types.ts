@@ -83,30 +83,16 @@ export interface ToolMap {
   selectedTools?: SelectableTool[];
 }
 
-export interface ToolServer {
-  id: string;
-  url: string;
-  name?: string;  // Optional display name
-}
-
-export type MoleculeNameFormat = 'brand' | 'iupac' | 'formula' | 'smiles';
-
 export interface RunSettings {
   moleculeName: MoleculeNameFormat;
   promptDebugging: boolean;
 }
 
-export interface OrchestratorSettings {
-  backend: string;
-  useCustomUrl: boolean;
-  customUrl?: string;
-  model: string;
-  useCustomModel?: boolean;
-  apiKey: string;
-  backendLabel: string;
-  moleculeName?: MoleculeNameFormat;
-  toolServers?: ToolServer[];
-}
+import type {
+  OrchestratorSettings,
+  ToolServer,
+  MoleculeNameFormat
+} from 'lcc-conductor';
 
 // Optimization customization options
 export interface OptimizationCustomization {

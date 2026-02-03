@@ -7,15 +7,19 @@ import 'remark-gfm';
 import 'react-syntax-highlighter';
 import 'react-syntax-highlighter/dist/esm/styles/prism';
 
-import { WS_SERVER, VERSION } from './config';
+import { WS_SERVER, VERSION, HTTP_SERVER } from './config';
 import { DEFAULT_CUSTOM_SYSTEM_PROMPT, PROPERTY_NAMES } from './constants';
-import { TreeNode, Edge, ContextMenuState, SidebarMessage, Tool, WebSocketMessageToServer, WebSocketMessage, SelectableTool, Experiment, OrchestratorSettings, OptimizationCustomization, ReactionAlternative } from './types';
+import { TreeNode, Edge, ContextMenuState, SidebarMessage, Tool, WebSocketMessageToServer, WebSocketMessage, SelectableTool, Experiment, OptimizationCustomization, ReactionAlternative } from './types';
 
 import { loadRDKit } from './components/molecule';
 import { ReasoningSidebar, useSidebarState } from './components/sidebar';
 import { MoleculeGraph, useGraphState } from './components/graph';
 import { ProjectSidebar, useProjectSidebar, useProjectManagement } from './components/project_sidebar';
-import { SettingsButton, BACKEND_OPTIONS } from './components/settings_button';
+import {
+  SettingsButton,
+  BACKEND_OPTIONS,
+  type OrchestratorSettings
+} from 'lcc-conductor';
 import { CombinedCustomizationModal } from './components/combined_customization_modal';
 import { Modal } from './components/modal';
 
@@ -1054,6 +1058,7 @@ const ChemistryTool: React.FC = () => {
                 onServerAdded={refreshToolsList}
                 onServerRemoved={refreshToolsList}
                 username={username}
+                httpServerUrl={HTTP_SERVER}
               />
 
               {/* WebSocket Status Indicator */}
