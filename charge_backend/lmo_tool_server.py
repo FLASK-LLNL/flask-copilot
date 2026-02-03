@@ -12,7 +12,7 @@ from loguru import logger
 import uvicorn
 
 from charge.servers.server_utils import update_mcp_network, get_hostname
-from tool_registration import register_tool_server
+from tool_registration import register_tool_server, get_asgi_app
 
 
 @click.command()
@@ -96,9 +96,9 @@ def main(
 
     mcp = LMO_MCP.mcp
 
-    asgi_app = mcp.get_asgi_app()
+    asgi_app = get_asgi_app(mcp)
     if asgi_app:
-        uvicorn.run(asgi_app, host=host or "0.0.0.0", port=port)
+        uvicorn.run(asgi_app, host=host or "0.0.0.0", port=port, factory=True)
     else:
         logger.error("Could not access FastMCP ASGI app")
 

@@ -13,7 +13,7 @@ from charge.servers.AiZynthTools import is_molecule_synthesizable, RetroPlanner
 
 import charge.servers.retrosynthesis_reaction_server as RETRO_MCP
 from charge.servers.server_utils import update_mcp_network, get_hostname
-from tool_registration import register_tool_server
+from tool_registration import register_tool_server, get_asgi_app
 
 
 @click.command()
@@ -48,7 +48,7 @@ def main(port, host, name, copilot_port, copilot_host, config):
     RetroPlanner.initialize(configfile=config)
     mcp.tool()(is_molecule_synthesizable)
 
-    asgi_app = mcp.get_asgi_app()
+    asgi_app = get_asgi_app(mcp)
     if asgi_app:
         uvicorn.run(asgi_app, host=host or "0.0.0.0", port=port)
     else:

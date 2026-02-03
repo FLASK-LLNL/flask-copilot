@@ -17,6 +17,8 @@ import time
 import os
 import re
 import asyncio
+from mcp.server.fastmcp import FastMCP
+
 from charge.utils.mcp_workbench_utils import (
     _setup_mcp_workbenches,
     _close_mcp_workbenches,
@@ -531,3 +533,12 @@ def list_server_urls() -> list[str]:
 async def list_server_tools(urls: list[str]):
     workbenches = [McpWorkbench(SseServerParams(url=server)) for server in urls]
     return await _list_wb_tools(workbenches)
+
+
+def get_asgi_app(mcp: FastMCP):
+    asgi_app = (
+        getattr(mcp, "sse_app", None)
+        or getattr(mcp, "asgi_app", None)
+        or getattr(mcp, "_app", None)
+    )
+    return asgi_app
