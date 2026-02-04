@@ -308,7 +308,6 @@ export const ReactionAlternativesSidebar: React.FC<ReactionAlternativesSidebarPr
         </div>
 
         <div ref={scrollContainerRef} className="flex-1 overflow-y-auto custom-scrollbar p-4 space-y-4">
-          {/* Atom-diff highlighting moved to main graph hover */}
           <div className="pb-2 border-b border-secondary">
             <div className="flex gap-2">
               <button
