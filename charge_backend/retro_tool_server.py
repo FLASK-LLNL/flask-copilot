@@ -50,7 +50,7 @@ def main(port, host, name, copilot_port, copilot_host, config):
 
     asgi_app = get_asgi_app(mcp)
     if asgi_app:
-        uvicorn.run(asgi_app, host=host or "0.0.0.0", port=port)
+        uvicorn.run(asgi_app, host=host or "0.0.0.0", port=port, factory=True)
     else:
         logger.error("Could not access FastMCP ASGI app")
 
