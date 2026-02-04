@@ -40,9 +40,12 @@ export default defineConfig({
     'window.APP_CONFIG.WS_SERVER': JSON.stringify(process.env.WS_SERVER || 'ws://localhost:8001/ws'),
     'window.APP_CONFIG.VERSION': JSON.stringify(process.env.SERVER_VERSION || '')
   },
+  resolve: {
+    dedupe: ['react', 'react-dom']
+  },
   optimizeDeps: {
     // Force pre-bundling in dev AND specify for build
-    include: ['scheduler'],
+    include: ['react', 'react-dom', 'lcc-conductor', 'scheduler'],
     force: true  // Force re-optimization
   },
   build: {
