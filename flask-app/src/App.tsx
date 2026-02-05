@@ -15,11 +15,13 @@ import { loadRDKit } from './components/molecule';
 import { ReasoningSidebar, useSidebarState } from './components/sidebar';
 import { MoleculeGraph, useGraphState } from './components/graph';
 import { ProjectSidebar, useProjectSidebar, useProjectManagement } from './components/project_sidebar';
+
 import {
   SettingsButton,
   BACKEND_OPTIONS,
   type OrchestratorSettings
 } from 'lcc-conductor';
+
 import { CombinedCustomizationModal } from './components/combined_customization_modal';
 import { Modal } from './components/modal';
 

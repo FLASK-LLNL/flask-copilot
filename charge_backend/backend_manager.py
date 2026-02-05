@@ -43,7 +43,6 @@ class FlaskActionManager(ActionManager):
     ):
         super().__init__(task_manager, experiment, args, username)
         self.run_settings: RunSettings = RunSettings()
-
         self.websocket = task_manager.websocket
 
     def setup_retro_synth_context(self) -> None:
