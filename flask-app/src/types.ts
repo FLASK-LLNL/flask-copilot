@@ -226,6 +226,7 @@ export interface RdkitjsReactionPayload {
   main_product_index: number;
   highlight_rgb: RGB;
   highlight_alpha: number;
+  reactant_mcs_smarts?: (string | null)[];
 }
 
 export interface MarkdownTextProps {

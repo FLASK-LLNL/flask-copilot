@@ -6,6 +6,7 @@ from typing import Dict, Iterable, List, Optional, Sequence, Set, Tuple
 
 from PIL import Image, ImageDraw
 from rdkit import Chem
+from rdkit.Chem.rdChemReactions import ReactionFromSmarts
 from rdkit.Chem import rdFMCS
 from rdkit.Chem.Scaffolds import MurckoScaffold
 from rdkit.Chem.Draw import rdMolDraw2D
@@ -21,28 +22,51 @@ class ReactionAtomChanges:
     reactant_changed_atoms: List[Set[int]]
     product_changed_atoms: List[Set[int]]
     main_product_index: int
+    reactant_mcs_smarts: List[Optional[str]]
 
 
 def _parse_reaction_smiles(reaction_smiles: str) -> Tuple[List[Chem.Mol], List[Chem.Mol]]:
-    """Parse reaction SMILES: reactants>>products.
+    """Parse reaction SMILES using RDKit's reaction parser.
 
-    Reactants and products are dot-separated.
+    Supports both "reactants>>products" and "reactants>agents>products".
+    Agents are ignored.
     """
 
-    if not reaction_smiles or ">>" not in reaction_smiles:
+    s = (reaction_smiles or "").strip()
+    if not s:
         return [], []
-    left, right = reaction_smiles.split(">>", 1)
 
-    def parse_side(side: str) -> List[Chem.Mol]:
-        mols: List[Chem.Mol] = []
-        for token in [t.strip() for t in side.split(".") if t.strip()]:
-            m = Chem.MolFromSmiles(token)
-            if m is None:
-                raise ValueError(f"Invalid SMILES in reaction: {token}")
-            mols.append(m)
-        return mols
+    try:
+        rxn = ReactionFromSmarts(str(s), useSmiles=True)
+    except Exception as e:
+        raise ValueError(f"Invalid reaction SMILES: {s}") from e
 
-    return parse_side(left.strip()), parse_side(right.strip())
+    if rxn is None:
+        raise ValueError(f"Invalid reaction SMILES: {s}")
+
+    reactants: List[Chem.Mol] = []
+    products: List[Chem.Mol] = []
+
+    for i in range(int(rxn.GetNumReactantTemplates())):
+        m0 = rxn.GetReactantTemplate(int(i))
+        if m0 is None:
+            raise ValueError(f"Invalid reactant in reaction SMILES: {s}")
+        # Copy the template mol: RDKit reaction objects can own the underlying
+        # template storage; returning a view can lead to invalid mols once the
+        # reaction goes out of scope.
+        m = Chem.Mol(m0)
+        Chem.SanitizeMol(m)
+        reactants.append(m)
+
+    for i in range(int(rxn.GetNumProductTemplates())):
+        m0 = rxn.GetProductTemplate(int(i))
+        if m0 is None:
+            raise ValueError(f"Invalid product in reaction SMILES: {s}")
+        m = Chem.Mol(m0)
+        Chem.SanitizeMol(m)
+        products.append(m)
+
+    return reactants, products
 
 
 def _ensure_mols(items: Sequence[object], *, label: str) -> List[Chem.Mol]:
@@ -81,7 +105,11 @@ def _largest_mol_index(mols: Sequence[Chem.Mol]) -> int:
     return best_i
 
 
-def _mcs_pattern(m1: Chem.Mol, m2: Chem.Mol, timeout_s: int = 2) -> Optional[Chem.Mol]:
+def _mcs_pattern(
+    m1: Chem.Mol,
+    m2: Chem.Mol,
+    timeout_s: int = 2,
+) -> Tuple[Optional[Chem.Mol], Optional[str]]:
     try:
         res = rdFMCS.FindMCS(
             [m1, m2],
@@ -94,11 +122,11 @@ def _mcs_pattern(m1: Chem.Mol, m2: Chem.Mol, timeout_s: int = 2) -> Optional[Che
             maximizeBonds=True,
         )
     except Exception:
-        return None
+        return None, None
     smarts = getattr(res, "smartsString", None)
     if not smarts:
-        return None
-    return Chem.MolFromSmarts(smarts)
+        return None, None
+    return Chem.MolFromSmarts(smarts), str(smarts)
 
 
 def _pick_best_match(
@@ -424,13 +452,25 @@ def _reaction_atom_changes_mols(
     mcs_timeout_s: int = 2,
 ) -> ReactionAtomChanges:
     if not reactants or not products:
-        return ReactionAtomChanges([set() for _ in reactants], [set() for _ in products], -1)
+        return ReactionAtomChanges(
+            [set() for _ in reactants],
+            [set() for _ in products],
+            -1,
+            [None for _ in reactants],
+        )
 
     main_pi = _largest_mol_index(products)
     if main_pi < 0:
-        return ReactionAtomChanges([set() for _ in reactants], [set() for _ in products], -1)
+        return ReactionAtomChanges(
+            [set() for _ in reactants],
+            [set() for _ in products],
+            -1,
+            [None for _ in reactants],
+        )
 
     main_product = products[main_pi]
+
+    reactant_mcs_smarts: List[Optional[str]] = [None for _ in reactants]
 
     product_atoms_mapped: Set[int] = set()
     reactant_instance_maps: List[List[Dict[int, int]]] = [[] for _ in reactants]
@@ -466,9 +506,10 @@ def _reaction_atom_changes_mols(
 
     for ri in reactant_order:
         r = reactants[ri]
-        patt = _mcs_pattern(r, main_product, timeout_s=int(mcs_timeout_s))
+        patt, smarts = _mcs_pattern(r, main_product, timeout_s=int(mcs_timeout_s))
         if patt is None:
             continue
+        reactant_mcs_smarts[int(ri)] = smarts
 
         r_match, p_best = _pick_best_match(patt, r, main_product, product_atoms_mapped)
         if not r_match:
@@ -683,14 +724,24 @@ def _reaction_atom_changes_mols(
         return keep
 
     # First, apply neighborhood restriction.
+    # If we have no reaction-center seeds but we did detect unmapped atoms, keep those
+    # changes (and their neighbors) rather than suppressing all highlighting.
     for ri, r in enumerate(reactants):
         seeds = (
             set(reactant_bond_change_endpoints[ri])
             | set(reactant_sig_changed_atoms[ri])
             | set(reactant_bond_order_changed_atoms[ri])
         )
+        used_fallback = False
+        if not seeds and reactant_changed[ri]:
+            seeds = set(int(i) for i in reactant_changed[ri])
+            used_fallback = True
+
         keep = neighborhood_keep(r, seeds)
-        reactant_changed[ri] = set(int(i) for i in reactant_changed[ri] if int(i) in keep)
+        if used_fallback:
+            reactant_changed[ri] = set(int(i) for i in keep)
+        else:
+            reactant_changed[ri] = set(int(i) for i in reactant_changed[ri] if int(i) in keep)
 
     for pi, pm in enumerate(products):
         if pi == main_pi:
@@ -699,8 +750,16 @@ def _reaction_atom_changes_mols(
                 | set(product_sig_changed_atoms_main)
                 | set(product_bond_order_changed_atoms_main)
             )
+            used_fallback = False
+            if not seeds and product_changed[pi]:
+                seeds = set(int(i) for i in product_changed[pi])
+                used_fallback = True
+
             keep = neighborhood_keep(pm, seeds)
-            product_changed[pi] = set(int(i) for i in product_changed[pi] if int(i) in keep)
+            if used_fallback:
+                product_changed[pi] = set(int(i) for i in keep)
+            else:
+                product_changed[pi] = set(int(i) for i in product_changed[pi] if int(i) in keep)
         else:
             # We don't currently compute bond-change endpoints for side products.
             # Suppress their highlights to avoid unrelated/spectator groups.
@@ -717,11 +776,19 @@ def _reaction_atom_changes_mols(
         return out
 
     for ri, r in enumerate(reactants):
-        reactant_changed[ri] = filter_carbons(r, reactant_changed[ri], reactant_bond_order_changed_atoms[ri])
+        reactant_changed[ri] = filter_carbons(            
+            r,
+            reactant_changed[ri],
+            reactant_bond_order_changed_atoms[ri],
+        )
 
     for pi, pm in enumerate(products):
         if pi == main_pi:
-            product_changed[pi] = filter_carbons(pm, product_changed[pi], product_bond_order_changed_atoms_main)
+            product_changed[pi] = filter_carbons(
+                pm,
+                product_changed[pi],
+                product_bond_order_changed_atoms_main,
+            )
         else:
             # No bond-order-change tracking for non-main products; carbon highlights are removed.
             product_changed[pi] = filter_carbons(pm, product_changed[pi], set())
@@ -730,6 +797,7 @@ def _reaction_atom_changes_mols(
         reactant_changed_atoms=reactant_changed,
         product_changed_atoms=product_changed,
         main_product_index=int(main_pi),
+        reactant_mcs_smarts=reactant_mcs_smarts,
     )
 
 
@@ -754,35 +822,3 @@ def reaction_atom_changes_from_lists(
     r_mols = _ensure_mols(reactants, label="reactants")
     p_mols = _ensure_mols(products, label="products")
     return _reaction_atom_changes_mols(r_mols, p_mols, mcs_timeout_s=int(mcs_timeout_s))
-
-
-# Optional: Pillow drawing helpers retained for parity but not required by payload builder
-def _draw_mol(
-    mol: Chem.Mol,
-    *,
-    size: Tuple[int, int] = (300, 300),
-    highlight_atoms: Optional[Iterable[int]] = None,
-    highlight_rgb: Tuple[int, int, int] = (220, 0, 0),
-    highlight_alpha: float = 0.45,
-) -> Image.Image:
-    drawer = rdMolDraw2D.MolDraw2DCairo(int(size[0]), int(size[1]))
-    hl = sorted(set(int(x) for x in (highlight_atoms or [])))
-    a = float(highlight_alpha)
-    if a < 0.0:
-        a = 0.0
-    if a > 1.0:
-        a = 1.0
-    # Blend highlight colour towards white for softer highlight
-    r = int(round(a * int(highlight_rgb[0]) + (1.0 - a) * 255.0))
-    g = int(round(a * int(highlight_rgb[1]) + (1.0 - a) * 255.0))
-    b = int(round(a * int(highlight_rgb[2]) + (1.0 - a) * 255.0))
-    hl_colors = {i: (r / 255.0, g / 255.0, b / 255.0) for i in hl}
-    rdMolDraw2D.PrepareAndDrawMolecule(
-        drawer,
-        mol,
-        highlightAtoms=hl,
-        highlightAtomColors=hl_colors,
-    )
-    drawer.FinishDrawing()
-    png_bytes = drawer.GetDrawingText()
-    return Image.open(io.BytesIO(png_bytes))
