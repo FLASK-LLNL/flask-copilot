@@ -215,14 +215,12 @@ export interface MoleculeSVGProps {
 export type RGB = [number, number, number];
 
 export interface RdkitjsMolPayload {
-  molblock: string;
   smiles: string;
   highlight_atom_idxs: number[];
   highlight_atom_mapnums: number[];
 }
 
 export interface RdkitjsReactionPayload {
-  version: 'rdkitjs-reaction-payload/v1';
   reactants: RdkitjsMolPayload[];
   products: RdkitjsMolPayload[];
   main_product_index: number;
