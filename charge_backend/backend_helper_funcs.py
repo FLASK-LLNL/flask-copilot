@@ -2,7 +2,7 @@ from loguru import logger
 from fastapi import WebSocket
 import asyncio
 import json
-from typing import Dict, Optional, Literal, Tuple
+from typing import Any, Dict, Optional, Literal, Tuple
 from dataclasses import dataclass, asdict
 from collections import defaultdict
 
@@ -46,7 +46,7 @@ class Reaction:
     label: Optional[str] = None
     alternatives: Optional[list[ReactionAlternative]] = None
     templatesSearched: bool = False
-    reactionPayload: Optional[dict] = None
+    reactionPayload: Optional[Dict[str, Any]] = None
 
     def json(self):
         return asdict(self)
@@ -103,6 +103,22 @@ class ModelMessage:
             if "smiles" in ret:
                 del ret["smiles"]
         return ret
+
+
+@dataclass(frozen=True)
+class RdkitjsMolPayload:
+    """Best-practice payload for rdkit.js rendering.
+
+    - Use a MolBlock to preserve atom ordering across Python -> JS.
+    - Provide highlight atom indices for direct rdkit.js highlighting.
+    - Also include 1-based indices (highlight_atom_mapnums) as a stable debugging aid.
+      These are NOT atom-map numbers.
+    """
+
+    molblock: str
+    smiles: str
+    highlight_atom_idxs: list[int]
+    highlight_atom_mapnums: list[int]
 
 
 def get_price(smiles: str) -> float:

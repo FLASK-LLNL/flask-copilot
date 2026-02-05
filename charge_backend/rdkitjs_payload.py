@@ -7,23 +7,10 @@ from rdkit import Chem
 
 import rdkit_mol_differ as mol_differ
 
+from backend_helper_funcs import RdkitjsMolPayload
+
 
 MolInput = Union[str, Chem.Mol]
-
-
-@dataclass(frozen=True)
-class RdkitjsMolPayload:
-    """Best-practice payload for rdkit.js rendering.
-
-    - Use a MolBlock to preserve atom ordering across Python -> JS.
-    - Provide highlight atom indices for direct rdkit.js highlighting.
-    - Also include atom-map numbers (1..N per molecule) for debugging / future use.
-    """
-
-    molblock: str
-    smiles: str
-    highlight_atom_idxs: List[int]
-    highlight_atom_mapnums: List[int]
 
 
 @dataclass(frozen=True)
