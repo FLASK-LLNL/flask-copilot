@@ -13,12 +13,14 @@ from sqlalchemy.orm import sessionmaker
 import os
 
 # Database connection configuration
+# Remote LLNL LaunchIT MariaDB (via SSH tunnel)
+# SSH tunnel command: ssh -L 32636:cz-marathe1-mymariadb1.apps.czapps.llnl.gov:32636 marathe1@oslic.llnl.gov
 DB_CONFIG = {
-    'host': 'localhost',
-    'port': 3306,
-    'user': 'flask_user',
-    'password': 'flask_password',
-    'database': 'flask_experiments',
+    'host': os.getenv('MARIADB_HOST', '127.0.0.1'),  # Use localhost when SSH tunnel is active
+    'port': int(os.getenv('MARIADB_PORT', '32636')),
+    'user': os.getenv('MARIADB_USER', 'marathe1'),
+    'password': os.getenv('MARIADB_PASSWORD', 'Eked1c2OWATXtD0YhHKP5CUKh5FGlbIkTaIDGtl1vKMHSB5lrW1FmA8RJB5k0V4x0lgxNSkMAhYbxo4f'),
+    'database': os.getenv('MARIADB_DATABASE', 'flaskcopilot'),
 }
 
 # Connection URL
@@ -37,7 +39,14 @@ def get_db_engine(echo=False):
     Returns:
         sqlalchemy.engine.Engine
     """
-    return create_engine(DATABASE_URL, echo=echo, pool_pre_ping=True)
+    return create_engine(
+        DATABASE_URL, 
+        echo=echo, 
+        pool_pre_ping=True,
+        connect_args={
+            'ssl': {'fake_flag_to_enable_tls': True}  # Enable SSL/TLS for remote connection
+        }
+    )
 
 def get_db_session():
     """

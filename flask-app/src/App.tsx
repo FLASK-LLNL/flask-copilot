@@ -887,7 +887,11 @@ const ChemistryTool: React.FC = () => {
       console.log('Skipping checkpoint - experiment is complete');
       return;
     }
-    sessionPersistence.saveSession(getSessionStateRef.current());
+    sessionPersistence.saveSession(
+      getSessionStateRef.current(),
+      false,
+      { checkpoint: true, name: `Checkpoint ${new Date().toISOString().replace('T', ' ').slice(0, 19)}` }
+    );
   }, [sessionPersistence]);
 
   // Function to manually trigger a checkpoint (always saves, ignores experiment complete status)
@@ -895,7 +899,11 @@ const ChemistryTool: React.FC = () => {
     console.log('Manual checkpoint triggered');
     const state = getSessionStateRef.current();
     // For manual checkpoint, save all current state regardless of experiment status
-    sessionPersistence.saveSession(state, true); // force save
+    sessionPersistence.saveSession(
+      state,
+      true,
+      { checkpoint: true, name: `Manual Checkpoint ${new Date().toISOString().replace('T', ' ').slice(0, 19)}` }
+    );
     setCheckpointDropdownOpen(false);
   }, [sessionPersistence]);
 

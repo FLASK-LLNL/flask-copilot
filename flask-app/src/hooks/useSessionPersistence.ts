@@ -70,7 +70,7 @@ export interface SessionPersistenceState {
 }
 
 export interface SessionPersistenceActions {
-  saveSession: (state: SessionState, force?: boolean) => Promise<void>;
+  saveSession: (state: SessionState, force?: boolean, options?: { checkpoint?: boolean; name?: string }) => Promise<void>;
   loadSession: () => Promise<SessionState | null>;
   clearSession: () => Promise<void>;
   setServerSessionId: (id: string | null) => void;
@@ -92,18 +92,30 @@ export const useSessionPersistence = (): SessionPersistenceState & SessionPersis
   const [resumeAttempted, setResumeAttempted] = useState(false);
   
   const isSavingRef = useRef(false);
+  const dbSessionIdRef = useRef<string | null>(null);
   const pendingResumeRef = useRef<{ sessionId: string | null; smiles: string; problemType: string } | null>(null);
+  const saveQueueRef = useRef<Array<{
+    state: SessionState;
+    checkpoint: boolean;
+    name?: string;
+    resolve: () => void;
+  }>>([]);
+  const processingQueueRef = useRef(false);
 
-  const saveSession = useCallback(async (state: SessionState, force = false): Promise<void> => {
-    // Only save if there's meaningful data or force save
-    if (!force && (!state.treeNodes || state.treeNodes.length === 0) && !state.smiles) return;
-    
-    // Prevent concurrent saves
-    if (isSavingRef.current) return;
+  useEffect(() => {
+    dbSessionIdRef.current = dbSessionId;
+  }, [dbSessionId]);
+
+  const processSaveQueue = useCallback(async (): Promise<void> => {
+    if (processingQueueRef.current) return;
+    const next = saveQueueRef.current.shift();
+    if (!next) return;
+
+    processingQueueRef.current = true;
     isSavingRef.current = true;
     setIsSaving(true);
     setSaveError(null);
-    
+
     try {
       const response = await fetch(`${HTTP_SERVER}/api/sessions/save`, {
         method: 'POST',
@@ -111,28 +123,56 @@ export const useSessionPersistence = (): SessionPersistenceState & SessionPersis
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          sessionId: dbSessionId,
-          state: state,
+          sessionId: next.checkpoint ? null : dbSessionIdRef.current,
+          name: next.name,
+          state: next.state,
         }),
       });
-      
+
       if (response.ok) {
         const data: SessionResponse = await response.json();
         setDbSessionId(data.sessionId);
         setLastSaved(new Date(data.lastModified));
         console.log('Session saved to database:', data.sessionId);
+        next.resolve();
       } else {
         console.error('Failed to save session to database:', response.status);
         setSaveError(`Save failed: ${response.status}`);
+        next.resolve();
       }
     } catch (error) {
       console.error('Failed to save session to database:', error);
       setSaveError('Save failed: network error');
+      next.resolve();
     } finally {
       isSavingRef.current = false;
       setIsSaving(false);
+      processingQueueRef.current = false;
+      if (saveQueueRef.current.length > 0) {
+        void processSaveQueue();
+      }
     }
-  }, [dbSessionId]);
+  }, []);
+
+  const saveSession = useCallback(async (
+    state: SessionState,
+    force = false,
+    options?: { checkpoint?: boolean; name?: string }
+  ): Promise<void> => {
+    // Only save if there's meaningful data or force save
+    if (!force && (!state.treeNodes || state.treeNodes.length === 0) && !state.smiles) return;
+
+    const checkpoint = options?.checkpoint ?? false;
+    const name = options?.name;
+
+    return new Promise<void>((resolve) => {
+      saveQueueRef.current.push({ state, checkpoint, name, resolve });
+
+      if (!processingQueueRef.current) {
+        void processSaveQueue();
+      }
+    });
+  }, [processSaveQueue]);
 
   const loadSession = useCallback(async (): Promise<SessionState | null> => {
     try {
