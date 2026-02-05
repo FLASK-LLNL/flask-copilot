@@ -22,7 +22,7 @@ from backend_helper_funcs import (
     get_price,
     CallbackHandler,
 )
-from molecule_naming import smiles_to_html
+from moleculedb.molecule_naming import smiles_to_html, MolNameFormat
 
 # TODO: Convert this to a dataclass
 MOLECULE_HOVER_TEMPLATE = (
@@ -61,7 +61,7 @@ async def generate_lead_molecule(
     initial_level: int = 0,
     initial_node_id: int = 0,
     initial_x_position: int = 50,
-    molecule_name_format: Literal["brand", "iupac", "formula", "smiles"] = "brand",
+    molecule_name_format: MolNameFormat = "brand",
     enable_constraints: bool = False,
     molecular_similarity: float = 0.7,
     diversity_penalty: float = 0.0,

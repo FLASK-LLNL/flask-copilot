@@ -69,7 +69,7 @@ def smiles_to_html(
 
     # First, try to find a canonical or IUPAC name
     if molecule_name_format in ("brand", "iupac"):
-        inchi = Chem.MolToInchi(mol)
+        inchi = str(Chem.MolToInchi(mol))
         name = inchi_lookup(inchi, molecule_name_format == "iupac")
         if name:
             return name
@@ -108,28 +108,3 @@ def smiles_to_iupac_online(smiles):
         return response.text
     except requests.exceptions.HTTPError:
         return smiles
-
-
-_STOCK_DATABASE_PATH = os.getenv("FLASK_STOCK_DB", "/data/zinc_stock.hdf5")
-if os.path.exists(_STOCK_DATABASE_PATH):
-    STOCK_DATABASE = pd.read_hdf(_STOCK_DATABASE_PATH, "table")
-    # The below line does not work in a uvicorn setting because the Pandas
-    # dataframe does not survive the fork well
-    # STOCK_DATABASE.set_index("inchi_key", inplace=True)  # Optimize InChI key queries
-    STOCK_DATABASE = set(STOCK_DATABASE["inchi_key"])
-else:
-    STOCK_DATABASE = None
-
-
-def is_purchasable(smiles: str) -> bool:
-    if Chem is None or STOCK_DATABASE is None:
-        return False
-    mol = Chem.MolFromSmiles(smiles)
-    if mol is None:  # Invalid SMILES
-        return False
-    inchi: str = str(Chem.MolToInchi(mol))
-    inchi_key = Chem.InchiToInchiKey(inchi)
-
-    return (
-        inchi_key in STOCK_DATABASE
-    )  # or `STOCK_DATABASE.index` if using dataframe directly

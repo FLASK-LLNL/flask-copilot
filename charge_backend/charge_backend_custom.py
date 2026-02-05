@@ -7,7 +7,7 @@ from charge.experiments.AutoGenExperiment import AutoGenExperiment
 from charge.tasks.Task import Task
 from charge.servers.log_progress import LOG_PROGRESS_SYSTEM_PROMPT
 from backend_helper_funcs import Node, CallbackHandler
-from molecule_naming import smiles_to_html
+from moleculedb.molecule_naming import smiles_to_html, MolNameFormat
 
 
 async def run_custom_problem(
@@ -17,7 +17,7 @@ async def run_custom_problem(
     experiment: AutoGenExperiment,
     available_tools: list[str],
     websocket: WebSocket,
-    molecule_name_format: Literal["brand", "iupac", "formula", "smiles"] = "brand",
+    molecule_name_format: MolNameFormat = "brand",
 ):
     task = Task(
         system_prompt=system_prompt + "\n\n" + LOG_PROGRESS_SYSTEM_PROMPT,
