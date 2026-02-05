@@ -80,8 +80,17 @@ async def find_exact_reactions(
     global REACTIONDB_HANDLE
     global db_entry_to_reaction
     if REACTIONDB_HANDLE is None:
-        REACTIONDB_HANDLE = ReactionDatabaseReader(REACTIONDB_PATH)
+        if os.path.exists(REACTIONDB_PATH):
+            REACTIONDB_HANDLE = ReactionDatabaseReader(REACTIONDB_PATH)
+        else:
+            await clogger.warning(f"Cannot load database at {REACTIONDB_PATH}")
+            return None
     if db_entry_to_reaction is None:
+        if not os.path.exists(REACTIONDB_PARSER_PATH):
+            await clogger.warning(
+                f"Database entry parser not found at {REACTIONDB_PARSER_PATH}"
+            )
+            return None
         mod = import_from_path("parse_entry", REACTIONDB_PARSER_PATH)
         if mod is None:
             await clogger.error(
