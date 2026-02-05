@@ -24,27 +24,6 @@ class RdkitjsReactionPayload:
     reactant_mcs_smarts: List[Optional[str]]
 
 
-def _ensure_mols(items: Sequence[MolInput], *, label: str) -> List[Chem.Mol]:
-    mols: List[Chem.Mol] = []
-    for x in items:
-        if x is None:
-            continue
-        if isinstance(x, Chem.Mol):
-            mols.append(x)
-            continue
-        if isinstance(x, str):
-            s = x.strip()
-            if not s:
-                continue
-            m = Chem.MolFromSmiles(s)
-            if m is None:
-                raise ValueError(f"Invalid SMILES in {label}: {s}")
-            mols.append(m)
-            continue
-        raise TypeError(f"Unsupported {label} item type: {type(x)!r}")
-    return mols
-
-
 def _mol_payload(
     m: Chem.Mol,
     *,
@@ -73,8 +52,8 @@ def build_rdkitjs_reaction_payload(
 ) -> RdkitjsReactionPayload:
     """Compute changed atoms and package MolBlocks + highlight indices for rdkit.js."""
 
-    r_mols = _ensure_mols(reactants, label="reactants")
-    p_mols = _ensure_mols(products, label="products")
+    r_mols = mol_differ._ensure_mols(reactants, label="reactants")
+    p_mols = mol_differ._ensure_mols(products, label="products")
 
     changes = mol_differ.reaction_atom_changes_from_lists(
         r_mols,
