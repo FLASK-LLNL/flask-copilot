@@ -60,7 +60,7 @@ async def generate_nodes_for_molecular_graph(
     retro_synth_context: RetrosynthesisContext,
     websocket: WebSocket,
     start_level: int = 0,
-    molecule_name_format: Literal["brand", "iupac", "formula", "smiles"] = "brand",
+    molecule_name_format: MolNameFormat = "brand",
     include_root_node: bool = True,
     root_node_id: str | None = None,
 ) -> list[Node]:
@@ -270,7 +270,7 @@ async def template_based_retrosynthesis(
     context: RetrosynthesisContext,
     websocket: WebSocket,
     available_tools: Optional[Union[str, list[str]]] = None,
-    molecule_name_format: Literal["brand", "iupac", "formula", "smiles"] = "brand",
+    molecule_name_format: MolNameFormat = "brand",
 ):
     """Stream positioned nodes and edges"""
     clogger = CallbackLogger(websocket, source="template_based_retrosynthesis")
@@ -348,7 +348,7 @@ async def compute_templates_for_node(
     context: RetrosynthesisContext,
     websocket: WebSocket,
     available_tools: Optional[Union[str, list[str]]] = None,
-    molecule_name_format: Literal["brand", "iupac", "formula", "smiles"] = "brand",
+    molecule_name_format: MolNameFormat = "brand",
 ):
     """Computes all templates for node"""
     clogger = CallbackLogger(websocket, source="compute_templates_for_node")
