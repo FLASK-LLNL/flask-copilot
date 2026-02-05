@@ -389,30 +389,30 @@ export const MoleculeGraph: React.FC<MoleculeGraphProps> = ({
                         }}
                         onMouseEnter={(e) => {
                             setHoveredReaction(node);
-                            const payload: any = node.reaction?.reactionPayload;
-                            if (payload) {
+                            const mappedReaction: any = node.reaction?.mappedReaction;
+                            if (mappedReaction) {
                                 const map: Record<string, any> = {};
-                                const product = (payload.products && payload.products.length)
-                                    ? (payload.products[payload.main_product_index] || payload.products[0])
+                                const product = (mappedReaction.products && mappedReaction.products.length)
+                                    ? (mappedReaction.products[mappedReaction.main_product_index] || mappedReaction.products[0])
                                     : null;
                                 if (product) {
                                     map[node.id] = {
                                         highlightAtomIdxs: product.highlight_atom_idxs || [],
-                                        highlightRgb: payload.highlight_rgb,
-                                        highlightAlpha: payload.highlight_alpha,
+                                        highlightRgb: mappedReaction.highlight_rgb,
+                                        highlightAlpha: mappedReaction.highlight_alpha,
                                     };
                                 }
 
                                 const childIds = edges
                                     .filter(ed => ed.fromNode === node.id)
                                     .map(ed => ed.toNode);
-                                const reactants: any[] = payload.reactants || [];
+                                const reactants: any[] = mappedReaction.reactants || [];
                                 for (let i = 0; i < childIds.length && i < reactants.length; i++) {
                                     const r = reactants[i];
                                     map[childIds[i]] = {
                                         highlightAtomIdxs: r.highlight_atom_idxs || [],
-                                        highlightRgb: payload.highlight_rgb,
-                                        highlightAlpha: payload.highlight_alpha,
+                                        highlightRgb: mappedReaction.highlight_rgb,
+                                        highlightAlpha: mappedReaction.highlight_alpha,
                                     };
                                 }
                                 setHoverHighlightMap(map);

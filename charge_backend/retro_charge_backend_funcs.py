@@ -19,8 +19,8 @@ from backend_helper_funcs import (
 from retrosynthesis.context import RetrosynthesisContext
 from molecule_naming import smiles_to_html, MolNameFormat, is_purchasable
 from rdkitjs_payload import (
-    build_rdkitjs_reaction_payload,
-    reaction_payload_to_json_dict,
+    build_rdkitjs_mapped_reaction,
+    mapped_reaction_to_json_dict,
 )
 
 from charge.tasks.RetrosynthesisTask import (
@@ -107,7 +107,7 @@ async def generate_nodes_for_molecular_graph(
             purchasable=purchasable,
         )
 
-        # If this node has children, attach a reaction + payload immediately.
+        # If this node has children, attach a reaction + mapped reaction immediately.
         # This makes hover-highlighting work on multi-step default routes without
         # requiring the user to open/select alternatives.
         if getattr(current_node, "children", None):
@@ -121,14 +121,14 @@ async def generate_nodes_for_molecular_graph(
                 )
                 try:
                     child_smiles = [reaction_path_dict[cid].smiles for cid in current_node.children]
-                    payload = build_rdkitjs_reaction_payload(
+                    mapped_reaction = build_rdkitjs_mapped_reaction(
                         reactants=child_smiles,
                         products=[smiles],
                     )
-                    node.reaction.reactionPayload = reaction_payload_to_json_dict(payload)
+                    node.reaction.mappedReaction = mapped_reaction_to_json_dict(mapped_reaction)
                 except Exception as e:
                     logger.opt(exception=e).warning(
-                        "Failed to build rdkitjs reaction payload for node_id={node_id} smiles={smiles}",
+                        "Failed to build rdkitjs mapped reaction for node_id={node_id} smiles={smiles}",
                         node_id=node_id_str,
                         smiles=smiles,
                     )
@@ -347,7 +347,7 @@ async def template_based_retrosynthesis(
         root_node_id=root.id,
     )
 
-    # Attach reaction diff payload for immediate reactants -> product (optional if children exist)
+    # Attach mapped reaction for immediate reactants -> product (optional if children exist)
     try:
         # Collect immediate children created for the root
         child_smiles = [
@@ -356,14 +356,14 @@ async def template_based_retrosynthesis(
             if context.parents.get(nid) == root.id
         ]
         if child_smiles:
-            payload = build_rdkitjs_reaction_payload(
+            mapped_reaction = build_rdkitjs_mapped_reaction(
                 reactants=child_smiles,
                 products=[root.smiles],
             )
-            reaction.reactionPayload = reaction_payload_to_json_dict(payload)
+            reaction.mappedReaction = mapped_reaction_to_json_dict(mapped_reaction)
     except Exception as e:
         logger.opt(exception=e).warning(
-            "Failed to build rdkitjs reaction payload for root template reaction root_id={node_id} smiles={smiles}",
+            "Failed to build rdkitjs mapped reaction for root template reaction root_id={node_id} smiles={smiles}",
             node_id=root.id,
             smiles=root.smiles,
         )
@@ -560,16 +560,16 @@ async def ai_based_retrosynthesis(
         alternatives=alternatives,
         templatesSearched=templates_searched,
     )
-    # Build reaction diff payload for AI single-step reaction
+    # Build mapped reaction for AI single-step reaction
     try:
-        payload = build_rdkitjs_reaction_payload(
+        mapped_reaction = build_rdkitjs_mapped_reaction(
             reactants=list(result.reactants_smiles_list),
             products=[current_node.smiles],
         )
-        ai_reaction.reactionPayload = reaction_payload_to_json_dict(payload)
+        ai_reaction.mappedReaction = mapped_reaction_to_json_dict(mapped_reaction)
     except Exception as e:
         logger.opt(exception=e).warning(
-            "Failed to build rdkitjs reaction payload for AI reaction node_id={node_id} product_smiles={smiles}",
+            "Failed to build rdkitjs mapped reaction for AI reaction node_id={node_id} product_smiles={smiles}",
             node_id=current_node.id,
             smiles=current_node.smiles,
         )
@@ -676,18 +676,18 @@ async def set_reaction_alternative(
         node.reaction.label = "Exact"
         node.reaction.highlight = "normal"
 
-    # Build reaction diff payload from alternative first step (reactants) to product (node)
+    # Build mapped reaction from alternative first step (reactants) to product (node)
     try:
         if alternative.pathway and len(alternative.pathway) >= 2:
             reactants = alternative.pathway[1].smiles
-            payload = build_rdkitjs_reaction_payload(
+            mapped_reaction = build_rdkitjs_mapped_reaction(
                 reactants=reactants,
                 products=[node.smiles],
             )
-            node.reaction.reactionPayload = reaction_payload_to_json_dict(payload)
+            node.reaction.mappedReaction = mapped_reaction_to_json_dict(mapped_reaction)
     except Exception as e:
         logger.opt(exception=e).warning(
-            "Failed to build rdkitjs reaction payload when selecting alternative node_id={node_id} alternative_id={alt_id}",
+            "Failed to build rdkitjs mapped reaction when selecting alternative node_id={node_id} alternative_id={alt_id}",
             node_id=node.id,
             alt_id=alternative_id,
         )
@@ -703,7 +703,7 @@ async def set_reaction_alternative(
             continue
 
         # Track which children were attached to which parent in this step,
-        # so we can build reactionPayloads for intermediate reactions once
+        # so we can build mappedReaction objects for intermediate reactions once
         # the full step has been expanded.
         children_by_parent: dict[str, list[str]] = defaultdict(list)
 
@@ -745,7 +745,7 @@ async def set_reaction_alternative(
                     f"out of range for step {i-1}. Error: {e}"
                 )
 
-        # After expanding this step, attach reactionPayloads for each parent
+        # After expanding this step, attach mappedReaction objects for each parent
         # that got children. This makes hover-highlighting work immediately
         # for multi-step pathways.
         for parent_id, child_smiles_list in children_by_parent.items():
@@ -760,15 +760,15 @@ async def set_reaction_alternative(
                         templatesSearched=False,
                     )
 
-                payload = build_rdkitjs_reaction_payload(
+                mapped_reaction = build_rdkitjs_mapped_reaction(
                     reactants=child_smiles_list,
                     products=[parent_node.smiles],
                 )
-                parent_node.reaction.reactionPayload = reaction_payload_to_json_dict(payload)
+                parent_node.reaction.mappedReaction = mapped_reaction_to_json_dict(mapped_reaction)
                 await context.update_node(parent_node, websocket)
             except Exception as e:
                 logger.opt(exception=e).warning(
-                    "Failed to build rdkitjs reaction payload for subreaction parent_id={parent_id} child_count={child_count}",
+                    "Failed to build rdkitjs mapped reaction for subreaction parent_id={parent_id} child_count={child_count}",
                     parent_id=parent_id,
                     child_count=len(child_smiles_list),
                 )

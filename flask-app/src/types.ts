@@ -28,7 +28,7 @@ export interface Reaction {
   highlight: keyof typeof NODE_STYLES;
   alternatives?: ReactionAlternative[];
   templatesSearched: boolean;  // Whether to show the "Search Templates" button
-  reactionPayload?: RdkitjsReactionPayload;
+  mappedReaction?: RdkitjsReactionPayload;
 }
 
 export interface TreeNode {

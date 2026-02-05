@@ -46,7 +46,7 @@ class Reaction:
     label: Optional[str] = None
     alternatives: Optional[list[ReactionAlternative]] = None
     templatesSearched: bool = False
-    reactionPayload: Optional[Dict[str, Any]] = None
+    mappedReaction: Optional[Dict[str, Any]] = None
 
     def json(self):
         return asdict(self)

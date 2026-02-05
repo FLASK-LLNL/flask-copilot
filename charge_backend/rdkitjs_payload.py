@@ -42,7 +42,7 @@ def _mol_payload(
     )
 
 
-def build_rdkitjs_reaction_payload(
+def build_rdkitjs_mapped_reaction(
     *,
     reactants: Sequence[MolInput],
     products: Sequence[MolInput],
@@ -83,3 +83,8 @@ def build_rdkitjs_reaction_payload(
 def reaction_payload_to_json_dict(payload: RdkitjsReactionPayload) -> Dict[str, Any]:
     """Return a JSON-serializable dict."""
     return asdict(payload)
+
+
+def mapped_reaction_to_json_dict(mapped_reaction: RdkitjsReactionPayload) -> Dict[str, Any]:
+    """Return a JSON-serializable dict (preferred name)."""
+    return asdict(mapped_reaction)
