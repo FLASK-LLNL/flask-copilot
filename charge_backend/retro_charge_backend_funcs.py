@@ -126,8 +126,12 @@ async def generate_nodes_for_molecular_graph(
                         products=[smiles],
                     )
                     node.reaction.reactionPayload = reaction_payload_to_json_dict(payload)
-                except Exception:
-                    pass
+                except Exception as e:
+                    logger.opt(exception=e).warning(
+                        "Failed to build rdkitjs reaction payload for node_id={node_id} smiles={smiles}",
+                        node_id=node_id_str,
+                        smiles=smiles,
+                    )
         await retro_synth_context.add_node(node, parent, websocket)
 
         for child_id in current_node.children:
@@ -357,8 +361,12 @@ async def template_based_retrosynthesis(
                 products=[root.smiles],
             )
             reaction.reactionPayload = reaction_payload_to_json_dict(payload)
-    except Exception:
-        pass
+    except Exception as e:
+        logger.opt(exception=e).warning(
+            "Failed to build rdkitjs reaction payload for root template reaction root_id={node_id} smiles={smiles}",
+            node_id=root.id,
+            smiles=root.smiles,
+        )
 
     # Notify frontend that computation completed
     root.reaction = reaction
@@ -559,8 +567,12 @@ async def ai_based_retrosynthesis(
             products=[current_node.smiles],
         )
         ai_reaction.reactionPayload = reaction_payload_to_json_dict(payload)
-    except Exception:
-        pass
+    except Exception as e:
+        logger.opt(exception=e).warning(
+            "Failed to build rdkitjs reaction payload for AI reaction node_id={node_id} product_smiles={smiles}",
+            node_id=current_node.id,
+            smiles=current_node.smiles,
+        )
     current_node.reaction = ai_reaction
 
     # Update node with discovered reaction
@@ -673,8 +685,12 @@ async def set_reaction_alternative(
                 products=[node.smiles],
             )
             node.reaction.reactionPayload = reaction_payload_to_json_dict(payload)
-    except Exception:
-        pass
+    except Exception as e:
+        logger.opt(exception=e).warning(
+            "Failed to build rdkitjs reaction payload when selecting alternative node_id={node_id} alternative_id={alt_id}",
+            node_id=node.id,
+            alt_id=alternative_id,
+        )
 
     node.highlight = "normal"
     await context.update_node(node, websocket)
@@ -750,7 +766,11 @@ async def set_reaction_alternative(
                 )
                 parent_node.reaction.reactionPayload = reaction_payload_to_json_dict(payload)
                 await context.update_node(parent_node, websocket)
-            except Exception:
-                pass
+            except Exception as e:
+                logger.opt(exception=e).warning(
+                    "Failed to build rdkitjs reaction payload for subreaction parent_id={parent_id} child_count={child_count}",
+                    parent_id=parent_id,
+                    child_count=len(child_smiles_list),
+                )
 
     await websocket.send_json({"type": "complete"})
