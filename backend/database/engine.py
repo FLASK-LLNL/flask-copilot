@@ -25,16 +25,21 @@ if USE_SQLITE_FALLBACK:
     ASYNC_DATABASE_URL = SQLITE_PATH.replace("sqlite:///", "sqlite+aiosqlite:///")
 else:
     # Remote LLNL LaunchIT MariaDB configuration (via SSH tunnel)
-    # SSH tunnel command: ssh -L 32636:cz-marathe1-mymariadb1.apps.czapps.llnl.gov:32636 marathe1@oslic.llnl.gov
-    # Credentials loaded from .env file (see .env.example)
-    DB_USER = os.getenv("DB_USER", "marathe1")
+    # SSH tunnel command: ssh -L 32636:cz-marathe1-mymariadb1.apps.czapps.llnl.gov:32636 <user>@oslic.llnl.gov
+    # All credentials loaded from .env file (see .env.example for template)
+    DB_USER = os.getenv("DB_USER")
     DB_PASSWORD = os.getenv("DB_PASSWORD")
-    DB_HOST = os.getenv("DB_HOST", "127.0.0.1")  # Use localhost when SSH tunnel is active
-    DB_PORT = os.getenv("DB_PORT", "32636")
-    DB_NAME = os.getenv("DB_NAME", "flaskcopilot")
+    DB_HOST = os.getenv("DB_HOST")
+    DB_PORT = os.getenv("DB_PORT")
+    DB_NAME = os.getenv("DB_NAME")
 
-    if not DB_PASSWORD:
-        print("WARNING: DB_PASSWORD not set. Set it in .env file (see .env.example)")
+    # Validate all required DB settings are present in .env
+    _missing = [k for k, v in {"DB_USER": DB_USER, "DB_PASSWORD": DB_PASSWORD,
+                                "DB_HOST": DB_HOST, "DB_PORT": DB_PORT,
+                                "DB_NAME": DB_NAME}.items() if not v]
+    if _missing:
+        print(f"WARNING: Missing database config in .env: {', '.join(_missing)}")
+        print("See .env.example for the required variables.")
         print("Falling back to SQLite...")
         USE_SQLITE_FALLBACK = True
         SQLITE_PATH = os.getenv("SQLITE_PATH", "sqlite:///flaskcopilot.db")
