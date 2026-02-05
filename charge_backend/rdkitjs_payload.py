@@ -21,6 +21,7 @@ class RdkitjsReactionPayload:
     main_product_index: int
     highlight_rgb: Tuple[int, int, int]
     highlight_alpha: float
+    reactant_mcs_smarts: List[Optional[str]]
 
 
 def _ensure_mols(items: Sequence[MolInput], *, label: str) -> List[Chem.Mol]:
@@ -53,7 +54,6 @@ def _mol_payload(
     molblock = Chem.MolToMolBlock(m)
     smiles = Chem.MolToSmiles(m)
     idxs = sorted({int(i) for i in highlight_atom_idxs})
-    # Provide 1-based indices as a stable debugging aid; these are NOT atom-map numbers.
     mapnums = [int(i) + 1 for i in idxs]
     return RdkitjsMolPayload(
         molblock=str(molblock),
@@ -97,6 +97,7 @@ def build_rdkitjs_reaction_payload(
         main_product_index=int(changes.main_product_index),
         highlight_rgb=(int(highlight_rgb[0]), int(highlight_rgb[1]), int(highlight_rgb[2])),
         highlight_alpha=float(highlight_alpha),
+        reactant_mcs_smarts=list(changes.reactant_mcs_smarts),
     )
 
 
