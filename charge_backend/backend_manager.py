@@ -21,12 +21,12 @@ from tool_registration import (
     list_server_urls,
     list_server_tools,
 )
-from retrosynthesis import (
+from retrosynthesis.template import (
     template_based_retrosynthesis,
-    ai_based_retrosynthesis,
     compute_templates_for_node,
-    set_reaction_alternative,
 )
+from retrosynthesis.ai import ai_based_retrosynthesis
+from retrosynthesis.alternatives import set_reaction_alternative
 from moleculedb.molecule_naming import MolNameFormat
 
 # Mapping from backend name to human-readable labels. Mirrored from the frontend

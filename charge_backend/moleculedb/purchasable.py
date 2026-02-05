@@ -88,7 +88,7 @@ def is_purchasable_moldb(conn: sqlite3.Connection, inchi: str) -> list[str]:
     rows = cursor.fetchall()
     result = []
     for row in rows:
-        result.append(row)
+        result.append(row[0])
 
     return result
 

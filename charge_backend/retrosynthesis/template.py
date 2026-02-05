@@ -16,7 +16,7 @@ from charge_backend.moleculedb.molecule_naming import (
     MolNameFormat,
 )
 from charge_backend.moleculedb.purchasable import is_purchasable
-
+from charge_backend.retrosynthesis.database import find_exact_reactions
 
 if TYPE_CHECKING:
     import aizynthfinder.reactiontree
@@ -271,6 +271,16 @@ async def template_based_retrosynthesis(
     )
     context.reset()  # Clear context
     await context.add_node(root, parent=None, websocket=websocket)
+
+    await clogger.info("Searching for exact matches...")
+    reaction = await find_exact_reactions(
+        root, context, clogger, websocket, molecule_name_format
+    )
+    if reaction is not None:  # Exact reactions were found in database
+        root.reaction = reaction
+        await context.update_node(root, websocket)
+        await websocket.send_json({"type": "complete"})
+        return
 
     await clogger.info("Running AiZynthFinder...")
     reaction, routes = await run_retro_planner(
