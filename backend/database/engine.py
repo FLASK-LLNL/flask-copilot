@@ -9,11 +9,15 @@ from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sess
 from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import declarative_base
 import os
+import ssl
+from pathlib import Path
+from dotenv import load_dotenv
+
+# Load credentials from .env file (user-local, gitignored)
+load_dotenv(dotenv_path=Path(__file__).resolve().parent.parent.parent / '.env')
 
 # Allow a local SQLite fallback so the app can run even if MariaDB is unreachable.
 USE_SQLITE_FALLBACK = os.getenv("USE_SQLITE_FALLBACK", "0") == "1"
-
-import ssl
 
 if USE_SQLITE_FALLBACK:
     SQLITE_PATH = os.getenv("SQLITE_PATH", "sqlite:///flaskcopilot.db")
@@ -22,15 +26,24 @@ if USE_SQLITE_FALLBACK:
 else:
     # Remote LLNL LaunchIT MariaDB configuration (via SSH tunnel)
     # SSH tunnel command: ssh -L 32636:cz-marathe1-mymariadb1.apps.czapps.llnl.gov:32636 marathe1@oslic.llnl.gov
-    DB_USER = os.getenv("MARIADB_USER", "marathe1")
-    DB_PASSWORD = os.getenv("MARIADB_PASSWORD", "Eked1c2OWATXtD0YhHKP5CUKh5FGlbIkTaIDGtl1vKMHSB5lrW1FmA8RJB5k0V4x0lgxNSkMAhYbxo4f")
-    DB_HOST = os.getenv("MARIADB_HOST", "127.0.0.1")  # Use localhost when SSH tunnel is active
-    DB_PORT = os.getenv("MARIADB_PORT", "32636")
-    DB_NAME = os.getenv("MARIADB_DATABASE", "flaskcopilot")
+    # Credentials loaded from .env file (see .env.example)
+    DB_USER = os.getenv("DB_USER", "marathe1")
+    DB_PASSWORD = os.getenv("DB_PASSWORD")
+    DB_HOST = os.getenv("DB_HOST", "127.0.0.1")  # Use localhost when SSH tunnel is active
+    DB_PORT = os.getenv("DB_PORT", "32636")
+    DB_NAME = os.getenv("DB_NAME", "flaskcopilot")
 
-    # MariaDB over SSH tunnel with mandatory TLS; use PyMySQL/AioMySQL with lax cert check (self-signed)
-    DATABASE_URL = f"mysql+pymysql://{DB_USER}:{DB_PASSWORD}@{DB_HOST}:{DB_PORT}/{DB_NAME}"
-    ASYNC_DATABASE_URL = f"mysql+aiomysql://{DB_USER}:{DB_PASSWORD}@{DB_HOST}:{DB_PORT}/{DB_NAME}"
+    if not DB_PASSWORD:
+        print("WARNING: DB_PASSWORD not set. Set it in .env file (see .env.example)")
+        print("Falling back to SQLite...")
+        USE_SQLITE_FALLBACK = True
+        SQLITE_PATH = os.getenv("SQLITE_PATH", "sqlite:///flaskcopilot.db")
+        DATABASE_URL = SQLITE_PATH.replace("sqlite:///", "sqlite+pysqlite:///")
+        ASYNC_DATABASE_URL = SQLITE_PATH.replace("sqlite:///", "sqlite+aiosqlite:///")
+    else:
+        # MariaDB over SSH tunnel with mandatory TLS; use PyMySQL/AioMySQL with lax cert check (self-signed)
+        DATABASE_URL = f"mysql+pymysql://{DB_USER}:{DB_PASSWORD}@{DB_HOST}:{DB_PORT}/{DB_NAME}"
+        ASYNC_DATABASE_URL = f"mysql+aiomysql://{DB_USER}:{DB_PASSWORD}@{DB_HOST}:{DB_PORT}/{DB_NAME}"
 
 # Common SSL settings (server uses self-signed cert; tunnel already encrypts)
 if not USE_SQLITE_FALLBACK:
