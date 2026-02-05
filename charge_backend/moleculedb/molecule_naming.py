@@ -69,7 +69,7 @@ def smiles_to_html(
 
     # First, try to find a canonical or IUPAC name
     if molecule_name_format in ("brand", "iupac"):
-        inchi = Chem.MolToInchi(mol)
+        inchi = str(Chem.MolToInchi(mol))
         name = inchi_lookup(inchi, molecule_name_format == "iupac")
         if name:
             return name

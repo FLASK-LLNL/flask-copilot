@@ -27,6 +27,7 @@ from retro_charge_backend_funcs import (
     compute_templates_for_node,
     set_reaction_alternative,
 )
+from moleculedb.molecule_naming import MolNameFormat
 
 # Mapping from backend name to human-readable labels. Mirrored from the frontend
 BACKEND_LABELS = {
@@ -153,9 +154,7 @@ class ActionManager:
         self.experiment = experiment
         self.args = args
         self.username = username
-        self.molecule_name_format: Literal["brand", "iupac", "formula", "smiles"] = (
-            "brand"
-        )
+        self.molecule_name_format: MolNameFormat = "brand"
         self.websocket = task_manager.websocket
 
     def setup_retro_synth_context(self) -> None:

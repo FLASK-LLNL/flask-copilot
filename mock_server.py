@@ -28,7 +28,7 @@ from typing import Any, Optional, Literal
 import requests
 from datetime import datetime
 from loguru import logger
-from charge_backend.molecule_naming import smiles_to_html
+from charge_backend.moleculedb.molecule_naming import smiles_to_html, MolNameFormat
 
 app = FastAPI()
 
@@ -159,7 +159,7 @@ class Tool:
 def generate_tree_structure(
     start_smiles: str,
     depth: int = 3,
-    molecule_name_format: Literal["brand", "iupac", "formula", "smiles"] = "brand",
+    molecule_name_format: MolNameFormat = "brand",
 ):
     """
     Generate entire tree structure upfront.
@@ -333,9 +333,9 @@ def calculate_positions(nodes: list[Node]):
 
 async def generate_molecules(
     start_smiles: str,
+    websocket: WebSocket,
     depth: int = 3,
-    websocket: WebSocket | None = None,
-    molecule_name_format: Literal["brand", "iupac", "formula", "smiles"] = "brand",
+    molecule_name_format: MolNameFormat = "brand",
 ):
     """
     Stream positioned nodes and edges for the retrosynthesis sample.
@@ -390,9 +390,9 @@ async def generate_molecules(
 
 async def lead_molecule(
     start_smiles: str,
+    websocket: WebSocket,
     depth: int = 3,
-    websocket: WebSocket = None,
-    molecule_name_format: Literal["brand", "iupac", "formula", "smiles"] = "brand",
+    molecule_name_format: MolNameFormat = "brand",
 ):
     """
     Stream positioned nodes and edges for the lead molecule optimization sample.
@@ -460,13 +460,13 @@ async def websocket_endpoint(websocket: WebSocket):
                 if data["problemType"] == "optimization":
                     await lead_molecule(
                         data["smiles"],
-                        data.get("depth", 10),
+                        depth=data.get("depth", 10),
                         websocket=websocket,
                         molecule_name_format=molecule_format,
                     )
                 elif data["problemType"] == "retrosynthesis":
                     await generate_molecules(
-                        data["smiles"], data.get("depth", 3), websocket, molecule_format
+                        data["smiles"], websocket, data.get("depth", 3), molecule_format
                     )
                 else:
                     await websocket.send_json(
