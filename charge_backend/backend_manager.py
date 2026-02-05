@@ -21,7 +21,7 @@ from tool_registration import (
     list_server_urls,
     list_server_tools,
 )
-from retro_charge_backend_funcs import (
+from retrosynthesis import (
     template_based_retrosynthesis,
     ai_based_retrosynthesis,
     compute_templates_for_node,
@@ -561,7 +561,7 @@ class ActionManager:
     async def report_orchestrator_config(self) -> Tuple[str, str, str]:
         agent_pool = self.experiment.agent_pool
         # Access the raw config
-        raw_config = agent_pool.model_client._raw_config
+        raw_config = agent_pool.model_client._raw_config  # type: ignore
         # Access specific fields
         base_url = raw_config.get("base_url")
         model = raw_config.get("model")
