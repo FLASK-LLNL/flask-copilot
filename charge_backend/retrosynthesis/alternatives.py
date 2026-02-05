@@ -1,5 +1,5 @@
 from fastapi import WebSocket
-from callback_logger import CallbackLogger
+from lc_conductor.callback_logger import CallbackLogger
 from collections import defaultdict
 
 from backend_helper_funcs import (

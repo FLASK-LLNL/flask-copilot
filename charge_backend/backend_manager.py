@@ -40,19 +40,9 @@ class FlaskActionManager(ActionManager):
         args,
         username: str,
     ):
-<<<<<<< HEAD
-        self.task_manager = task_manager
-        self.experiment = experiment
-        self.args = args
-        self.username = username
+        super().__init__(task_manager, experiment, args, username)
         self.molecule_name_format: MolNameFormat = "brand"
         self.websocket = task_manager.websocket
-=======
-        super().__init__(task_manager, experiment, args, username)
-        self.molecule_name_format: Literal["brand", "iupac", "formula", "smiles"] = (
-            "brand"
-        )
->>>>>>> 6ce878b (Refactoring copilot to use new LC Conductor library functions.)
 
     def setup_retro_synth_context(self) -> None:
         if self.retro_synth_context is None:
