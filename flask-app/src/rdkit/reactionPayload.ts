@@ -1,21 +1,6 @@
 export type RGB = [number, number, number]
 
-export type RdkitjsMolPayload = {
-  molblock: string
-  smiles: string
-  highlight_atom_idxs: number[]
-  highlight_atom_mapnums: number[]
-}
-
-export type RdkitjsReactionPayload = {
-  version: 'rdkitjs-reaction-payload/v1'
-  reactants: RdkitjsMolPayload[]
-  products: RdkitjsMolPayload[]
-  main_product_index: number
-  highlight_rgb: RGB
-  highlight_alpha: number
-  reactant_mcs_smarts?: (string | null)[]
-}
+import type { RGB } from '../types'
 
 export type RdkitModule = {
   get_mol: (input: string) => RdkitMol
