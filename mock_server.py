@@ -19,18 +19,65 @@ from fastapi import FastAPI, Request, WebSocket, WebSocketDisconnect
 from fastapi.responses import JSONResponse, HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
+from contextlib import asynccontextmanager
 from dataclasses import dataclass, asdict
 import asyncio
 import copy
 import os
+import sys
 import random
+import uuid
 from typing import Any, Optional, Literal
+from dataclasses import dataclass, field
+from datetime import datetime, timedelta
 import requests
-from datetime import datetime
 from loguru import logger
 from charge_backend.moleculedb.molecule_naming import smiles_to_html, MolNameFormat
 
-app = FastAPI()
+# Import database components
+sys.path.insert(0, os.path.dirname(__file__))
+from backend.database.engine import engine, Base
+from backend.routers import sessions as sessionsrouter
+
+
+# Session tracking for computation resume
+@dataclass
+class ComputationSession:
+    """Track an active computation for potential resume"""
+    session_id: str
+    smiles: str
+    problem_type: str
+    depth: int
+    websocket: WebSocket
+    created_at: datetime = field(default_factory=datetime.now)
+    is_complete: bool = False
+    is_cancelled: bool = False
+    sent_nodes: list = field(default_factory=list)
+    sent_edges: list = field(default_factory=list)
+    pending_nodes: list = field(default_factory=list)
+    pending_edges: list = field(default_factory=list)
+    current_index: int = 0
+
+active_sessions: dict[str, ComputationSession] = {}
+SESSION_TIMEOUT_HOURS = 24
+
+def cleanup_old_sessions():
+    """Remove sessions older than SESSION_TIMEOUT_HOURS"""
+    cutoff = datetime.now() - timedelta(hours=SESSION_TIMEOUT_HOURS)
+    expired = [sid for sid, sess in active_sessions.items() if sess.created_at < cutoff]
+    for sid in expired:
+        del active_sessions[sid]
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Database initialization on startup"""
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
+    yield
+
+
+app = FastAPI(lifespan=lifespan)
 
 # CORS for development
 app.add_middleware(
@@ -40,6 +87,9 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Include the sessions router for database persistence
+app.include_router(sessionsrouter.router)
 
 if "FLASK_APPDIR" in os.environ:
     DIST_PATH = os.environ["FLASK_APPDIR"]
@@ -345,10 +395,36 @@ async def generate_molecules(
     nodes, edges = generate_tree_structure(start_smiles, depth, molecule_name_format)
     positioned_nodes = calculate_positions(nodes)
 
+    # Send initial reasoning message
+    await websocket.send_json({
+        "type": "response",
+        "message": {
+            "source": "Reasoning",
+            "message": f"**Starting Retrosynthesis Analysis**\n\nTarget molecule: `{start_smiles}`\n\nExploring synthetic pathways with depth {depth}...",
+        }
+    })
+
     # Stream root first
     root = positioned_nodes[0]
     await websocket.send_json({"type": "node", "node": root.json()})
+    
+    await websocket.send_json({
+        "type": "response",
+        "message": {
+            "source": "Reasoning",
+            "message": f"Identified target molecule. Now analyzing possible disconnection strategies...",
+        }
+    })
     await asyncio.sleep(0.8)
+
+    # Retrosynthesis reasoning templates
+    retro_reasoning = [
+        "Analyzing bond disconnection possibilities in the target structure...",
+        "Identified potential synthetic precursors through retrosynthetic analysis.",
+        "Evaluating reaction feasibility and yield predictions for this transformation.",
+        "Cross-referencing with known chemical reactions in the database.",
+        "This disconnection follows established synthetic methodology.",
+    ]
 
     # Stream remaining nodes with edges
     for i in range(1, len(positioned_nodes)):
@@ -367,10 +443,30 @@ async def generate_molecules(
             edge_data["edge"]["toNode"] = node.id
             await websocket.send_json(edge_data)
 
+            # Send reasoning about this step
+            reasoning_msg = retro_reasoning[i % len(retro_reasoning)]
+            await websocket.send_json({
+                "type": "response",
+                "message": {
+                    "source": "Reasoning",
+                    "message": f"**Step {i}**: {reasoning_msg}",
+                }
+            })
+
             await asyncio.sleep(0.6)
 
             # Send node
             await websocket.send_json({"type": "node", "node": node.json()})
+            
+            # Send info about the discovered precursor
+            await websocket.send_json({
+                "type": "response",
+                "message": {
+                    "source": "Logger (Info)",
+                    "message": f"Found precursor: `{node.smiles}`",
+                    "smiles": node.smiles,
+                }
+            })
 
             # Update edge to complete
             edge_complete = {
@@ -385,6 +481,15 @@ async def generate_molecules(
 
             await asyncio.sleep(0.2)
 
+    # Send completion message
+    await websocket.send_json({
+        "type": "response",
+        "message": {
+            "source": "Reasoning",
+            "message": f"**Retrosynthesis Complete**\n\nSuccessfully identified {len(positioned_nodes)} molecules in the synthetic pathway.",
+        }
+    })
+
     await websocket.send_json({"type": "complete"})
 
 
@@ -397,6 +502,27 @@ async def lead_molecule(
     """
     Stream positioned nodes and edges for the lead molecule optimization sample.
     """
+
+    # Sample reasoning messages to simulate LLM thinking
+    reasoning_templates = [
+        "Analyzing molecular structure and identifying potential modification sites...",
+        "Evaluating functional groups for optimization. The current molecule shows promising structural features.",
+        "Applying chemical intuition to extend the carbon chain. This modification should improve the target property.",
+        "Cross-referencing with known structure-activity relationships in the chemical space.",
+        "Validating the proposed modification against chemical feasibility constraints.",
+        "Computing predicted properties for the new molecular candidate...",
+        "The optimization step successfully generated a valid molecular structure with improved characteristics.",
+    ]
+
+    # Send initial reasoning message
+    await websocket.send_json({
+        "type": "response",
+        "message": {
+            "source": "Reasoning",
+            "message": f"**Starting Lead Molecule Optimization**\n\nInitial molecule: `{start_smiles}`\n\nPlanned optimization depth: {depth} iterations",
+        }
+    })
+    await asyncio.sleep(0.3)
 
     # Generate one node at a time
     for i in range(depth):
@@ -412,6 +538,17 @@ async def lead_molecule(
                 },
             }
             await websocket.send_json(edge_complete)
+        
+        # Send reasoning message for this iteration
+        reasoning_idx = i % len(reasoning_templates)
+        await websocket.send_json({
+            "type": "response",
+            "message": {
+                "source": "Reasoning",
+                "message": f"**Iteration {i + 1}/{depth}**\n\n{reasoning_templates[reasoning_idx]}",
+            }
+        })
+        
         node = dict(
             id=f"node_{i}",
             smiles=start_smiles + "C" * i,
@@ -423,6 +560,17 @@ async def lead_molecule(
             y=i * 150,
         )
         await websocket.send_json({"type": "node", "node": node})
+        
+        # Send a Logger (Info) message about the generated molecule
+        await websocket.send_json({
+            "type": "response",
+            "message": {
+                "source": "Logger (Info)",
+                "message": f"Generated molecule: `{start_smiles + 'C' * i}`",
+                "smiles": start_smiles + "C" * i,
+            }
+        })
+        
         if i == depth - 1:
             break
         edge_data = {
@@ -436,9 +584,17 @@ async def lead_molecule(
             },
         }
         await websocket.send_json(edge_data)
-        # TODO: Compute here
         await asyncio.sleep(0.8)
 
+    # Send completion reasoning message
+    await websocket.send_json({
+        "type": "response",
+        "message": {
+            "source": "Reasoning",
+            "message": f"**Optimization Complete**\n\nSuccessfully generated {depth} molecules in the optimization pathway.",
+        }
+    })
+    
     await websocket.send_json({"type": "complete"})
 
 
@@ -448,15 +604,91 @@ async def websocket_endpoint(websocket: WebSocket):
 
     molecule_format = "brand"
     username = "nobody"
+    current_session_id = None
+    
     if "x-forwarded-user" in websocket.headers:
         username = websocket.headers["x-forwarded-user"]
+    
+    # Cleanup old sessions periodically
+    cleanup_old_sessions()
 
     await websocket.accept()
     try:
         while True:
             data = await websocket.receive_json()
+            
+            # Handle session resume request
+            if data["action"] == "resume_session":
+                session_id = data.get("sessionId")
+                if session_id and session_id in active_sessions:
+                    session = active_sessions[session_id]
+                    if not session.is_complete and not session.is_cancelled:
+                        current_session_id = session_id
+                        session.websocket = websocket
+                        logger.info(f"Resuming session {session_id}")
+                        
+                        # Send session_resumed message with current state
+                        await websocket.send_json({
+                            "type": "session_resumed",
+                            "sessionId": session_id,
+                            "sentNodes": len(session.sent_nodes),
+                            "totalNodes": len(session.pending_nodes) if session.pending_nodes else 0,
+                            "isComplete": session.is_complete
+                        })
+                        
+                        # Resume the computation
+                        if session.problem_type == "optimization":
+                            await lead_molecule(
+                                session.smiles,
+                                session.depth,
+                                websocket=websocket,
+                                molecule_name_format=molecule_format
+                            )
+                        elif session.problem_type == "retrosynthesis":
+                            await generate_molecules(
+                                session.smiles,
+                                session.depth,
+                                websocket,
+                                molecule_format
+                            )
+                    else:
+                        # Session was already complete or cancelled
+                        await websocket.send_json({
+                            "type": "session_status",
+                            "sessionId": session_id,
+                            "status": "complete" if session.is_complete else "cancelled"
+                        })
+                else:
+                    # Session not found or expired
+                    await websocket.send_json({
+                        "type": "session_not_found",
+                        "sessionId": session_id
+                    })
+                continue
 
             if data["action"] == "compute":
+                # Create new session
+                session_id = data.get("sessionId") or str(uuid.uuid4())
+                depth = data.get("depth", 10 if data["problemType"] == "optimization" else 3)
+                
+                session = ComputationSession(
+                    session_id=session_id,
+                    smiles=data["smiles"],
+                    problem_type=data["problemType"],
+                    depth=depth,
+                    websocket=websocket
+                )
+                active_sessions[session_id] = session
+                current_session_id = session_id
+                
+                # Send session ID to client
+                await websocket.send_json({
+                    "type": "session_started",
+                    "sessionId": session_id
+                })
+                
+                logger.info(f"Started new session {session_id} for {data['problemType']}")
+                
                 if data["problemType"] == "optimization":
                     await lead_molecule(
                         data["smiles"],
@@ -533,6 +765,16 @@ async def websocket_endpoint(websocket: WebSocket):
                 )
             elif data["action"] == "ui-update-orchestrator-settings":
                 molecule_format = data["moleculeName"]
+            elif data["action"] == "stop":
+                if current_session_id and current_session_id in active_sessions:
+                    active_sessions[current_session_id].is_cancelled = True
+                    logger.info(f"Session {current_session_id} stopped by user")
+            elif data["action"] == "reset":
+                if current_session_id and current_session_id in active_sessions:
+                    active_sessions[current_session_id].is_cancelled = True
+                    del active_sessions[current_session_id]
+                current_session_id = None
+                logger.info("Session reset by user")
             else:
                 print("WARN: Unhandled message:", data)
     except WebSocketDisconnect:
@@ -541,5 +783,9 @@ async def websocket_endpoint(websocket: WebSocket):
 
 if __name__ == "__main__":
     import uvicorn
+    import logging
+
+    # Suppress noisy HTTP access logs for session save endpoint
+    logging.getLogger("uvicorn.access").setLevel(logging.WARNING)
 
     uvicorn.run(app, host="127.0.0.1", port=8001)

@@ -264,6 +264,11 @@ export const ProjectSidebar: React.FC<ProjectSidebarProps> = ({
   };
 
   const handleEditProject = (project: Project) => {
+    console.log('handleEditProject called with:', project);
+    if (!project || !project.id) {
+      console.error('Invalid project passed to handleEditProject');
+      return;
+    }
     setEditingProject(project.id);
     setEditProjectName(project.name);
   };
@@ -408,8 +413,8 @@ export const ProjectSidebar: React.FC<ProjectSidebarProps> = ({
           <div className="alert alert-warning mt-2">
             <p className="text-warning text-xs">
               {!selection.projectId
-                ? '⚠️ No project selected. A new project will be created when you run.'
-                : '⚠️ No experiment selected. A new experiment will be created when you run.'}
+                ? 'Warning: No project selected. A new project will be created when you run.'
+                : 'Warning: No experiment selected. A new experiment will be created when you run.'}
             </p>
           </div>
         )}
