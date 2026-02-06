@@ -8,7 +8,7 @@ from pathlib import Path
 from charge.experiments.AutoGenExperiment import AutoGenExperiment
 from charge.clients.autogen_utils import chargeConnectionError
 from charge.utils.mcp_workbench_utils import call_mcp_tool_directly
-from callback_logger import CallbackLogger
+from lc_conductor import CallbackLogger
 from charge.tasks.LMOTask import (
     LMOTask as LeadMoleculeOptimization,
     MoleculeOutputSchema,
