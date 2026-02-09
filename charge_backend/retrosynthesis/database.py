@@ -118,9 +118,14 @@ async def find_exact_reactions(
         "dbentry", "", label="Exact", highlight="normal", alternatives=alternatives
     )
 
-    for i, entry in enumerate(entries):
-        # Process database entry
-        processed = db_entry_to_reaction(product_inchi, entry)
+    # Process database entries
+    processed = [db_entry_to_reaction(product_inchi, entry) for entry in entries]
+    # Sort entries by ones having a description coming first
+    processed_entries = [e for e in processed if e.text] + [
+        e for e in processed if not e.text
+    ]
+
+    for i, processed in enumerate(processed_entries):
 
         # Create pathway with reagents
         reactant_smiles: list[str] = []
