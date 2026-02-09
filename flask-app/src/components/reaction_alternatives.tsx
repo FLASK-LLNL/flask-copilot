@@ -342,6 +342,7 @@ export const ReactionAlternativesSidebar: React.FC<ReactionAlternativesSidebarPr
             disabled={!canClick}
             onMouseEnter={() => isDisabled && alt.disabledReason && setHoveredDisabled(alt.id)}
             onMouseLeave={() => setHoveredDisabled(null)}
+            title={alt.hoverInfo}
             className={`w-full glass-panel transition-all text-left relative ${
               isActive ? 'border-2 border-primary bg-primary/10' : ''
             } ${
