@@ -1,7 +1,7 @@
 import React, { useState, useRef, useMemo } from 'react';
 import { X, Loader2, FlaskConical, BookOpen, Check, ChevronDown, ChevronLeft, ChevronRight, AlertCircle, MessageSquareMore, Clock, Sparkles } from 'lucide-react';
 import { ReactionAlternative } from '../types';
-import ITEMS_PER_PAGE from '../constants';
+import { ITEMS_PER_PAGE } from '../constants';
 
 // Helper function to strip HTML tags from text for tooltips
 const stripHtml = (html: string): string => {
