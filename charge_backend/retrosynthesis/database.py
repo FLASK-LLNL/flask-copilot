@@ -125,6 +125,29 @@ async def find_exact_reactions(
         e for e in processed if not e.text
     ]
 
+    # Optionally filter reactions where the product appears as a reactant
+    processed_entries = [
+        e
+        for e in processed_entries
+        if not any(
+            c["inchi"] == product_inchi and c["role"] != "Product"
+            for c in e.components
+            if "role" in c and "inchi" in c
+        )
+    ]
+
+    # Sort so entries where product appears first come first
+    processed_entries.sort(
+        key=lambda e: not next(
+            (
+                c["inchi"] == product_inchi
+                for c in e.components
+                if "role" in c and "inchi" in c
+            ),
+            False,
+        )
+    )
+
     for i, processed in enumerate(processed_entries):
 
         # Create pathway with reagents
