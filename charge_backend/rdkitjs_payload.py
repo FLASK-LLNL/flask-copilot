@@ -30,12 +30,10 @@ def _mol_payload(
     highlight_atom_idxs: Sequence[int],
 ) -> RdkitjsMolPayload:
     # Do not set atom-map numbers on atoms: RDKit depictions may render them as labels.
-    molblock = Chem.MolToMolBlock(m)
     smiles = Chem.MolToSmiles(m)
     idxs = sorted({int(i) for i in highlight_atom_idxs})
     mapnums = [int(i) + 1 for i in idxs]
     return RdkitjsMolPayload(
-        molblock=str(molblock),
         smiles=str(smiles),
         highlight_atom_idxs=idxs,
         highlight_atom_mapnums=mapnums,
@@ -50,7 +48,7 @@ def build_rdkitjs_mapped_reaction(
     highlight_alpha: float = 0.45,
     mcs_timeout_s: int = 2,
 ) -> RdkitjsReactionPayload:
-    """Compute changed atoms and package MolBlocks + highlight indices for rdkit.js."""
+    """Compute changed atoms and package highlight indices for rdkit.js."""
 
     r_mols = mol_differ._ensure_mols(reactants, label="reactants")
     p_mols = mol_differ._ensure_mols(products, label="products")

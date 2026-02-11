@@ -109,13 +109,11 @@ class ModelMessage:
 class RdkitjsMolPayload:
     """Best-practice payload for rdkit.js rendering.
 
-    - Use a MolBlock to preserve atom ordering across Python -> JS.
     - Provide highlight atom indices for direct rdkit.js highlighting.
     - Also include 1-based indices (highlight_atom_mapnums) as a stable debugging aid.
       These are NOT atom-map numbers.
     """
 
-    molblock: str
     smiles: str
     highlight_atom_idxs: list[int]
     highlight_atom_mapnums: list[int]

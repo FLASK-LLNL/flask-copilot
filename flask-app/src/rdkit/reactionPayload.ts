@@ -26,7 +26,7 @@ function blendToWhite(rgb: RGB, alpha: number): RGB {
 
 export function renderMolWithHighlights(
   RDKit: RdkitModule,
-  molblock: string,
+  molInput: string,
   highlightAtomIdxs: number[],
   opts?: { highlightRgb?: RGB; highlightAlpha?: number; width?: number; height?: number },
 ): string {
@@ -38,7 +38,7 @@ export function renderMolWithHighlights(
   const norm = (c: number) => Math.max(0, Math.min(1, c / 255))
   const softRgbNorm: [number, number, number] = [norm(softRgb[0]), norm(softRgb[1]), norm(softRgb[2])]
 
-  const mol = RDKit.get_mol(molblock)
+  const mol = RDKit.get_mol(molInput)
   try {
     const baseOpts = {
       width,
