@@ -12,12 +12,14 @@ import { DEFAULT_CUSTOM_SYSTEM_PROMPT, PROPERTY_NAMES } from './constants';
 import { TreeNode, Edge, ContextMenuState, SidebarMessage, Tool, WebSocketMessageToServer, WebSocketMessage, SelectableTool, Experiment, OptimizationCustomization, ReactionAlternative } from './types';
 
 import { loadRDKit } from './components/molecule';
-import { ReasoningSidebar, useSidebarState } from './components/sidebar';
 import { MoleculeGraph, useGraphState } from './components/graph';
 import { ProjectSidebar, useProjectSidebar, useProjectManagement } from './components/project_sidebar';
 
 import {
   SettingsButton,
+  ReasoningSidebar,
+  useSidebarState,
+  MarkdownText,
   BACKEND_OPTIONS,
   type OrchestratorSettings
 } from 'lcc-conductor';
@@ -31,7 +33,6 @@ import { copyToClipboard } from './utils';
 import './animations.css';
 import { MetricsDashboard, useMetricsDashboardState } from './components/metrics';
 import { useProjectData } from './hooks/useProjectData';
-import { MarkdownText } from './components/markdown';
 import { ReactionAlternativesSidebar } from './components/reaction_alternatives';
 
 

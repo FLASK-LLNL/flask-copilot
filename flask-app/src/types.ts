@@ -58,15 +58,6 @@ export interface Edge {
   label?: string;
 }
 
-
-export interface SidebarMessage {
-  id: number;
-  timestamp: string;
-  message: string;
-  smiles: string | null;
-  source: string;
-}
-
 export interface Tool {
   server?: string;
   names?: string[];
@@ -90,6 +81,11 @@ export interface RunSettings {
 
 import type {
   OrchestratorSettings,
+  SidebarMessage,
+  SidebarState,
+  SidebarProps,
+  VisibleSources,
+  MarkdownTextProps,
   ToolServer,
   MoleculeNameFormat
 } from 'lcc-conductor';
@@ -183,10 +179,6 @@ export interface VisibleMetrics {
   yield: boolean;
 }
 
-export interface VisibleSources {
-  [key: string]: boolean;
-}
-
 export interface ContextMenuState {
   node: TreeNode | null;
   isReaction: boolean;
@@ -232,10 +224,6 @@ export interface RdkitjsReactionPayload {
   reactant_mcs_smarts?: (string | null)[];
 }
 
-export interface MarkdownTextProps {
-  text: string;
-}
-
 export interface MoleculeGraphState {
   offset: Position;
   setOffset: Dispatch<SetStateAction<Position>>;
@@ -254,21 +242,6 @@ export interface MoleculeGraphProps extends MoleculeGraphState {
     handleReactionCardClick: (node: TreeNode) => void;
     selectedReactionNodeId?: string;
     reactionSidebarOpen: boolean;
-    rdkitModule: RDKitModule | null;
-}
-
-export interface SidebarState {
-    messages: SidebarMessage[];
-    setMessages: Dispatch<SetStateAction<SidebarMessage[]>>;
-    sourceFilterOpen: boolean;
-    setSourceFilterOpen: Dispatch<SetStateAction<boolean>>;
-    visibleSources: VisibleSources;
-    setVisibleSources: Dispatch<SetStateAction<VisibleSources>>;
-}
-
-export interface SidebarProps extends SidebarState {
-    // General state from app
-    setSidebarOpen: Dispatch<SetStateAction<boolean>>;
     rdkitModule: RDKitModule | null;
 }
 
