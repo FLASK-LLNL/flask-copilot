@@ -1,3 +1,9 @@
+# Python bytecode
+*.pyc
+*.pyo
+*.pyd
+__pycache__/
+
 # Logs
 logs
 *.log
@@ -149,3 +155,6 @@ __pycache__/
 
 # Public assets
 flask-app/public/rdkit/
+
+# readme
+*.md
