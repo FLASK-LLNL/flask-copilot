@@ -242,7 +242,7 @@ async def template_based_retrosynthesis(
     """Stream positioned nodes and edges"""
     clogger = CallbackLogger(websocket, source="template_based_retrosynthesis")
     await clogger.info(
-        f"Planning retrosynthesis for: {start_smiles} with available tools: {available_tools}."
+        f"Planning retrosynthesis for: `{start_smiles}` with available tools: {available_tools}."
     )
 
     # Generate root node

@@ -1,7 +1,7 @@
-// components/reaction_alternatives_sidebar.tsx
 import React, { useState, useRef, useMemo } from 'react';
 import { X, Loader2, FlaskConical, BookOpen, Check, ChevronDown, ChevronLeft, ChevronRight, AlertCircle, MessageSquareMore, Clock, Sparkles } from 'lucide-react';
 import { ReactionAlternative } from '../types';
+import { ITEMS_PER_PAGE } from '../constants';
 
 // Helper function to strip HTML tags from text for tooltips
 const stripHtml = (html: string): string => {
@@ -138,7 +138,49 @@ const PathwayPreview: React.FC<{
   );
 };
 
-// Collapsible section component
+// Pagination controls component
+const PaginationControls: React.FC<{
+  currentPage: number;
+  totalPages: number;
+  totalItems: number;
+  onPageChange: (page: number) => void;
+}> = ({ currentPage, totalPages, totalItems, onPageChange }) => {
+  if (totalPages <= 1) return null;
+
+  const startItem = (currentPage - 1) * ITEMS_PER_PAGE + 1;
+  const endItem = Math.min(currentPage * ITEMS_PER_PAGE, totalItems);
+
+  return (
+    <div className="flex items-center justify-between gap-2 py-2 px-2 bg-surface/50 rounded mt-2">
+      <button
+        onClick={() => onPageChange(currentPage - 1)}
+        disabled={currentPage === 1}
+        className="btn btn-tertiary btn-sm disabled:opacity-50 disabled:cursor-not-allowed"
+      >
+        <ChevronLeft className="w-3 h-3" />
+        Previous
+      </button>
+
+      <div className="text-xs text-secondary">
+        Showing {startItem}-{endItem} of {totalItems}
+        <span className="text-tertiary ml-1">
+          (Page {currentPage} of {totalPages})
+        </span>
+      </div>
+
+      <button
+        onClick={() => onPageChange(currentPage + 1)}
+        disabled={currentPage === totalPages}
+        className="btn btn-tertiary btn-sm disabled:opacity-50 disabled:cursor-not-allowed"
+      >
+        Next
+        <ChevronRight className="w-3 h-3" />
+      </button>
+    </div>
+  );
+};
+
+// Collapsible section component with pagination
 const CollapsibleSection: React.FC<{
   title: string;
   count: number;
@@ -146,7 +188,10 @@ const CollapsibleSection: React.FC<{
   subtitle?: string;
   defaultExpanded?: boolean;
   children: React.ReactNode;
-}> = ({ title, count, dotColor, subtitle, defaultExpanded = false, children }) => {
+  currentPage: number;
+  onPageChange: (page: number) => void;
+  totalPages: number;
+}> = ({ title, count, dotColor, subtitle, defaultExpanded = false, children, currentPage, onPageChange, totalPages }) => {
   const [isExpanded, setIsExpanded] = useState(defaultExpanded);
 
   return (
@@ -169,8 +214,16 @@ const CollapsibleSection: React.FC<{
         <div className="text-xs text-tertiary ml-6 mb-2 italic">{subtitle}</div>
       )}
       {isExpanded && (
-        <div className="space-y-2 ml-2 mt-2">
-          {children}
+        <div className="ml-2 mt-2">
+          <div className="space-y-2">
+            {children}
+          </div>
+          <PaginationControls
+            currentPage={currentPage}
+            totalPages={totalPages}
+            totalItems={count}
+            onPageChange={onPageChange}
+          />
         </div>
       )}
     </div>
@@ -194,9 +247,13 @@ export const ReactionAlternativesSidebar: React.FC<ReactionAlternativesSidebarPr
     rdkitModule
   } = props;
 
-
   const [hoveredDisabled, setHoveredDisabled] = useState<string | null>(null);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
+
+  // Pagination state for each section
+  const [exactPage, setExactPage] = useState(1);
+  const [templatePage, setTemplatePage] = useState(1);
+  const [aiPage, setAiPage] = useState(1);
 
   // Memoize computed values to prevent recalculation
   const { exactMatches, templateMatches, aiMatches, hasExactMatches, hasTemplateMatches, hasAiMatches, showTemplateButton } = useMemo(() => {
@@ -219,6 +276,58 @@ export const ReactionAlternativesSidebar: React.FC<ReactionAlternativesSidebarPr
     };
   }, [alternatives, templatesSearched]);
 
+  // Reset pages when alternatives change
+  React.useEffect(() => {
+    setExactPage(1);
+    setTemplatePage(1);
+    setAiPage(1);
+  }, [alternatives]);
+
+  // Sets the page to show the active alternative
+  React.useEffect(() => {
+    // Find the active alternative in each category and set the page accordingly
+    const exactActiveIndex = exactMatches.findIndex(alt => alt.status === 'active');
+    if (exactActiveIndex !== -1) {
+      const activePage = Math.ceil((exactActiveIndex + 1) / ITEMS_PER_PAGE);
+      setExactPage(activePage);
+    }
+
+    const templateActiveIndex = templateMatches.findIndex(alt => alt.status === 'active');
+    if (templateActiveIndex !== -1) {
+      const activePage = Math.ceil((templateActiveIndex + 1) / ITEMS_PER_PAGE);
+      setTemplatePage(activePage);
+    }
+
+    const aiActiveIndex = aiMatches.findIndex(alt => alt.status === 'active');
+    if (aiActiveIndex !== -1) {
+      const activePage = Math.ceil((aiActiveIndex + 1) / ITEMS_PER_PAGE);
+      setAiPage(activePage);
+    }
+  }, [exactMatches, templateMatches, aiMatches, isOpen]);
+
+  // Paginate the matches
+  const paginatedExactMatches = useMemo(() => {
+    const start = (exactPage - 1) * ITEMS_PER_PAGE;
+    const end = start + ITEMS_PER_PAGE;
+    return exactMatches.slice(start, end);
+  }, [exactMatches, exactPage]);
+
+  const paginatedTemplateMatches = useMemo(() => {
+    const start = (templatePage - 1) * ITEMS_PER_PAGE;
+    const end = start + ITEMS_PER_PAGE;
+    return templateMatches.slice(start, end);
+  }, [templateMatches, templatePage]);
+
+  const paginatedAiMatches = useMemo(() => {
+    const start = (aiPage - 1) * ITEMS_PER_PAGE;
+    const end = start + ITEMS_PER_PAGE;
+    return aiMatches.slice(start, end);
+  }, [aiMatches, aiPage]);
+
+  const exactTotalPages = Math.ceil(exactMatches.length / ITEMS_PER_PAGE);
+  const templateTotalPages = Math.ceil(templateMatches.length / ITEMS_PER_PAGE);
+  const aiTotalPages = Math.ceil(aiMatches.length / ITEMS_PER_PAGE);
+
   // Memoize the AlternativeCard to prevent recreation
   const AlternativeCard = useMemo(() => {
     return ({ alt }: { alt: ReactionAlternative }) => {
@@ -233,6 +342,7 @@ export const ReactionAlternativesSidebar: React.FC<ReactionAlternativesSidebarPr
             disabled={!canClick}
             onMouseEnter={() => isDisabled && alt.disabledReason && setHoveredDisabled(alt.id)}
             onMouseLeave={() => setHoveredDisabled(null)}
+            title={alt.hoverInfo}
             className={`w-full glass-panel transition-all text-left relative ${
               isActive ? 'border-2 border-primary bg-primary/10' : ''
             } ${
@@ -341,17 +451,6 @@ export const ReactionAlternativesSidebar: React.FC<ReactionAlternativesSidebarPr
             </div>
           </div>
 
-          {/*!hasExactMatches && templatesSearched && (
-            <div className="glass-panel bg-warning/10 border border-warning/30 p-3">
-              <div className="flex items-start gap-2">
-                <AlertCircle className="w-4 h-4 text-warning flex-shrink-0 mt-0.5" />
-                <div className="text-sm text-warning">
-                  No exact matches found in database
-                </div>
-              </div>
-            </div>
-          )*/}
-
           {hasAiMatches && (
             <CollapsibleSection
               title="AI-GENERATED PATHWAY"
@@ -359,17 +458,18 @@ export const ReactionAlternativesSidebar: React.FC<ReactionAlternativesSidebarPr
               dotColor="bg-primary"
               subtitle="Novel pathway discovered by AI"
               defaultExpanded={true}
+              currentPage={aiPage}
+              onPageChange={setAiPage}
+              totalPages={aiTotalPages}
             >
-              <div className="space-y-2">
-                {aiMatches.map(alt => (
-                  <div key={alt.id} className="relative">
-                    <div className="absolute -left-1 -right-1 -top-1 -bottom-1 rounded-lg blur-sm" style={{background: 'linear-gradient(to right, rgba(147, 51, 234, 0.2), rgba(236, 72, 153, 0.2))'}}></div>
-                    <div className="relative">
-                      <AlternativeCard alt={alt} />
-                    </div>
+              {paginatedAiMatches.map(alt => (
+                <div key={alt.id} className="relative">
+                  <div className="absolute -left-1 -right-1 -top-1 -bottom-1 rounded-lg blur-sm" style={{background: 'linear-gradient(to right, rgba(147, 51, 234, 0.2), rgba(236, 72, 153, 0.2))'}}></div>
+                  <div className="relative">
+                    <AlternativeCard alt={alt} />
                   </div>
-                ))}
-              </div>
+                </div>
+              ))}
             </CollapsibleSection>
           )}
 
@@ -380,8 +480,11 @@ export const ReactionAlternativesSidebar: React.FC<ReactionAlternativesSidebarPr
               dotColor="bg-success"
               subtitle="Known reactions in database"
               defaultExpanded={true}
+              currentPage={exactPage}
+              onPageChange={setExactPage}
+              totalPages={exactTotalPages}
             >
-              {exactMatches.map(alt => (
+              {paginatedExactMatches.map(alt => (
                 <AlternativeCard key={alt.id} alt={alt} />
               ))}
             </CollapsibleSection>
@@ -394,6 +497,9 @@ export const ReactionAlternativesSidebar: React.FC<ReactionAlternativesSidebarPr
               dotColor="bg-info"
               subtitle="Adapted from similar reactions"
               defaultExpanded={!hasExactMatches}
+              currentPage={templatePage}
+              onPageChange={setTemplatePage}
+              totalPages={templateTotalPages}
             >
               {isComputingTemplates && templateMatches.length === 0 && (
                 <div className="text-sm text-tertiary italic p-4 text-center glass-panel flex items-center justify-center gap-2">
@@ -401,7 +507,7 @@ export const ReactionAlternativesSidebar: React.FC<ReactionAlternativesSidebarPr
                   Searching templates...
                 </div>
               )}
-              {templateMatches.map(alt => (
+              {paginatedTemplateMatches.map(alt => (
                 <AlternativeCard key={alt.id} alt={alt} />
               ))}
             </CollapsibleSection>

@@ -22,3 +22,6 @@ export const PROPERTY_NAMES: Record<string, string> = {
 } as const;
 
 export const DEFAULT_CUSTOM_SYSTEM_PROMPT = 'Respond with concise and clear answers, as well as JSONs for each SMILES string you return as `{"smiles": "<SMILES STRING GOES HERE>"}`.';
+
+// Pagination constant for reaction alternatives
+export const ITEMS_PER_PAGE = 100;
