@@ -1,5 +1,3 @@
-export type RGB = [number, number, number]
-
 import type { RGB } from '../types'
 
 export type RdkitModule = {
