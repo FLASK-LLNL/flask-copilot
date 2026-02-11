@@ -79,7 +79,7 @@ async def generate_nodes_for_molecular_graph(
         # If this node has children, attach a reaction + mapped reaction immediately.
         # This makes hover-highlighting work on multi-step default routes without
         # requiring the user to open/select alternatives.
-        if getattr(current_node, "children", None):
+        if getattr(current_node, "children", False):
             if len(current_node.children) > 0:
                 node.reaction = Reaction(
                     "azf",
