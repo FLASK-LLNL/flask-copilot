@@ -25,7 +25,9 @@ class ReactionAtomChanges:
     reactant_mcs_smarts: List[Optional[str]]
 
 
-def _parse_reaction_smiles(reaction_smiles: str) -> Tuple[List[Chem.Mol], List[Chem.Mol]]:
+def _parse_reaction_smiles(
+    reaction_smiles: str,
+) -> Tuple[List[Chem.Mol], List[Chem.Mol]]:
     """Parse reaction SMILES using RDKit's reaction parser.
 
     Supports both "reactants>>products" and "reactants>agents>products".
@@ -188,8 +190,12 @@ def _pick_best_match(
                 for p2 in p_orients:
                     p_out = outside_degree_list(product, p2)
                     score = sum(1 for a, b in zip(r_out, p_out) if a == b)
-                    new_cnt = sum(1 for a in p2 if int(a) not in product_atoms_already_mapped)
-                    if score > best_score or (score == best_score and new_cnt > best_new):
+                    new_cnt = sum(
+                        1 for a in p2 if int(a) not in product_atoms_already_mapped
+                    )
+                    if score > best_score or (
+                        score == best_score and new_cnt > best_new
+                    ):
                         best_score = score
                         best_new = new_cnt
                         best_r = r2
@@ -405,9 +411,22 @@ def _extend_instance_map_by_neighbors(
                     def score(p_idx: int) -> Tuple[int, int, int, int]:
                         pa = product.GetAtomWithIdx(int(p_idx))
                         return (
-                            1 if int(pa.GetIsAromatic()) == int(r_nb.GetIsAromatic()) else 0,
-                            1 if int(pa.GetFormalCharge()) == int(r_nb.GetFormalCharge()) else 0,
-                            1 if int(pa.GetTotalNumHs()) == int(r_nb.GetTotalNumHs()) else 0,
+                            (
+                                1
+                                if int(pa.GetIsAromatic()) == int(r_nb.GetIsAromatic())
+                                else 0
+                            ),
+                            (
+                                1
+                                if int(pa.GetFormalCharge())
+                                == int(r_nb.GetFormalCharge())
+                                else 0
+                            ),
+                            (
+                                1
+                                if int(pa.GetTotalNumHs()) == int(r_nb.GetTotalNumHs())
+                                else 0
+                            ),
                             -int(pa.GetDegree()),
                         )
 
@@ -500,7 +519,9 @@ def _reaction_atom_changes_mols(
     # reactant (e.g., ethanol) can match multiple places in the product.
     reactant_order = sorted(
         range(len(reactants)),
-        key=lambda i: int(reactants[i].GetNumHeavyAtoms()) if reactants[i] is not None else 0,
+        key=lambda i: (
+            int(reactants[i].GetNumHeavyAtoms()) if reactants[i] is not None else 0
+        ),
         reverse=True,
     )
 
@@ -515,15 +536,14 @@ def _reaction_atom_changes_mols(
         if not r_match:
             continue
 
-        allow_multi = (
-            int(r.GetNumHeavyAtoms()) >= 6
-            and int(patt.GetNumAtoms()) >= 6
-        )
+        allow_multi = int(r.GetNumHeavyAtoms()) >= 6 and int(patt.GetNumAtoms()) >= 6
 
         # Select multiple matches in the product to explain repeated reactant units.
         # For small reactants, avoid over-mapping due to symmetry/ambiguity.
         if allow_multi:
-            p_matches = _pick_greedy_product_matches(patt, main_product, product_atoms_mapped)
+            p_matches = _pick_greedy_product_matches(
+                patt, main_product, product_atoms_mapped
+            )
         else:
             p_matches = [p_best] if p_best else []
         if not p_matches:
@@ -564,14 +584,18 @@ def _reaction_atom_changes_mols(
             if core_query is not None:
                 r_core = r.GetSubstructMatch(core_query)
                 if r_core:
-                    extra_pm = _pick_greedy_product_matches(core_query, main_product, product_atoms_mapped)
+                    extra_pm = _pick_greedy_product_matches(
+                        core_query, main_product, product_atoms_mapped
+                    )
                     if extra_pm:
                         base_inst = len(reactant_instance_maps[ri])
                         for j, pm in enumerate(extra_pm):
                             if len(pm) != len(r_core):
                                 continue
                             inst_id = base_inst + j
-                            inst_map = {int(r_ai): int(p_ai) for r_ai, p_ai in zip(r_core, pm)}
+                            inst_map = {
+                                int(r_ai): int(p_ai) for r_ai, p_ai in zip(r_core, pm)
+                            }
                             inst_map = _extend_instance_map_by_neighbors(
                                 r,
                                 main_product,
@@ -583,7 +607,11 @@ def _reaction_atom_changes_mols(
                                 pai = int(p_ai)
                                 product_atoms_mapped.add(pai)
                                 if pai not in product_atom_source:
-                                    product_atom_source[pai] = (int(ri), int(r_ai), int(inst_id))
+                                    product_atom_source[pai] = (
+                                        int(ri),
+                                        int(r_ai),
+                                        int(inst_id),
+                                    )
 
     reactant_changed: List[Set[int]] = []
     for ri, r in enumerate(reactants):
@@ -600,10 +628,14 @@ def _reaction_atom_changes_mols(
         if i != main_pi:
             product_changed[i] = set(range(int(pm.GetNumAtoms())))
 
-    product_changed_main: Set[int] = set(range(int(main_product.GetNumAtoms()))) - set(product_atoms_mapped)
+    product_changed_main: Set[int] = set(range(int(main_product.GetNumAtoms()))) - set(
+        product_atoms_mapped
+    )
     mapped_product_atoms_global = set(product_atoms_mapped)
 
-    def bond_sig_to_outside(m: Chem.Mol, atom_idx: int, inside: Set[int]) -> List[Tuple[int, int]]:
+    def bond_sig_to_outside(
+        m: Chem.Mol, atom_idx: int, inside: Set[int]
+    ) -> List[Tuple[int, int]]:
         out: List[Tuple[int, int]] = []
         a = m.GetAtomWithIdx(int(atom_idx))
         for nb in a.GetNeighbors():
@@ -617,7 +649,9 @@ def _reaction_atom_changes_mols(
         out.sort()
         return out
 
-    def atom_sig(m: Chem.Mol, atom_idx: int, inside: Set[int]) -> Tuple[int, int, int, Tuple[Tuple[int, int], ...]]:
+    def atom_sig(
+        m: Chem.Mol, atom_idx: int, inside: Set[int]
+    ) -> Tuple[int, int, int, Tuple[Tuple[int, int], ...]]:
         a = m.GetAtomWithIdx(int(atom_idx))
         total_h = int(a.GetTotalNumHs())
         charge = int(a.GetFormalCharge())
@@ -672,7 +706,10 @@ def _reaction_atom_changes_mols(
     for b in main_product.GetBonds():
         p1 = int(b.GetBeginAtomIdx())
         p2 = int(b.GetEndAtomIdx())
-        if p1 not in mapped_product_atoms_global or p2 not in mapped_product_atoms_global:
+        if (
+            p1 not in mapped_product_atoms_global
+            or p2 not in mapped_product_atoms_global
+        ):
             continue
 
         s1 = product_atom_source.get(p1)
@@ -741,7 +778,9 @@ def _reaction_atom_changes_mols(
         if used_fallback:
             reactant_changed[ri] = set(int(i) for i in keep)
         else:
-            reactant_changed[ri] = set(int(i) for i in reactant_changed[ri] if int(i) in keep)
+            reactant_changed[ri] = set(
+                int(i) for i in reactant_changed[ri] if int(i) in keep
+            )
 
     for pi, pm in enumerate(products):
         if pi == main_pi:
@@ -759,7 +798,9 @@ def _reaction_atom_changes_mols(
             if used_fallback:
                 product_changed[pi] = set(int(i) for i in keep)
             else:
-                product_changed[pi] = set(int(i) for i in product_changed[pi] if int(i) in keep)
+                product_changed[pi] = set(
+                    int(i) for i in product_changed[pi] if int(i) in keep
+                )
         else:
             # We don't currently compute bond-change endpoints for side products.
             # Suppress their highlights to avoid unrelated/spectator groups.
@@ -776,7 +817,7 @@ def _reaction_atom_changes_mols(
         return out
 
     for ri, r in enumerate(reactants):
-        reactant_changed[ri] = filter_carbons(            
+        reactant_changed[ri] = filter_carbons(
             r,
             reactant_changed[ri],
             reactant_bond_order_changed_atoms[ri],
@@ -801,11 +842,15 @@ def _reaction_atom_changes_mols(
     )
 
 
-def reaction_atom_changes(reaction_smiles: str, *, mcs_timeout_s: int = 2) -> ReactionAtomChanges:
+def reaction_atom_changes(
+    reaction_smiles: str, *, mcs_timeout_s: int = 2
+) -> ReactionAtomChanges:
     """Identify changed atoms for reaction SMILES: reactants>>products."""
 
     reactants, products = _parse_reaction_smiles(reaction_smiles)
-    return _reaction_atom_changes_mols(reactants, products, mcs_timeout_s=int(mcs_timeout_s))
+    return _reaction_atom_changes_mols(
+        reactants, products, mcs_timeout_s=int(mcs_timeout_s)
+    )
 
 
 def reaction_atom_changes_from_lists(

@@ -1328,7 +1328,7 @@ const ChemistryTool: React.FC = () => {
                   onClose={handleCloseReactionAlternativesSidebar}
                   productMolecule={selectedReactionNode.label} // Strip HTML
                   productSmiles={selectedReactionNode.smiles}
-                  alternatives={stableAlternatives} 
+                  alternatives={stableAlternatives}
                   onSelectAlternative={handleSelectAlternative}
                   onComputeTemplates={handleComputeTemplates}
                   onComputeFlaskAI={handleComputeFlaskAI}

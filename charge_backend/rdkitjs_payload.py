@@ -74,7 +74,11 @@ def build_rdkitjs_mapped_reaction(
         reactants=r_payloads,
         products=p_payloads,
         main_product_index=int(changes.main_product_index),
-        highlight_rgb=(int(highlight_rgb[0]), int(highlight_rgb[1]), int(highlight_rgb[2])),
+        highlight_rgb=(
+            int(highlight_rgb[0]),
+            int(highlight_rgb[1]),
+            int(highlight_rgb[2]),
+        ),
         highlight_alpha=float(highlight_alpha),
         reactant_mcs_smarts=list(changes.reactant_mcs_smarts),
     )
@@ -85,6 +89,8 @@ def reaction_payload_to_json_dict(payload: RdkitjsReactionPayload) -> Dict[str, 
     return asdict(payload)
 
 
-def mapped_reaction_to_json_dict(mapped_reaction: RdkitjsReactionPayload) -> Dict[str, Any]:
+def mapped_reaction_to_json_dict(
+    mapped_reaction: RdkitjsReactionPayload,
+) -> Dict[str, Any]:
     """Return a JSON-serializable dict (preferred name)."""
     return asdict(mapped_reaction)

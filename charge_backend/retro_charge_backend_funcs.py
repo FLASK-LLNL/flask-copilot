@@ -120,12 +120,16 @@ async def generate_nodes_for_molecular_graph(
                     templatesSearched=False,
                 )
                 try:
-                    child_smiles = [reaction_path_dict[cid].smiles for cid in current_node.children]
+                    child_smiles = [
+                        reaction_path_dict[cid].smiles for cid in current_node.children
+                    ]
                     mapped_reaction = build_rdkitjs_mapped_reaction(
                         reactants=child_smiles,
                         products=[smiles],
                     )
-                    node.reaction.mappedReaction = mapped_reaction_to_json_dict(mapped_reaction)
+                    node.reaction.mappedReaction = mapped_reaction_to_json_dict(
+                        mapped_reaction
+                    )
                 except Exception as e:
                     logger.opt(exception=e).warning(
                         "Failed to build rdkitjs mapped reaction for node_id={node_id} smiles={smiles}",
@@ -764,7 +768,9 @@ async def set_reaction_alternative(
                     reactants=child_smiles_list,
                     products=[parent_node.smiles],
                 )
-                parent_node.reaction.mappedReaction = mapped_reaction_to_json_dict(mapped_reaction)
+                parent_node.reaction.mappedReaction = mapped_reaction_to_json_dict(
+                    mapped_reaction
+                )
                 await context.update_node(parent_node, websocket)
             except Exception as e:
                 logger.opt(exception=e).warning(
