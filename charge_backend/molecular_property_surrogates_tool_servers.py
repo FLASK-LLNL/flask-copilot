@@ -9,9 +9,10 @@ import os
 import click
 import sys
 from loguru import logger
+import uvicorn
 
 from charge.servers.server_utils import update_mcp_network, get_hostname
-from tool_registration import register_tool_server
+from tool_registration import register_tool_server, get_asgi_app
 from mcp.server.fastmcp import FastMCP
 
 from charge.servers.molecular_property_utils import calculate_property_hf
@@ -54,12 +55,16 @@ def main(
         "Computationally expensive surrogate models for molecular properties MCP Server",
         sse_path=f"/mol_prop_tools/sse",
         message_path=f"/mol_prop_tools/messages/",
+        host=host,
+        port=port,
     )
     mcp.tool()(calculate_property_hf)
 
-    update_mcp_network(mcp, host, port)
-
-    mcp.run(transport="sse")
+    asgi_app = get_asgi_app(mcp)
+    if asgi_app:
+        uvicorn.run(asgi_app, host=host or "0.0.0.0", port=port)
+    else:
+        logger.error("Could not access FastMCP ASGI app")
 
 
 if __name__ == "__main__":
