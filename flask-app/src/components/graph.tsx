@@ -4,7 +4,7 @@ import { useRef, useCallback, useEffect, useState, useMemo } from "react";
 import { BOX_HEIGHT, BOX_WIDTH, NODE_STYLES, REACTION_STYLES } from "../constants";
 import {MoleculeGraphProps, MoleculeGraphState, Position, Reaction, TreeNode} from "../types";
 import { MoleculeSVG } from "./molecule";
-import { MarkdownText } from "./markdown";
+import { MarkdownText } from 'lcc-conductor';
 import { estimateTextWidth } from "../tree_utils";
 
 export const useGraphState = (): MoleculeGraphState => {
