@@ -8,13 +8,18 @@
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
 from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import declarative_base
+from sqlalchemy import create_engine, text
+from sqlalchemy.orm import sessionmaker
 import os
 import ssl
 from pathlib import Path
 from dotenv import load_dotenv
 
 # Load credentials from .env file (user-local, gitignored)
-load_dotenv(dotenv_path=Path(__file__).resolve().parent.parent.parent / '.env')
+# Override with: FLASK_ENV_FILE=.env-local python3 ...
+_project_root = Path(__file__).resolve().parent.parent.parent
+_env_file = _project_root / os.getenv('FLASK_ENV_FILE', '.env')
+load_dotenv(dotenv_path=_env_file)
 
 # Allow a local SQLite fallback so the app can run even if MariaDB is unreachable.
 USE_SQLITE_FALLBACK = os.getenv("USE_SQLITE_FALLBACK", "0") == "1"
@@ -28,13 +33,13 @@ else:
     # SSH tunnel command: ssh -L 32636:cz-marathe1-mymariadb1.apps.czapps.llnl.gov:32636 <user>@oslic.llnl.gov
     # All credentials loaded from .env file (see .env.example for template)
     DB_USER = os.getenv("DB_USER")
-    DB_PASSWORD = os.getenv("DB_PASSWORD")
+    DB_PASSWORD = os.getenv("DB_PASSWORD", "")  # Empty password allowed for local dev
     DB_HOST = os.getenv("DB_HOST")
     DB_PORT = os.getenv("DB_PORT")
     DB_NAME = os.getenv("DB_NAME")
 
-    # Validate all required DB settings are present in .env
-    _missing = [k for k, v in {"DB_USER": DB_USER, "DB_PASSWORD": DB_PASSWORD,
+    # Validate required DB settings are present in .env (password can be empty for local dev)
+    _missing = [k for k, v in {"DB_USER": DB_USER,
                                 "DB_HOST": DB_HOST, "DB_PORT": DB_PORT,
                                 "DB_NAME": DB_NAME}.items() if not v]
     if _missing:
@@ -59,9 +64,6 @@ if not USE_SQLITE_FALLBACK:
 else:
     SSL_KW = {}
 
-from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker
-
 # Create sync engine (SSL required by server; skip cert verification because tunnel is trusted)
 try:
     connect_args = {"check_same_thread": False} if USE_SQLITE_FALLBACK else SSL_KW
@@ -75,8 +77,15 @@ try:
         connect_args=connect_args
     )
     SyncSessionLocal = sessionmaker(bind=sync_engine, expire_on_commit=False)
+
+    # Eagerly verify the connection so OperationalError is caught here
+    # rather than deferred to the first query (SQLAlchemy uses lazy connect).
+    with sync_engine.connect() as _conn:
+        _conn.execute(text('SELECT 1'))
     
-    # Also create async engine for compatibility (may have SSL issues)
+    # Also create async engine for compatibility
+    # For aiomysql, SSL configuration is different - don't pass ssl context
+    async_connect_args = {} if not USE_SQLITE_FALLBACK else {"check_same_thread": False}
     engine = create_async_engine(
         ASYNC_DATABASE_URL,
         echo=False,
@@ -84,11 +93,12 @@ try:
         max_overflow=20,
         pool_pre_ping=True,
         pool_recycle=3600,
-        connect_args=SSL_KW
+        connect_args=async_connect_args
     )
     AsyncSessionLocal = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
-except OperationalError:
-    print("Warning: Could not connect to MariaDB. Database features will be disabled.")
+except (OperationalError, Exception) as exc:
+    print(f"Warning: Could not connect to database: {exc}")
+    print("Database features will be disabled.")
     engine = AsyncSessionLocal = None
     sync_engine = SyncSessionLocal = None
 

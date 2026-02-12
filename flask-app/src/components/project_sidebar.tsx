@@ -783,10 +783,22 @@ export const ProjectSidebar: React.FC<ProjectSidebarProps> = ({
 export const useProjectSidebar = () => {
   const SELECTION_STORAGE_KEY = 'flask_copilot_last_selection';
 
+  // Initialize selection from localStorage so it survives browser restarts
   const [isOpen, setIsOpen] = useState(true);
-  const [selection, setSelectionState] = useState<ProjectSelection>({
-    projectId: null,
-    experimentId: null
+  const [selection, setSelectionState] = useState<ProjectSelection>(() => {
+    try {
+      const stored = localStorage.getItem(SELECTION_STORAGE_KEY);
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        if (parsed && (parsed.projectId || parsed.experimentId)) {
+          console.log('Restored sidebar selection from localStorage:', parsed);
+          return parsed as ProjectSelection;
+        }
+      }
+    } catch (e) {
+      console.error('Error reading sidebar selection from localStorage:', e);
+    }
+    return { projectId: null, experimentId: null };
   });
 
   // Save selection to localStorage whenever it changes

@@ -128,6 +128,7 @@ const ChemistryTool: React.FC = () => {
   const edgesRef = useRef(edges);
   const sidebarStateRef = useRef(sidebarState);
   const saveCheckpointRef = useRef<() => void>(() => {});
+  const saveStateToExperimentRef = useRef<() => boolean>(() => false);
   const restoredSessionRef = useRef<SessionState | null>(null);
   const isExperimentCompleteRef = useRef(false);
   const autoCheckpointEnabledRef = useRef(true);
@@ -287,19 +288,24 @@ const ChemistryTool: React.FC = () => {
   }
 
   const loadContextFromExperiment = (projectId: string, experimentId: string | null): void => {
-    console.log('Loading context:', { projectId, experimentId });
+    console.log('Loading context:', { projectId, experimentId, projectCount: projectData.projectsRef.current.length });
     const project = projectData.projectsRef.current.find(p => p.id === projectId);
     if (project) {
       const experiment = project.experiments.find(e => e.id === experimentId);
       if (experiment) {
         loadContext(experiment);
+      } else {
+        console.warn('Experiment not found in project:', experimentId);
       }
+    } else {
+      console.warn('Project not found in projectsRef:', projectId, '(projects loaded:', projectData.projectsRef.current.length, ')');
     }
     return;
   }
 
   const loadStateFromCurrentExperiment = (): void => {
     const { projectId, experimentId } = projectSidebar.selectionRef.current;
+    console.log('loadStateFromCurrentExperiment:', { projectId, experimentId });
     if (projectId && experimentId) {
       loadContextFromExperiment(projectId, experimentId);
     }
@@ -485,7 +491,10 @@ const ChemistryTool: React.FC = () => {
         });
         // Save checkpoint when new molecule is generated (if auto-checkpoint is enabled)
         if (autoCheckpointEnabledRef.current) {
-          setTimeout(() => saveCheckpointRef.current(), 100); // Small delay to ensure state is updated
+          setTimeout(() => {
+            saveCheckpointRef.current();          // Save to database
+            saveStateToExperimentRef.current();    // Save to localStorage so it survives DB outages
+          }, 100); // Small delay to ensure state is updated
         }
       } else if (data.type === 'stopped') {
         // Handle explicit stop from backend
@@ -695,6 +704,14 @@ const ChemistryTool: React.FC = () => {
   // Apply restored session state from database (called after reset in onopen)
   const applyRestoredSession = (savedState: SessionState): void => {
     console.log('Applying restored session state:', savedState);
+    
+    // Restore sidebar selection so saveStateToExperiment works after restore
+    if (savedState.projectId || savedState.experimentId) {
+      projectSidebar.setSelection({
+        projectId: savedState.projectId || null,
+        experimentId: savedState.experimentId || null,
+      });
+    }
     
     // Restore core state
     if (savedState.smiles) setSmiles(savedState.smiles);
@@ -912,8 +929,48 @@ const ChemistryTool: React.FC = () => {
     saveCheckpointRef.current = saveCheckpoint;
   }, [saveCheckpoint]);
 
-  // Set up checkpoint on page unload
+  // Update the saveStateToExperiment ref so WebSocket handler can persist to localStorage
+  useEffect(() => {
+    saveStateToExperimentRef.current = saveStateToExperiment;
+  }, [saveStateToExperiment]);
+
+  // Set up checkpoint on page unload (saves to database via sendBeacon)
   useAutoSave(sessionPersistence, getSessionState);
+
+  // Also save experiment state to localStorage on page unload so it survives
+  // browser restarts even when the database is unavailable.
+  // This must be synchronous -- async functions may not complete during unload.
+  useEffect(() => {
+    const handleUnloadSaveToLocalStorage = () => {
+      try {
+        const projectId = projectSidebar.selectionRef.current.projectId;
+        const experimentId = projectSidebar.selectionRef.current.experimentId;
+        if (!projectId || !experimentId) return;
+
+        const context = getContextRef.current();
+        const storageKey = 'flask_copilot_projects';
+        const raw = localStorage.getItem(storageKey);
+        if (!raw) return;
+
+        const projects = JSON.parse(raw);
+        const project = projects.find((p: { id: string }) => p.id === projectId);
+        if (!project) return;
+
+        const expIndex = project.experiments.findIndex((e: { id: string }) => e.id === experimentId);
+        if (expIndex === -1) return;
+
+        project.experiments[expIndex] = { ...context, lastModified: new Date().toISOString() };
+        project.lastModified = new Date().toISOString();
+        localStorage.setItem(storageKey, JSON.stringify(projects));
+      } catch {
+        // Silently ignore -- experiment may not exist yet
+      }
+    };
+    window.addEventListener('beforeunload', handleUnloadSaveToLocalStorage);
+    return () => {
+      window.removeEventListener('beforeunload', handleUnloadSaveToLocalStorage);
+    };
+  }, []);
 
   // Load session from database on initial mount (runs only once)
   const sessionLoadAttemptedRef = useRef(false);
@@ -931,8 +988,9 @@ const ChemistryTool: React.FC = () => {
         // Store the session in ref so it can be applied after WebSocket connects
         restoredSessionRef.current = savedState;
         
-        // If WebSocket is already connected, apply immediately
-        if (wsConnected && wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+        // Check WebSocket readyState directly via ref -- the wsConnected state
+        // variable is stale in this closure since both effects fire on mount.
+        if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
           console.log('WebSocket already connected, applying restored session now');
           applyRestoredSession(savedState);
         }
@@ -1331,23 +1389,24 @@ const ChemistryTool: React.FC = () => {
 
 
             <div className="flex justify-end gap-2 mb-4">
-              {/* Checkpoint Dropdown */}
+              <button onClick={loadContextFromFile} disabled={isComputing} className="btn btn-secondary btn-sm">
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
+                </svg>
+                Load
+              </button>
               <div className="dropdown">
-                <button 
-                  onClick={(e) => { e.stopPropagation(); setCheckpointDropdownOpen(!checkpointDropdownOpen); }} 
-                  onMouseDown={(e) => e.stopPropagation()} 
-                  className="btn btn-secondary btn-sm"
-                >
+                <button onClick={(e) => { e.stopPropagation(); setSaveDropdownOpen(!saveDropdownOpen); }} onMouseDown={(e) => e.stopPropagation()} className="btn btn-secondary btn-sm">
                   <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4" />
                   </svg>
-                  Checkpoint
-                  <svg className={`w-3 h-3 transition-transform ${checkpointDropdownOpen ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  Save
+                  <svg className={`w-3 h-3 transition-transform ${saveDropdownOpen ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
                   </svg>
                 </button>
-                {checkpointDropdownOpen && (
-                  <div className="dropdown-menu checkpoint-dropdown" onClick={(e) => e.stopPropagation()} onMouseDown={(e) => e.stopPropagation()}>
+                {saveDropdownOpen && (
+                  <div className="dropdown-menu" onClick={(e) => e.stopPropagation()} onMouseDown={(e) => e.stopPropagation()}>
                     <div className="dropdown-item-static">
                       <label className="flex items-center gap-2 cursor-pointer">
                         <input 
@@ -1370,29 +1429,9 @@ const ChemistryTool: React.FC = () => {
                       </svg>
                       Save Checkpoint Now
                     </button>
-                  </div>
-                )}
-              </div>
-              <button onClick={loadContextFromFile} disabled={isComputing} className="btn btn-secondary btn-sm">
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
-                </svg>
-                Load
-              </button>
-              <div className="dropdown">
-                <button onClick={(e) => { e.stopPropagation(); setSaveDropdownOpen(!saveDropdownOpen); }} onMouseDown={(e) => e.stopPropagation()} disabled={isComputing || treeNodes.length === 0 || !wsConnected} className="btn btn-secondary btn-sm">
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4" />
-                  </svg>
-                  Save
-                  <svg className={`w-3 h-3 transition-transform ${saveDropdownOpen ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                  </svg>
-                </button>
-                {saveDropdownOpen && (
-                  <div className="dropdown-menu" onClick={(e) => e.stopPropagation()} onMouseDown={(e) => e.stopPropagation()}>
-                    <button onClick={saveTree} className="dropdown-item">Save Tree Only</button>
-                    <button onClick={requestSaveContext} className="dropdown-item dropdown-divider">Save Full Context</button>
+                    <div className="dropdown-divider"></div>
+                    <button onClick={saveTree} disabled={treeNodes.length === 0} className="dropdown-item">Save Tree Only</button>
+                    <button onClick={requestSaveContext} disabled={treeNodes.length === 0 || !wsConnected} className="dropdown-item">Save Full Context</button>
                   </div>
                 )}
               </div>

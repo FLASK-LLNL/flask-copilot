@@ -38,6 +38,7 @@ from charge_backend.moleculedb.molecule_naming import smiles_to_html, MolNameFor
 sys.path.insert(0, os.path.dirname(__file__))
 from backend.database.engine import engine, Base
 from backend.routers import sessions as sessionsrouter
+from backend.routers import projects as projectsrouter
 
 
 # Session tracking for computation resume
@@ -72,8 +73,15 @@ def cleanup_old_sessions():
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Database initialization on startup"""
-    async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
+    if engine is not None:
+        try:
+            async with engine.begin() as conn:
+                await conn.run_sync(Base.metadata.create_all)
+            logger.info("Database tables initialized successfully")
+        except Exception as e:
+            logger.warning(f"Database initialization failed (app will run without persistence): {e}")
+    else:
+        logger.warning("No database engine available. Running without persistence.")
     yield
 
 
@@ -90,6 +98,8 @@ app.add_middleware(
 
 # Include the sessions router for database persistence
 app.include_router(sessionsrouter.router)
+# Include the projects router for multi-browser experiment sharing
+app.include_router(projectsrouter.router)
 
 if "FLASK_APPDIR" in os.environ:
     DIST_PATH = os.environ["FLASK_APPDIR"]
