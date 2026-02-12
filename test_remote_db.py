@@ -17,8 +17,10 @@ import uuid
 from datetime import datetime
 
 # Load credentials from .env file (user-local, gitignored)
-# Looks in current directory, then parent directories
-load_dotenv(dotenv_path=Path(__file__).resolve().parent / '.env')
+# Override with: FLASK_ENV_FILE=.env-local python3 test_remote_db.py
+_project_root = Path(__file__).resolve().parent
+_env_file = _project_root / os.getenv('FLASK_ENV_FILE', '.env')
+load_dotenv(dotenv_path=_env_file)
 
 # Remote LLNL LaunchIT MariaDB connection details
 # When using SSH tunnel: ssh -L 32636:cz-marathe1-mymariadb1.apps.czapps.llnl.gov:32636 marathe1@oslic.llnl.gov

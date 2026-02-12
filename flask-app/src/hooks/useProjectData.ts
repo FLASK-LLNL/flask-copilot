@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { Project, Experiment } from '../types';
+import { HTTP_SERVER } from '../config';
 
 const STORAGE_KEY = 'flask_copilot_projects';
 
@@ -147,6 +148,191 @@ class LocalStorageDataSource implements ProjectDataSource {
   }
 }
 
+// Database implementation with localStorage fallback
+class DatabaseDataSource implements ProjectDataSource {
+  private useLocalStorageFallback = false;
+  private localStorageSource = new LocalStorageDataSource();
+
+  async loadProjects(): Promise<Project[]> {
+    // Try database first
+    if (!this.useLocalStorageFallback) {
+      try {
+        const response = await fetch(`${HTTP_SERVER}/api/projects`);
+        if (response.ok) {
+          const projects = await response.json();
+          console.log(`[DatabaseDataSource] Loaded ${projects.length} projects from database`);
+          // Sync to localStorage as cache
+          localStorage.setItem(STORAGE_KEY, JSON.stringify(projects));
+          return projects;
+        } else {
+          console.warn(`[DatabaseDataSource] Database request failed: ${response.status}`);
+          this.useLocalStorageFallback = true;
+        }
+      } catch (error) {
+        console.warn('[DatabaseDataSource] Database unavailable, falling back to localStorage:', error);
+        this.useLocalStorageFallback = true;
+      }
+    }
+    
+    // Fallback to localStorage
+    console.log('[DatabaseDataSource] Using localStorage fallback');
+    return this.localStorageSource.loadProjects();
+  }
+
+  async saveProjects(projects: Project[]): Promise<void> {
+    // Always save to localStorage as cache
+    await this.localStorageSource.saveProjects(projects);
+  }
+
+  async createProject(name: string): Promise<Project> {
+    if (!this.useLocalStorageFallback) {
+      try {
+        const response = await fetch(`${HTTP_SERVER}/api/projects`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name }),
+        });
+        if (response.ok) {
+          const project = await response.json();
+          // Update localStorage cache
+          const projects = await this.localStorageSource.loadProjects();
+          projects.push(project);
+          await this.localStorageSource.saveProjects(projects);
+          return project;
+        }
+      } catch (error) {
+        console.warn('Database unavailable, using localStorage:', error);
+        this.useLocalStorageFallback = true;
+      }
+    }
+    
+    return this.localStorageSource.createProject(name);
+  }
+
+  async updateProject(project: Project): Promise<void> {
+    // Update localStorage cache first
+    await this.localStorageSource.updateProject(project);
+    
+    if (!this.useLocalStorageFallback) {
+      try {
+        const response = await fetch(`${HTTP_SERVER}/api/projects/${project.id}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name: project.name }),
+        });
+        if (!response.ok) {
+          console.warn('Failed to update project in database');
+        }
+      } catch (error) {
+        console.warn('Database unavailable:', error);
+      }
+    }
+  }
+
+  async deleteProject(projectId: string): Promise<void> {
+    // Delete from localStorage cache
+    await this.localStorageSource.deleteProject(projectId);
+    
+    if (!this.useLocalStorageFallback) {
+      try {
+        const response = await fetch(`${HTTP_SERVER}/api/projects/${projectId}`, {
+          method: 'DELETE',
+        });
+        if (!response.ok) {
+          console.warn('Failed to delete project from database');
+        }
+      } catch (error) {
+        console.warn('Database unavailable:', error);
+      }
+    }
+  }
+
+  async createExperiment(projectId: string, name: string): Promise<Experiment> {
+    if (!this.useLocalStorageFallback) {
+      try {
+        const response = await fetch(`${HTTP_SERVER}/api/projects/${projectId}/experiments`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name }),
+        });
+        if (response.ok) {
+          const experiment = await response.json();
+          // Update localStorage cache
+          const projects = await this.localStorageSource.loadProjects();
+          const project = projects.find(p => p.id === projectId);
+          if (project) {
+            project.experiments.push(experiment);
+            project.lastModified = new Date().toISOString();
+            await this.localStorageSource.saveProjects(projects);
+          }
+          return experiment;
+        }
+      } catch (error) {
+        console.warn('Database unavailable, using localStorage:', error);
+        this.useLocalStorageFallback = true;
+      }
+    }
+    
+    return this.localStorageSource.createExperiment(projectId, name);
+  }
+
+  async updateExperiment(projectId: string, experiment: Experiment): Promise<void> {
+    // Update localStorage cache first
+    await this.localStorageSource.updateExperiment(projectId, experiment);
+    
+    if (!this.useLocalStorageFallback) {
+      try {
+        const response = await fetch(`${HTTP_SERVER}/api/projects/${projectId}/experiments/${experiment.id}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ experiment }),
+        });
+        if (!response.ok) {
+          console.warn('Failed to update experiment in database');
+        }
+      } catch (error) {
+        console.warn('Database unavailable:', error);
+      }
+    }
+  }
+
+  async deleteExperiment(projectId: string, experimentId: string): Promise<void> {
+    // Delete from localStorage cache
+    await this.localStorageSource.deleteExperiment(projectId, experimentId);
+    
+    if (!this.useLocalStorageFallback) {
+      try {
+        const response = await fetch(`${HTTP_SERVER}/api/projects/${projectId}/experiments/${experimentId}`, {
+          method: 'DELETE',
+        });
+        if (!response.ok) {
+          console.warn('Failed to delete experiment from database');
+        }
+      } catch (error) {
+        console.warn('Database unavailable:', error);
+      }
+    }
+  }
+
+  async setExperimentRunning(projectId: string, experimentId: string, isRunning: boolean): Promise<void> {
+    // Update localStorage cache
+    await this.localStorageSource.setExperimentRunning(projectId, experimentId, isRunning);
+    
+    if (!this.useLocalStorageFallback) {
+      try {
+        const response = await fetch(`${HTTP_SERVER}/api/projects/${projectId}/experiments/${experimentId}/running?is_running=${isRunning}`, {
+          method: 'PUT',
+        });
+        if (!response.ok) {
+          console.warn('Failed to update experiment running status in database');
+        }
+      } catch (error) {
+        console.warn('Database unavailable:', error);
+      }
+    }
+  }
+}
+
 // TODO: Future server implementation
 // class ServerDataSource implements ProjectDataSource {
 //   async loadProjects(): Promise<Project[]> {
@@ -156,22 +342,32 @@ class LocalStorageDataSource implements ProjectDataSource {
 //   // ...
 // }
 
+// Synchronous read of projects from localStorage so the data is available
+// before any effects run (avoids race with WebSocket onopen).
+const loadProjectsSync = (): Project[] => {
+  try {
+    const stored = localStorage.getItem(STORAGE_KEY);
+    if (stored) {
+      return JSON.parse(stored);
+    }
+  } catch (e) {
+    console.error('Error reading projects from localStorage:', e);
+  }
+  return [];
+};
+
 // Hook for managing project data
 export const useProjectData = () => {
-  const [projects, setProjects] = useState<Project[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [projects, setProjects] = useState<Project[]>(loadProjectsSync);
+  const [loading, setLoading] = useState(false);
 
   const projectsRef = useRef(projects);
   useEffect(() => {
     projectsRef.current = projects;
   }, [projects]);
 
-  // TODO(later): Swap this to use ServerDataSource
-  const dataSource: ProjectDataSource = new LocalStorageDataSource();
-
-  useEffect(() => {
-    loadProjects();
-  }, []);
+  // Use database-backed data source with localStorage fallback
+  const dataSource = useRef(new DatabaseDataSource()).current;
 
   const loadProjects = async () => {
     setLoading(true);
@@ -226,6 +422,21 @@ export const useProjectData = () => {
     await dataSource.setExperimentRunning(projectId, experimentId, isRunning);
     await loadProjects();
   };
+
+  // Auto-refresh projects from database every 2 seconds to pick up changes from other browsers
+  useEffect(() => {
+    // Initial load
+    console.log('[useProjectData] Initial load of projects');
+    loadProjects();
+
+    // Set up periodic refresh
+    const refreshInterval = setInterval(() => {
+      console.log('[useProjectData] Periodic refresh of projects');
+      loadProjects();
+    }, 2000); // Refresh every 2 seconds
+
+    return () => clearInterval(refreshInterval);
+  }, []); // Empty deps - only run once on mount
 
   return {
     projectsRef,
