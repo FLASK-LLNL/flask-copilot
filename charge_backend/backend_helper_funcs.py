@@ -106,8 +106,14 @@ class ModelMessage:
 
 @dataclass
 class RunSettings:
-    moleculeName: MolNameFormat
-    promptDebugging: bool
+    molecule_name_format: MolNameFormat
+    prompt_debugging: bool
+
+    def __init__(
+        self, moleculeName: MolNameFormat = "brand", promptDebugging: bool = False
+    ):
+        self.molecule_name_format = moleculeName
+        self.prompt_debugging = promptDebugging
 
 
 def get_price(smiles: str) -> float:

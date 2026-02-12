@@ -9,6 +9,7 @@ from backend_helper_funcs import (
     Reaction,
     ReactionAlternative,
     PathwayStep,
+    RunSettings,
 )
 from retrosynthesis.context import RetrosynthesisContext
 from charge_backend.moleculedb.molecule_naming import (
@@ -159,7 +160,7 @@ async def run_retro_planner(
     config_file: str,
     smiles: str,
     clogger: CallbackLogger,
-    molecule_name_format: MolNameFormat,
+    run_settings: RunSettings,
     reaction_id: str = "azf",
     all_inactive: bool = False,
 ) -> tuple[Reaction | None, list[azf.ReactionPath]]:
@@ -170,7 +171,7 @@ async def run_retro_planner(
     :param config_file: Path to AiZynthFinder configuration yml file
     :param smiles: SMILES string to use
     :param clogger: Logger object that can return messages to the UI
-    :param molecule_name_format: Desired default formatting for molecule names
+    :param run_settings: Desired run settings
     :param reaction_id: An optional string for a unique reaction ID
     :param all_inactive: If True, does not activate the first alternative
     :return: A 2-tuple of (Reaction object, list of routes) if routes found, or
@@ -199,7 +200,7 @@ async def run_retro_planner(
     alts: list[ReactionAlternative] = []
     for i, rpath in enumerate(rpaths):
         alt = make_reaction_alternative(
-            rpath, i, trees[i], molecule_name_format, all_inactive
+            rpath, i, trees[i], run_settings.molecule_name_format, all_inactive
         )
         if alt is not None:
             alts.append(alt)
@@ -236,8 +237,8 @@ async def template_based_retrosynthesis(
     config_file: str,
     context: RetrosynthesisContext,
     websocket: WebSocket,
+    run_settings: RunSettings,
     available_tools: Optional[Union[str, list[str]]] = None,
-    molecule_name_format: MolNameFormat = "brand",
 ):
     """Stream positioned nodes and edges"""
     clogger = CallbackLogger(websocket, source="template_based_retrosynthesis")
@@ -254,7 +255,7 @@ async def template_based_retrosynthesis(
     root = Node(
         id="node_0",
         smiles=start_smiles,
-        label=smiles_to_html(start_smiles, molecule_name_format),
+        label=smiles_to_html(start_smiles, run_settings.molecule_name_format),
         hoverInfo=f"""# Root molecule
 **SMILES:** {start_smiles}
 
@@ -274,7 +275,7 @@ async def template_based_retrosynthesis(
 
     await clogger.info("Searching for exact matches...")
     reaction = await find_exact_reactions(
-        root, context, clogger, websocket, molecule_name_format
+        root, context, clogger, websocket, run_settings
     )
     if reaction is not None:  # Exact reactions were found in database
         root.reaction = reaction
@@ -284,7 +285,7 @@ async def template_based_retrosynthesis(
 
     await clogger.info("Running AiZynthFinder...")
     reaction, routes = await run_retro_planner(
-        config_file, start_smiles, clogger, molecule_name_format
+        config_file, start_smiles, clogger, run_settings
     )
     if not reaction:
         await clogger.info(
@@ -308,7 +309,7 @@ async def template_based_retrosynthesis(
         routes[0].nodes,
         context,
         websocket=websocket,
-        molecule_name_format=molecule_name_format,
+        molecule_name_format=run_settings.molecule_name_format,
         include_root_node=False,
         root_node_id=root.id,
     )
@@ -324,8 +325,8 @@ async def compute_templates_for_node(
     config_file: str,
     context: RetrosynthesisContext,
     websocket: WebSocket,
+    run_settings: RunSettings,
     available_tools: Optional[Union[str, list[str]]] = None,
-    molecule_name_format: MolNameFormat = "brand",
 ):
     """Computes all templates for node"""
     clogger = CallbackLogger(websocket, source="compute_templates_for_node")
@@ -337,7 +338,7 @@ async def compute_templates_for_node(
         config_file,
         node.smiles,
         clogger,
-        molecule_name_format,
+        run_settings=run_settings,
         all_inactive=True,
     )
 

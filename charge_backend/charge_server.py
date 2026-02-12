@@ -40,6 +40,7 @@ from tool_registration import (
 )
 
 from backend_manager import TaskManager, ActionManager
+from charge_backend import prompt_debugger
 
 # Pydantic models for new endpoints
 from pydantic import BaseModel
@@ -270,6 +271,11 @@ async def websocket_endpoint(websocket: WebSocket):
             try:
                 data = await websocket.receive_json()
                 action = data.get("action")
+
+                if action == "prompt-breakpoint-response":  # AI debugging
+                    prompt_debugger.DEBUG_PROMPT_RESPONSES[websocket].set_result(data)
+                    continue
+
                 if action in action_handlers:
 
                     # Cancel any existing task before starting a new one
