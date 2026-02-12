@@ -1,6 +1,6 @@
 /* eslint-disable react-hooks/exhaustive-deps */
 import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
-import { Loader2, FlaskConical, TestTubeDiagonal, Network, Play, RotateCcw, X, Send, RefreshCw, Sparkles, MessageCircleQuestion, StepForward, MessageSquareShare, Brain, PanelRightOpen, Sliders, Wrench, Settings } from 'lucide-react';
+import { Loader2, FlaskConical, TestTubeDiagonal, Network, Play, RotateCcw, X, Send, RefreshCw, Sparkles, MessageCircleQuestion, StepForward, MessageSquareShare, Brain, PanelRightOpen, Sliders, Wrench, Settings, Bug, CheckCircle } from 'lucide-react';
 import 'recharts';
 import 'react-markdown';
 import 'remark-gfm';
@@ -17,6 +17,7 @@ import { MoleculeGraph, useGraphState } from './components/graph';
 import { ProjectSidebar, useProjectSidebar, useProjectManagement } from './components/project_sidebar';
 import { SettingsButton, BACKEND_OPTIONS } from './components/settings_button';
 import { CombinedCustomizationModal } from './components/combined_customization_modal';
+import { Modal } from './components/modal';
 
 import { findAllDescendants, hasDescendants, isRootNode, relayoutTree } from './tree_utils';
 import { copyToClipboard } from './utils';
@@ -69,6 +70,14 @@ const ChemistryTool: React.FC = () => {
     explorationRate: 0.5,
     additionalConstraints: [],
   });
+
+  // AI debugging
+  const [debugMode, setDebugMode] = useState<boolean>(false);
+  const [promptBreakpoint, setPromptBreakpoint] = useState<{
+    prompt: string;
+    metadata?: any;
+  } | null>(null);
+  const [editedPrompt, setEditedPrompt] = useState<string>('');
 
   // Function to refresh tools list from backend
   const refreshToolsList = useCallback(() => {
@@ -212,7 +221,6 @@ const ChemistryTool: React.FC = () => {
         customUrl: settings.customUrl,
         model: settings.model,
         apiKey: settings.apiKey,
-        moleculeName: settings.moleculeName
       };
       wsRef.current.send(JSON.stringify(message));
 
@@ -378,6 +386,7 @@ const ChemistryTool: React.FC = () => {
       customPropertyAscending,
       systemPrompt,
       userPrompt: problemPrompt,
+      runSettings: {promptDebugging: debugMode, moleculeName: orchestratorSettings.moleculeName || "brand"},
       customization
     };
 
@@ -517,6 +526,13 @@ const ChemistryTool: React.FC = () => {
         saveFullContext(data.experimentContext!);
       } else if (data.type === 'get-username-response') {
         setUsername(data.username!);
+      } else if (data.type === 'prompt-breakpoint') {
+        console.log('Prompt breakpoint triggered:', data);
+        setPromptBreakpoint({
+          prompt: data.prompt || '',
+          metadata: data.metadata
+        });
+        setEditedPrompt(data.prompt || '');
       }
     };
 
@@ -633,8 +649,6 @@ const ChemistryTool: React.FC = () => {
     };
   }, [smiles, problemType, graphState, metricsDashboardState, autoZoom,
       systemPrompt, problemPrompt, propertyType, customPropertyName, customPropertyDesc, customPropertyAscending, customization, projectData, projectSidebar]);
-
-
 
   const saveTree = (): void => {
     const data = { version: '1.0', type: 'tree', timestamp: new Date().toISOString(), smiles, nodes: treeNodes, edges };
@@ -764,6 +778,24 @@ const ChemistryTool: React.FC = () => {
       });
   };
 
+  // Handle prompt approval/modification
+  const handlePromptBreakpointResponse = useCallback(() => {
+    if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) {
+      alert('WebSocket not connected');
+      return;
+    }
+
+    wsRef.current.send(JSON.stringify({
+      action: 'prompt-breakpoint-response',
+      prompt: editedPrompt,
+      metadata: promptBreakpoint?.metadata
+    }));
+
+    setPromptBreakpoint(null);
+    setEditedPrompt('');
+    setIsComputing(true); // Resume computation
+  }, [editedPrompt, promptBreakpoint]);
+
   const sendMessageToServer = useCallback((message: string, data?: Omit<WebSocketMessageToServer, 'action'>): void => {
     if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) {
       alert('WebSocket not connected');
@@ -771,6 +803,7 @@ const ChemistryTool: React.FC = () => {
     }
     const msg: WebSocketMessageToServer = {
       action: message,
+      runSettings: {promptDebugging: debugMode, moleculeName: orchestratorSettings.moleculeName || "brand"},
       ...data
     };
     wsRef.current.send(JSON.stringify(msg));
@@ -813,7 +846,8 @@ const ChemistryTool: React.FC = () => {
       wsRef.current.send(JSON.stringify({
         action: "compute-reaction-templates",
         nodeId: nodeId,
-        smiles: smiles
+        smiles: smiles,
+        runSettings: {promptDebugging: debugMode, moleculeName: orchestratorSettings.moleculeName || "brand"}
       }));
     }
   }, [selectedReactionNode?.id, selectedReactionNode?.smiles]);  // Only depend on primitive values
@@ -828,7 +862,8 @@ const ChemistryTool: React.FC = () => {
       } else {
         wsRef.current.send(JSON.stringify({
           action: "compute-reaction-from",
-          nodeId: nodeId
+          nodeId: nodeId,
+          runSettings: {promptDebugging: debugMode, moleculeName: orchestratorSettings.moleculeName || "brand"},
         }));
       }
     }
@@ -871,6 +906,7 @@ const ChemistryTool: React.FC = () => {
       nodeId: customQueryModal?.id,
       smiles: customQueryModal?.smiles,
       query: customQueryText,
+      runSettings: {promptDebugging: debugMode, moleculeName: orchestratorSettings.moleculeName || "brand"},
       ...propertyDetails
     };
     wsRef.current.send(JSON.stringify(message));
@@ -1131,13 +1167,30 @@ const ChemistryTool: React.FC = () => {
                   <label className="form-label">Starting Molecule (SMILES)</label>
                   <input type="text" value={smiles} onChange={(e) => setSmiles(e.target.value)} disabled={isComputing} placeholder="Enter SMILES notation" className="form-input text-lg" />
                 </div>
-                <div>
-                  <label className="form-label flex items-center gap-2 cursor-pointer">
-                    <input type="checkbox" checked={autoZoom} onChange={(e) => setAutoZoom(e.target.checked)} className="form-checkbox" />
-                    Auto-zoom to fit
-                  </label>
+                <div className="flex-0.5">
+                  <div>
+                    <label className="form-label flex items-center gap-2 cursor-pointer">
+                      <input type="checkbox" checked={autoZoom} onChange={(e) => setAutoZoom(e.target.checked)} className="form-checkbox" />
+                      Auto-zoom to fit
+                    </label>
+                  </div>
+                  <div>
+                    <label className="form-label flex items-center gap-2 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={debugMode}
+                        onChange={() => setDebugMode(!debugMode)}
+                        disabled={isComputing}
+                        className="form-checkbox"
+                        title="Prompts will pause for review before sending"
+                      />
+                      <Bug className="w-4 h-4" />
+                      AI Debug Mode
+                    </label>
+                  </div>
                 </div>
               </div>
+
 
               <div className="flex items-center gap-4">
                 <div className="input-row-controls">
@@ -1644,6 +1697,63 @@ const ChemistryTool: React.FC = () => {
         showOptimizationTab={problemType === "optimization"}
       />
 
+      {/* Prompt Debugging Modal */}
+      <Modal
+        isOpen={!!promptBreakpoint}
+        onClose={() => {
+          handlePromptBreakpointResponse();
+        }}
+        title="🔍 AI Prompt Breakpoint"
+        subtitle="Review and modify the prompt before sending to the AI"
+        size="lg"
+        footer={
+          <>
+            <button
+              onClick={() => handlePromptBreakpointResponse()}
+              className="btn btn-primary flex-1"
+            >
+              <CheckCircle className="w-5 h-5" />
+              Approve & Send
+            </button>
+          </>
+        }
+      >
+        <div className="space-y-4">
+          {promptBreakpoint?.metadata && (
+            <div className="glass-panel">
+              <div className="text-sm font-semibold text-secondary mb-2">
+                Context Information:
+              </div>
+              <pre className="text-xs text-tertiary overflow-x-auto">
+                {JSON.stringify(promptBreakpoint.metadata, null, 2)}
+              </pre>
+            </div>
+          )}
+
+          <div className="form-group">
+            <label className="form-label-block">
+              Prompt Content
+              <span className="text-xs text-tertiary ml-2">
+                (Edit as needed before approving)
+              </span>
+            </label>
+            <textarea
+              value={editedPrompt}
+              onChange={(e) => setEditedPrompt(e.target.value)}
+              className="form-textarea"
+              style={{ minHeight: '300px', fontFamily: 'monospace' }}
+              placeholder="Prompt content will appear here..."
+            />
+          </div>
+
+          <div className="alert alert-info">
+            <div className="text-sm text-secondary">
+              You can review and modify this prompt before it is sent to the AI
+              model. Changes will be used for this request only.
+            </div>
+          </div>
+        </div>
+      </Modal>
     </div>
   );
 };
