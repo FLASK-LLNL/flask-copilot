@@ -41,11 +41,12 @@ export default defineConfig({
     'window.APP_CONFIG.VERSION': JSON.stringify(process.env.SERVER_VERSION || '')
   },
   resolve: {
-    dedupe: ['react', 'react-dom']
+    dedupe: ['react', 'react-dom', 'lucide-react'],
+    preserveSymlinks: true
   },
   optimizeDeps: {
     // Force pre-bundling in dev AND specify for build
-    include: ['react', 'react-dom', 'lc-conductor', 'scheduler'],
+    include: ['react', 'react-dom', 'lc-conductor', 'scheduler', 'lucide-react'],
     force: true  // Force re-optimization
   },
   build: {

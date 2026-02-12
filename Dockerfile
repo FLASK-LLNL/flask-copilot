@@ -39,6 +39,7 @@ WORKDIR /app/
 
 RUN python -m venv /venv
 RUN . /venv/bin/activate && \
+    pip install -e externals/lc_conductor && \
     pip install -r requirements.txt && \
     git clone --recursive https://github.com/FLASK-LLNL/ChARGe.git charge.git && \
     cd /app/charge.git && \
