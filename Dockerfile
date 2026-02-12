@@ -9,14 +9,33 @@ RUN mkdir /data/db
 
 WORKDIR /app
 COPY requirements.txt /app
-COPY flask-app/. /app
+COPY flask-app /app/flask-app
 COPY charge_backend /app/charge_backend
+COPY externals /app/externals
 
+# Build the components for the LC Conductor
+WORKDIR /app/externals/lc_conductor/lcc_ui_components
+RUN . $HOME/.nvm/nvm.sh && \
+    npm install -g npm@latest && \
+    npm install
+    # && \
+    # rm -rf node_modules/.vite dist .vite
+RUN . $HOME/.nvm/nvm.sh && npm run build
+
+# Verify LC-Conductor build
+RUN test -f dist/index.js || (echo "LC-Conductor build failed!" && exit 1)
+RUN echo "LC-Conductor built successfully"
+
+# Switch back to the flask-app to build copilot
+WORKDIR /app/flask-app
 RUN . $HOME/.nvm/nvm.sh && \
     npm install -g npm@latest && \
     npm install && \
     rm -rf node_modules/.vite dist .vite
 RUN . $HOME/.nvm/nvm.sh && npm run build
+
+# Switch back to the top level to build everything else
+WORKDIR /app/
 
 RUN python -m venv /venv
 RUN . /venv/bin/activate && \
@@ -31,7 +50,7 @@ COPY dockerscripts/launch_servers.sh /app
 
 RUN chmod -R g+rwx /app /data
 
-ENV FLASK_APPDIR=/app/dist
+ENV FLASK_APPDIR=/app/flask-app/dist
 
 ARG SERVER_VERSION=""
 ENV SERVER_VERSION=${SERVER_VERSION}

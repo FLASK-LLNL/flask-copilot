@@ -22,7 +22,7 @@ import {
   MarkdownText,
   BACKEND_OPTIONS,
   type OrchestratorSettings
-} from 'lcc-conductor';
+} from 'lc-conductor';
 
 import { CombinedCustomizationModal } from './components/combined_customization_modal';
 import { Modal } from './components/modal';

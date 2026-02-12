@@ -88,7 +88,7 @@ import type {
   MarkdownTextProps,
   ToolServer,
   MoleculeNameFormat
-} from 'lcc-conductor';
+} from 'lc-conductor';
 
 // Optimization customization options
 export interface OptimizationCustomization {
