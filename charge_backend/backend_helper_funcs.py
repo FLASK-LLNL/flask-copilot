@@ -2,7 +2,7 @@ from loguru import logger
 from fastapi import WebSocket
 import asyncio
 import json
-from typing import Dict, Optional, Literal
+from typing import Any, Dict, Optional, Literal, Tuple
 from dataclasses import dataclass, asdict
 
 from charge.clients.autogen import AutoGenAgent
@@ -46,6 +46,7 @@ class Reaction:
     label: Optional[str] = None
     alternatives: Optional[list[ReactionAlternative]] = None
     templatesSearched: bool = False
+    mappedReaction: Optional[Dict[str, Any]] = None
 
     def json(self):
         return asdict(self)
@@ -114,6 +115,20 @@ class RunSettings:
     ):
         self.molecule_name_format = moleculeName
         self.prompt_debugging = promptDebugging
+
+
+@dataclass(frozen=True)
+class RdkitjsMolPayload:
+    """Best-practice payload for rdkit.js rendering.
+
+    - Provide highlight atom indices for direct rdkit.js highlighting.
+    - Also include 1-based indices (highlight_atom_mapnums) as a stable debugging aid.
+      These are NOT atom-map numbers.
+    """
+
+    smiles: str
+    highlight_atom_idxs: list[int]
+    highlight_atom_mapnums: list[int]
 
 
 def get_price(smiles: str) -> float:

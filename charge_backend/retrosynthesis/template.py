@@ -18,6 +18,7 @@ from charge_backend.moleculedb.molecule_naming import (
 )
 from charge_backend.moleculedb.purchasable import is_purchasable
 from charge_backend.retrosynthesis.database import find_exact_reactions
+from retrosynthesis.mapping import build_mapped_reaction_dict_or_none
 
 if TYPE_CHECKING:
     import aizynthfinder.reactiontree
@@ -75,17 +76,29 @@ async def generate_nodes_for_molecular_graph(
             highlight="normal",
             purchasable=(len(mol_sources) > 0),
         )
-        await retro_synth_context.add_node(node, parent, websocket)
 
-        if parent is not None and parent.reaction is None:
-            parent.reaction = Reaction(
-                "azf",
-                "Reaction found with AiZynthFinder",
-                highlight="yellow",
-                label="Template",
-                templatesSearched=False,
-            )
-            await retro_synth_context.update_node(parent, websocket)
+        # If this node has children, attach a reaction + mapped reaction immediately.
+        # This makes hover-highlighting work on multi-step default routes without
+        # requiring the user to open/select alternatives.
+        if getattr(current_node, "children", False):
+            if len(current_node.children) > 0:
+                node.reaction = Reaction(
+                    "azf",
+                    "Reaction found with AiZynthFinder",
+                    highlight="yellow",
+                    label="Template",
+                    templatesSearched=False,
+                )
+                node.reaction.mappedReaction = build_mapped_reaction_dict_or_none(
+                    reactants=[
+                        reaction_path_dict[cid].smiles for cid in current_node.children
+                    ],
+                    products=[smiles],
+                    log_msg="Failed to build rdkitjs mapped reaction for node_id={node_id} smiles={smiles}",
+                    node_id=node_id_str,
+                    smiles=smiles,
+                )
+        await retro_synth_context.add_node(node, parent, websocket)
 
         for child_id in current_node.children:
             child_node = reaction_path_dict[child_id]
@@ -279,6 +292,17 @@ async def template_based_retrosynthesis(
     )
     if reaction is not None:  # Exact reactions were found in database
         root.reaction = reaction
+        root.reaction.mappedReaction = build_mapped_reaction_dict_or_none(
+            reactants=[
+                n.smiles
+                for nid, n in context.node_ids.items()
+                if context.parents.get(nid) == root.id
+            ],
+            products=[root.smiles],
+            log_msg="Failed to build rdkitjs mapped reaction for exact root_id={node_id} smiles={smiles}",
+            node_id=root.id,
+            smiles=root.smiles,
+        )
         await context.update_node(root, websocket)
         await websocket.send_json({"type": "complete"})
         return
@@ -316,6 +340,17 @@ async def template_based_retrosynthesis(
 
     # Notify frontend that computation completed
     root.reaction = reaction
+    root.reaction.mappedReaction = build_mapped_reaction_dict_or_none(
+        reactants=[
+            n.smiles
+            for nid, n in context.node_ids.items()
+            if context.parents.get(nid) == root.id
+        ],
+        products=[root.smiles],
+        log_msg="Failed to build rdkitjs mapped reaction for root template reaction root_id={node_id} smiles={smiles}",
+        node_id=root.id,
+        smiles=root.smiles,
+    )
     await context.update_node(root, websocket)
     await websocket.send_json({"type": "complete"})
 
@@ -369,5 +404,18 @@ async def compute_templates_for_node(
         node.reaction.templatesSearched = True
 
     # Notify frontend that template reactions were computed
+    if node.reaction is not None:
+        child_smiles = [
+            n.smiles
+            for nid, n in context.node_ids.items()
+            if context.parents.get(nid) == node.id
+        ]
+        node.reaction.mappedReaction = build_mapped_reaction_dict_or_none(
+            reactants=child_smiles,
+            products=[node.smiles],
+            log_msg="Failed to build rdkitjs mapped reaction for template node_id={node_id} smiles={smiles}",
+            node_id=node.id,
+            smiles=node.smiles,
+        )
     await context.update_node(node, websocket)
     await websocket.send_json({"type": "complete"})

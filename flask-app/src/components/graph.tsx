@@ -33,6 +33,11 @@ export const MoleculeGraph: React.FC<MoleculeGraphProps> = ({
     const [dragStart, setDragStart] = useState<Position>({ x: 0, y: 0 });
     const [hoveredNode, setHoveredNode] = useState<TreeNode | null>(null);
     const [hoveredReaction, setHoveredReaction] = useState<TreeNode | null>(null);
+    const [hoverHighlightMap, setHoverHighlightMap] = useState<Record<string, {
+        highlightAtomIdxs: number[];
+        highlightRgb?: [number, number, number];
+        highlightAlpha?: number;
+    }>>({});
     const [mousePos, setMousePos] = useState<Position>({ x: 0, y: 0 });
     const containerRef = useRef<HTMLDivElement>(null);
 
@@ -359,7 +364,14 @@ export const MoleculeGraph: React.FC<MoleculeGraphProps> = ({
                     onClick={(e) => handleNodeClick(e, node)}
                     >
                     <div className={`node-card ${getNodeStyle(node.highlight || "normal", node.purchasable ?? null, isLeaf(node.id))}`}>
-                        <MoleculeSVG smiles={node.smiles} height={80} rdkitModule={rdkitModule} />
+                        <MoleculeSVG
+                            smiles={node.smiles}
+                            height={80}
+                            rdkitModule={rdkitModule}
+                            highlightAtomIdxs={hoverHighlightMap[node.id]?.highlightAtomIdxs}
+                            highlightRgb={hoverHighlightMap[node.id]?.highlightRgb}
+                            highlightAlpha={hoverHighlightMap[node.id]?.highlightAlpha}
+                        />
                         <div className="node-label">
                         <div className="node-label-text" dangerouslySetInnerHTML={{ __html: node.label }}></div>
                         </div>
@@ -377,6 +389,36 @@ export const MoleculeGraph: React.FC<MoleculeGraphProps> = ({
                         }}
                         onMouseEnter={(e) => {
                             setHoveredReaction(node);
+                            const mappedReaction: any = node.reaction?.mappedReaction;
+                            if (mappedReaction) {
+                                const map: Record<string, any> = {};
+                                const product = (mappedReaction.products && mappedReaction.products.length)
+                                    ? (mappedReaction.products[mappedReaction.main_product_index] || mappedReaction.products[0])
+                                    : null;
+                                if (product) {
+                                    map[node.id] = {
+                                        highlightAtomIdxs: product.highlight_atom_idxs || [],
+                                        highlightRgb: mappedReaction.highlight_rgb,
+                                        highlightAlpha: mappedReaction.highlight_alpha,
+                                    };
+                                }
+
+                                const childIds = edges
+                                    .filter(ed => ed.fromNode === node.id)
+                                    .map(ed => ed.toNode);
+                                const reactants: any[] = mappedReaction.reactants || [];
+                                for (let i = 0; i < childIds.length && i < reactants.length; i++) {
+                                    const r = reactants[i];
+                                    map[childIds[i]] = {
+                                        highlightAtomIdxs: r.highlight_atom_idxs || [],
+                                        highlightRgb: mappedReaction.highlight_rgb,
+                                        highlightAlpha: mappedReaction.highlight_alpha,
+                                    };
+                                }
+                                setHoverHighlightMap(map);
+                            } else {
+                                setHoverHighlightMap({});
+                            }
                             const rect = containerRef.current?.getBoundingClientRect();
                             if (rect) {
                                 setMousePos({ x: e.clientX - rect.left, y: e.clientY - rect.top });
@@ -390,7 +432,10 @@ export const MoleculeGraph: React.FC<MoleculeGraphProps> = ({
                                 }
                             }
                         }}
-                        onMouseLeave={() => setHoveredReaction(null)}
+                        onMouseLeave={() => {
+                            setHoveredReaction(null);
+                            setHoverHighlightMap({});
+                        }}
                         onClick={(e) => {
                           e.stopPropagation();
                             handleReactionClick(e, node);  // Left-click opens sidebar
@@ -444,13 +489,7 @@ export const MoleculeGraph: React.FC<MoleculeGraphProps> = ({
                 </div>
                 </div>
             )}
-            {hoveredReaction && !ctx?.node && hoveredReaction.reaction?.hoverInfo && (
-                <div className="node-hover-tooltip" style={{ left: `${mousePos.x + 20}px`, top: `${mousePos.y + 20}px` }}>
-                <div className="node-hover-content custom-scrollbar">
-                    <MarkdownText text={hoveredReaction.reaction.hoverInfo} />
-                </div>
-                </div>
-            )}
+            {/* Reaction hover tooltip removed; reaction hover now highlights changed atoms on connected nodes */}
         </>
     );
 };
