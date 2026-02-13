@@ -8,6 +8,7 @@ from pathlib import Path
 from charge.experiments.AutoGenExperiment import AutoGenExperiment
 from charge.clients.autogen_utils import chargeConnectionError
 from charge.utils.mcp_workbench_utils import call_mcp_tool_directly
+from charge_backend.prompt_debugger import debug_prompt_task
 from callback_logger import CallbackLogger
 from charge.tasks.LMOTask import (
     LMOTask as LeadMoleculeOptimization,
@@ -21,6 +22,7 @@ from backend_helper_funcs import (
     post_process_lmo_smiles,
     get_price,
     CallbackHandler,
+    RunSettings,
 )
 from moleculedb.molecule_naming import smiles_to_html, MolNameFormat
 
@@ -53,6 +55,7 @@ async def generate_lead_molecule(
     depth: int,
     available_tools: list[str],
     websocket: WebSocket,
+    run_settings: RunSettings,
     property: str = "density",
     property_description: str = "molecular density (g/cc)",
     calculate_property_tool: str = "calculate_property_hf",
@@ -61,12 +64,11 @@ async def generate_lead_molecule(
     initial_level: int = 0,
     initial_node_id: int = 0,
     initial_x_position: int = 50,
-    molecule_name_format: MolNameFormat = "brand",
     enable_constraints: bool = False,
     molecular_similarity: float = 0.7,
     diversity_penalty: float = 0.0,
     exploration_rate: float = 0.5,
-    additional_constraints: list[str] = None,
+    additional_constraints: Optional[list[str]] = None,
 ) -> None:
     """Generate a lead molecule and stream its progress.
     Args:
@@ -85,7 +87,7 @@ async def generate_lead_molecule(
         initial_level (int): Initial tree level.
         initial_node_id (int): Initial node ID.
         initial_x_position (int): Initial x-position for visualization.
-        molecule_name_format: Format for displaying molecule names.
+        run_settings: Default run settings such as molecule display format.
         enable_constraints (bool): Whether to use custom optimization strategy.
         molecular_similarity (float): Similarity threshold to parent molecule (0.0-1.0).
         diversity_penalty (float): Penalty for generating similar molecules (0.0-1.0).
@@ -173,7 +175,9 @@ async def generate_lead_molecule(
         node = Node(
             id=f"node_{node_id}",
             smiles=lead_molecule_smiles,
-            label=smiles_to_html(lead_molecule_smiles, molecule_name_format),
+            label=smiles_to_html(
+                lead_molecule_smiles, run_settings.molecule_name_format
+            ),
             # Add property calculations here
             density=lead_molecule_data.get("density", None),
             sascore=lead_molecule_data.get("sascore", None),
@@ -353,6 +357,8 @@ async def generate_lead_molecule(
             try:
                 iteration += 1
 
+                if run_settings.prompt_debugging:
+                    await debug_prompt_task(lmo_task, websocket)
                 await experiment.run_async(callback=callback)
                 finished_tasks = experiment.get_finished_tasks()
                 _, results = finished_tasks[-1]
@@ -440,7 +446,7 @@ async def generate_lead_molecule(
                             id=f"node_{node_id}",
                             smiles=canonical_smiles,
                             label=smiles_to_html(
-                                canonical_smiles, molecule_name_format
+                                canonical_smiles, run_settings.molecule_name_format
                             ),
                             # Add property calculations here
                             density=processed_mol.get("density", None),

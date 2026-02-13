@@ -10,11 +10,12 @@ from backend_helper_funcs import (
     Reaction,
     ReactionAlternative,
     PathwayStep,
+    RunSettings,
 )
+from charge_backend.prompt_debugger import debug_prompt
 from retrosynthesis.context import RetrosynthesisContext
 from charge_backend.moleculedb.molecule_naming import (
     smiles_to_html,
-    MolNameFormat,
 )
 from retrosynthesis.template import (
     generate_nodes_for_molecular_graph,
@@ -60,8 +61,8 @@ async def ai_based_retrosynthesis(
     websocket: WebSocket,
     experiment: AutoGenExperiment,
     config_file: str,
+    run_settings: RunSettings,
     available_tools: Optional[Union[str, list[str]]] = None,
-    molecule_name_format: MolNameFormat = "brand",
 ):
     """Performs template-free retrosynthesis using the AI orchestrator."""
     clogger = CallbackLogger(websocket, source="ai_based_retrosynthesis")
@@ -124,6 +125,8 @@ async def ai_based_retrosynthesis(
 
     # Run task
     await highlight_node(current_node, websocket, True)
+    if run_settings.prompt_debugging:
+        await debug_prompt(runner, websocket)
     output = await runner.run()
 
     if os.getenv("CHARGE_DISABLE_OUTPUT_VALIDATION", "0") == "1":
@@ -155,7 +158,7 @@ async def ai_based_retrosynthesis(
             PathwayStep(
                 list(result.reactants_smiles_list),
                 [
-                    smiles_to_html(s, molecule_name_format)
+                    smiles_to_html(s, run_settings.molecule_name_format)
                     for s in result.reactants_smiles_list
                 ],
                 [0 for _ in range(len(result.reactants_smiles_list))],
@@ -212,7 +215,7 @@ async def ai_based_retrosynthesis(
         node = Node(
             node_id_str,
             smiles,
-            smiles_to_html(smiles, molecule_name_format),
+            smiles_to_html(smiles, run_settings.molecule_name_format),
             f"Discovered by {runner.model}.\n\n**Purchasable**? {purchasable_str}",
             level,
             current_node.id,
@@ -232,7 +235,7 @@ async def ai_based_retrosynthesis(
 
         # Find paths for the leaf nodes
         reaction, routes = await run_retro_planner(
-            config_file, node.smiles, clogger, molecule_name_format
+            config_file, node.smiles, clogger, run_settings
         )
         if reaction is None:
             await clogger.warning(f"No routes found for {node.smiles}. Skipping...")

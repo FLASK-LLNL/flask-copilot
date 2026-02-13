@@ -1,13 +1,12 @@
 from fastapi import WebSocket
-from loguru import logger
 import re
-from typing import Literal
 
 from charge.experiments.AutoGenExperiment import AutoGenExperiment
 from charge.tasks.Task import Task
 from charge.servers.log_progress import LOG_PROGRESS_SYSTEM_PROMPT
-from backend_helper_funcs import Node, CallbackHandler
-from moleculedb.molecule_naming import smiles_to_html, MolNameFormat
+from backend_helper_funcs import Node, CallbackHandler, RunSettings
+from moleculedb.molecule_naming import smiles_to_html
+from charge_backend.prompt_debugger import debug_prompt
 
 
 async def run_custom_problem(
@@ -17,7 +16,7 @@ async def run_custom_problem(
     experiment: AutoGenExperiment,
     available_tools: list[str],
     websocket: WebSocket,
-    molecule_name_format: MolNameFormat = "brand",
+    run_settings: RunSettings,
 ):
     task = Task(
         system_prompt=system_prompt + "\n\n" + LOG_PROGRESS_SYSTEM_PROMPT,
@@ -29,6 +28,8 @@ async def run_custom_problem(
         callback=CallbackHandler(websocket),
     )
 
+    if run_settings.prompt_debugging:
+        await debug_prompt(agent, websocket)
     result = await agent.run()
     await websocket.send_json(
         {
@@ -45,7 +46,7 @@ async def run_custom_problem(
             node = Node(
                 id=f"node_{i}",
                 smiles=smiles,
-                label=smiles_to_html(smiles, molecule_name_format),
+                label=smiles_to_html(smiles, run_settings.molecule_name_format),
                 hoverInfo=result,
                 level=0,
                 x=50,
