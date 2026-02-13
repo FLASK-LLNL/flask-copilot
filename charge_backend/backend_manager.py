@@ -11,7 +11,7 @@ from charge.tasks.Task import Task
 from backend_helper_funcs import (
     CallbackHandler,
     Reaction,
-    RunSettings,
+    FlaskRunSettings,
 )
 from retrosynthesis.context import RetrosynthesisContext
 from lmo_charge_backend_funcs import generate_lead_molecule
@@ -42,7 +42,7 @@ class FlaskActionManager(ActionManager):
         username: str,
     ):
         super().__init__(task_manager, experiment, args, username)
-        self.run_settings: RunSettings = RunSettings()
+        self.run_settings: FlaskRunSettings = FlaskRunSettings()
         self.websocket = task_manager.websocket
 
     def setup_retro_synth_context(self) -> None:
@@ -56,7 +56,7 @@ class FlaskActionManager(ActionManager):
 
     def setup_run_settings(self, data: dict[str, Any]):
         if "runSettings" in data:
-            self.run_settings = RunSettings(**data["runSettings"])
+            self.run_settings = FlaskRunSettings(**data["runSettings"])
 
     async def handle_compute(self, data: dict) -> None:
         self.setup_run_settings(data)
@@ -69,25 +69,6 @@ class FlaskActionManager(ActionManager):
             asyncio.create_task(self._handle_custom_problem(data))
         else:
             raise ValueError(f"Unknown problem type: {problem_type}")
-
-    async def handle_save_state(self, data, *args, **kwargs) -> None:
-        """Handle save state action."""
-        logger.info("Save state action received")
-        self.setup_run_settings(data)
-
-        experiment_context = await self.experiment.save_state()
-        await self.websocket.send_json(
-            {"type": "save-context-response", "experimentContext": experiment_context}
-        )
-
-    async def handle_load_state(self, data, *args, **kwargs) -> None:
-        """Handle load state action."""
-        logger.info("Load state action received")
-        experiment_context = data.get("experimentContext")
-        if not experiment_context:
-            logger.error("No experiment context provided for loading state")
-            return
-        await self.experiment.load_state(experiment_context)
 
     async def _handle_optimization(
         self,
@@ -427,6 +408,11 @@ class FlaskActionManager(ActionManager):
         await set_reaction_alternative(
             node, alt, self.retro_synth_context, self.websocket
         )
+
+    async def handle_orchestrator_settings_update(self, data: dict) -> None:
+        if "moleculeName" in data:
+            self.run_settings.molecule_name_format = data["moleculeName"]
+        await ActionManager.handle_orchestrator_settings_update(self, data)
 
     async def handle_custom_query_molecule(self, data: dict) -> None:
         """Handle a query on the given molecule."""

@@ -9,7 +9,7 @@ from charge.clients.autogen import AutoGenAgent
 import charge.servers.AiZynthTools as aizynth_funcs
 from charge.servers import SMILES_utils
 from charge.servers.molecular_property_utils import get_density
-from lc_conductor import CallbackLogger
+from lc_conductor import CallbackLogger, RunSettings
 from charge_backend.moleculedb.molecule_naming import MolNameFormat
 
 
@@ -106,15 +106,14 @@ class ModelMessage:
 
 
 @dataclass
-class RunSettings:
+class FlaskRunSettings(RunSettings):
     molecule_name_format: MolNameFormat
-    prompt_debugging: bool
 
     def __init__(
         self, moleculeName: MolNameFormat = "brand", promptDebugging: bool = False
     ):
+        super().__init__(promptDebugging)
         self.molecule_name_format = moleculeName
-        self.prompt_debugging = promptDebugging
 
 
 @dataclass(frozen=True)
@@ -258,11 +257,6 @@ async def highlight_node(node: Node, websocket: WebSocket, highlight: bool):
             },
         }
     )
-
-
-async def loop_executor(executor, func, *args, **kwargs):
-    loop = asyncio.get_event_loop()
-    return await loop.run_in_executor(executor, func, *args, **kwargs)
 
 
 def post_process_lmo_smiles(
