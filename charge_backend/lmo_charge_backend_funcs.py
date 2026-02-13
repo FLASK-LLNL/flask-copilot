@@ -304,6 +304,7 @@ async def generate_lead_molecule(
             direction=direction,
             ranking=ranking,
             number_of_molecules=number_of_molecules,
+            num_top_candidates=num_top_candidates,
         )
         + customization_text
     )
@@ -500,6 +501,7 @@ async def generate_lead_molecule(
                             direction=direction,
                             ranking=ranking,
                             number_of_molecules=number_of_molecules,
+                            num_top_candidates=num_top_candidates,
                         )
                         + customization_text
                     )

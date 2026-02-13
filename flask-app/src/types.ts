@@ -115,8 +115,9 @@ export interface OptimizationCustomization {
   diversityPenalty?: number;
   explorationRate?: number;
   additionalConstraints?: string[];  // Array of constraint types
-  numberOfMolecules?: number;  // Number of candidate molecules per iteration (Nmol)
-  numberOfIterations?: number;  // Number of valid new molecules to find (Niter)
+  numberOfMolecules?: number;  // Number of candidate molecules per iteration
+  numTopCandidates?: number;  // Number of valid new molecules to find per depth level
+  depth?: number;  // Number of generations/levels to run
 }
 
 export interface ConstraintOption {
