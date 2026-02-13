@@ -808,7 +808,7 @@ const ChemistryTool: React.FC = () => {
     };
     wsRef.current.send(JSON.stringify(msg));
     setContextMenu({node: null, isReaction: false, x: 0, y: 0});
-  }, []);
+  }, [debugMode, orchestratorSettings]);
 
   const handleReactionCardClick = useCallback((node: TreeNode) => {
     if (isComputing) return;
@@ -850,7 +850,7 @@ const ChemistryTool: React.FC = () => {
         runSettings: {promptDebugging: debugMode, moleculeName: orchestratorSettings.moleculeName || "brand"}
       }));
     }
-  }, [selectedReactionNode?.id, selectedReactionNode?.smiles]);  // Only depend on primitive values
+  }, [selectedReactionNode?.id, selectedReactionNode?.smiles, debugMode, orchestratorSettings]);  // Only depend on primitive values
 
   const handleComputeFlaskAI = useCallback((customPrompt: boolean) => {
     const nodeId = selectedReactionNode?.id;
@@ -868,7 +868,7 @@ const ChemistryTool: React.FC = () => {
       }
     }
     setIsComputing(true);
-  }, [selectedReactionNode?.id]);  // Only depend on the ID
+  }, [selectedReactionNode?.id, debugMode, orchestratorSettings]);  // Only depend on the ID
 
   const stableAlternatives = useMemo(() => {
     return selectedReactionNode?.reaction?.alternatives || [];
