@@ -115,6 +115,8 @@ export interface OptimizationCustomization {
   diversityPenalty?: number;
   explorationRate?: number;
   additionalConstraints?: string[];  // Array of constraint types
+  numberOfMolecules?: number;  // Number of candidate molecules per iteration (Nmol)
+  numberOfIterations?: number;  // Number of valid new molecules to find (Niter)
 }
 
 export interface ConstraintOption {

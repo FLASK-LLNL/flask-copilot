@@ -303,6 +303,8 @@ class ActionManager:
         diversity_penalty = customization.get("diversityPenalty", 0.0)
         exploration_rate = customization.get("explorationRate", 0.5)
         additional_constraints = customization.get("additionalConstraints", [])
+        number_of_molecules = customization.get("numberOfMolecules", 10)
+        number_of_iterations = customization.get("numberOfIterations", 3)
 
         run_func = partial(
             generate_lead_molecule,
@@ -310,7 +312,7 @@ class ActionManager:
             self.experiment,
             self.args.json_file,
             self.args.max_iterations,
-            data.get("depth", 3),
+            number_of_iterations,
             self.task_manager.available_tools or list_server_urls(),
             self.task_manager.websocket,
             self.run_settings,
@@ -324,6 +326,8 @@ class ActionManager:
             diversity_penalty,
             exploration_rate,
             additional_constraints,
+            number_of_molecules,
+            number_of_iterations,  # TODO SHOULD BE num_top_candidates
         )
         await self.task_manager.run_task(run_func())
 

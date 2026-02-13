@@ -69,6 +69,8 @@ async def generate_lead_molecule(
     diversity_penalty: float = 0.0,
     exploration_rate: float = 0.5,
     additional_constraints: Optional[list[str]] = None,
+    number_of_molecules: int = 10,
+    num_top_candidates: int = 3,
 ) -> None:
     """Generate a lead molecule and stream its progress.
     Args:
@@ -93,7 +95,8 @@ async def generate_lead_molecule(
         diversity_penalty (float): Penalty for generating similar molecules (0.0-1.0).
         exploration_rate (float): Balance between exploitation and exploration (0.0-1.0).
         additional_constraints (list[str]): List of constraint types to apply.
-
+        number_of_molecules (int): Number of candidate molecules to generate per iteration.
+        num_top_candidates (int): Number of valid new molecules to find per depth level.
     Returns:
         None
     """
@@ -300,6 +303,7 @@ async def generate_lead_molecule(
             condition=condition,
             direction=direction,
             ranking=ranking,
+            number_of_molecules=number_of_molecules,
         )
         + customization_text
     )
@@ -495,6 +499,7 @@ async def generate_lead_molecule(
                             condition=condition,
                             direction=direction,
                             ranking=ranking,
+                            number_of_molecules=number_of_molecules,
                         )
                         + customization_text
                     )
