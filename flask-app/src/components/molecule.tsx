@@ -2,14 +2,44 @@ import { useState, useEffect } from "react";
 import { MOLECULE_WIDTH } from "../constants";
 import { MoleculeSVGProps } from "../types";
 import { RDKitModule } from '@rdkit/rdkit';
+import { renderMolWithHighlights } from '../rdkit/reactionPayload';
 
-export const MoleculeSVG: React.FC<MoleculeSVGProps> = ({ smiles, height = 80, rdkitModule = null }) => {
+export const MoleculeSVG: React.FC<MoleculeSVGProps> = ({
+  smiles,
+  height = 80,
+  rdkitModule = null,
+  highlightAtomIdxs,
+  highlightRgb,
+  highlightAlpha,
+}) => {
   const [svg, setSvg] = useState<string | null>(null);
   const [error, setError] = useState<boolean>(false);
 
   useEffect(() => {
     if (rdkitModule && smiles) {
       try {
+        if (highlightAtomIdxs && highlightAtomIdxs.length > 0) {
+          const molSvg = renderMolWithHighlights(
+            rdkitModule as any,
+            smiles,
+            highlightAtomIdxs,
+            {
+              width: MOLECULE_WIDTH,
+              height,
+              highlightRgb,
+              highlightAlpha,
+            },
+          )
+
+          // Use this to change bond colors to "dark mode" (maybe not a good idea)
+          const modifiedSvg = molSvg
+              //.replace(/fill:"#FFFFFF"/g, "fill='transparent'")
+              //.replace(/stroke:#000000/g, "stroke:#E5E7EB")
+              //.replace(/fill:#000000/g, "fill:#E5E7EB");
+          setSvg(modifiedSvg);
+          return;
+        }
+
         const mol = rdkitModule.get_mol(smiles);
         if (mol && mol.is_valid()) {
           // Configure drawing options for dark mode
@@ -23,11 +53,7 @@ export const MoleculeSVG: React.FC<MoleculeSVGProps> = ({ smiles, height = 80, r
 
           const molSvg = mol.get_svg_with_highlights(drawOpts);
 
-          // Use this to change bond colors to "dark mode" (maybe not a good idea)
           const modifiedSvg = molSvg
-              //.replace(/fill:"#FFFFFF"/g, "fill='transparent'")
-              //.replace(/stroke:#000000/g, "stroke:#E5E7EB")
-              //.replace(/fill:#000000/g, "fill:#E5E7EB");
           setSvg(modifiedSvg);
           mol.delete();
           return;
@@ -38,7 +64,7 @@ export const MoleculeSVG: React.FC<MoleculeSVGProps> = ({ smiles, height = 80, r
       }
     }
     setError(true);
-  }, [smiles, rdkitModule, height]);
+  }, [smiles, rdkitModule, height, highlightAtomIdxs, highlightRgb, highlightAlpha]);
 
 
   // Fallback to dummy visualization
