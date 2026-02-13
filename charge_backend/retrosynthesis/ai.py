@@ -21,6 +21,7 @@ from retrosynthesis.template import (
     run_retro_planner,
 )
 from charge_backend.moleculedb.purchasable import is_purchasable
+from retrosynthesis.mapping import build_mapped_reaction_dict_or_none
 
 from charge.tasks.RetrosynthesisTask import (
     TemplateFreeRetrosynthesisTask as RetrosynthesisTask,
@@ -184,6 +185,13 @@ async def ai_based_retrosynthesis(
         alternatives=alternatives,
         templatesSearched=templates_searched,
     )
+    ai_reaction.mappedReaction = build_mapped_reaction_dict_or_none(
+        reactants=list(result.reactants_smiles_list),
+        products=[current_node.smiles],
+        log_msg="Failed to build rdkitjs mapped reaction for AI reaction node_id={node_id} product_smiles={smiles}",
+        node_id=current_node.id,
+        smiles=current_node.smiles,
+    )
     current_node.reaction = ai_reaction
 
     # Update node with discovered reaction
@@ -240,6 +248,23 @@ async def ai_based_retrosynthesis(
             include_root_node=False,
             root_node_id=node.id,
         )
+
+        # Attach mapped reaction for immediate reactants -> product.
+        # This is needed so hover-highlighting works for the first template step
+        # discovered after an AI-generated step.
+        if node.reaction is not None:
+            child_smiles = [
+                n.smiles
+                for nid, n in context.node_ids.items()
+                if context.parents.get(nid) == node.id
+            ]
+            node.reaction.mappedReaction = build_mapped_reaction_dict_or_none(
+                reactants=child_smiles,
+                products=[node.smiles],
+                log_msg="Failed to build rdkitjs mapped reaction for template node_id={node_id} smiles={smiles}",
+                node_id=node.id,
+                smiles=node.smiles,
+            )
         await context.update_node(node, websocket)  # Also disables highlight
 
     await websocket.send_json({"type": "complete"})
