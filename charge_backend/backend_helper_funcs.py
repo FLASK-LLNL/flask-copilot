@@ -4,13 +4,13 @@ import asyncio
 import json
 from typing import Any, Dict, Optional, Literal, Tuple
 from dataclasses import dataclass, asdict
-from collections import defaultdict
 
 from charge.clients.autogen import AutoGenAgent
 import charge.servers.AiZynthTools as aizynth_funcs
 from charge.servers import SMILES_utils
 from charge.servers.molecular_property_utils import get_density
 from callback_logger import CallbackLogger
+from charge_backend.moleculedb.molecule_naming import MolNameFormat
 
 
 @dataclass
@@ -103,6 +103,18 @@ class ModelMessage:
             if "smiles" in ret:
                 del ret["smiles"]
         return ret
+
+
+@dataclass
+class RunSettings:
+    molecule_name_format: MolNameFormat
+    prompt_debugging: bool
+
+    def __init__(
+        self, moleculeName: MolNameFormat = "brand", promptDebugging: bool = False
+    ):
+        self.molecule_name_format = moleculeName
+        self.prompt_debugging = promptDebugging
 
 
 @dataclass(frozen=True)

@@ -91,6 +91,11 @@ export interface ToolServer {
 
 export type MoleculeNameFormat = 'brand' | 'iupac' | 'formula' | 'smiles';
 
+export interface RunSettings {
+  moleculeName: MoleculeNameFormat;
+  promptDebugging: boolean;
+}
+
 export interface OrchestratorSettings {
   backend: string;
   useCustomUrl: boolean;
@@ -99,7 +104,8 @@ export interface OrchestratorSettings {
   useCustomModel?: boolean;
   apiKey: string;
   backendLabel: string;
-  moleculeName?: MoleculeNameFormat;  toolServers?: ToolServer[];
+  moleculeName?: MoleculeNameFormat;
+  toolServers?: ToolServer[];
 }
 
 // Optimization customization options
@@ -133,6 +139,9 @@ export interface WebSocketMessageToServer {
   customPropertyAscending?: boolean;
   xpos?: number;
 
+  // Settings
+  runSettings?: RunSettings;
+
   // Optimization customization
   customization?: OptimizationCustomization;
 
@@ -142,6 +151,10 @@ export interface WebSocketMessageToServer {
 
   // Retrosynthesis
   alternativeId?: string;
+
+  // Prompt debugging
+  prompt?: string;
+  metadata?: any;
 }
 
 // Messages received from backend
@@ -159,6 +172,10 @@ export interface WebSocketMessage {
   username?: string;
 
   alternatives?: ReactionAlternative[];
+
+  // Prompt debugging
+  prompt?: string;
+  metadata?: any;
 }
 
 

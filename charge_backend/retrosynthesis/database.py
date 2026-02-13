@@ -10,10 +10,10 @@ from backend_helper_funcs import (
     Reaction,
     ReactionAlternative,
     PathwayStep,
+    RunSettings,
 )
 from charge_backend.moleculedb.molecule_naming import (
     smiles_to_html,
-    MolNameFormat,
 )
 from charge_backend.moleculedb.purchasable import is_purchasable
 from charge_backend.moleculedb.dynamic_import import import_from_path
@@ -74,7 +74,7 @@ async def find_exact_reactions(
     context: RetrosynthesisContext,
     clogger: CallbackLogger,
     websocket: WebSocket,
-    molecule_name_format: MolNameFormat,
+    run_settings: RunSettings,
 ) -> Reaction | None:
     # Load state
     global REACTIONDB_HANDLE
@@ -174,7 +174,7 @@ async def find_exact_reactions(
             PathwayStep(
                 reactant_smiles,
                 [
-                    label or smiles_to_html(smiles, molecule_name_format)
+                    label or smiles_to_html(smiles, run_settings.molecule_name_format)
                     for label, smiles in zip(reactant_labels, reactant_smiles)
                 ],
                 [0] * len(reactant_smiles),
@@ -213,7 +213,8 @@ async def find_exact_reactions(
                 node = Node(
                     id=context.new_node_id(),
                     smiles=smiles,
-                    label=label or smiles_to_html(smiles, molecule_name_format),
+                    label=label
+                    or smiles_to_html(smiles, run_settings.molecule_name_format),
                     hoverInfo=f"""# {role}
 {("  * Given name in database: " + label) if label else ""}
   * SMILES: {smiles}

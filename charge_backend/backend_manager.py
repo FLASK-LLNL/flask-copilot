@@ -1,4 +1,4 @@
-from typing import Literal, Optional, Tuple
+from typing import Any, Literal, Optional, Tuple
 from fastapi import WebSocket
 import asyncio
 import os
@@ -11,6 +11,7 @@ from charge.tasks.Task import Task
 from backend_helper_funcs import (
     CallbackHandler,
     Reaction,
+    RunSettings,
 )
 from retrosynthesis.context import RetrosynthesisContext
 from lmo_charge_backend_funcs import generate_lead_molecule
@@ -27,7 +28,7 @@ from retrosynthesis.template import (
 )
 from retrosynthesis.ai import ai_based_retrosynthesis
 from retrosynthesis.alternatives import set_reaction_alternative
-from moleculedb.molecule_naming import MolNameFormat
+from charge_backend.prompt_debugger import debug_prompt
 
 # Mapping from backend name to human-readable labels. Mirrored from the frontend
 BACKEND_LABELS = {
@@ -154,7 +155,8 @@ class ActionManager:
         self.experiment = experiment
         self.args = args
         self.username = username
-        self.molecule_name_format: MolNameFormat = "brand"
+        self.run_settings: RunSettings = RunSettings()
+
         self.websocket = task_manager.websocket
 
     def setup_retro_synth_context(self) -> None:
@@ -166,7 +168,12 @@ class ActionManager:
         assert self.retro_synth_context is not None
         return self.retro_synth_context
 
+    def setup_run_settings(self, data: dict[str, Any]):
+        if "runSettings" in data:
+            self.run_settings = RunSettings(**data["runSettings"])
+
     async def handle_compute(self, data: dict) -> None:
+        self.setup_run_settings(data)
         problem_type = data.get("problemType")
         if problem_type == "optimization":
             asyncio.create_task(self._handle_optimization(data))
@@ -177,9 +184,10 @@ class ActionManager:
         else:
             raise ValueError(f"Unknown problem type: {problem_type}")
 
-    async def handle_save_state(self, *args, **kwargs) -> None:
+    async def handle_save_state(self, data, *args, **kwargs) -> None:
         """Handle save state action."""
         logger.info("Save state action received")
+        self.setup_run_settings(data)
 
         experiment_context = await self.experiment.save_state()
         await self.websocket.send_json(
@@ -305,12 +313,12 @@ class ActionManager:
             data.get("depth", 3),
             self.task_manager.available_tools or list_server_urls(),
             self.task_manager.websocket,
+            self.run_settings,
             *property_attributes,
             data.get("query", None),
             initial_level,
             initial_node_id,
             initial_x_position,
-            self.molecule_name_format,
             enable_constraints,
             molecular_similarity,
             diversity_penalty,
@@ -333,8 +341,8 @@ class ActionManager:
             self.args.config_file,
             self.get_retro_synth_context(),
             self.task_manager.websocket,
+            self.run_settings,
             available_tools,
-            self.molecule_name_format,
         )
 
         await self.task_manager.run_task(run_func())
@@ -352,13 +360,14 @@ class ActionManager:
             self.experiment,
             self.task_manager.available_tools or list_server_urls(),
             self.task_manager.websocket,
-            self.molecule_name_format,
+            self.run_settings,
         )
 
         await self.task_manager.run_task(run_func())
 
     async def handle_compute_reaction_from(self, data: dict) -> None:
         """Handle compute-reaction-from action."""
+        self.setup_run_settings(data)
         if self.retro_synth_context is None:
             raise ValueError("Retrosynthesis context not initialized")
 
@@ -399,14 +408,15 @@ class ActionManager:
             self.task_manager.websocket,
             self.experiment,
             self.args.config_file,
+            self.run_settings,
             self.task_manager.available_tools or list_server_urls(),
-            self.molecule_name_format,
         )
 
         asyncio.create_task(self.task_manager.run_task(run_func()))
 
     async def handle_template_retrosynthesis(self, data: dict) -> None:
         """Handle compute-reaction-templates action."""
+        self.setup_run_settings(data)
         if self.retro_synth_context is None:
             raise ValueError("Retrosynthesis context not initialized")
 
@@ -420,14 +430,15 @@ class ActionManager:
             self.args.config_file,
             self.retro_synth_context,
             self.task_manager.websocket,
+            self.run_settings,
             self.task_manager.available_tools or list_server_urls(),
-            self.molecule_name_format,
         )
 
         asyncio.create_task(self.task_manager.run_task(run_func()))
 
     async def handle_optimize_from(self, data: dict) -> None:
         """Handle optimize-from action."""
+        self.setup_run_settings(data)
         prompt = data.get("query")
         if prompt:
             await self._send_processing_message(
@@ -458,6 +469,7 @@ class ActionManager:
 
     async def handle_recompute_reaction(self, data: dict) -> None:
         """Handle recompute-reaction action."""
+        self.setup_run_settings(data)
         if self.retro_synth_context is None:
             raise ValueError("Retrosynthesis context not initialized")
 
@@ -498,14 +510,15 @@ class ActionManager:
             self.task_manager.websocket,
             self.experiment,
             self.args.config_file,
+            self.run_settings,
             self.task_manager.available_tools or list_server_urls(),
-            self.molecule_name_format,
         )
 
         asyncio.create_task(self.task_manager.run_task(run_func()))
 
     async def handle_set_reaction_alternative(self, data: dict) -> None:
         """Handle set-reaction-alternative action."""
+        self.setup_run_settings(data)
         if self.retro_synth_context is None:
             raise ValueError("Retrosynthesis context not initialized")
 
@@ -593,7 +606,7 @@ class ActionManager:
         from charge.clients.autogen import AutoGenPool
 
         if "moleculeName" in data:
-            self.molecule_name_format = data["moleculeName"]
+            self.run_settings.molecule_name_format = data["moleculeName"]
 
         backend = data["backend"]
         model = data["model"]
@@ -683,6 +696,7 @@ class ActionManager:
 
     async def handle_custom_query_molecule(self, data: dict) -> None:
         """Handle a query on the given molecule."""
+        self.setup_run_settings(data)
         await self._send_processing_message(
             f"Processing molecule query: {data['query']} for node {data['nodeId']}"
         )
@@ -701,6 +715,8 @@ class ActionManager:
         )
 
         async def run_and_report():
+            if self.run_settings.prompt_debugging:
+                await debug_prompt(agent, self.websocket)
             result = await agent.run()
             # Report answer
             await self._send_processing_message(result, source="Agent")
@@ -710,6 +726,7 @@ class ActionManager:
 
     async def handle_custom_query_reaction(self, data: dict) -> None:
         """Handle a query on the reaction (from nodeId to its reactants)."""
+        self.setup_run_settings(data)
         assert self.retro_synth_context is not None
 
         await self._send_processing_message(
@@ -757,6 +774,8 @@ class ActionManager:
         #     agent.task = task
 
         async def run_and_report():
+            if self.run_settings.prompt_debugging:
+                await debug_prompt(agent, self.websocket)
             result = await agent.run()
             await self.experiment.add_to_context(agent, task, result)
             # Report answer

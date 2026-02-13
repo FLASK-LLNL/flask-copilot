@@ -456,6 +456,9 @@ async def websocket_endpoint(websocket: WebSocket):
         while True:
             data = await websocket.receive_json()
 
+            if "runSettings" in data:
+                molecule_format = data["runSettings"]["moleculeName"]
+
             if data["action"] == "compute":
                 if data["problemType"] == "optimization":
                     await lead_molecule(
