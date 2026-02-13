@@ -312,7 +312,7 @@ class ActionManager:
             data["smiles"],
             self.experiment,
             self.args.json_file,
-            self.args.max_iterations,
+            self.args.max_retries,
             depth,
             self.task_manager.available_tools or list_server_urls(),
             self.task_manager.websocket,

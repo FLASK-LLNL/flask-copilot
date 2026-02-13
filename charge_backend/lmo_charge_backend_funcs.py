@@ -51,7 +51,7 @@ async def generate_lead_molecule(
     start_smiles: str,
     experiment: AutoGenExperiment,
     mol_file_path: str,
-    max_iterations: int,
+    max_retries: int,
     depth: int,
     available_tools: list[str],
     websocket: WebSocket,
@@ -77,7 +77,7 @@ async def generate_lead_molecule(
         start_smiles (str): The starting SMILES string for the lead molecule.
         experiment (AutoGenExperiment): The experiment instance to run tasks.
         mol_file_path (str): Path to the file where molecules are stored.
-        max_iterations (int): Maximum iterations for molecule generation.
+        max_retries (int): Maximum number of retries for calling AI in molecule generation.
         available_tools (list[str]): List of available tools for molecule generation.
         depth (int): Depth of the generation tree.
         websocket (WebSocket): WebSocket connection for streaming updates.
@@ -358,7 +358,7 @@ async def generate_lead_molecule(
 
         iteration = 0
         iteration_found_better = False
-        while iteration < max_iterations:
+        while iteration < max_retries:
             try:
                 iteration += 1
 
@@ -483,7 +483,7 @@ async def generate_lead_molecule(
 
                 # If we found molecules in this iteration, prepare for next iteration
                 if len(generated_smiles_list) > 0:
-                    # Break out of max_iterations loop if we found a better molecule
+                    # Break out of max_retries loop if we found a better molecule
                     if iteration_found_better:
                         await clogger.info(
                             f"Found better molecule in iteration {iteration}, moving to next depth level"
