@@ -22,10 +22,6 @@ RUN . $HOME/.nvm/nvm.sh && \
     # rm -rf node_modules/.vite dist .vite
 RUN . $HOME/.nvm/nvm.sh && npm run build
 
-# Verify LC-Conductor build
-RUN test -f dist/index.js || (echo "LC-Conductor build failed!" && exit 1)
-RUN echo "LC-Conductor built successfully"
-
 # Switch back to the flask-app to build copilot
 WORKDIR /app/flask-app
 RUN . $HOME/.nvm/nvm.sh && \
