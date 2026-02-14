@@ -596,6 +596,7 @@ class ActionManager:
                     "model": model,
                     "useCustomModel": False,
                     "apiKey": "",
+                    "moleculeName": self.run_settings.molecule_name_format,
                 },
             }
         )
