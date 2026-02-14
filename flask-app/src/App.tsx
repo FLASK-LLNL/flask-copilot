@@ -200,6 +200,26 @@ const ChemistryTool: React.FC = () => {
     // await fetch(HTTP_SERVER + '/api/save-selection', { method: 'POST', body: JSON.stringify(payload) });
   };
 
+  // Callback function to handle molecule name preference changes
+  const handleMoleculeNameSave = async (moleculeName: string): Promise<void> => {
+    if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) {
+      alert('WebSocket not connected');
+      return;
+    }
+    console.log(`Updated Molecule Name Preference: ${moleculeName}`);
+
+    // Update local orchestrator settings with new molecule name
+    const updatedSettings = {
+      ...orchestratorSettings,
+      moleculeName: moleculeName
+    };
+    setOrchestratorSettings(updatedSettings);
+    localStorage.setItem('orchestratorSettings', JSON.stringify(updatedSettings));
+
+    // Note: The molecule name is sent to backend as part of runSettings
+    // in each compute action, so no separate websocket message needed here.
+  };
+
   // Callback function to send updated settings to backend
   const handleSettingsUpdateConfirm = async (
     settings: OrchestratorSettings,
@@ -1694,6 +1714,8 @@ const ChemistryTool: React.FC = () => {
         onToolConfirm={handleToolSelectionConfirm}
         initialCustomization={customization}
         onCustomizationSave={setCustomization}
+        initialMoleculeName={orchestratorSettings.moleculeName || 'brand'}
+        onMoleculeNameSave={handleMoleculeNameSave}
         showOptimizationTab={problemType === "optimization"}
       />
 

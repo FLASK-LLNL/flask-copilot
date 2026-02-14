@@ -1,8 +1,9 @@
 import React, { useState } from 'react';
-import { X, Wrench, Network } from 'lucide-react';
+import { X, Wrench, Network, FlaskConical } from 'lucide-react';
 import { OptimizationCustomization, SelectableTool } from '../types';
 import { ToolSelectionContent } from './tool_selection_content';
 import { OptimizationCustomizationContent } from './optimization_customization_content';
+import { MoleculePropertiesContent } from './molecule_properties';
 
 interface CombinedCustomizationModalProps {
   isOpen: boolean;
@@ -18,11 +19,15 @@ interface CombinedCustomizationModalProps {
   initialCustomization: OptimizationCustomization;
   onCustomizationSave: (customization: OptimizationCustomization) => void;
 
+  // Molecule properties props
+  initialMoleculeName?: string;
+  onMoleculeNameSave?: (moleculeName: string) => void;
+
   // Show optimization tab only for optimization problem type
   showOptimizationTab?: boolean;
 }
 
-type TabType = 'tools' | 'optimization';
+type TabType = 'tools' | 'optimization' | 'molecule';
 
 export const CombinedCustomizationModal: React.FC<CombinedCustomizationModalProps> = ({
   isOpen,
@@ -33,10 +38,14 @@ export const CombinedCustomizationModal: React.FC<CombinedCustomizationModalProp
   onToolConfirm,
   initialCustomization,
   onCustomizationSave,
+  initialMoleculeName = 'brand',
+  onMoleculeNameSave,
   showOptimizationTab = true,
 }) => {
   const [activeTab, setActiveTab] = useState<TabType>('tools');
   const [pendingCustomization, setPendingCustomization] = useState<OptimizationCustomization>(initialCustomization);
+  const [pendingMoleculeName, setPendingMoleculeName] = useState<string>(initialMoleculeName);
+
 
   if (!isOpen) return null;
 
@@ -54,6 +63,12 @@ export const CombinedCustomizationModal: React.FC<CombinedCustomizationModalProp
     onCustomizationSave(pendingCustomization);
   };
 
+  const handleMoleculeNameSave = () => {
+    if (onMoleculeNameSave) {
+      onMoleculeNameSave(pendingMoleculeName);
+    }
+  };
+
   const handleApplyAndClose = async () => {
     // Apply tool selection
     await handleToolConfirm();
@@ -62,6 +77,9 @@ export const CombinedCustomizationModal: React.FC<CombinedCustomizationModalProp
     if (showOptimizationTab) {
       handleCustomizationSave();
     }
+
+    // Apply molecule name preference
+    handleMoleculeNameSave();
 
     onClose();
   };
@@ -116,6 +134,18 @@ export const CombinedCustomizationModal: React.FC<CombinedCustomizationModalProp
               )}
             </button>
           )}
+
+          <button
+            onClick={() => setActiveTab('molecule')}
+            className={`flex items-center gap-2 px-6 py-3 font-medium transition-colors border-b-2 ${
+              activeTab === 'molecule'
+                ? 'border-primary text-primary'
+                : 'border-transparent text-secondary hover:text-primary'
+            }`}
+          >
+            <FlaskConical className="w-4 h-4" />
+            Molecule Display
+          </button>
         </div>
 
         {/* Tab Content */}
@@ -133,6 +163,13 @@ export const CombinedCustomizationModal: React.FC<CombinedCustomizationModalProp
               customization={pendingCustomization}
               onCustomizationChange={setPendingCustomization}
               showResetButton={true}
+            />
+          )}
+
+          {activeTab === 'molecule' && (
+            <MoleculePropertiesContent
+              moleculeName={pendingMoleculeName}
+              onMoleculeNameChange={setPendingMoleculeName}
             />
           )}
         </div>
