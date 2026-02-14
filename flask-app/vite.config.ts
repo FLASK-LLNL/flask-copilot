@@ -46,7 +46,7 @@ export default defineConfig({
   },
   optimizeDeps: {
     // Force pre-bundling in dev AND specify for build
-    include: ['react', 'react-dom', 'lc-conductor', 'scheduler', 'lucide-react'],
+    include: ['scheduler'],
     force: true  // Force re-optimization
   },
   build: {

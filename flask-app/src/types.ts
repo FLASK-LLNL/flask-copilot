@@ -74,7 +74,9 @@ export interface ToolMap {
   selectedTools?: SelectableTool[];
 }
 
-export interface RunSettings {
+export type MoleculeNameFormat = 'brand' | 'iupac' | 'formula' | 'smiles';
+
+export interface FlaskRunSettings {
   moleculeName: MoleculeNameFormat;
   promptDebugging: boolean;
 }
@@ -87,8 +89,11 @@ import type {
   VisibleSources,
   MarkdownTextProps,
   ToolServer,
-  MoleculeNameFormat
 } from 'lc-conductor';
+
+export interface FlaskOrchestratorSettings extends OrchestratorSettings {
+  moleculeName?: MoleculeNameFormat;
+}
 
 // Optimization customization options
 export interface OptimizationCustomization {
@@ -148,7 +153,7 @@ export interface WebSocketMessage {
   message?: SidebarMessage;
   tools?: Tool[];
   experimentContext?: string;
-  orchestratorSettings?: OrchestratorSettings;
+  orchestratorSettings?: FlaskOrchestratorSettings;
 
   withNode?: boolean;
   username?: string;

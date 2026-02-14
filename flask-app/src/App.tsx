@@ -9,7 +9,7 @@ import 'react-syntax-highlighter/dist/esm/styles/prism';
 
 import { WS_SERVER, VERSION, HTTP_SERVER } from './config';
 import { DEFAULT_CUSTOM_SYSTEM_PROMPT, PROPERTY_NAMES } from './constants';
-import { TreeNode, Edge, ContextMenuState, SidebarMessage, Tool, WebSocketMessageToServer, WebSocketMessage, SelectableTool, Experiment, OptimizationCustomization, ReactionAlternative } from './types';
+import { TreeNode, Edge, ContextMenuState, SidebarMessage, Tool, WebSocketMessageToServer, WebSocketMessage, SelectableTool, Experiment, FlaskOrchestratorSettings, OptimizationCustomization, ReactionAlternative } from './types';
 
 import { loadRDKit } from './components/molecule';
 import { MoleculeGraph, useGraphState } from './components/graph';
@@ -21,7 +21,6 @@ import {
   useSidebarState,
   MarkdownText,
   BACKEND_OPTIONS,
-  type OrchestratorSettings
 } from 'lc-conductor';
 
 import { CombinedCustomizationModal } from './components/combined_customization_modal';
@@ -168,7 +167,7 @@ const ChemistryTool: React.FC = () => {
       backendLabel: 'vLLM'
     };
   };
-  const [orchestratorSettings, setOrchestratorSettings] = useState<OrchestratorSettings>(getInitialSettings());
+  const [orchestratorSettings, setOrchestratorSettings] = useState<FlaskOrchestratorSettings>(getInitialSettings());
 
   // Add this helper function near the top of the ChemistryTool component
   const getDisplayUrl = (): string => {
@@ -229,7 +228,7 @@ const ChemistryTool: React.FC = () => {
 
   // Callback function to send updated settings to backend
   const handleSettingsUpdateConfirm = async (
-    settings: OrchestratorSettings,
+    settings: FlaskOrchestratorSettings,
   ): Promise<void> => {
     if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) {
       alert('WebSocket not connected');
@@ -532,7 +531,7 @@ const ChemistryTool: React.FC = () => {
         setSelectedTools([]);
       } else if (data.type === 'server-update-orchestrator-settings') {
         // Handle orchestrator settings updates from server
-        const newSettings: OrchestratorSettings = {
+        const newSettings: FlaskOrchestratorSettings = {
           backend: data.orchestratorSettings!.backend,
           useCustomUrl: data.orchestratorSettings!.useCustomUrl,
           customUrl: data.orchestratorSettings!.customUrl,
