@@ -1,6 +1,6 @@
 from fastapi import WebSocket
 from charge.servers import AiZynthTools as azf
-from callback_logger import CallbackLogger
+from lc_conductor.callback_logger import CallbackLogger
 from typing import Optional, Union, TYPE_CHECKING
 from collections import deque
 

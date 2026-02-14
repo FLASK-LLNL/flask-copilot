@@ -58,15 +58,6 @@ export interface Edge {
   label?: string;
 }
 
-
-export interface SidebarMessage {
-  id: number;
-  timestamp: string;
-  message: string;
-  smiles: string | null;
-  source: string;
-}
-
 export interface Tool {
   server?: string;
   names?: string[];
@@ -83,29 +74,25 @@ export interface ToolMap {
   selectedTools?: SelectableTool[];
 }
 
-export interface ToolServer {
-  id: string;
-  url: string;
-  name?: string;  // Optional display name
-}
-
 export type MoleculeNameFormat = 'brand' | 'iupac' | 'formula' | 'smiles';
 
-export interface RunSettings {
+export interface FlaskRunSettings {
   moleculeName: MoleculeNameFormat;
   promptDebugging: boolean;
 }
 
-export interface OrchestratorSettings {
-  backend: string;
-  useCustomUrl: boolean;
-  customUrl?: string;
-  model: string;
-  useCustomModel?: boolean;
-  apiKey: string;
-  backendLabel: string;
+import type {
+  OrchestratorSettings,
+  SidebarMessage,
+  SidebarState,
+  SidebarProps,
+  VisibleSources,
+  MarkdownTextProps,
+  ToolServer,
+} from 'lc-conductor';
+
+export interface FlaskOrchestratorSettings extends OrchestratorSettings {
   moleculeName?: MoleculeNameFormat;
-  toolServers?: ToolServer[];
 }
 
 // Optimization customization options
@@ -166,7 +153,7 @@ export interface WebSocketMessage {
   message?: SidebarMessage;
   tools?: Tool[];
   experimentContext?: string;
-  orchestratorSettings?: OrchestratorSettings;
+  orchestratorSettings?: FlaskOrchestratorSettings;
 
   withNode?: boolean;
   username?: string;
@@ -195,10 +182,6 @@ export interface VisibleMetrics {
   sascore: boolean;
   density: boolean;
   yield: boolean;
-}
-
-export interface VisibleSources {
-  [key: string]: boolean;
 }
 
 export interface ContextMenuState {
@@ -246,10 +229,6 @@ export interface RdkitjsReactionPayload {
   reactant_mcs_smarts?: (string | null)[];
 }
 
-export interface MarkdownTextProps {
-  text: string;
-}
-
 export interface MoleculeGraphState {
   offset: Position;
   setOffset: Dispatch<SetStateAction<Position>>;
@@ -268,21 +247,6 @@ export interface MoleculeGraphProps extends MoleculeGraphState {
     handleReactionCardClick: (node: TreeNode) => void;
     selectedReactionNodeId?: string;
     reactionSidebarOpen: boolean;
-    rdkitModule: RDKitModule | null;
-}
-
-export interface SidebarState {
-    messages: SidebarMessage[];
-    setMessages: Dispatch<SetStateAction<SidebarMessage[]>>;
-    sourceFilterOpen: boolean;
-    setSourceFilterOpen: Dispatch<SetStateAction<boolean>>;
-    visibleSources: VisibleSources;
-    setVisibleSources: Dispatch<SetStateAction<VisibleSources>>;
-}
-
-export interface SidebarProps extends SidebarState {
-    // General state from app
-    setSidebarOpen: Dispatch<SetStateAction<boolean>>;
     rdkitModule: RDKitModule | null;
 }
 

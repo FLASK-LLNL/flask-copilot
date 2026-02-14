@@ -4,7 +4,7 @@ import os
 from typing import Any, Callable, Literal
 
 from charge_backend.retrosynthesis.context import RetrosynthesisContext
-from callback_logger import CallbackLogger
+from lc_conductor.callback_logger import CallbackLogger
 from backend_helper_funcs import (
     Node,
     Reaction,
