@@ -11,7 +11,7 @@ from loguru import logger
 
 import charge.servers.FLASKv2_reactions as flask
 from charge.servers.server_utils import update_mcp_network, get_hostname
-from tool_registration import register_tool_server
+from lc_conductor.tool_registration import register_tool_server
 
 
 @click.command()
