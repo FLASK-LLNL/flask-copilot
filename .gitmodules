@@ -1,0 +1,3 @@
+[submodule "externals/lc_conductor"]
+	path = externals/lc_conductor
+	url = https://github.com/FLASK-LLNL/LC-Conductor.git

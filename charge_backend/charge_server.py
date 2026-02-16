@@ -28,7 +28,7 @@ from charge.experiments.AutoGenExperiment import AutoGenExperiment
 from charge.clients.autogen import AutoGenPool
 
 
-from tool_registration import (
+from lc_conductor.tool_registration import (
     get_client_info,
     register_url,
     register_post,
@@ -39,7 +39,8 @@ from tool_registration import (
     get_registered_servers,
 )
 
-from backend_manager import TaskManager, ActionManager
+from lc_conductor import TaskManager
+from backend_manager import FlaskActionManager
 from charge_backend import prompt_debugger
 
 # Pydantic models for new endpoints
@@ -127,7 +128,7 @@ async def check_mcp_servers_endpoint(data: CheckServersRequest):
 
     Uses existing workbench utilities for validation.
     """
-    from tool_registration import _check_mcp_connectivity
+    from lc_conductor.tool_registration import _check_mcp_connectivity
 
     results = {}
 
@@ -238,7 +239,7 @@ async def websocket_endpoint(websocket: WebSocket):
 
     task_manager = TaskManager(websocket)
 
-    action_manager = ActionManager(task_manager, experiment, args, username)
+    action_manager = FlaskActionManager(task_manager, experiment, args, username)
     await action_manager.report_orchestrator_config()
 
     action_handlers = {
