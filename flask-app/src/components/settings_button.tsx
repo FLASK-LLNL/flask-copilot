@@ -18,55 +18,67 @@ export const BACKEND_OPTIONS = [
     value: 'openai',
     label: 'OpenAI',
     defaultUrl: 'https://api.openai.com/v1',
-    models: ['gpt-5.2', 'gpt-5.1', 'gpt-5', 'gpt-5-mini', 'gpt-5-nano']
+    models: ['gpt-5.2', 'gpt-5.1', 'gpt-5', 'gpt-5-mini', 'gpt-5-nano'],
   },
   {
     value: 'livai',
     label: 'LivAI',
     defaultUrl: '',
-    models: ['gpt-5.2', 'gpt-5.1', 'gpt-5', 'gpt-5-mini', 'gpt-5-nano', 'claude-sonnet-4.5', 'claude-sonnet-3.7']
+    models: [
+      'gpt-5.2',
+      'gpt-5.1',
+      'gpt-5',
+      'gpt-5-mini',
+      'gpt-5-nano',
+      'claude-sonnet-4.5',
+      'claude-sonnet-3.7',
+    ],
   },
   {
     value: 'llamame',
     label: 'LLamaMe',
     defaultUrl: '',
-    models: ['openai/gpt-oss-120b', 'meta-llama/Llama-3.3-70B-Instruct']
+    models: ['openai/gpt-oss-120b', 'meta-llama/Llama-3.3-70B-Instruct'],
   },
   {
     value: 'alcf',
     label: 'ALCF Sophia',
     defaultUrl: '',
-    models: ['openai/gpt-oss-120b', 'openai/gpt-oss-20b', 'meta-llama/Llama-4-Scout-17B-16E-Instruct']
+    models: [
+      'openai/gpt-oss-120b',
+      'openai/gpt-oss-20b',
+      'meta-llama/Llama-4-Scout-17B-16E-Instruct',
+    ],
   },
   {
     value: 'gemini',
     label: 'Google Gemini',
     defaultUrl: 'https://generativelanguage.googleapis.com/v1',
-    models: ['gemini-2.0-flash-exp', 'gemini-1.5-pro', 'gemini-1.5-flash', 'gemini-1.0-pro']
+    models: ['gemini-2.0-flash-exp', 'gemini-1.5-pro', 'gemini-1.5-flash', 'gemini-1.0-pro'],
   },
   {
     value: 'ollama',
     label: 'Ollama',
     defaultUrl: '',
-    models: ['gpt-oss:latest', 'gpt-oss-120b', 'gpt-oss-20b']
+    models: ['gpt-oss:latest', 'gpt-oss-120b', 'gpt-oss-20b'],
   },
   {
     value: 'vllm',
     label: 'vLLM',
     defaultUrl: '',
-    models: ['gpt-oss-120b', 'gpt-oss-20b']
+    models: ['gpt-oss-120b', 'gpt-oss-20b'],
   },
   {
     value: 'huggingface',
     label: 'HuggingFace Local',
     defaultUrl: '',
-    models: ['']
+    models: [''],
   },
   {
     value: 'custom',
     label: 'Custom URL',
     defaultUrl: 'http://localhost:8000',
-    models: ['']
+    models: [''],
   },
 ];
 
@@ -77,16 +89,21 @@ export const SettingsButton: React.FC<SettingsButtonProps> = ({
   onServerRemoved,
   initialSettings,
   username,
-  className = ''
+  className = '',
 }) => {
   const [isModalOpen, setIsModalOpen] = React.useState(false);
   const [activeTab, setActiveTab] = React.useState<'orchestrator' | 'tools'>('orchestrator');
   // Cache for storing backend-specific settings
-  const [backendCache, setBackendCache] = React.useState<Record<string, {
-    customUrl: string;
-    model: string;
-    useCustomModel: boolean;
-  }>>({});
+  const [backendCache, setBackendCache] = React.useState<
+    Record<
+      string,
+      {
+        customUrl: string;
+        model: string;
+        useCustomModel: boolean;
+      }
+    >
+  >({});
 
   // Default settings
   const defaultSettings: OrchestratorSettings = {
@@ -99,7 +116,7 @@ export const SettingsButton: React.FC<SettingsButtonProps> = ({
     apiKey: '',
     moleculeName: 'brand',
     toolServers: [],
-    ...initialSettings
+    ...initialSettings,
   };
 
   const [settings, setSettings] = React.useState<OrchestratorSettings>(defaultSettings);
@@ -110,11 +127,16 @@ export const SettingsButton: React.FC<SettingsButtonProps> = ({
   const [newServerUrl, setNewServerUrl] = React.useState('');
   const [editingServer, setEditingServer] = React.useState<string | null>(null);
   const [editServerUrl, setEditServerUrl] = React.useState('');
-  const [connectivityStatus, setConnectivityStatus] = React.useState<Record<string, {
-    status: 'checking' | 'connected' | 'disconnected';
-    tools?: Array<{ name: string; description?: string }>;
-    error?: string;
-  }>>({});
+  const [connectivityStatus, setConnectivityStatus] = React.useState<
+    Record<
+      string,
+      {
+        status: 'checking' | 'connected' | 'disconnected';
+        tools?: Array<{ name: string; description?: string }>;
+        error?: string;
+      }
+    >
+  >({});
   const [hoveredServer, setHoveredServer] = React.useState<string | null>(null);
   const [pinnedServer, setPinnedServer] = React.useState<string | null>(null);
 
@@ -125,7 +147,7 @@ export const SettingsButton: React.FC<SettingsButtonProps> = ({
   // Update settings when initialSettings prop changes
   React.useEffect(() => {
     if (initialSettings) {
-      const backendOption = BACKEND_OPTIONS.find(opt => opt.value === initialSettings.backend);
+      const backendOption = BACKEND_OPTIONS.find((opt) => opt.value === initialSettings.backend);
 
       // Check if the model is in the predefined list for this backend
       const modelInList = backendOption?.models?.includes(initialSettings.model || '');
@@ -136,9 +158,10 @@ export const SettingsButton: React.FC<SettingsButtonProps> = ({
         backendLabel: backendOption!.label,
         // If model is not in the predefined list, automatically set useCustomModel to true
         // Unless useCustomModel is explicitly provided in initialSettings
-        useCustomModel: initialSettings.useCustomModel !== undefined
-          ? initialSettings.useCustomModel
-          : !modelInList
+        useCustomModel:
+          initialSettings.useCustomModel !== undefined
+            ? initialSettings.useCustomModel
+            : !modelInList,
       };
       setSettings(updatedSettings);
       setTempSettings(updatedSettings);
@@ -148,14 +171,14 @@ export const SettingsButton: React.FC<SettingsButtonProps> = ({
   // Check connectivity for all tool servers when modal opens
   React.useEffect(() => {
     if (isModalOpen && tempSettings.toolServers && tempSettings.toolServers.length > 0) {
-      tempSettings.toolServers.forEach(server => {
+      tempSettings.toolServers.forEach((server) => {
         checkMCPServerConnectivity(server.url);
       });
     }
 
     // Cleanup: abort all connections when modal closes
     return () => {
-      activeConnectionsRef.current.forEach(controller => controller.abort());
+      activeConnectionsRef.current.forEach((controller) => controller.abort());
       activeConnectionsRef.current.clear();
     };
   }, [isModalOpen]);
@@ -189,9 +212,9 @@ export const SettingsButton: React.FC<SettingsButtonProps> = ({
     const abortController = new AbortController();
     activeConnectionsRef.current.set(url, abortController);
 
-    setConnectivityStatus(prev => ({
+    setConnectivityStatus((prev) => ({
       ...prev,
-      [url]: { status: 'checking' }
+      [url]: { status: 'checking' },
     }));
 
     try {
@@ -202,9 +225,9 @@ export const SettingsButton: React.FC<SettingsButtonProps> = ({
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          urls: [url]
+          urls: [url],
         }),
-        signal: abortController.signal
+        signal: abortController.signal,
       });
 
       if (!response.ok) {
@@ -215,20 +238,20 @@ export const SettingsButton: React.FC<SettingsButtonProps> = ({
       const result = data.results[url];
 
       if (result.status === 'connected') {
-        setConnectivityStatus(prev => ({
+        setConnectivityStatus((prev) => ({
           ...prev,
           [url]: {
             status: 'connected',
-            tools: result.tools?.length > 0 ? result.tools : undefined
-          }
+            tools: result.tools?.length > 0 ? result.tools : undefined,
+          },
         }));
       } else {
-        setConnectivityStatus(prev => ({
+        setConnectivityStatus((prev) => ({
           ...prev,
           [url]: {
             status: 'disconnected',
-            error: result.error || 'Connection failed'
-          }
+            error: result.error || 'Connection failed',
+          },
         }));
       }
 
@@ -239,12 +262,12 @@ export const SettingsButton: React.FC<SettingsButtonProps> = ({
         return;
       }
 
-      setConnectivityStatus(prev => ({
+      setConnectivityStatus((prev) => ({
         ...prev,
         [url]: {
           status: 'disconnected',
-          error: error.message || 'Connection failed'
-        }
+          error: error.message || 'Connection failed',
+        },
       }));
       activeConnectionsRef.current.delete(url);
     }
@@ -279,7 +302,7 @@ export const SettingsButton: React.FC<SettingsButtonProps> = ({
   };
 
   const handleBackendChange = (newBackend: string) => {
-    const newBackendOption = BACKEND_OPTIONS.find(opt => opt.value === newBackend);
+    const newBackendOption = BACKEND_OPTIONS.find((opt) => opt.value === newBackend);
 
     // Cache the current settings before switching backends
     const updatedCache = {
@@ -287,21 +310,21 @@ export const SettingsButton: React.FC<SettingsButtonProps> = ({
       [tempSettings.backend]: {
         customUrl: tempSettings.customUrl || '',
         model: tempSettings.model || '',
-        useCustomModel: tempSettings.useCustomModel || false
-      }
+        useCustomModel: tempSettings.useCustomModel || false,
+      },
     };
     setBackendCache(updatedCache);
 
     // Restore cached URL and model for new backend, or use defaults
     const cached = updatedCache[newBackend];
     const urlToUse = tempSettings.useCustomUrl
-      ? (cached?.customUrl || newBackendOption?.defaultUrl || '')
-      : (newBackendOption?.defaultUrl || '');
+      ? cached?.customUrl || newBackendOption?.defaultUrl || ''
+      : newBackendOption?.defaultUrl || '';
     const modelToUse = cached?.model
       ? cached?.model
-      : (cached?.useCustomModel
-        ? (tempSettings.model || '')
-        : (newBackendOption?.models[0] || ''));
+      : cached?.useCustomModel
+        ? tempSettings.model || ''
+        : newBackendOption?.models[0] || '';
     const useCustomModelToUse = cached?.useCustomModel || false;
 
     setTempSettings({
@@ -310,12 +333,12 @@ export const SettingsButton: React.FC<SettingsButtonProps> = ({
       customUrl: urlToUse,
       model: modelToUse,
       useCustomModel: useCustomModelToUse,
-      backendLabel: newBackendOption!.label
+      backendLabel: newBackendOption!.label,
     });
   };
 
   const handleCustomUrlToggle = (enabled: boolean) => {
-    const backendOption = BACKEND_OPTIONS.find(opt => opt.value === tempSettings.backend);
+    const backendOption = BACKEND_OPTIONS.find((opt) => opt.value === tempSettings.backend);
     const cached = backendCache[tempSettings.backend];
 
     setTempSettings({
@@ -324,8 +347,8 @@ export const SettingsButton: React.FC<SettingsButtonProps> = ({
       // When enabling: check cache first, then current value, then default
       // When disabling: preserve the customUrl value
       customUrl: enabled
-        ? (cached?.customUrl || tempSettings.customUrl || (backendOption?.defaultUrl || ''))
-        : tempSettings.customUrl
+        ? cached?.customUrl || tempSettings.customUrl || backendOption?.defaultUrl || ''
+        : tempSettings.customUrl,
     });
   };
 
@@ -336,14 +359,14 @@ export const SettingsButton: React.FC<SettingsButtonProps> = ({
       [tempSettings.backend]: {
         customUrl: newUrl,
         model: tempSettings.model,
-        useCustomModel: tempSettings.useCustomModel || false
-      }
+        useCustomModel: tempSettings.useCustomModel || false,
+      },
     };
     setBackendCache(updatedCache);
 
     setTempSettings({
       ...tempSettings,
-      customUrl: newUrl
+      customUrl: newUrl,
     });
   };
 
@@ -354,19 +377,19 @@ export const SettingsButton: React.FC<SettingsButtonProps> = ({
       [tempSettings.backend]: {
         customUrl: tempSettings.customUrl || '',
         model: selectedModel,
-        useCustomModel: tempSettings.useCustomModel || false
-      }
+        useCustomModel: tempSettings.useCustomModel || false,
+      },
     };
     setBackendCache(updatedCache);
 
     setTempSettings({
       ...tempSettings,
-      model: selectedModel
+      model: selectedModel,
     });
   };
 
   const handleCustomModelToggle = (enabled: boolean) => {
-    const backendOption = BACKEND_OPTIONS.find(opt => opt.value === tempSettings.backend);
+    const backendOption = BACKEND_OPTIONS.find((opt) => opt.value === tempSettings.backend);
     const cached = backendCache[tempSettings.backend];
 
     let modelToUse: string;
@@ -398,15 +421,15 @@ export const SettingsButton: React.FC<SettingsButtonProps> = ({
       [tempSettings.backend]: {
         customUrl: tempSettings.customUrl || '',
         model: modelToUse,
-        useCustomModel: enabled
-      }
+        useCustomModel: enabled,
+      },
     };
     setBackendCache(updatedCache);
 
     setTempSettings({
       ...tempSettings,
       useCustomModel: enabled,
-      model: modelToUse
+      model: modelToUse,
     });
   };
 
@@ -417,14 +440,14 @@ export const SettingsButton: React.FC<SettingsButtonProps> = ({
       [tempSettings.backend]: {
         customUrl: tempSettings.customUrl || '',
         model: newModel,
-        useCustomModel: tempSettings.useCustomModel || false
-      }
+        useCustomModel: tempSettings.useCustomModel || false,
+      },
     };
     setBackendCache(updatedCache);
 
     setTempSettings({
       ...tempSettings,
-      model: newModel
+      model: newModel,
     });
   };
 
@@ -435,9 +458,9 @@ export const SettingsButton: React.FC<SettingsButtonProps> = ({
     const url = newServerUrl.trim();
 
     // Set to checking state
-    setConnectivityStatus(prev => ({
+    setConnectivityStatus((prev) => ({
       ...prev,
-      [url]: { status: 'checking' }
+      [url]: { status: 'checking' },
     }));
 
     try {
@@ -449,8 +472,8 @@ export const SettingsButton: React.FC<SettingsButtonProps> = ({
         },
         body: JSON.stringify({
           url: url,
-          name: `Server ${Date.now()}`
-        })
+          name: `Server ${Date.now()}`,
+        }),
       });
 
       if (!response.ok) {
@@ -463,21 +486,21 @@ export const SettingsButton: React.FC<SettingsButtonProps> = ({
         // Server validated and registered successfully
         const newServer: ToolServer = {
           id: Date.now().toString(),
-          url: result.url || url
+          url: result.url || url,
         };
 
         setTempSettings({
           ...tempSettings,
-          toolServers: [...(tempSettings.toolServers || []), newServer]
+          toolServers: [...(tempSettings.toolServers || []), newServer],
         });
 
         // Update connectivity status with tools
-        setConnectivityStatus(prev => ({
+        setConnectivityStatus((prev) => ({
           ...prev,
           [newServer.url]: {
             status: 'connected',
-            tools: result.tools?.length > 0 ? result.tools : undefined
-          }
+            tools: result.tools?.length > 0 ? result.tools : undefined,
+          },
         }));
 
         setNewServerUrl('');
@@ -485,28 +508,28 @@ export const SettingsButton: React.FC<SettingsButtonProps> = ({
 
         // Notify parent that server was added
         if (onServerAdded) {
-           onServerAdded();
+          onServerAdded();
         }
       } else {
         // Validation failed
-        setConnectivityStatus(prev => ({
+        setConnectivityStatus((prev) => ({
           ...prev,
           [url]: {
             status: 'disconnected',
-            error: result.error || 'Validation failed'
-          }
+            error: result.error || 'Validation failed',
+          },
         }));
 
         // Show error to user but keep the input visible
         alert(`Failed to add server: ${result.error || 'Validation failed'}`);
       }
     } catch (error: any) {
-      setConnectivityStatus(prev => ({
+      setConnectivityStatus((prev) => ({
         ...prev,
         [url]: {
           status: 'disconnected',
-          error: error.message || 'Connection failed'
-        }
+          error: error.message || 'Connection failed',
+        },
       }));
 
       alert(`Failed to add server: ${error.message || 'Connection failed'}`);
@@ -514,7 +537,7 @@ export const SettingsButton: React.FC<SettingsButtonProps> = ({
   };
 
   const handleEditServer = (serverId: string) => {
-    const server = tempSettings.toolServers?.find(s => s.id === serverId);
+    const server = tempSettings.toolServers?.find((s) => s.id === serverId);
     if (server) {
       setEditingServer(serverId);
       setEditServerUrl(server.url);
@@ -524,15 +547,15 @@ export const SettingsButton: React.FC<SettingsButtonProps> = ({
   const handleSaveServerEdit = async (serverId: string) => {
     if (!editServerUrl.trim()) return;
 
-    const oldServer = tempSettings.toolServers?.find(s => s.id === serverId);
+    const oldServer = tempSettings.toolServers?.find((s) => s.id === serverId);
     if (!oldServer) return;
 
     const newUrl = editServerUrl.trim();
 
     // Set to checking state
-    setConnectivityStatus(prev => ({
+    setConnectivityStatus((prev) => ({
       ...prev,
-      [newUrl]: { status: 'checking' }
+      [newUrl]: { status: 'checking' },
     }));
 
     try {
@@ -544,8 +567,8 @@ export const SettingsButton: React.FC<SettingsButtonProps> = ({
         },
         body: JSON.stringify({
           url: newUrl,
-          name: oldServer.name || `Server ${serverId}`
-        })
+          name: oldServer.name || `Server ${serverId}`,
+        }),
       });
 
       if (!response.ok) {
@@ -557,7 +580,7 @@ export const SettingsButton: React.FC<SettingsButtonProps> = ({
       if (result.status === 'connected') {
         // Clean up old URL status
         if (oldServer.url !== newUrl) {
-          setConnectivityStatus(prev => {
+          setConnectivityStatus((prev) => {
             const newStatus = { ...prev };
             delete newStatus[oldServer.url];
             return newStatus;
@@ -567,41 +590,42 @@ export const SettingsButton: React.FC<SettingsButtonProps> = ({
         // Update server URL
         setTempSettings({
           ...tempSettings,
-          toolServers: tempSettings.toolServers?.map(s =>
-            s.id === serverId ? { ...s, url: result.url || newUrl } : s
-          ) || []
+          toolServers:
+            tempSettings.toolServers?.map((s) =>
+              s.id === serverId ? { ...s, url: result.url || newUrl } : s
+            ) || [],
         });
 
         // Update connectivity status
-        setConnectivityStatus(prev => ({
+        setConnectivityStatus((prev) => ({
           ...prev,
           [result.url || newUrl]: {
             status: 'connected',
-            tools: result.tools?.length > 0 ? result.tools : undefined
-          }
+            tools: result.tools?.length > 0 ? result.tools : undefined,
+          },
         }));
 
         setEditingServer(null);
         setEditServerUrl('');
       } else {
         // Validation failed
-        setConnectivityStatus(prev => ({
+        setConnectivityStatus((prev) => ({
           ...prev,
           [newUrl]: {
             status: 'disconnected',
-            error: result.error || 'Validation failed'
-          }
+            error: result.error || 'Validation failed',
+          },
         }));
 
         alert(`Failed to update server: ${result.error || 'Validation failed'}`);
       }
     } catch (error: any) {
-      setConnectivityStatus(prev => ({
+      setConnectivityStatus((prev) => ({
         ...prev,
         [newUrl]: {
           status: 'disconnected',
-          error: error.message || 'Connection failed'
-        }
+          error: error.message || 'Connection failed',
+        },
       }));
 
       alert(`Failed to update server: ${error.message || 'Connection failed'}`);
@@ -609,7 +633,7 @@ export const SettingsButton: React.FC<SettingsButtonProps> = ({
   };
 
   const handleDeleteServer = async (serverId: string) => {
-    const server = tempSettings.toolServers?.find(s => s.id === serverId);
+    const server = tempSettings.toolServers?.find((s) => s.id === serverId);
     if (!server) return;
 
     console.log('🗑️ Deleting server:', server.url);
@@ -618,7 +642,7 @@ export const SettingsButton: React.FC<SettingsButtonProps> = ({
       const response = await fetch(HTTP_SERVER + '/delete-mcp-server', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ url: server.url })
+        body: JSON.stringify({ url: server.url }),
       });
 
       if (!response.ok) {
@@ -637,7 +661,7 @@ export const SettingsButton: React.FC<SettingsButtonProps> = ({
         }
 
         // Clean up status
-        setConnectivityStatus(prev => {
+        setConnectivityStatus((prev) => {
           const newStatus = { ...prev };
           delete newStatus[server.url];
           return newStatus;
@@ -650,7 +674,7 @@ export const SettingsButton: React.FC<SettingsButtonProps> = ({
         // Remove from tempSettings
         setTempSettings({
           ...tempSettings,
-          toolServers: tempSettings.toolServers?.filter(s => s.id !== serverId) || []
+          toolServers: tempSettings.toolServers?.filter((s) => s.id !== serverId) || [],
         });
 
         // Notify parent
@@ -682,7 +706,7 @@ export const SettingsButton: React.FC<SettingsButtonProps> = ({
         await fetch(HTTP_SERVER + '/delete-mcp-server', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ url: server.url })
+          body: JSON.stringify({ url: server.url }),
         });
       } catch (error) {
         console.warn(`Error deleting ${server.url}:`, error);
@@ -692,13 +716,13 @@ export const SettingsButton: React.FC<SettingsButtonProps> = ({
     await Promise.all(deletePromises);
 
     // Cancel all active connections
-    activeConnectionsRef.current.forEach(controller => controller.abort());
+    activeConnectionsRef.current.forEach((controller) => controller.abort());
     activeConnectionsRef.current.clear();
 
     // Clear frontend state
     setTempSettings({
       ...tempSettings,
-      toolServers: []
+      toolServers: [],
     });
     setConnectivityStatus({});
     setPinnedServer(null);
@@ -708,14 +732,11 @@ export const SettingsButton: React.FC<SettingsButtonProps> = ({
     }
   };
 
-  const currentBackendOption = BACKEND_OPTIONS.find(opt => opt.value === tempSettings.backend);
+  const currentBackendOption = BACKEND_OPTIONS.find((opt) => opt.value === tempSettings.backend);
 
   return (
     <>
-      <button
-        onClick={handleOpenModal}
-        className={`btn btn-secondary btn-sm ${className}`}
-      >
+      <button onClick={handleOpenModal} className={`btn btn-secondary btn-sm ${className}`}>
         <Settings className="w-4 h-4" />
         <span>Settings</span>
         <svg className="w-3 h-3 ml-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -729,27 +750,31 @@ export const SettingsButton: React.FC<SettingsButtonProps> = ({
           <div className="modal-content modal-content-lg">
             <div className="modal-header">
               <div>
-                <h2 className="modal-title">{username}'s Orchestrator and Tools Settings</h2>
+                <h2 className="modal-title">{username}&apos;s Orchestrator and Tools Settings</h2>
                 <p className="modal-subtitle">Configure your connection and tools</p>
               </div>
-              <button
-                onClick={handleCancel}
-                className="btn-icon"
-              >
+              <button onClick={handleCancel} className="btn-icon">
                 <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M6 18L18 6M6 6l12 12"
+                  />
                 </svg>
               </button>
             </div>
 
             {/* Tab Navigation */}
-            <div className="card-header" style={{ borderBottom: '1px solid rgba(168, 85, 247, 0.3)' }}>
+            <div
+              className="card-header"
+              style={{ borderBottom: '1px solid rgba(168, 85, 247, 0.3)' }}
+            >
               <div className="flex gap-sm">
                 <button
                   onClick={() => setActiveTab('orchestrator')}
                   className={`btn btn-sm transition-colors ${
-                    activeTab === 'orchestrator'
-                      ? 'btn-primary' : 'btn-tertiary'
+                    activeTab === 'orchestrator' ? 'btn-primary' : 'btn-tertiary'
                   }`}
                 >
                   <Settings className="w-4 h-4" />
@@ -758,16 +783,13 @@ export const SettingsButton: React.FC<SettingsButtonProps> = ({
                 <button
                   onClick={() => setActiveTab('tools')}
                   className={`btn btn-sm transition-colors ${
-                    activeTab === 'tools'
-                      ? 'btn-primary' : 'btn-tertiary'
+                    activeTab === 'tools' ? 'btn-primary' : 'btn-tertiary'
                   }`}
                 >
                   <Wrench className="w-4 h-4" />
                   <span>Tool Servers</span>
                   {tempSettings.toolServers && tempSettings.toolServers.length > 0 && (
-                    <span className="notification-badge">
-                      {tempSettings.toolServers.length}
-                    </span>
+                    <span className="notification-badge">{tempSettings.toolServers.length}</span>
                   )}
                 </button>
               </div>
@@ -777,143 +799,144 @@ export const SettingsButton: React.FC<SettingsButtonProps> = ({
               {/* Orchestrator Tab */}
               {activeTab === 'orchestrator' && (
                 <div className="space-y-4">
-                {/* Backend Selector */}
-                <div className="form-group">
-                  <label className="form-label">
-                    Backend
-                  </label>
-                  <select
-                    value={tempSettings.backend}
-                    onChange={(e) => handleBackendChange(e.target.value)}
-                    className="form-select"
-                  >
-                    {BACKEND_OPTIONS.map(option => (
-                      <option key={option.value} value={option.value}>
-                        {option.label}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                {/* Use Custom URL Checkbox */}
-                <div>
-                  <label className="form-label cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={tempSettings.useCustomUrl}
-                      onChange={(e) => handleCustomUrlToggle(e.target.checked)}
-                      className="form-checkbox"
-                    />
-                    <span>Use custom URL for this backend</span>
-                  </label>
-                  <p className="helper-text" style={{ marginLeft: '1.5rem' }}>
-                    Override the default endpoint with a custom server URL
-                  </p>
-                </div>
-
-                {/* Custom URL Field (conditional) */}
-                {tempSettings.useCustomUrl && (
-                  <div className="form-group animate-fadeIn">
-                    <label className="form-label">
-                      Custom URL
-                      <span className="helper-text" style={{ marginLeft: '0.5rem' }}>
-                        {tempSettings.backend === 'vllm' && '(vLLM endpoint)'}
-                        {tempSettings.backend === 'ollama' && '(Ollama endpoint)'}
-                        {(tempSettings.backend === 'livai') && '(LivAI base URL)'}
-                        {(tempSettings.backend === 'llamame') && '(LLamaMe base URL)'}
-                        {(tempSettings.backend === 'alcf') && '(ALCF Sophia base URL)'}
-                        {tempSettings.backend === 'openai' && '(OpenAI-compatible endpoint)'}
-                        {tempSettings.backend === 'gemini' && '(Gemini API endpoint)'}
-                      </span>
-                    </label>
-                    <input
-                      type="text"
-                      value={tempSettings.customUrl || ''}
-                      onChange={(e) => handleCustomUrlChange(e.target.value)}
-                      placeholder={currentBackendOption?.defaultUrl || 'http://localhost:8000'}
-                      className="form-input"
-                    />
-                    <p className="helper-text">
-                      Default: {currentBackendOption?.defaultUrl || 'Not set'}
-                    </p>
-                  </div>
-                )}
-
-                {/* Model Selection */}
-                <div className="form-group">
-                  <label className="form-label">
-                    Model
-                    <span className="helper-text" style={{ marginLeft: '0.5rem' }}>
-                      {tempSettings.backend === 'openai' && '(GPT models)'}
-                      {tempSettings.backend === 'livai' && '(LLNL Enterprise models)'}
-                      {tempSettings.backend === 'llamame' && '(LLNL Internal models)'}
-                      {tempSettings.backend === 'alcf' && '(ACLF Internal models)'}
-                      {tempSettings.backend === 'gemini' && '(Gemini models)'}
-                      {tempSettings.backend === 'ollama' && '(Local models)'}
-                      {tempSettings.backend === 'vllm' && '(vLLM models)'}
-                    </span>
-                  </label>
-
-                  {!tempSettings.useCustomModel ? (
+                  {/* Backend Selector */}
+                  <div className="form-group">
+                    <label className="form-label">Backend</label>
                     <select
-                      value={tempSettings.model}
-                      onChange={(e) => handleModelSelect(e.target.value)}
+                      value={tempSettings.backend}
+                      onChange={(e) => handleBackendChange(e.target.value)}
                       className="form-select"
                     >
-                      {currentBackendOption?.models?.map(model => (
-                        <option key={model} value={model}>
-                          {model}
+                      {BACKEND_OPTIONS.map((option) => (
+                        <option key={option.value} value={option.value}>
+                          {option.label}
                         </option>
                       ))}
                     </select>
-                  ) : (
+                  </div>
+
+                  {/* Use Custom URL Checkbox */}
+                  <div>
+                    <label className="form-label cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={tempSettings.useCustomUrl}
+                        onChange={(e) => handleCustomUrlToggle(e.target.checked)}
+                        className="form-checkbox"
+                      />
+                      <span>Use custom URL for this backend</span>
+                    </label>
+                    <p className="helper-text" style={{ marginLeft: '1.5rem' }}>
+                      Override the default endpoint with a custom server URL
+                    </p>
+                  </div>
+
+                  {/* Custom URL Field (conditional) */}
+                  {tempSettings.useCustomUrl && (
+                    <div className="form-group animate-fadeIn">
+                      <label className="form-label">
+                        Custom URL
+                        <span className="helper-text" style={{ marginLeft: '0.5rem' }}>
+                          {tempSettings.backend === 'vllm' && '(vLLM endpoint)'}
+                          {tempSettings.backend === 'ollama' && '(Ollama endpoint)'}
+                          {tempSettings.backend === 'livai' && '(LivAI base URL)'}
+                          {tempSettings.backend === 'llamame' && '(LLamaMe base URL)'}
+                          {tempSettings.backend === 'alcf' && '(ALCF Sophia base URL)'}
+                          {tempSettings.backend === 'openai' && '(OpenAI-compatible endpoint)'}
+                          {tempSettings.backend === 'gemini' && '(Gemini API endpoint)'}
+                        </span>
+                      </label>
+                      <input
+                        type="text"
+                        value={tempSettings.customUrl || ''}
+                        onChange={(e) => handleCustomUrlChange(e.target.value)}
+                        placeholder={currentBackendOption?.defaultUrl || 'http://localhost:8000'}
+                        className="form-input"
+                      />
+                      <p className="helper-text">
+                        Default: {currentBackendOption?.defaultUrl || 'Not set'}
+                      </p>
+                    </div>
+                  )}
+
+                  {/* Model Selection */}
+                  <div className="form-group">
+                    <label className="form-label">
+                      Model
+                      <span className="helper-text" style={{ marginLeft: '0.5rem' }}>
+                        {tempSettings.backend === 'openai' && '(GPT models)'}
+                        {tempSettings.backend === 'livai' && '(LLNL Enterprise models)'}
+                        {tempSettings.backend === 'llamame' && '(LLNL Internal models)'}
+                        {tempSettings.backend === 'alcf' && '(ACLF Internal models)'}
+                        {tempSettings.backend === 'gemini' && '(Gemini models)'}
+                        {tempSettings.backend === 'ollama' && '(Local models)'}
+                        {tempSettings.backend === 'vllm' && '(vLLM models)'}
+                      </span>
+                    </label>
+
+                    {!tempSettings.useCustomModel ? (
+                      <select
+                        value={tempSettings.model}
+                        onChange={(e) => handleModelSelect(e.target.value)}
+                        className="form-select"
+                      >
+                        {currentBackendOption?.models?.map((model) => (
+                          <option key={model} value={model}>
+                            {model}
+                          </option>
+                        ))}
+                      </select>
+                    ) : (
+                      <input
+                        type="text"
+                        value={tempSettings.model}
+                        onChange={(e) => handleCustomModelChange(e.target.value)}
+                        placeholder="Enter custom model name"
+                        className="form-input"
+                      />
+                    )}
+                  </div>
+
+                  {/* Use Custom Model Checkbox */}
+                  <div>
+                    <label className="form-label cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={tempSettings.useCustomModel || false}
+                        onChange={(e) => handleCustomModelToggle(e.target.checked)}
+                        className="form-checkbox"
+                      />
+                      <span>Use custom model name</span>
+                    </label>
+                    <p className="helper-text" style={{ marginLeft: '1.5rem' }}>
+                      Enter a custom model identifier not in the preset list
+                    </p>
+                  </div>
+
+                  {/* API Key Field */}
+                  <div className="form-group">
+                    <label className="form-label">
+                      API Key
+                      <span className="helper-text" style={{ marginLeft: '0.5rem' }}>
+                        {(tempSettings.backend === 'ollama' ||
+                          tempSettings.backend === 'huggingface' ||
+                          tempSettings.backend === 'vllm') &&
+                          '(Optional for local backends)'}
+                        {tempSettings.backend === 'openai' && '(OPENAI_API_KEY)'}
+                        {tempSettings.backend === 'livai' && '(LIVAI_API_KEY)'}
+                        {tempSettings.backend === 'llamame' && '(LLAMAME_API_KEY)'}
+                        {tempSettings.backend === 'alcf' && '(ALCF_API_KEY)'}
+                        {tempSettings.backend === 'gemini' && '(GOOGLE_API_KEY)'}
+                      </span>
+                    </label>
                     <input
-                      type="text"
-                      value={tempSettings.model}
-                      onChange={(e) => handleCustomModelChange(e.target.value)}
-                      placeholder="Enter custom model name"
+                      type="password"
+                      value={tempSettings.apiKey}
+                      onChange={(e) => setTempSettings({ ...tempSettings, apiKey: e.target.value })}
+                      placeholder="Enter your API key"
                       className="form-input"
                     />
-                  )}
-                </div>
-
-                {/* Use Custom Model Checkbox */}
-                <div>
-                  <label className="form-label cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={tempSettings.useCustomModel || false}
-                      onChange={(e) => handleCustomModelToggle(e.target.checked)}
-                      className="form-checkbox"
-                    />
-                    <span>Use custom model name</span>
-                  </label>
-                  <p className="helper-text" style={{ marginLeft: '1.5rem' }}>
-                    Enter a custom model identifier not in the preset list
-                  </p>
-                </div>
-
-                {/* API Key Field */}
-                <div className="form-group">
-                  <label className="form-label">
-                    API Key
-                    <span className="helper-text" style={{ marginLeft: '0.5rem' }}>
-                      {(tempSettings.backend === 'ollama' || tempSettings.backend === 'huggingface' || tempSettings.backend === 'vllm') && '(Optional for local backends)'}
-                      {tempSettings.backend === 'openai' && '(OPENAI_API_KEY)'}
-                      {tempSettings.backend === 'livai' && '(LIVAI_API_KEY)'}
-                      {tempSettings.backend === 'llamame' && '(LLAMAME_API_KEY)'}
-                      {tempSettings.backend === 'alcf' && '(ALCF_API_KEY)'}
-                      {tempSettings.backend === 'gemini' && '(GOOGLE_API_KEY)'}
-                    </span>
-                  </label>
-                  <input
-                    type="password"
-                    value={tempSettings.apiKey}
-                    onChange={(e) => setTempSettings({...tempSettings, apiKey: e.target.value})}
-                    placeholder="Enter your API key"
-                    className="form-input"
-                  />
-                </div>
+                  </div>
                 </div>
               )}
 
@@ -927,209 +950,235 @@ export const SettingsButton: React.FC<SettingsButtonProps> = ({
                         Configure external MCP tool servers for extended functionality
                       </p>
                     </div>
-                  {tempSettings.toolServers && tempSettings.toolServers.length > 0 && (
+                    {tempSettings.toolServers && tempSettings.toolServers.length > 0 && (
+                      <button onClick={handleClearAllServers} className="btn btn-tertiary btn-sm">
+                        <Trash2 className="w-3 h-3" />
+                        Clear All
+                      </button>
+                    )}
+                  </div>
+
+                  {/* Server List */}
+                  <div className="space-y-2">
+                    {tempSettings.toolServers?.map((server) => (
+                      <div
+                        key={server.id}
+                        className="glass-panel hover:bg-surface-hover transition-colors"
+                      >
+                        {editingServer === server.id ? (
+                          <div className="space-y-2">
+                            <input
+                              type="text"
+                              value={editServerUrl}
+                              onChange={(e) => setEditServerUrl(e.target.value)}
+                              onKeyDown={(e) => {
+                                if (e.key === 'Enter') handleSaveServerEdit(server.id);
+                                if (e.key === 'Escape') {
+                                  setEditingServer(null);
+                                  setEditServerUrl('');
+                                }
+                              }}
+                              placeholder="https://example.com/sse"
+                              className="form-input"
+                              autoFocus
+                            />
+                            <div className="flex gap-sm">
+                              <button
+                                onClick={() => handleSaveServerEdit(server.id)}
+                                className="btn btn-secondary btn-sm flex-1"
+                              >
+                                Save
+                              </button>
+                              <button
+                                onClick={() => {
+                                  setEditingServer(null);
+                                  setEditServerUrl('');
+                                }}
+                                className="btn btn-tertiary btn-sm flex-1"
+                              >
+                                Cancel
+                              </button>
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="flex items-center gap-md">
+                            {/* Connectivity Indicator */}
+                            <div
+                              className="relative connectivity-indicator"
+                              onMouseEnter={() => setHoveredServer(server.id)}
+                              onMouseLeave={() => setHoveredServer(null)}
+                              onClick={() =>
+                                setPinnedServer(pinnedServer === server.id ? null : server.id)
+                              }
+                              style={{ cursor: 'pointer' }}
+                            >
+                              {connectivityStatus[server.url]?.status === 'checking' ? (
+                                <Loader2 className="icon-md text-muted animate-spin" />
+                              ) : (
+                                <div
+                                  className={`status-indicator ${
+                                    connectivityStatus[server.url]?.status === 'connected'
+                                      ? 'status-indicator-connected'
+                                      : 'status-indicator-disconnected'
+                                  }`}
+                                  title={
+                                    connectivityStatus[server.url]?.status === 'connected'
+                                      ? 'Connected (click for tools)'
+                                      : connectivityStatus[server.url]?.error || 'Disconnected'
+                                  }
+                                />
+                              )}
+
+                              {/* Tools Tooltip */}
+                              {(hoveredServer === server.id || pinnedServer === server.id) &&
+                                connectivityStatus[server.url]?.status === 'connected' &&
+                                connectivityStatus[server.url]?.tools &&
+                                connectivityStatus[server.url].tools!.length > 0 && (
+                                  <div
+                                    ref={tooltipRef}
+                                    className="ws-tooltip"
+                                    style={{ left: 'auto', right: 0, top: '2.5rem' }}
+                                  >
+                                    <p className="text-sm font-semibold mb-2 text-primary">
+                                      Available Tools:
+                                    </p>
+                                    <ul className="text-sm space-y-2 max-h-60 overflow-y-auto custom-scrollbar">
+                                      {connectivityStatus[server.url].tools!.map((tool, idx) => (
+                                        <li key={idx} className="text-secondary">
+                                          <span className="text-mono emphasized-text">
+                                            • {tool.name}
+                                          </span>
+                                          {tool.description && (
+                                            <p
+                                              className="text-xs text-secondary"
+                                              style={{
+                                                marginLeft: '0.75rem',
+                                                marginTop: '0.125rem',
+                                              }}
+                                            >
+                                              {tool.description.length > 80
+                                                ? `${tool.description.substring(0, 80)}...`
+                                                : tool.description}
+                                            </p>
+                                          )}
+                                        </li>
+                                      ))}
+                                    </ul>
+                                  </div>
+                                )}
+                            </div>
+
+                            {/* URL */}
+                            <div className="flex-1">
+                              <p className="text-sm truncate text-primary">{server.url}</p>
+                            </div>
+
+                            {/* Action Buttons */}
+                            <div className="flex items-center gap-sm">
+                              <button
+                                onClick={() => handleEditServer(server.id)}
+                                className="btn-icon"
+                                title="Edit server"
+                              >
+                                <Edit2 className="icon-md" />
+                              </button>
+                              <button
+                                onClick={() => handleDeleteServer(server.id)}
+                                className="action-button action-button-danger"
+                                title="Delete server"
+                              >
+                                <Trash2 className="icon-md" />
+                              </button>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    ))}
+
+                    {/* Empty State */}
+                    {(!tempSettings.toolServers || tempSettings.toolServers.length === 0) &&
+                      !addingServer && (
+                        <div
+                          className="empty-state"
+                          style={{
+                            padding: '2rem',
+                            border: '1px dashed rgba(168, 85, 247, 0.5)',
+                            borderRadius: '0.5rem',
+                          }}
+                        >
+                          <Wrench className="empty-state-icon" />
+                          <p className="empty-state-text">No tool servers configured</p>
+                          <p className="empty-state-subtext">
+                            Add MCP servers to extend functionality
+                          </p>
+                        </div>
+                      )}
+                  </div>
+
+                  {/* Add New Server */}
+                  {addingServer ? (
+                    <div className="glass-panel space-y-2" style={{ border: '2px solid #a78bfa' }}>
+                      <label className="form-label-block">MCP Server URL</label>
+                      <input
+                        type="text"
+                        value={newServerUrl}
+                        onChange={(e) => setNewServerUrl(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') handleAddServer();
+                          if (e.key === 'Escape') {
+                            setAddingServer(false);
+                            setNewServerUrl('');
+                          }
+                        }}
+                        placeholder="https://example.com/sse"
+                        className="form-input"
+                        autoFocus
+                      />
+                      <div className="flex gap-sm">
+                        <button
+                          onClick={handleAddServer}
+                          className="btn btn-secondary btn-sm flex-1"
+                        >
+                          <Plus className="w-3 h-3" />
+                          Add Server
+                        </button>
+                        <button
+                          onClick={() => {
+                            setAddingServer(false);
+                            setNewServerUrl('');
+                          }}
+                          className="btn btn-tertiary btn-sm flex-1"
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
                     <button
-                      onClick={handleClearAllServers}
-                      className="btn btn-tertiary btn-sm"
+                      onClick={() => setAddingServer(true)}
+                      className="btn btn-secondary btn-sm w-full"
                     >
-                      <Trash2 className="w-3 h-3" />
-                      Clear All
+                      <Plus className="icon-md" />
+                      <span>Add Tool Server</span>
                     </button>
                   )}
                 </div>
-
-                {/* Server List */}
-                <div className="space-y-2">
-                  {tempSettings.toolServers?.map(server => (
-                    <div key={server.id} className="glass-panel hover:bg-surface-hover transition-colors">
-                      {editingServer === server.id ? (
-                        <div className="space-y-2">
-                          <input
-                            type="text"
-                            value={editServerUrl}
-                            onChange={(e) => setEditServerUrl(e.target.value)}
-                            onKeyDown={(e) => {
-                              if (e.key === 'Enter') handleSaveServerEdit(server.id);
-                              if (e.key === 'Escape') {
-                                setEditingServer(null);
-                                setEditServerUrl('');
-                              }
-                            }}
-                            placeholder="https://example.com/sse"
-                            className="form-input"
-                            autoFocus
-                          />
-                          <div className="flex gap-sm">
-                            <button
-                              onClick={() => handleSaveServerEdit(server.id)}
-                              className="btn btn-secondary btn-sm flex-1"
-                            >
-                              Save
-                            </button>
-                            <button
-                              onClick={() => {
-                                setEditingServer(null);
-                                setEditServerUrl('');
-                              }}
-                              className="btn btn-tertiary btn-sm flex-1"
-                            >
-                              Cancel
-                            </button>
-                          </div>
-                        </div>
-                      ) : (
-                        <div className="flex items-center gap-md">
-                          {/* Connectivity Indicator */}
-                          <div
-                            className="relative connectivity-indicator"
-                            onMouseEnter={() => setHoveredServer(server.id)}
-                            onMouseLeave={() => setHoveredServer(null)}
-                            onClick={() => setPinnedServer(pinnedServer === server.id ? null : server.id)}
-                            style={{ cursor: 'pointer' }}
-                          >
-                            {connectivityStatus[server.url]?.status === 'checking' ? (
-                              <Loader2 className="icon-md text-muted animate-spin" />
-                            ) : (
-                              <div className={`status-indicator ${
-                                connectivityStatus[server.url]?.status === 'connected'
-                                  ? 'status-indicator-connected'
-                                  : 'status-indicator-disconnected'
-                              }`}
-                                title={
-                                  connectivityStatus[server.url]?.status === 'connected'
-                                    ? 'Connected (click for tools)'
-                                    : connectivityStatus[server.url]?.error || 'Disconnected'
-                                }
-                              />
-                            )}
-
-                            {/* Tools Tooltip */}
-                            {(hoveredServer === server.id || pinnedServer === server.id) &&
-                             connectivityStatus[server.url]?.status === 'connected' &&
-                             connectivityStatus[server.url]?.tools &&
-                             connectivityStatus[server.url].tools!.length > 0 && (
-                              <div ref={tooltipRef} className="ws-tooltip" style={{ left: 'auto', right: 0, top: '2.5rem' }}>
-                                <p className="text-sm font-semibold mb-2 text-primary">Available Tools:</p>
-                                <ul className="text-sm space-y-2 max-h-60 overflow-y-auto custom-scrollbar">
-                                  {connectivityStatus[server.url].tools!.map((tool, idx) => (
-                                    <li key={idx} className="text-secondary">
-                                      <span className="text-mono emphasized-text">• {tool.name}</span>
-                                      {tool.description && (
-                                        <p className="text-xs text-secondary" style={{ marginLeft: '0.75rem', marginTop: '0.125rem' }}>
-                                          {tool.description.length > 80
-                                            ? `${tool.description.substring(0, 80)}...`
-                                            : tool.description}
-                                        </p>
-                                      )}
-                                    </li>
-                                  ))}
-                                </ul>
-                              </div>
-                            )}
-                          </div>
-
-                          {/* URL */}
-                          <div className="flex-1">
-                            <p className="text-sm truncate text-primary">{server.url}</p>
-                          </div>
-
-                          {/* Action Buttons */}
-                          <div className="flex items-center gap-sm">
-                            <button
-                              onClick={() => handleEditServer(server.id)}
-                              className="btn-icon"
-                              title="Edit server"
-                            >
-                              <Edit2 className="icon-md" />
-                            </button>
-                            <button
-                              onClick={() => handleDeleteServer(server.id)}
-                              className="action-button action-button-danger"
-                              title="Delete server"
-                            >
-                              <Trash2 className="icon-md" />
-                            </button>
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  ))}
-
-                  {/* Empty State */}
-                  {(!tempSettings.toolServers || tempSettings.toolServers.length === 0) && !addingServer && (
-                    <div className="empty-state" style={{ padding: '2rem', border: '1px dashed rgba(168, 85, 247, 0.5)', borderRadius: '0.5rem' }}>
-                      <Wrench className="empty-state-icon" />
-                      <p className="empty-state-text">No tool servers configured</p>
-                      <p className="empty-state-subtext">Add MCP servers to extend functionality</p>
-                    </div>
-                  )}
-                </div>
-
-                {/* Add New Server */}
-                {addingServer ? (
-                  <div className="glass-panel space-y-2" style={{ border: '2px solid #a78bfa' }}>
-                    <label className="form-label-block">MCP Server URL</label>
-                    <input
-                      type="text"
-                      value={newServerUrl}
-                      onChange={(e) => setNewServerUrl(e.target.value)}
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter') handleAddServer();
-                        if (e.key === 'Escape') {
-                          setAddingServer(false);
-                          setNewServerUrl('');
-                        }
-                      }}
-                      placeholder="https://example.com/sse"
-                      className="form-input"
-                      autoFocus
-                    />
-                    <div className="flex gap-sm">
-                      <button
-                        onClick={handleAddServer}
-                        className="btn btn-secondary btn-sm flex-1"
-                      >
-                        <Plus className="w-3 h-3" />
-                        Add Server
-                      </button>
-                      <button
-                        onClick={() => {
-                          setAddingServer(false);
-                          setNewServerUrl('');
-                        }}
-                        className="btn btn-tertiary btn-sm flex-1"
-                      >
-                        Cancel
-                      </button>
-                    </div>
-                  </div>
-                ) : (
-                  <button
-                    onClick={() => setAddingServer(true)}
-                    className="btn btn-secondary btn-sm w-full"
-                  >
-                    <Plus className="icon-md" />
-                    <span>Add Tool Server</span>
-                  </button>
-                )}
-              </div>
               )}
             </div>
 
             <div className="modal-footer">
-              <button
-                onClick={handleSave}
-                className="btn btn-primary flex-1"
-              >
+              <button onClick={handleSave} className="btn btn-primary flex-1">
                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M5 13l4 4L19 7"
+                  />
                 </svg>
                 Save Settings
               </button>
-              <button
-                onClick={handleCancel}
-                className="btn btn-tertiary"
-              >
+              <button onClick={handleCancel} className="btn btn-tertiary">
                 Cancel
               </button>
             </div>

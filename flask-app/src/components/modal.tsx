@@ -20,7 +20,7 @@ export const Modal: React.FC<ModalProps> = ({
   size = 'md',
   children,
   footer,
-  onOverlayClick
+  onOverlayClick,
 }) => {
   if (!isOpen) return null;
 
@@ -42,9 +42,7 @@ export const Modal: React.FC<ModalProps> = ({
             <X className="w-6 h-6" />
           </button>
         </div>
-        <div className="modal-body">
-          {children}
-        </div>
+        <div className="modal-body">{children}</div>
         {footer && <div className="modal-footer">{footer}</div>}
       </div>
     </div>

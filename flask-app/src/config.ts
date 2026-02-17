@@ -2,7 +2,7 @@ export interface AppConfig {
   // WebSocket
   WS_SERVER: string;
   VERSION: string;
-};
+}
 
 declare global {
   interface Window {
@@ -13,19 +13,19 @@ declare global {
 
 const DEFAULT_CONFIG: AppConfig = {
   WS_SERVER: 'ws://localhost:8001/ws',
-  VERSION: ''
+  VERSION: '',
 };
 
 let config: AppConfig | null = null;
 
 export const getConfig = (): AppConfig => {
-    if (!config) {
-        config = {
-        ...DEFAULT_CONFIG,
-        ...(window.APP_CONFIG || {})
-        };
-    }
-    return config;
+  if (!config) {
+    config = {
+      ...DEFAULT_CONFIG,
+      ...(window.APP_CONFIG || {}),
+    };
+  }
+  return config;
 };
 
 function wsToHttp(wsUrl: string): string {

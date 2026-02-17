@@ -13,7 +13,11 @@ interface ProjectDataSource {
   createExperiment: (projectId: string, name: string) => Promise<Experiment>;
   updateExperiment: (projectId: string, experiment: Experiment) => Promise<void>;
   deleteExperiment: (projectId: string, experimentId: string) => Promise<void>;
-  setExperimentRunning: (projectId: string, experimentId: string, isRunning: boolean) => Promise<void>;
+  setExperimentRunning: (
+    projectId: string,
+    experimentId: string,
+    isRunning: boolean
+  ) => Promise<void>;
 }
 
 export interface ProjectData {
@@ -26,7 +30,11 @@ export interface ProjectData {
   createExperiment: (projectId: string, name: string) => Promise<Experiment>;
   updateExperiment: (projectId: string, experiment: Experiment) => Promise<void>;
   deleteExperiment: (projectId: string, experimentId: string) => Promise<void>;
-  setExperimentRunning: (projectId: string, experimentId: string, isRunning: boolean) => Promise<void>;
+  setExperimentRunning: (
+    projectId: string,
+    experimentId: string,
+    isRunning: boolean
+  ) => Promise<void>;
   refreshProjects: () => Promise<void>;
 }
 
@@ -53,7 +61,7 @@ class LocalStorageDataSource implements ProjectDataSource {
       name,
       createdAt: new Date().toISOString(),
       lastModified: new Date().toISOString(),
-      experiments: []
+      experiments: [],
     };
 
     const projects = await this.loadProjects();
@@ -65,7 +73,7 @@ class LocalStorageDataSource implements ProjectDataSource {
 
   async updateProject(project: Project): Promise<void> {
     const projects = await this.loadProjects();
-    const index = projects.findIndex(p => p.id === project.id);
+    const index = projects.findIndex((p) => p.id === project.id);
     if (index !== -1) {
       projects[index] = { ...project, lastModified: new Date().toISOString() };
       await this.saveProjects(projects);
@@ -74,7 +82,7 @@ class LocalStorageDataSource implements ProjectDataSource {
 
   async deleteProject(projectId: string): Promise<void> {
     const projects = await this.loadProjects();
-    const filtered = projects.filter(p => p.id !== projectId);
+    const filtered = projects.filter((p) => p.id !== projectId);
     await this.saveProjects(filtered);
   }
 
@@ -83,11 +91,11 @@ class LocalStorageDataSource implements ProjectDataSource {
       id: `exp_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
       name,
       createdAt: new Date().toISOString(),
-      lastModified: new Date().toISOString()
+      lastModified: new Date().toISOString(),
     };
 
     const projects = await this.loadProjects();
-    const project = projects.find(p => p.id === projectId);
+    const project = projects.find((p) => p.id === projectId);
     if (project) {
       project.experiments.push(newExperiment);
       project.lastModified = new Date().toISOString();
@@ -99,9 +107,9 @@ class LocalStorageDataSource implements ProjectDataSource {
 
   async updateExperiment(projectId: string, experiment: Experiment): Promise<void> {
     const projects = await this.loadProjects();
-    const project = projects.find(p => p.id === projectId);
+    const project = projects.find((p) => p.id === projectId);
     if (project) {
-      const expIndex = project.experiments.findIndex(e => e.id === experiment.id);
+      const expIndex = project.experiments.findIndex((e) => e.id === experiment.id);
       if (expIndex !== -1) {
         project.experiments[expIndex] = { ...experiment, lastModified: new Date().toISOString() };
         project.lastModified = new Date().toISOString();
@@ -112,19 +120,23 @@ class LocalStorageDataSource implements ProjectDataSource {
 
   async deleteExperiment(projectId: string, experimentId: string): Promise<void> {
     const projects = await this.loadProjects();
-    const project = projects.find(p => p.id === projectId);
+    const project = projects.find((p) => p.id === projectId);
     if (project) {
-      project.experiments = project.experiments.filter(e => e.id !== experimentId);
+      project.experiments = project.experiments.filter((e) => e.id !== experimentId);
       project.lastModified = new Date().toISOString();
       await this.saveProjects(projects);
     }
   }
 
-  async setExperimentRunning(projectId: string, experimentId: string, isRunning: boolean): Promise<void> {
+  async setExperimentRunning(
+    projectId: string,
+    experimentId: string,
+    isRunning: boolean
+  ): Promise<void> {
     const projects = await this.loadProjects();
-    const project = projects.find(p => p.id === projectId);
+    const project = projects.find((p) => p.id === projectId);
     if (project) {
-      const experiment = project.experiments.find(e => e.id === experimentId);
+      const experiment = project.experiments.find((e) => e.id === experimentId);
       if (experiment) {
         experiment.isRunning = isRunning;
         experiment.lastModified = new Date().toISOString();
@@ -206,7 +218,11 @@ export const useProjectData = () => {
     await loadProjects();
   };
 
-  const setExperimentRunning = async (projectId: string, experimentId: string, isRunning: boolean) => {
+  const setExperimentRunning = async (
+    projectId: string,
+    experimentId: string,
+    isRunning: boolean
+  ) => {
     await dataSource.setExperimentRunning(projectId, experimentId, isRunning);
     await loadProjects();
   };
@@ -222,6 +238,6 @@ export const useProjectData = () => {
     updateExperiment,
     deleteExperiment,
     setExperimentRunning,
-    refreshProjects: loadProjects
+    refreshProjects: loadProjects,
   };
 };

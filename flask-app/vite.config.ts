@@ -1,8 +1,8 @@
 import { defineConfig } from 'vite';
-import tailwindcss from '@tailwindcss/vite'
+import tailwindcss from '@tailwindcss/vite';
 import react from '@vitejs/plugin-react';
-import { resolve } from 'path'
-import { copyFileSync, mkdirSync, writeFileSync } from 'fs'
+import { resolve } from 'path';
+import { copyFileSync, mkdirSync, writeFileSync } from 'fs';
 
 // Plugin to copy RDKit files during build
 function copyRDKitFiles() {
@@ -26,34 +26,32 @@ function copyRDKitFiles() {
       } catch (error) {
         console.error('Failed to copy RDKit files:', error);
       }
-    }
-  }
+    },
+  };
 }
 
 export default defineConfig({
-  plugins: [
-    react(),
-    tailwindcss(),
-    copyRDKitFiles()
-  ],
+  plugins: [react(), tailwindcss(), copyRDKitFiles()],
   define: {
-    'window.APP_CONFIG.WS_SERVER': JSON.stringify(process.env.WS_SERVER || 'ws://localhost:8001/ws'),
-    'window.APP_CONFIG.VERSION': JSON.stringify(process.env.SERVER_VERSION || '')
+    'window.APP_CONFIG.WS_SERVER': JSON.stringify(
+      process.env.WS_SERVER || 'ws://localhost:8001/ws'
+    ),
+    'window.APP_CONFIG.VERSION': JSON.stringify(process.env.SERVER_VERSION || ''),
   },
   resolve: {
     dedupe: ['react', 'react-dom', 'lucide-react'],
-    preserveSymlinks: true
+    preserveSymlinks: true,
   },
   optimizeDeps: {
     // Force pre-bundling in dev AND specify for build
     include: ['scheduler'],
-    force: true  // Force re-optimization
+    force: true, // Force re-optimization
   },
   build: {
     rollupOptions: {
       // Completely disable CommonJS detection for scheduler
       commonjsOptions: {
-        exclude: ['scheduler'],  // Don't let commonjs plugin touch it
+        exclude: ['scheduler'], // Don't let commonjs plugin touch it
       },
       // Explicitly tell Rollup: DO NOT externalize scheduler
       external: (id) => {
@@ -62,7 +60,7 @@ export default defineConfig({
           return false;
         }
         return false;
-      }
-    }
-  }
+      },
+    },
+  },
 });

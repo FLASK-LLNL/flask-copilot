@@ -4,7 +4,7 @@ export const MOLECULE_NAME_OPTIONS = [
   { value: 'brand', label: 'Brand/Common Name' },
   { value: 'iupac', label: 'IUPAC Name' },
   { value: 'formula', label: 'Chemical Formula' },
-  { value: 'smiles', label: 'SMILES' }
+  { value: 'smiles', label: 'SMILES' },
 ];
 
 interface MoleculePropertiesContentProps {
@@ -27,15 +27,13 @@ export const MoleculePropertiesContent: React.FC<MoleculePropertiesContentProps>
 
       {/* Molecule Name Preference */}
       <div className="form-group">
-        <label className="form-label">
-          Preferred Molecule Name Format
-        </label>
+        <label className="form-label">Preferred Molecule Name Format</label>
         <select
           value={moleculeName || 'brand'}
           onChange={(e) => onMoleculeNameChange(e.target.value)}
           className="form-select"
         >
-          {MOLECULE_NAME_OPTIONS.map(option => (
+          {MOLECULE_NAME_OPTIONS.map((option) => (
             <option key={option.value} value={option.value}>
               {option.label}
             </option>
