@@ -117,13 +117,19 @@ export const useSessionPersistence = (): SessionPersistenceState & SessionPersis
     setSaveError(null);
 
     try {
+      // Prefer the sidebar's experimentId so saves always update the
+      // experiment the user is working in.  Fall back to the session
+      // persistence tracking ID for edge cases.
+      const effectiveSessionId = next.checkpoint
+        ? null
+        : (next.state.experimentId || dbSessionIdRef.current);
       const response = await fetch(`${HTTP_SERVER}/api/sessions/save`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          sessionId: next.checkpoint ? null : dbSessionIdRef.current,
+          sessionId: effectiveSessionId,
           name: next.name,
           state: next.state,
         }),
@@ -314,8 +320,10 @@ export const useCheckpointOnUnload = (
       const state = getStateRef.current();
       if ((!state.treeNodes || state.treeNodes.length === 0) && !state.smiles) return;
       
+      // Prefer the sidebar experimentId so the beacon updates the correct row
+      const effectiveSessionId = state.experimentId || dbSessionId;
       const payload = JSON.stringify({
-        sessionId: dbSessionId,
+        sessionId: effectiveSessionId,
         state: state,
       });
       

@@ -114,12 +114,17 @@ export const ProjectSidebar: React.FC<ProjectSidebarProps> = ({
   }, [isResizing, onToggle]);
 
   // Update experiment running status when isComputing changes
+  const prevIsComputingRef = React.useRef(isComputing);
   React.useEffect(() => {
-    if (selection.projectId && selection.experimentId) {
-      setExperimentRunning(selection.projectId, selection.experimentId, isComputing);
+    // Only fire when isComputing actually changes, not on selection changes
+    if (prevIsComputingRef.current !== isComputing) {
+      prevIsComputingRef.current = isComputing;
+      if (selection.projectId && selection.experimentId) {
+        setExperimentRunning(selection.projectId, selection.experimentId, isComputing);
+      }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isComputing, selection.projectId, selection.experimentId]);
+  }, [isComputing]);
 
   React.useEffect(() => {
     const handleClickOutside = (event: MouseEvent): void => {

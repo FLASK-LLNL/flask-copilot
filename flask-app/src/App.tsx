@@ -73,6 +73,7 @@ const ChemistryTool: React.FC = () => {
   const [customQueryType, setCustomQueryType] = useState<string | null>(null);
   const [wsConnected, setWsConnected] = useState<boolean>(false);
   const [saveDropdownOpen, setSaveDropdownOpen] = useState<boolean>(false);
+  const [loadDropdownOpen, setLoadDropdownOpen] = useState<boolean>(false);
   const [checkpointDropdownOpen, setCheckpointDropdownOpen] = useState<boolean>(false);
   const [autoCheckpointEnabled, setAutoCheckpointEnabled] = useState<boolean>(true);
   const [wsError, setWsError] = useState<string>('');
@@ -270,16 +271,17 @@ const ChemistryTool: React.FC = () => {
     const handleClickOutside = (): void => {
       setContextMenu({node: null, isReaction: false, x:0, y:0});
       setSaveDropdownOpen(false);
+      setLoadDropdownOpen(false);
       setCheckpointDropdownOpen(false);
       sidebarState.setSourceFilterOpen(false);
       setWsTooltipPinned(false);
       setCopiedField(null);
     };
-    if (contextMenu || saveDropdownOpen || checkpointDropdownOpen || sidebarState.sourceFilterOpen || wsTooltipPinned) {
+    if (contextMenu || saveDropdownOpen || loadDropdownOpen || checkpointDropdownOpen || sidebarState.sourceFilterOpen || wsTooltipPinned) {
       window.addEventListener('mousedown', handleClickOutside);
       return () => window.removeEventListener('mousedown', handleClickOutside);
     }
-  }, [contextMenu, saveDropdownOpen, checkpointDropdownOpen, sidebarState, wsTooltipPinned, projectSidebar]);
+  }, [contextMenu, saveDropdownOpen, loadDropdownOpen, checkpointDropdownOpen, sidebarState, wsTooltipPinned, projectSidebar]);
 
 
   // State management
@@ -312,30 +314,44 @@ const ChemistryTool: React.FC = () => {
   };
 
   const loadContext = (data: Experiment): void => {
-    // Conditionally set everything that is in the context
-    (data.smiles !== undefined) && setSmiles(data.smiles);
-    (data.problemType !== undefined) && setProblemType(data.problemType);
-    (data.systemPrompt !== undefined) && setSystemPrompt(data.systemPrompt);
-    (data.problemPrompt !== undefined) && setProblemPrompt(data.problemPrompt);
-    (data.propertyType !== undefined) && setPropertyType(data.propertyType);
-    (data.customPropertyName !== undefined) && setCustomPropertyName(data.customPropertyName);
-    (data.customPropertyDesc !== undefined) && setCustomPropertyDesc(data.customPropertyDesc);
-    (data.customPropertyAscending !== undefined) && setCustomPropertyAscending(data.customPropertyAscending);
-    data.customization && setCustomization(data.customization);
-    data.treeNodes && setTreeNodes(data.treeNodes);
-    data.edges && setEdges(data.edges);
-    data.metricsHistory && metricsDashboardState.setMetricsHistory(data.metricsHistory);
-    data.visibleMetrics && metricsDashboardState.setVisibleMetrics(data.visibleMetrics);
+    // Always reset to defaults first, then apply experiment data.
+    // This ensures switching to a fresh/empty experiment clears old state.
+    setSmiles(data.smiles ?? '');
+    setProblemType(data.problemType ?? 'retrosynthesis');
+    setSystemPrompt(data.systemPrompt ?? DEFAULT_CUSTOM_SYSTEM_PROMPT);
+    setProblemPrompt(data.problemPrompt ?? '');
+    setPropertyType(data.propertyType ?? 'density');
+    setCustomPropertyName(data.customPropertyName ?? '');
+    setCustomPropertyDesc(data.customPropertyDesc ?? '');
+    setCustomPropertyAscending(data.customPropertyAscending ?? true);
+    setCustomization(data.customization ?? {
+      enableConstraints: false,
+      molecularSimilarity: 0.7,
+      diversityPenalty: 0.0,
+      explorationRate: 0.5,
+      additionalConstraints: [],
+    });
+    setTreeNodes(data.treeNodes ?? []);
+    setEdges(data.edges ?? []);
+    metricsDashboardState.setMetricsHistory(data.metricsHistory ?? []);
+    metricsDashboardState.setVisibleMetrics(data.visibleMetrics ?? { cost: false, bandgap: false, sascore: false, yield: true, density: false });
     if (data.graphState) {
       graphState.setZoom(data.graphState.zoom);
       graphState.setOffset(data.graphState.offset);
+    } else {
+      graphState.setZoom(1);
+      graphState.setOffset({ x: 50, y: 50 });
     }
-    (data.autoZoom !== undefined) && setAutoZoom(data.autoZoom);
+    setAutoZoom(data.autoZoom ?? true);
     if (data.sidebarState) {
       sidebarState.setMessages(data.sidebarState.messages);
       sidebarState.setVisibleSources(data.sidebarState.visibleSources);
+    } else {
+      sidebarState.setMessages([]);
     }
-    data.experimentContext && sendMessageToServer('load-context', {experimentContext: data.experimentContext});
+    if (data.experimentContext) {
+      sendMessageToServer('load-context', {experimentContext: data.experimentContext});
+    }
   }
 
   const saveStateToExperiment = useCallback((): boolean => {
@@ -428,7 +444,8 @@ const ChemistryTool: React.FC = () => {
       customPropertyAscending,
       systemPrompt,
       userPrompt: problemPrompt,
-      customization
+      customization,
+      experimentId: projectSidebar.selectionRef.current.experimentId || undefined,
     };
 
     wsRef.current?.send(JSON.stringify(message));
@@ -457,16 +474,16 @@ const ChemistryTool: React.FC = () => {
       setWsConnected(true);
       setWsReconnecting(false);
       setWsError('');
-      reset();  // Server state must match UI state
+      resetLocalState();  // Clear UI state without killing server-side sessions
       isExperimentCompleteRef.current = false; // Reset experiment complete flag
 
-      // Apply restored session from database if available
+      // Apply restored session from database if available (first connect only)
       if (restoredSessionRef.current) {
         console.log('Applying restored session after reset');
         applyRestoredSession(restoredSessionRef.current);
-        // Don't clear the ref yet - keep it for potential reconnection
+        restoredSessionRef.current = null; // Clear after first apply
       } else {
-        // Fall back to loading from current experiment (project sidebar)
+        // Reconnection or no saved session: load from current sidebar selection
         loadStateFromCurrentExperiment();
       }
 
@@ -562,7 +579,15 @@ const ChemistryTool: React.FC = () => {
         setIsComputing(false);
         isExperimentCompleteRef.current = true;  // Mark experiment as complete to stop checkpointing
         unhighlightNodes();
-        saveStateToExperiment();  // Keep experiment up to date
+        saveStateToExperiment();  // Keep experiment up to date (localStorage / project data)
+
+        // Persist final state to MariaDB so other browsers see the completed tree.
+        // Use force=true to bypass the "no data" guard.
+        sessionPersistence.saveSession(
+          getSessionStateRef.current(),
+          true, // force
+        );
+
         // Clear server session ID on completion
         sessionPersistence.setServerSessionId(null);
         sessionPersistence.setSessionWasComputing(false);
@@ -678,7 +703,9 @@ const ChemistryTool: React.FC = () => {
     };
   }, []);
 
-  const reset = (): void => {
+  // Reset local UI state only (no server message).
+  // Used on WebSocket open so a session restore or resume can follow.
+  const resetLocalState = (): void => {
     setTreeNodes([]);
     setEdges([]);
     setIsComputing(false);
@@ -696,6 +723,12 @@ const ChemistryTool: React.FC = () => {
     setReactionSidebarOpen(false);
     setSelectedReactionNode(null);
     setIsComputingTemplates(false);
+  };
+
+  // Full reset: clear local state AND tell the server to discard its session.
+  // Only used for explicit user actions (Reset button, new computation).
+  const reset = (): void => {
+    resetLocalState();
     if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
       wsRef.current.send(JSON.stringify({ action: 'reset' }));
     }
@@ -904,10 +937,11 @@ const ChemistryTool: React.FC = () => {
       console.log('Skipping checkpoint - experiment is complete');
       return;
     }
+    // Update the current session in place (checkpoint: false) so we don't
+    // create a new experiment entry for every batch of molecules.
     sessionPersistence.saveSession(
       getSessionStateRef.current(),
-      false,
-      { checkpoint: true, name: `Checkpoint ${new Date().toISOString().replace('T', ' ').slice(0, 19)}` }
+      false
     );
   }, [sessionPersistence]);
 
@@ -1334,7 +1368,7 @@ const ChemistryTool: React.FC = () => {
           onSelectionChange={projectSidebar.setSelection}
           onLoadContext={loadContextFromExperiment}
           onSaveContext={saveStateToExperiment}
-          onReset={reset}
+          onReset={resetLocalState}
           isComputing={isComputing}
         />
         <div className="content-wrapper">
@@ -1389,12 +1423,48 @@ const ChemistryTool: React.FC = () => {
 
 
             <div className="flex justify-end gap-2 mb-4">
-              <button onClick={loadContextFromFile} disabled={isComputing} className="btn btn-secondary btn-sm">
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
-                </svg>
-                Load
-              </button>
+              <div className="dropdown">
+                <button onClick={(e) => { e.stopPropagation(); setLoadDropdownOpen(!loadDropdownOpen); }} onMouseDown={(e) => e.stopPropagation()} disabled={isComputing} className="btn btn-secondary btn-sm">
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
+                  </svg>
+                  Load
+                  <svg className={`w-3 h-3 transition-transform ${loadDropdownOpen ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                  </svg>
+                </button>
+                {loadDropdownOpen && (
+                  <div className="dropdown-menu" onClick={(e) => e.stopPropagation()} onMouseDown={(e) => e.stopPropagation()}>
+                    <button onClick={() => { loadContextFromFile(); setLoadDropdownOpen(false); }} className="dropdown-item">
+                      <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
+                      </svg>
+                      Load from File
+                    </button>
+                    <div className="dropdown-divider"></div>
+                    <button
+                      onClick={() => {
+                        if (window.confirm('Delete all projects and experiments from the database and clear cached data? This cannot be undone.')) {
+                          // Clear session persistence first so no stale dbSessionId
+                          // can trigger re-creation of deleted experiments.
+                          sessionPersistence.clearSession();
+                          restoredSessionRef.current = null;
+                          projectData.clearAllProjects().then(() => {
+                            projectSidebar.setSelection({ projectId: null, experimentId: null });
+                          });
+                        }
+                        setLoadDropdownOpen(false);
+                      }}
+                      className="dropdown-item text-red-400"
+                    >
+                      <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                      </svg>
+                      Clear All Projects
+                    </button>
+                  </div>
+                )}
+              </div>
               <div className="dropdown">
                 <button onClick={(e) => { e.stopPropagation(); setSaveDropdownOpen(!saveDropdownOpen); }} onMouseDown={(e) => e.stopPropagation()} className="btn btn-secondary btn-sm">
                   <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
