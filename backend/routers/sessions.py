@@ -11,12 +11,17 @@ requiring explicit project/experiment management.
 """
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.exc import OperationalError
 from sqlalchemy import select, and_
 from pydantic import BaseModel, Field
 from typing import Optional, Any, List
 from datetime import datetime
+from loguru import logger
 import time
 import random
+
+# Max retries for concurrent modification errors (MariaDB error 1020)
+_MAX_RETRIES = 3
 
 from backend.database.engine import get_db
 from backend.auth import get_forwarded_user
@@ -151,62 +156,91 @@ async def save_session(
     
     # If sessionId provided, try to update existing
     if request.sessionId:
+        for attempt in range(_MAX_RETRIES):
+            try:
+                result = await db.execute(
+                    select(models.Experiment).where(
+                        and_(
+                            models.Experiment.id == request.sessionId,
+                            models.Experiment.user == user
+                        )
+                    )
+                )
+                experiment = result.scalar_one_or_none()
+                
+                if experiment:
+                    # Update existing session
+                    experiment.smiles = state.smiles
+                    experiment.problem_type = state.problemType
+                    experiment.system_prompt = state.systemPrompt
+                    experiment.problem_prompt = state.problemPrompt
+                    experiment.auto_zoom = state.autoZoom
+                    experiment.tree_nodes = state.treeNodes
+                    experiment.edges = state.edges
+                    experiment.metrics_history = state.metricsHistory
+                    experiment.visible_metrics = state.visibleMetrics
+                    experiment.is_running = state.isComputing
+                    experiment.graph_state = {
+                        "offset": state.offset,
+                        "zoom": state.zoom,
+                        "promptsModified": state.promptsModified,
+                        "serverSessionId": state.serverSessionId,
+                        # Property optimization
+                        "propertyType": state.propertyType,
+                        "customPropertyName": state.customPropertyName,
+                        "customPropertyDesc": state.customPropertyDesc,
+                        "customPropertyAscending": state.customPropertyAscending,
+                        # Sidebar state
+                        "sidebarMessages": state.sidebarMessages,
+                        "sidebarSourceFilterOpen": state.sidebarSourceFilterOpen,
+                        "sidebarVisibleSources": state.sidebarVisibleSources,
+                    }
+                    experiment.last_modified = datetime.utcnow()
+                    
+                    if request.name:
+                        experiment.name = request.name
+                    
+                    await db.commit()
+                    await db.refresh(experiment)
+                    
+                    return SessionResponse(
+                        sessionId=experiment.id,
+                        name=experiment.name,
+                        createdAt=experiment.created_at,
+                        lastModified=experiment.last_modified,
+                        isRunning=experiment.is_running,
+                        state=_experiment_to_state(experiment)
+                    )
+                else:
+                    break  # Experiment not found, fall through to create
+            except OperationalError as e:
+                if "1020" in str(e) and attempt < _MAX_RETRIES - 1:
+                    logger.warning(f"Concurrent modification on experiment {request.sessionId}, retry {attempt + 1}/{_MAX_RETRIES}")
+                    await db.rollback()
+                    continue
+                raise
+    
+    # Create new session.
+    # The frontend must supply a projectId that maps to an existing project.
+    # If none is provided (or it doesn't exist), reject the save so that
+    # stale checkpoint/unload saves cannot resurrect data after a clear.
+    project = None
+    if state.projectId:
         result = await db.execute(
-            select(models.Experiment).where(
+            select(models.Project).where(
                 and_(
-                    models.Experiment.id == request.sessionId,
-                    models.Experiment.user == user
+                    models.Project.id == state.projectId,
+                    models.Project.user == user,
                 )
             )
         )
-        experiment = result.scalar_one_or_none()
-        
-        if experiment:
-            # Update existing session
-            experiment.smiles = state.smiles
-            experiment.problem_type = state.problemType
-            experiment.system_prompt = state.systemPrompt
-            experiment.problem_prompt = state.problemPrompt
-            experiment.auto_zoom = state.autoZoom
-            experiment.tree_nodes = state.treeNodes
-            experiment.edges = state.edges
-            experiment.metrics_history = state.metricsHistory
-            experiment.visible_metrics = state.visibleMetrics
-            experiment.is_running = state.isComputing
-            experiment.graph_state = {
-                "offset": state.offset,
-                "zoom": state.zoom,
-                "promptsModified": state.promptsModified,
-                "serverSessionId": state.serverSessionId,
-                # Property optimization
-                "propertyType": state.propertyType,
-                "customPropertyName": state.customPropertyName,
-                "customPropertyDesc": state.customPropertyDesc,
-                "customPropertyAscending": state.customPropertyAscending,
-                # Sidebar state
-                "sidebarMessages": state.sidebarMessages,
-                "sidebarSourceFilterOpen": state.sidebarSourceFilterOpen,
-                "sidebarVisibleSources": state.sidebarVisibleSources,
-            }
-            experiment.last_modified = datetime.utcnow()
-            
-            if request.name:
-                experiment.name = request.name
-            
-            await db.commit()
-            await db.refresh(experiment)
-            
-            return SessionResponse(
-                sessionId=experiment.id,
-                name=experiment.name,
-                createdAt=experiment.created_at,
-                lastModified=experiment.last_modified,
-                isRunning=experiment.is_running,
-                state=_experiment_to_state(experiment)
-            )
-    
-    # Create new session
-    project = await get_or_create_default_project(user, db)
+        project = result.scalar_one_or_none()
+
+    if project is None:
+        raise HTTPException(
+            status_code=422,
+            detail="No valid project specified. Create a project first.",
+        )
     
     # Generate session name if not provided
     session_name = request.name or f"Session {datetime.now().strftime('%Y-%m-%d %H:%M')}"

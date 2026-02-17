@@ -37,6 +37,7 @@ export interface ProjectData {
     isRunning: boolean
   ) => Promise<void>;
   refreshProjects: () => Promise<void>;
+  clearAllProjects: () => Promise<void>;
 }
 
 // LocalStorage implementation
@@ -153,15 +154,14 @@ class DatabaseDataSource implements ProjectDataSource {
   private useLocalStorageFallback = false;
   private localStorageSource = new LocalStorageDataSource();
 
+  /** Load all projects from the database. */
   async loadProjects(): Promise<Project[]> {
-    // Try database first
     if (!this.useLocalStorageFallback) {
       try {
         const response = await fetch(`${HTTP_SERVER}/api/projects`);
         if (response.ok) {
           const projects = await response.json();
           console.log(`[DatabaseDataSource] Loaded ${projects.length} projects from database`);
-          // Sync to localStorage as cache
           localStorage.setItem(STORAGE_KEY, JSON.stringify(projects));
           return projects;
         } else {
@@ -173,10 +173,29 @@ class DatabaseDataSource implements ProjectDataSource {
         this.useLocalStorageFallback = true;
       }
     }
-    
+
     // Fallback to localStorage
     console.log('[DatabaseDataSource] Using localStorage fallback');
     return this.localStorageSource.loadProjects();
+  }
+
+  /** Delete all projects and experiments from the database and clear localStorage. */
+  async clearAllProjects(): Promise<void> {
+    if (!this.useLocalStorageFallback) {
+      try {
+        const response = await fetch(`${HTTP_SERVER}/api/projects/all`, {
+          method: 'DELETE',
+        });
+        if (!response.ok) {
+          console.warn('[DatabaseDataSource] Failed to delete all projects from database');
+        }
+      } catch (error) {
+        console.warn('[DatabaseDataSource] Database unavailable during clear:', error);
+      }
+    }
+    // Clear localStorage caches
+    localStorage.removeItem(STORAGE_KEY);
+    localStorage.removeItem('flask_copilot_last_selection');
   }
 
   async saveProjects(projects: Project[]): Promise<void> {
@@ -373,8 +392,14 @@ export const useProjectData = () => {
     setLoading(true);
     try {
       const data = await dataSource.loadProjects();
-      setProjects(data);
-      projectsRef.current = data;
+
+      // Only update state if data actually changed (avoids re-render cascades)
+      const newJson = JSON.stringify(data);
+      const oldJson = JSON.stringify(projectsRef.current);
+      if (newJson !== oldJson) {
+        setProjects(data);
+        projectsRef.current = data;
+      }
     } catch (error) {
       console.error('Error loading projects:', error);
     } finally {
@@ -390,7 +415,6 @@ export const useProjectData = () => {
 
   const updateProject = async (project: Project) => {
     await dataSource.updateProject(project);
-    await loadProjects();
   };
 
   const deleteProject = async (projectId: string) => {
@@ -406,7 +430,6 @@ export const useProjectData = () => {
 
   const updateExperiment = async (projectId: string, experiment: Experiment) => {
     await dataSource.updateExperiment(projectId, experiment);
-    await loadProjects();
   };
 
   const deleteExperiment = async (projectId: string, experimentId: string) => {
@@ -420,20 +443,23 @@ export const useProjectData = () => {
     isRunning: boolean
   ) => {
     await dataSource.setExperimentRunning(projectId, experimentId, isRunning);
-    await loadProjects();
   };
 
-  // Auto-refresh projects from database every 2 seconds to pick up changes from other browsers
+  const clearAllProjects = async () => {
+    await dataSource.clearAllProjects();
+    setProjects([]);
+    projectsRef.current = [];
+  };
+
+  // Auto-refresh projects from database every 2 seconds to pick up changes
+  // from other browsers.
   useEffect(() => {
-    // Initial load
     console.log('[useProjectData] Initial load of projects');
     loadProjects();
 
-    // Set up periodic refresh
     const refreshInterval = setInterval(() => {
-      console.log('[useProjectData] Periodic refresh of projects');
       loadProjects();
-    }, 2000); // Refresh every 2 seconds
+    }, 2000);
 
     return () => clearInterval(refreshInterval);
   }, []); // Empty deps - only run once on mount
@@ -450,5 +476,6 @@ export const useProjectData = () => {
     deleteExperiment,
     setExperimentRunning,
     refreshProjects: loadProjects,
+    clearAllProjects
   };
 };

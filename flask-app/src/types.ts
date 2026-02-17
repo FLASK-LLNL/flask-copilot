@@ -118,6 +118,7 @@ export interface WebSocketMessageToServer {
   query?: string;
   experimentContext?: string;
   enabledTools?: ToolMap;
+  experimentId?: string;
 
   // Lead molecule optimization
   propertyType?: string;

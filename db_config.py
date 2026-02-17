@@ -19,7 +19,10 @@ from pathlib import Path
 from dotenv import load_dotenv
 
 # Load credentials from .env file (user-local, gitignored)
-load_dotenv(dotenv_path=Path(__file__).resolve().parent / '.env')
+# Override with: FLASK_ENV_FILE=.env-local python3 ...
+_project_root = Path(__file__).resolve().parent
+_env_file = _project_root / os.getenv('FLASK_ENV_FILE', '.env')
+load_dotenv(dotenv_path=_env_file)
 
 # Database connection configuration
 # Remote LLNL LaunchIT MariaDB (via SSH tunnel)
