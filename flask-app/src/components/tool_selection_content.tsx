@@ -20,7 +20,7 @@ export const ToolSelectionContent: React.FC<ToolSelectionContentProps> = ({
   };
 
   const handleSelectAll = (): void => {
-    onSelectionChange(availableToolsMap.map(tool => tool.id));
+    onSelectionChange(availableToolsMap.map((tool) => tool.id));
   };
 
   const handleClearAll = (): void => {
@@ -30,9 +30,7 @@ export const ToolSelectionContent: React.FC<ToolSelectionContentProps> = ({
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
-        <p className="text-sm text-secondary">
-          Select which tool servers to use for this workflow
-        </p>
+        <p className="text-sm text-secondary">Select which tool servers to use for this workflow</p>
         <div className="flex gap-2">
           <button
             onClick={handleSelectAll}
@@ -57,12 +55,12 @@ export const ToolSelectionContent: React.FC<ToolSelectionContentProps> = ({
           <p className="text-xs mt-1">Connect MCP servers in settings to enable tools</p>
         </div>
       ) : (
-        <div className="tool-list space-y-2 custom-scrollbar" style={{ maxHeight: '400px', overflowY: 'auto' }}>
+        <div
+          className="tool-list space-y-2 custom-scrollbar"
+          style={{ maxHeight: '400px', overflowY: 'auto' }}
+        >
           {availableToolsMap.map((item: SelectableTool) => (
-            <label
-              key={item.id}
-              className="tool-list-item"
-            >
+            <label key={item.id} className="tool-list-item">
               <input
                 type="checkbox"
                 checked={selectedTools.includes(item.id)}
@@ -70,18 +68,14 @@ export const ToolSelectionContent: React.FC<ToolSelectionContentProps> = ({
                 className="form-checkbox"
               />
               <div className="flex-1">
-                <span className="tool-list-item-label">
-                  {item.tool_server.server}
-                </span>
+                <span className="tool-list-item-label">{item.tool_server.server}</span>
                 {item.tool_server.names && item.tool_server.names.length > 0 && (
                   <div className="text-xs text-tertiary mt-0.5">
-                    {item.tool_server.names.join(", ")}
+                    {item.tool_server.names.join(', ')}
                   </div>
                 )}
                 {item.tool_server.description && (
-                  <div className="text-xs text-secondary mt-1">
-                    {item.tool_server.description}
-                  </div>
+                  <div className="text-xs text-secondary mt-1">{item.tool_server.description}</div>
                 )}
               </div>
             </label>
@@ -90,7 +84,9 @@ export const ToolSelectionContent: React.FC<ToolSelectionContentProps> = ({
       )}
 
       <div className="bg-secondary/30 rounded-lg p-3 text-sm text-secondary">
-        <strong>Selected: {selectedTools.length} of {availableToolsMap.length} tools</strong>
+        <strong>
+          Selected: {selectedTools.length} of {availableToolsMap.length} tools
+        </strong>
         <p className="text-xs text-tertiary mt-1">
           Selected tools will be available to the AI agent during workflow execution
         </p>

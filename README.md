@@ -9,14 +9,14 @@ WebSocket-powered server as the backend.
 
 ## Installing
 
-* Backend:
-    * Make sure you have Python installed with a virtualenv.
-    * Go to the main folder and run `pip install -r requirements.txt`
-* Frontend:
-    * Install `npm`
-    * `cd` into the `flask-app` folder and run `npm install`
-    * Go into the `flask-app` directory and run `npm start dev` for development
-      work or `npm run build` for a production build of the app.
+- Backend:
+  - Make sure you have Python installed with a virtualenv.
+  - Go to the main folder and run `pip install -r requirements.txt`
+- Frontend:
+  - Install `npm`
+  - `cd` into the `flask-app` folder and run `npm install`
+  - Go into the `flask-app` directory and run `npm start dev` for development
+    work or `npm run build` for a production build of the app.
 
 ## Running
 

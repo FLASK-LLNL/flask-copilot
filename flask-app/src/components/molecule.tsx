@@ -1,6 +1,6 @@
-import { useState, useEffect } from "react";
-import { MOLECULE_WIDTH } from "../constants";
-import { MoleculeSVGProps } from "../types";
+import { useState, useEffect } from 'react';
+import { MOLECULE_WIDTH } from '../constants';
+import { MoleculeSVGProps } from '../types';
 import { RDKitModule } from '@rdkit/rdkit';
 import { renderMolWithHighlights } from '../rdkit/reactionPayload';
 
@@ -19,23 +19,18 @@ export const MoleculeSVG: React.FC<MoleculeSVGProps> = ({
     if (rdkitModule && smiles) {
       try {
         if (highlightAtomIdxs && highlightAtomIdxs.length > 0) {
-          const molSvg = renderMolWithHighlights(
-            rdkitModule as any,
-            smiles,
-            highlightAtomIdxs,
-            {
-              width: MOLECULE_WIDTH,
-              height,
-              highlightRgb,
-              highlightAlpha,
-            },
-          )
+          const molSvg = renderMolWithHighlights(rdkitModule as any, smiles, highlightAtomIdxs, {
+            width: MOLECULE_WIDTH,
+            height,
+            highlightRgb,
+            highlightAlpha,
+          });
 
           // Use this to change bond colors to "dark mode" (maybe not a good idea)
-          const modifiedSvg = molSvg
-              //.replace(/fill:"#FFFFFF"/g, "fill='transparent'")
-              //.replace(/stroke:#000000/g, "stroke:#E5E7EB")
-              //.replace(/fill:#000000/g, "fill:#E5E7EB");
+          const modifiedSvg = molSvg;
+          //.replace(/fill:"#FFFFFF"/g, "fill='transparent'")
+          //.replace(/stroke:#000000/g, "stroke:#E5E7EB")
+          //.replace(/fill:#000000/g, "fill:#E5E7EB");
           setSvg(modifiedSvg);
           return;
         }
@@ -53,7 +48,7 @@ export const MoleculeSVG: React.FC<MoleculeSVGProps> = ({
 
           const molSvg = mol.get_svg_with_highlights(drawOpts);
 
-          const modifiedSvg = molSvg
+          const modifiedSvg = molSvg;
           setSvg(modifiedSvg);
           mol.delete();
           return;
@@ -65,7 +60,6 @@ export const MoleculeSVG: React.FC<MoleculeSVGProps> = ({
     }
     setError(true);
   }, [smiles, rdkitModule, height, highlightAtomIdxs, highlightRgb, highlightAlpha]);
-
 
   // Fallback to dummy visualization
   if (error || !rdkitModule) {
@@ -82,7 +76,15 @@ export const MoleculeSVG: React.FC<MoleculeSVGProps> = ({
     }
 
     return (
-      <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', width: '100%', height: height }}>
+      <div
+        style={{
+          display: 'flex',
+          justifyContent: 'center',
+          alignItems: 'center',
+          width: '100%',
+          height: height,
+        }}
+      >
         <svg height={height} viewBox="0 0 80 80" style={{ display: 'block', margin: '0 auto' }}>
           <defs>
             <linearGradient id={`grad-${hash}`} x1="0%" y1="0%" x2="100%" y2="100%">
@@ -124,35 +126,38 @@ export const MoleculeSVG: React.FC<MoleculeSVGProps> = ({
 };
 
 export const loadRDKit = (): RDKitModule | null => {
-    const [rdkitModule, setRdkitModule] = useState<RDKitModule | null>(null);
+  const [rdkitModule, setRdkitModule] = useState<RDKitModule | null>(null);
 
-    // Load RDKit.js on mount
-    useEffect(() => {
-        const script = document.createElement('script');
-        script.src = '/rdkit/RDKit_minimal.js';
-        script.async = true;
+  // Load RDKit.js on mount
+  useEffect(() => {
+    const script = document.createElement('script');
+    script.src = '/rdkit/RDKit_minimal.js';
+    script.async = true;
 
-        script.onload = () => {
-        window.initRDKitModule().then((RDKit: RDKitModule) => {
-            console.log('RDKit loaded successfully!');
-            setRdkitModule(RDKit);
-        }).catch((error: any) => {
-            console.error('RDKit initialization failed:', error);
+    script.onload = () => {
+      window
+        .initRDKitModule()
+        .then((RDKit: RDKitModule) => {
+          console.log('RDKit loaded successfully!');
+          setRdkitModule(RDKit);
+        })
+        .catch((error: any) => {
+          console.error('RDKit initialization failed:', error);
         });
-        };
+    };
 
-        script.onerror = () => {
-        console.error('Failed to load RDKit script');
-        };
+    script.onerror = () => {
+      console.error('Failed to load RDKit script');
+    };
 
-        document.body.appendChild(script);
+    document.body.appendChild(script);
 
-        return () => {
-        if (document.body.contains(script)) {
-            document.body.removeChild(script);
-        }
-        };
-    }, []);
+    return () => {
+      if (document.body.contains(script)) {
+        document.body.removeChild(script);
+      }
+    };
+  }, []);
 
-    return rdkitModule;
+  return rdkitModule;
 };

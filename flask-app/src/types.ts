@@ -1,6 +1,6 @@
 // TypeScript interfaces and types
 import { RDKitModule } from '@rdkit/rdkit';
-import { NODE_STYLES } from "./constants";
+import { NODE_STYLES } from './constants';
 import { Dispatch, SetStateAction } from 'react';
 
 // Class that only exists for UI preview purposes
@@ -18,7 +18,7 @@ export interface ReactionAlternative {
   hoverInfo: string;
   disabled?: boolean;
   disabledReason?: string;
-  pathway: PathwayStep[];  // For UI preview
+  pathway: PathwayStep[]; // For UI preview
 }
 
 export interface Reaction {
@@ -27,7 +27,7 @@ export interface Reaction {
   hoverInfo: string;
   highlight: keyof typeof NODE_STYLES;
   alternatives?: ReactionAlternative[];
-  templatesSearched: boolean;  // Whether to show the "Search Templates" button
+  templatesSearched: boolean; // Whether to show the "Search Templates" button
   mappedReaction?: RdkitjsReactionPayload;
 }
 
@@ -101,7 +101,7 @@ export interface OptimizationCustomization {
   molecularSimilarity?: number;
   diversityPenalty?: number;
   explorationRate?: number;
-  additionalConstraints?: string[];  // Array of constraint types
+  additionalConstraints?: string[]; // Array of constraint types
 }
 
 export interface ConstraintOption {
@@ -164,7 +164,6 @@ export interface WebSocketMessage {
   prompt?: string;
   metadata?: any;
 }
-
 
 export interface MetricDefinition {
   label: string;
@@ -237,29 +236,29 @@ export interface MoleculeGraphState {
 }
 
 export interface MoleculeGraphProps extends MoleculeGraphState {
-    nodes: TreeNode[];
-    edges: Edge[];
-    ctx: ContextMenuState;
-    autoZoom: boolean;
-    setAutoZoom: Dispatch<SetStateAction<boolean>>;
-    handleNodeClick: (e: React.MouseEvent<HTMLDivElement>, node: TreeNode) => void;
-    handleReactionClick: (e: React.MouseEvent<HTMLDivElement>, node: TreeNode) => void;
-    handleReactionCardClick: (node: TreeNode) => void;
-    selectedReactionNodeId?: string;
-    reactionSidebarOpen: boolean;
-    rdkitModule: RDKitModule | null;
+  nodes: TreeNode[];
+  edges: Edge[];
+  ctx: ContextMenuState;
+  autoZoom: boolean;
+  setAutoZoom: Dispatch<SetStateAction<boolean>>;
+  handleNodeClick: (e: React.MouseEvent<HTMLDivElement>, node: TreeNode) => void;
+  handleReactionClick: (e: React.MouseEvent<HTMLDivElement>, node: TreeNode) => void;
+  handleReactionCardClick: (node: TreeNode) => void;
+  selectedReactionNodeId?: string;
+  reactionSidebarOpen: boolean;
+  rdkitModule: RDKitModule | null;
 }
 
 export interface MetricsDashboardState {
-    metricsHistory: MetricHistoryItem[];
-    setMetricsHistory: Dispatch<SetStateAction<MetricHistoryItem[]>>;
-    visibleMetrics: VisibleMetrics;
-    setVisibleMetrics: Dispatch<SetStateAction<VisibleMetrics>>;
+  metricsHistory: MetricHistoryItem[];
+  setMetricsHistory: Dispatch<SetStateAction<MetricHistoryItem[]>>;
+  visibleMetrics: VisibleMetrics;
+  setVisibleMetrics: Dispatch<SetStateAction<VisibleMetrics>>;
 }
 
 export interface MetricsDashboardProps extends MetricsDashboardState {
-    // General state from app
-    treeNodes: TreeNode[];
+  // General state from app
+  treeNodes: TreeNode[];
 }
 
 // Experiment types
@@ -268,7 +267,7 @@ export interface Experiment {
   name: string;
   createdAt: string;
   lastModified: string;
-  isRunning?: boolean;  // Track if experiment is currently computing
+  isRunning?: boolean; // Track if experiment is currently computing
 
   // System state
   smiles?: string;

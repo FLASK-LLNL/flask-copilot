@@ -1,140 +1,160 @@
 // Molecule graph view
-import { Loader2, Move } from "lucide-react";
-import { useRef, useCallback, useEffect, useState, useMemo } from "react";
-import { BOX_HEIGHT, BOX_WIDTH, NODE_STYLES, REACTION_STYLES } from "../constants";
-import {MoleculeGraphProps, MoleculeGraphState, Position, Reaction, TreeNode} from "../types";
-import { MoleculeSVG } from "./molecule";
+import { Loader2, Move } from 'lucide-react';
+import { useRef, useCallback, useEffect, useState, useMemo } from 'react';
+import { BOX_HEIGHT, BOX_WIDTH, NODE_STYLES, REACTION_STYLES } from '../constants';
+import { MoleculeGraphProps, MoleculeGraphState, Position, Reaction, TreeNode } from '../types';
+import { MoleculeSVG } from './molecule';
 import { MarkdownText } from 'lc-conductor';
-import { estimateTextWidth } from "../tree_utils";
+import { estimateTextWidth } from '../tree_utils';
 
 export const useGraphState = (): MoleculeGraphState => {
-    const [offset, setOffset] = useState<Position>({ x: 50, y: 50 });
-    const [zoom, setZoom] = useState<number>(1);
+  const [offset, setOffset] = useState<Position>({ x: 50, y: 50 });
+  const [zoom, setZoom] = useState<number>(1);
 
-    return { offset, setOffset, zoom, setZoom };
+  return { offset, setOffset, zoom, setZoom };
 };
 
 type NodeStyleKey = keyof typeof NODE_STYLES;
-function getNodeStyle(highlight: NodeStyleKey, purchasable: boolean | null,
-                      leaf: boolean): string {
-    if (highlight === "normal" && leaf && purchasable === false) {
-        return NODE_STYLES['red'];
-    }
-    return NODE_STYLES[highlight];
+function getNodeStyle(highlight: NodeStyleKey, purchasable: boolean | null, leaf: boolean): string {
+  if (highlight === 'normal' && leaf && purchasable === false) {
+    return NODE_STYLES['red'];
+  }
+  return NODE_STYLES[highlight];
 }
 
 export const MoleculeGraph: React.FC<MoleculeGraphProps> = ({
-  nodes, edges, ctx, autoZoom, setAutoZoom,
-  handleNodeClick, handleReactionClick, handleReactionCardClick,
-  selectedReactionNodeId, reactionSidebarOpen,
-  rdkitModule, offset, setOffset, zoom, setZoom
+  nodes,
+  edges,
+  ctx,
+  autoZoom,
+  setAutoZoom,
+  handleNodeClick,
+  handleReactionClick,
+  handleReactionCardClick,
+  selectedReactionNodeId,
+  reactionSidebarOpen,
+  rdkitModule,
+  offset,
+  setOffset,
+  zoom,
+  setZoom,
 }) => {
-    const [isDragging, setIsDragging] = useState<boolean>(false);
-    const [dragStart, setDragStart] = useState<Position>({ x: 0, y: 0 });
-    const [hoveredNode, setHoveredNode] = useState<TreeNode | null>(null);
-    const [hoveredReaction, setHoveredReaction] = useState<TreeNode | null>(null);
-    const [hoverHighlightMap, setHoverHighlightMap] = useState<Record<string, {
+  const [isDragging, setIsDragging] = useState<boolean>(false);
+  const [dragStart, setDragStart] = useState<Position>({ x: 0, y: 0 });
+  const [hoveredNode, setHoveredNode] = useState<TreeNode | null>(null);
+  const [hoveredReaction, setHoveredReaction] = useState<TreeNode | null>(null);
+  const [hoverHighlightMap, setHoverHighlightMap] = useState<
+    Record<
+      string,
+      {
         highlightAtomIdxs: number[];
         highlightRgb?: [number, number, number];
         highlightAlpha?: number;
-    }>>({});
-    const [mousePos, setMousePos] = useState<Position>({ x: 0, y: 0 });
-    const containerRef = useRef<HTMLDivElement>(null);
+      }
+    >
+  >({});
+  const [mousePos, setMousePos] = useState<Position>({ x: 0, y: 0 });
+  const containerRef = useRef<HTMLDivElement>(null);
 
-    const getNode = useCallback((nodeId: string): TreeNode | undefined => {
-        return nodes.find(n => n.id === nodeId);
-    }, [nodes]);
+  const getNode = useCallback(
+    (nodeId: string): TreeNode | undefined => {
+      return nodes.find((n) => n.id === nodeId);
+    },
+    [nodes]
+  );
 
-    const isEdgeHighlighted = useCallback((nodeId: string): boolean => {
-        return hoveredReaction?.id == nodeId;
-    }, [hoveredReaction]);
+  const isEdgeHighlighted = useCallback(
+    (nodeId: string): boolean => {
+      return hoveredReaction?.id == nodeId;
+    },
+    [hoveredReaction]
+  );
 
-    const nodesWithChildren = useMemo(
-    () => new Set(edges.map(e => e.fromNode)),
-    [edges]
-    );
+  const nodesWithChildren = useMemo(() => new Set(edges.map((e) => e.fromNode)), [edges]);
 
-    const isLeaf = (nodeId: string) => !nodesWithChildren.has(nodeId);
+  const isLeaf = (nodeId: string) => !nodesWithChildren.has(nodeId);
 
-    const handleMouseDown = (e: React.MouseEvent<HTMLDivElement>): void => {
+  const handleMouseDown = (e: React.MouseEvent<HTMLDivElement>): void => {
     if (e.button !== 0) return;
     setIsDragging(true);
     setDragStart({ x: e.clientX - offset.x, y: e.clientY - offset.y });
     e.preventDefault();
-    };
+  };
 
-    const handleMouseMove = (e: MouseEvent): void => {
+  const handleMouseMove = (e: MouseEvent): void => {
     if (!isDragging) return;
     setOffset({
-        x: e.clientX - dragStart.x,
-        y: e.clientY - dragStart.y
+      x: e.clientX - dragStart.x,
+      y: e.clientY - dragStart.y,
     });
-    };
+  };
 
-    const handleMouseUp = (): void => {
+  const handleMouseUp = (): void => {
     setIsDragging(false);
-    };
+  };
 
-    const handleWheel = (e: WheelEvent): void => {
+  const handleWheel = (e: WheelEvent): void => {
     e.preventDefault();
 
     if (autoZoom) {
-        setAutoZoom(false);
+      setAutoZoom(false);
     }
 
     const rect = containerRef.current?.getBoundingClientRect();
-        if (!rect) return;
+    if (!rect) return;
 
-        const mouseX = e.clientX - rect.left;
-        const mouseY = e.clientY - rect.top;
+    const mouseX = e.clientX - rect.left;
+    const mouseY = e.clientY - rect.top;
 
-        const delta = -e.deltaY * 0.001;
-        const newZoom = Math.min(Math.max(0.1, zoom + delta), 3);
+    const delta = -e.deltaY * 0.001;
+    const newZoom = Math.min(Math.max(0.1, zoom + delta), 3);
 
-        const zoomRatio = newZoom / zoom;
-        const newOffsetX = mouseX - (mouseX - offset.x) * zoomRatio;
-        const newOffsetY = mouseY - (mouseY - offset.y) * zoomRatio;
+    const zoomRatio = newZoom / zoom;
+    const newOffsetX = mouseX - (mouseX - offset.x) * zoomRatio;
+    const newOffsetY = mouseY - (mouseY - offset.y) * zoomRatio;
 
-        setZoom(newZoom);
-        setOffset({ x: newOffsetX, y: newOffsetY });
-    };
+    setZoom(newZoom);
+    setOffset({ x: newOffsetX, y: newOffsetY });
+  };
 
-    const resetZoom = (): void => {
-        setZoom(1);
-        setOffset({ x: 50, y: 50 });
-    };
+  const resetZoom = (): void => {
+    setZoom(1);
+    setOffset({ x: 50, y: 50 });
+  };
 
-    const fitToView = (): void => {
+  const fitToView = (): void => {
     if (!containerRef.current || nodes.length === 0) return;
 
     const padding = 80;
-    let minX = Infinity, maxX = -Infinity;
-    let minY = Infinity, maxY = -Infinity;
+    let minX = Infinity,
+      maxX = -Infinity;
+    let minY = Infinity,
+      maxY = -Infinity;
 
     const nodeElements = containerRef.current.querySelectorAll('[data-node-id]');
 
     if (nodeElements.length === 0) {
-        nodes.forEach(node => {
+      nodes.forEach((node) => {
         minX = Math.min(minX, node.x);
         maxX = Math.max(maxX, node.x + 140);
         minY = Math.min(minY, node.y);
         maxY = Math.max(maxY, node.y + 140);
-        });
+      });
     } else {
-        nodeElements.forEach((element) => {
+      nodeElements.forEach((element) => {
         const nodeId = element.getAttribute('data-node-id');
-        const node = nodes.find(n => n.id === nodeId);
+        const node = nodes.find((n) => n.id === nodeId);
 
         if (node) {
-            const actualWidth = (element as HTMLElement).offsetWidth;
-            const actualHeight = (element as HTMLElement).offsetHeight;
+          const actualWidth = (element as HTMLElement).offsetWidth;
+          const actualHeight = (element as HTMLElement).offsetHeight;
 
-            minX = Math.min(minX, node.x);
-            maxX = Math.max(maxX, node.x + actualWidth);
-            minY = Math.min(minY, node.y);
-            maxY = Math.max(maxY, node.y + actualHeight);
+          minX = Math.min(minX, node.x);
+          maxX = Math.max(maxX, node.x + actualWidth);
+          minY = Math.min(minY, node.y);
+          maxY = Math.max(maxY, node.y + actualHeight);
         }
-        });
+      });
     }
 
     const contentWidth = maxX - minX + padding * 2;
@@ -156,340 +176,393 @@ export const MoleculeGraph: React.FC<MoleculeGraphProps> = ({
 
     setZoom(newZoom);
     setOffset({ x: newOffsetX, y: newOffsetY });
-    };
+  };
 
-    useEffect(() => {
+  useEffect(() => {
     if (isDragging) {
-        window.addEventListener('mousemove', handleMouseMove);
-        window.addEventListener('mouseup', handleMouseUp);
-        return () => {
+      window.addEventListener('mousemove', handleMouseMove);
+      window.addEventListener('mouseup', handleMouseUp);
+      return () => {
         window.removeEventListener('mousemove', handleMouseMove);
         window.removeEventListener('mouseup', handleMouseUp);
-        };
+      };
     }
-    }, [isDragging, dragStart]);
+  }, [isDragging, dragStart]);
 
-    // Add wheel listener with passive: false to allow preventDefault
-    useEffect(() => {
+  // Add wheel listener with passive: false to allow preventDefault
+  useEffect(() => {
     const container = containerRef.current;
     if (container) {
-        container.addEventListener('wheel', handleWheel, { passive: false });
-        return () => {
+      container.addEventListener('wheel', handleWheel, { passive: false });
+      return () => {
         container.removeEventListener('wheel', handleWheel);
-        };
+      };
     }
-    }, [autoZoom, zoom, offset]);
+  }, [autoZoom, zoom, offset]);
 
-    useEffect(() => {
+  useEffect(() => {
     if (autoZoom && nodes.length > 0) {
+      requestAnimationFrame(() => {
         requestAnimationFrame(() => {
-            requestAnimationFrame(() => {
-                fitToView();
-            });
+          fitToView();
         });
+      });
     }
-    }, [nodes, autoZoom]);
+  }, [nodes, autoZoom]);
 
+  const getCurvedPath = (from: TreeNode | undefined, to: TreeNode | undefined): string => {
+    if (!from || !to) return '';
 
+    const startX = from.x + BOX_WIDTH;
+    const startY = from.y + BOX_HEIGHT / 2;
+    const endX = to.x;
+    const endY = to.y + BOX_HEIGHT / 2;
 
-    const getCurvedPath = (from: TreeNode | undefined, to: TreeNode | undefined): string => {
-        if (!from || !to) return '';
+    // Check if parent node has a reaction
+    if (from.reaction) {
+      const reactionCircleBaseWidth = 60;
+      const reactionPadding = 40;
 
-        const startX = from.x + BOX_WIDTH;
-        const startY = from.y + BOX_HEIGHT / 2;
-        const endX = to.x;
-        const endY = to.y + BOX_HEIGHT / 2;
+      let reactionWidth = reactionCircleBaseWidth;
+      if (from.reaction.label) {
+        const labelWidth = estimateTextWidth(from.reaction.label);
+        reactionWidth = Math.max(reactionWidth, labelWidth);
+      }
 
-        // Check if parent node has a reaction
-        if (from.reaction) {
-            const reactionCircleBaseWidth = 60;
-            const reactionPadding = 40;
+      // Calculate where the straight line should end (after reaction)
+      const straightEndX = startX + reactionWidth + reactionPadding;
 
-            let reactionWidth = reactionCircleBaseWidth;
-            if (from.reaction.label) {
-                const labelWidth = estimateTextWidth(from.reaction.label);
-                reactionWidth = Math.max(reactionWidth, labelWidth);
-            }
+      // Create path: straight line, then curve
+      const controlX1 = straightEndX + (endX - straightEndX) * 0.3;
+      const controlX2 = straightEndX + (endX - straightEndX) * 0.7;
 
-            // Calculate where the straight line should end (after reaction)
-            const straightEndX = startX + reactionWidth + reactionPadding;
+      return `M ${startX} ${startY} L ${straightEndX} ${startY} C ${controlX1} ${startY}, ${controlX2} ${endY}, ${endX} ${endY}`;
+    } else {
+      // Normal curved path
+      const controlX1 = startX + (endX - startX) * 0.3;
+      const controlX2 = startX + (endX - startX) * 0.7;
 
-            // Create path: straight line, then curve
-            const controlX1 = straightEndX + (endX - straightEndX) * 0.3;
-            const controlX2 = straightEndX + (endX - straightEndX) * 0.7;
+      return `M ${startX} ${startY} C ${controlX1} ${startY}, ${controlX2} ${endY}, ${endX} ${endY}`;
+    }
+  };
 
-            return `M ${startX} ${startY} L ${straightEndX} ${startY} C ${controlX1} ${startY}, ${controlX2} ${endY}, ${endX} ${endY}`;
-        } else {
-            // Normal curved path
-            const controlX1 = startX + (endX - startX) * 0.3;
-            const controlX2 = startX + (endX - startX) * 0.7;
+  const getCurveMidpoint = (from: TreeNode | undefined, to: TreeNode | undefined): Position => {
+    if (!from || !to) return { x: 0, y: 0 };
+    const startX = from.x + BOX_WIDTH;
+    const startY = from.y + BOX_HEIGHT / 2;
+    const endX = to.x;
+    const endY = to.y + BOX_HEIGHT / 2;
 
-            return `M ${startX} ${startY} C ${controlX1} ${startY}, ${controlX2} ${endY}, ${endX} ${endY}`;
-        }
+    // Check if parent node has a reaction
+    if (from.reaction) {
+      const reactionCircleBaseWidth = 60;
+      const reactionPadding = 40;
+
+      let reactionWidth = reactionCircleBaseWidth;
+      if (from.reaction.label) {
+        const labelWidth = estimateTextWidth(from.reaction.label);
+        reactionWidth = Math.max(reactionWidth, labelWidth);
+      }
+
+      const straightEndX = startX + reactionWidth + reactionPadding;
+
+      // Midpoint is along the straight portion (for reaction label placement)
+      return { x: (startX + straightEndX) / 2, y: startY };
+    } else {
+      // Normal curved midpoint calculation
+      const t = 0.5;
+      const controlX1 = startX + (endX - startX) * 0.3;
+      const controlX2 = startX + (endX - startX) * 0.7;
+
+      const x =
+        Math.pow(1 - t, 3) * startX +
+        3 * Math.pow(1 - t, 2) * t * controlX1 +
+        3 * (1 - t) * Math.pow(t, 2) * controlX2 +
+        Math.pow(t, 3) * endX;
+
+      const y =
+        Math.pow(1 - t, 3) * startY +
+        3 * Math.pow(1 - t, 2) * t * startY +
+        3 * (1 - t) * Math.pow(t, 2) * endY +
+        Math.pow(t, 3) * endY;
+
+      return { x, y };
+    }
+  };
+
+  // Calculate SVG dimensions based on node positions
+  const getSvgDimensions = (): { width: number; height: number } => {
+    if (nodes.length === 0) return { width: 3000, height: 2000 };
+
+    let maxX = 0;
+    let maxY = 0;
+
+    nodes.forEach((node) => {
+      maxX = Math.max(maxX, node.x + BOX_WIDTH + 500); // Add buffer for curves
+      maxY = Math.max(maxY, node.y + BOX_HEIGHT + 200);
+    });
+
+    return {
+      width: Math.max(maxX, 3000),
+      height: Math.max(maxY, 2000),
     };
+  };
 
-    const getCurveMidpoint = (from: TreeNode | undefined, to: TreeNode | undefined): Position => {
-        if (!from || !to) return { x: 0, y: 0 };
-        const startX = from.x + BOX_WIDTH;
-        const startY = from.y + BOX_HEIGHT / 2;
-        const endX = to.x;
-        const endY = to.y + BOX_HEIGHT / 2;
-
-        // Check if parent node has a reaction
-        if (from.reaction) {
-            const reactionCircleBaseWidth = 60;
-            const reactionPadding = 40;
-
-            let reactionWidth = reactionCircleBaseWidth;
-            if (from.reaction.label) {
-                const labelWidth = estimateTextWidth(from.reaction.label);
-                reactionWidth = Math.max(reactionWidth, labelWidth);
-            }
-
-            const straightEndX = startX + reactionWidth + reactionPadding;
-
-            // Midpoint is along the straight portion (for reaction label placement)
-            return { x: (startX + straightEndX) / 2, y: startY };
-        } else {
-            // Normal curved midpoint calculation
-            const t = 0.5;
-            const controlX1 = startX + (endX - startX) * 0.3;
-            const controlX2 = startX + (endX - startX) * 0.7;
-
-            const x = Math.pow(1-t, 3) * startX +
-                        3 * Math.pow(1-t, 2) * t * controlX1 +
-                        3 * (1-t) * Math.pow(t, 2) * controlX2 +
-                        Math.pow(t, 3) * endX;
-
-            const y = Math.pow(1-t, 3) * startY +
-                        3 * Math.pow(1-t, 2) * t * startY +
-                        3 * (1-t) * Math.pow(t, 2) * endY +
-                        Math.pow(t, 3) * endY;
-
-            return { x, y };
-        }
-    };
-
-    // Calculate SVG dimensions based on node positions
-    const getSvgDimensions = (): { width: number, height: number } => {
-        if (nodes.length === 0) return { width: 3000, height: 2000 };
-
-        let maxX = 0;
-        let maxY = 0;
-
-        nodes.forEach(node => {
-            maxX = Math.max(maxX, node.x + BOX_WIDTH + 500); // Add buffer for curves
-            maxY = Math.max(maxY, node.y + BOX_HEIGHT + 200);
-        });
-
-        return {
-            width: Math.max(maxX, 3000),
-            height: Math.max(maxY, 2000)
-        };
-    };
-
-    return (
-        <>
-            <div
-                ref={containerRef}
-                className={`graph-container ${
-                    autoZoom ? 'graph-cursor-default' : isDragging ? 'graph-cursor-grabbing' : 'graph-cursor-grab'
-                } ${reactionSidebarOpen ? 'opacity-70' : ''}`}  // ADD DIMMING
-                onMouseDown={handleMouseDown}
-                style={{ userSelect: 'none' }}
-            >
-                <div
-                className={`graph-canvas ${isDragging ? '' : 'graph-canvas-smooth'}`}
-                style={{
-                    transform: `translate(${offset.x}px, ${offset.y}px) scale(${zoom})`,
-                }}
-                >
-                {edges.filter(edge => getNode(edge.fromNode) && getNode(edge.toNode)).map((edge, idx) => {
-                    const midpoint = getCurveMidpoint(getNode(edge.fromNode), getNode(edge.toNode));
-                    const svgDims = getSvgDimensions();
-                    return (
-                    <div key={edge.id} className="absolute pointer-events-none">
-                        <svg className="absolute" style={{ width: `${svgDims.width}px`, height: `${svgDims.height}px`, top: 0, left: 0 }}>
-                        <g className={`animate-fadeIn ${isEdgeHighlighted(edge.fromNode) ? 'edge-highlighted' : (edge.status === 'computing' ? 'edge-computing' : 'edge-normal')}`} style={{ animationDelay: `${idx * 50}ms` }}>
-                            <path
-                            d={getCurvedPath(getNode(edge.fromNode), getNode(edge.toNode))}
-                            strokeWidth="3"
-                            fill="none"
-                            strokeDasharray={edge.status === 'computing' ? '5,5' : 'none'}
-                            className={edge.status === 'computing' ? 'animate-dash' : ''}
-                            opacity="0.8"
-                            />
-                        </g>
-                        </svg>
-
-                        <div className="edge-label" style={{ left: `${midpoint.x}px`, top: `${midpoint.y}px` }}>
-                        {edge.label && (
-                            <div className={`edge-label-badge ${edge.status === 'computing' ? 'edge-label-computing' : 'edge-label-normal'}`}>
-                            {edge.status === 'computing' && <Loader2 className="w-3 h-3 inline mr-1 animate-spin" />}
-                            {edge.label}
-                            </div>
-                        )}
-                        </div>
-                    </div>
-                    );
-                })}
-
-                {nodes.map((node, idx) => (
-                    <>
-                    <div
-                    key={node.id}
-                    data-node-id={node.id}
-                    className="graph-node"
+  return (
+    <>
+      <div
+        ref={containerRef}
+        className={`graph-container ${
+          autoZoom
+            ? 'graph-cursor-default'
+            : isDragging
+              ? 'graph-cursor-grabbing'
+              : 'graph-cursor-grab'
+        } ${reactionSidebarOpen ? 'opacity-70' : ''}`} // ADD DIMMING
+        onMouseDown={handleMouseDown}
+        style={{ userSelect: 'none' }}
+      >
+        <div
+          className={`graph-canvas ${isDragging ? '' : 'graph-canvas-smooth'}`}
+          style={{
+            transform: `translate(${offset.x}px, ${offset.y}px) scale(${zoom})`,
+          }}
+        >
+          {edges
+            .filter((edge) => getNode(edge.fromNode) && getNode(edge.toNode))
+            .map((edge, idx) => {
+              const midpoint = getCurveMidpoint(getNode(edge.fromNode), getNode(edge.toNode));
+              const svgDims = getSvgDimensions();
+              return (
+                <div key={edge.id} className="absolute pointer-events-none">
+                  <svg
+                    className="absolute"
                     style={{
-                        left: `${node.x}px`,
-                        top: `${node.y}px`,
-                        width: `${BOX_WIDTH*1.05}px`,
+                      width: `${svgDims.width}px`,
+                      height: `${svgDims.height}px`,
+                      top: 0,
+                      left: 0,
                     }}
-                    onMouseEnter={(e) => {
-                        setHoveredNode(node);
-                        const rect = containerRef.current?.getBoundingClientRect();
-                        if (rect) {
-                            setMousePos({ x: e.clientX - rect.left, y: e.clientY - rect.top });
-                        }
-                    }}
-                    onMouseMove={(e) => {
-                        if (hoveredNode?.id === node.id) {
-                            const rect = containerRef.current?.getBoundingClientRect();
-                            if (rect) {
-                                setMousePos({ x: e.clientX - rect.left, y: e.clientY - rect.top });
-                            }
-                        }
-                    }}
-                    onMouseLeave={() => setHoveredNode(null)}
-                    onClick={(e) => handleNodeClick(e, node)}
+                  >
+                    <g
+                      className={`animate-fadeIn ${
+                        isEdgeHighlighted(edge.fromNode)
+                          ? 'edge-highlighted'
+                          : edge.status === 'computing'
+                            ? 'edge-computing'
+                            : 'edge-normal'
+                      }`}
+                      style={{ animationDelay: `${idx * 50}ms` }}
                     >
-                    <div className={`node-card ${getNodeStyle(node.highlight || "normal", node.purchasable ?? null, isLeaf(node.id))}`}>
-                        <MoleculeSVG
-                            smiles={node.smiles}
-                            height={80}
-                            rdkitModule={rdkitModule}
-                            highlightAtomIdxs={hoverHighlightMap[node.id]?.highlightAtomIdxs}
-                            highlightRgb={hoverHighlightMap[node.id]?.highlightRgb}
-                            highlightAlpha={hoverHighlightMap[node.id]?.highlightAlpha}
-                        />
-                        <div className="node-label">
-                        <div className="node-label-text" dangerouslySetInnerHTML={{ __html: node.label }}></div>
-                        </div>
-                    </div>
-                    </div>
-                    {(node.reaction &&
-                       <div
-                        key={`reaction-${node.id}`}
-                        data-node-id={`reaction-${node.id}`}
-                        className="graph-reaction"
-                        style={{
-                            left: `${node.x+BOX_WIDTH*1.1}px`,
-                            top: `${node.y+BOX_HEIGHT*0.36}px`,
-                            width: `${Math.max(estimateTextWidth(node.reaction.label ?? ""), 25)}px`,
-                        }}
-                        onMouseEnter={(e) => {
-                            setHoveredReaction(node);
-                            const mappedReaction: any = node.reaction?.mappedReaction;
-                            if (mappedReaction) {
-                                const map: Record<string, any> = {};
-                                const product = (mappedReaction.products && mappedReaction.products.length)
-                                    ? (mappedReaction.products[mappedReaction.main_product_index] || mappedReaction.products[0])
-                                    : null;
-                                if (product) {
-                                    map[node.id] = {
-                                        highlightAtomIdxs: product.highlight_atom_idxs || [],
-                                        highlightRgb: mappedReaction.highlight_rgb,
-                                        highlightAlpha: mappedReaction.highlight_alpha,
-                                    };
-                                }
+                      <path
+                        d={getCurvedPath(getNode(edge.fromNode), getNode(edge.toNode))}
+                        strokeWidth="3"
+                        fill="none"
+                        strokeDasharray={edge.status === 'computing' ? '5,5' : 'none'}
+                        className={edge.status === 'computing' ? 'animate-dash' : ''}
+                        opacity="0.8"
+                      />
+                    </g>
+                  </svg>
 
-                                const childIds = edges
-                                    .filter(ed => ed.fromNode === node.id)
-                                    .map(ed => ed.toNode);
-                                const reactants: any[] = mappedReaction.reactants || [];
-                                for (let i = 0; i < childIds.length && i < reactants.length; i++) {
-                                    const r = reactants[i];
-                                    map[childIds[i]] = {
-                                        highlightAtomIdxs: r.highlight_atom_idxs || [],
-                                        highlightRgb: mappedReaction.highlight_rgb,
-                                        highlightAlpha: mappedReaction.highlight_alpha,
-                                    };
-                                }
-                                setHoverHighlightMap(map);
-                            } else {
-                                setHoverHighlightMap({});
-                            }
-                            const rect = containerRef.current?.getBoundingClientRect();
-                            if (rect) {
-                                setMousePos({ x: e.clientX - rect.left, y: e.clientY - rect.top });
-                            }
-                        }}
-                        onMouseMove={(e) => {
-                            if (hoveredReaction?.id === node.id) {
-                                const rect = containerRef.current?.getBoundingClientRect();
-                                if (rect) {
-                                    setMousePos({ x: e.clientX - rect.left, y: e.clientY - rect.top });
-                                }
-                            }
-                        }}
-                        onMouseLeave={() => {
-                            setHoveredReaction(null);
-                            setHoverHighlightMap({});
-                        }}
-                        onClick={(e) => {
-                          e.stopPropagation();
-                            handleReactionClick(e, node);  // Left-click opens sidebar
-                        }}
-                        >
-                        <div className={`reaction-button ${REACTION_STYLES[node.reaction.highlight || 'normal']} ${
-                            selectedReactionNodeId === node.id ? 'ring-2 ring-white ring-offset-2 ring-offset-slate-900' : ''
-                        }`}>
-                            <div className="flex items-center justify-between gap-2">
-                                <span className="flex-1 truncate">
-                                {node.reaction.label || '\u00A0'}
-                                </span>
-                                {node.reaction.alternatives && node.reaction.alternatives.length > 1 && (
-                                <span className="absolute -top-3 -right-3 min-w-[18px] h-[18px] flex items-center justify-center text-[9px] bg-white/90 text-purple-900 px-1 rounded-full font-bold shadow-md">
-                                    +{node.reaction.alternatives.length - 1}
-                                </span>
-                                )}
-                            </div>
-                            </div>
-                        </div>
+                  <div
+                    className="edge-label"
+                    style={{ left: `${midpoint.x}px`, top: `${midpoint.y}px` }}
+                  >
+                    {edge.label && (
+                      <div
+                        className={`edge-label-badge ${
+                          edge.status === 'computing' ? 'edge-label-computing' : 'edge-label-normal'
+                        }`}
+                      >
+                        {edge.status === 'computing' && (
+                          <Loader2 className="w-3 h-3 inline mr-1 animate-spin" />
+                        )}
+                        {edge.label}
+                      </div>
                     )}
-                    </>
-                ))}
+                  </div>
                 </div>
+              );
+            })}
 
-                {nodes.length > 0 && !isDragging && (
-                <div className="graph-controls space-y-2">
-                    <div className="graph-control-panel">
-                    <Move className="w-4 h-4" />
-                    {autoZoom ? 'Auto-zoom active • Drag to pan' : 'Drag to pan • Scroll to zoom'}
-                    </div>
-                    <div className="graph-control-panel graph-control-panel-interactive flex-between">
-                    <span>Zoom: {(zoom * 100).toFixed(0)}%</span>
-                    {!autoZoom && (
-                        <button
-                        onClick={(e) => { e.stopPropagation(); resetZoom(); }}
-                        onMouseDown={(e) => e.stopPropagation()}
-                        className="btn-sm bg-primary hover:bg-secondary text-primary rounded transition-colors"
-                        >
-                        Reset
-                        </button>
-                    )}
-                    </div>
+          {nodes.map((node, idx) => (
+            <>
+              <div
+                key={node.id}
+                data-node-id={node.id}
+                className="graph-node"
+                style={{
+                  left: `${node.x}px`,
+                  top: `${node.y}px`,
+                  width: `${BOX_WIDTH * 1.05}px`,
+                }}
+                onMouseEnter={(e) => {
+                  setHoveredNode(node);
+                  const rect = containerRef.current?.getBoundingClientRect();
+                  if (rect) {
+                    setMousePos({ x: e.clientX - rect.left, y: e.clientY - rect.top });
+                  }
+                }}
+                onMouseMove={(e) => {
+                  if (hoveredNode?.id === node.id) {
+                    const rect = containerRef.current?.getBoundingClientRect();
+                    if (rect) {
+                      setMousePos({ x: e.clientX - rect.left, y: e.clientY - rect.top });
+                    }
+                  }
+                }}
+                onMouseLeave={() => setHoveredNode(null)}
+                onClick={(e) => handleNodeClick(e, node)}
+              >
+                <div
+                  className={`node-card ${getNodeStyle(
+                    node.highlight || 'normal',
+                    node.purchasable ?? null,
+                    isLeaf(node.id)
+                  )}`}
+                >
+                  <MoleculeSVG
+                    smiles={node.smiles}
+                    height={80}
+                    rdkitModule={rdkitModule}
+                    highlightAtomIdxs={hoverHighlightMap[node.id]?.highlightAtomIdxs}
+                    highlightRgb={hoverHighlightMap[node.id]?.highlightRgb}
+                    highlightAlpha={hoverHighlightMap[node.id]?.highlightAlpha}
+                  />
+                  <div className="node-label">
+                    <div
+                      className="node-label-text"
+                      dangerouslySetInnerHTML={{ __html: node.label }}
+                    ></div>
+                  </div>
                 </div>
-                )}
+              </div>
+              {node.reaction && (
+                <div
+                  key={`reaction-${node.id}`}
+                  data-node-id={`reaction-${node.id}`}
+                  className="graph-reaction"
+                  style={{
+                    left: `${node.x + BOX_WIDTH * 1.1}px`,
+                    top: `${node.y + BOX_HEIGHT * 0.36}px`,
+                    width: `${Math.max(estimateTextWidth(node.reaction.label ?? ''), 25)}px`,
+                  }}
+                  onMouseEnter={(e) => {
+                    setHoveredReaction(node);
+                    const mappedReaction: any = node.reaction?.mappedReaction;
+                    if (mappedReaction) {
+                      const map: Record<string, any> = {};
+                      const product =
+                        mappedReaction.products && mappedReaction.products.length
+                          ? mappedReaction.products[mappedReaction.main_product_index] ||
+                            mappedReaction.products[0]
+                          : null;
+                      if (product) {
+                        map[node.id] = {
+                          highlightAtomIdxs: product.highlight_atom_idxs || [],
+                          highlightRgb: mappedReaction.highlight_rgb,
+                          highlightAlpha: mappedReaction.highlight_alpha,
+                        };
+                      }
+
+                      const childIds = edges
+                        .filter((ed) => ed.fromNode === node.id)
+                        .map((ed) => ed.toNode);
+                      const reactants: any[] = mappedReaction.reactants || [];
+                      for (let i = 0; i < childIds.length && i < reactants.length; i++) {
+                        const r = reactants[i];
+                        map[childIds[i]] = {
+                          highlightAtomIdxs: r.highlight_atom_idxs || [],
+                          highlightRgb: mappedReaction.highlight_rgb,
+                          highlightAlpha: mappedReaction.highlight_alpha,
+                        };
+                      }
+                      setHoverHighlightMap(map);
+                    } else {
+                      setHoverHighlightMap({});
+                    }
+                    const rect = containerRef.current?.getBoundingClientRect();
+                    if (rect) {
+                      setMousePos({ x: e.clientX - rect.left, y: e.clientY - rect.top });
+                    }
+                  }}
+                  onMouseMove={(e) => {
+                    if (hoveredReaction?.id === node.id) {
+                      const rect = containerRef.current?.getBoundingClientRect();
+                      if (rect) {
+                        setMousePos({ x: e.clientX - rect.left, y: e.clientY - rect.top });
+                      }
+                    }
+                  }}
+                  onMouseLeave={() => {
+                    setHoveredReaction(null);
+                    setHoverHighlightMap({});
+                  }}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleReactionClick(e, node); // Left-click opens sidebar
+                  }}
+                >
+                  <div
+                    className={`reaction-button ${
+                      REACTION_STYLES[node.reaction.highlight || 'normal']
+                    } ${
+                      selectedReactionNodeId === node.id
+                        ? 'ring-2 ring-white ring-offset-2 ring-offset-slate-900'
+                        : ''
+                    }`}
+                  >
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="flex-1 truncate">{node.reaction.label || '\u00A0'}</span>
+                      {node.reaction.alternatives && node.reaction.alternatives.length > 1 && (
+                        <span className="absolute -top-3 -right-3 min-w-[18px] h-[18px] flex items-center justify-center text-[9px] bg-white/90 text-purple-900 px-1 rounded-full font-bold shadow-md">
+                          +{node.reaction.alternatives.length - 1}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              )}
+            </>
+          ))}
+        </div>
+
+        {nodes.length > 0 && !isDragging && (
+          <div className="graph-controls space-y-2">
+            <div className="graph-control-panel">
+              <Move className="w-4 h-4" />
+              {autoZoom ? 'Auto-zoom active • Drag to pan' : 'Drag to pan • Scroll to zoom'}
             </div>
-            {hoveredNode && !ctx?.node && (
-                <div className="node-hover-tooltip" style={{ left: `${mousePos.x + 20}px`, top: `${mousePos.y + 20}px` }}>
-                <div className="node-hover-content custom-scrollbar">
-                    <MarkdownText text={hoveredNode.hoverInfo} />
-                </div>
-                </div>
-            )}
-            {/* Reaction hover tooltip removed; reaction hover now highlights changed atoms on connected nodes */}
-        </>
-    );
+            <div className="graph-control-panel graph-control-panel-interactive flex-between">
+              <span>Zoom: {(zoom * 100).toFixed(0)}%</span>
+              {!autoZoom && (
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    resetZoom();
+                  }}
+                  onMouseDown={(e) => e.stopPropagation()}
+                  className="btn-sm bg-primary hover:bg-secondary text-primary rounded transition-colors"
+                >
+                  Reset
+                </button>
+              )}
+            </div>
+          </div>
+        )}
+      </div>
+      {hoveredNode && !ctx?.node && (
+        <div
+          className="node-hover-tooltip"
+          style={{ left: `${mousePos.x + 20}px`, top: `${mousePos.y + 20}px` }}
+        >
+          <div className="node-hover-content custom-scrollbar">
+            <MarkdownText text={hoveredNode.hoverInfo} />
+          </div>
+        </div>
+      )}
+      {/* Reaction hover tooltip removed; reaction hover now highlights changed atoms on connected nodes */}
+    </>
+  );
 };
