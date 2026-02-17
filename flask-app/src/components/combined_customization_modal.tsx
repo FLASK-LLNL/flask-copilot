@@ -13,7 +13,10 @@ interface CombinedCustomizationModalProps {
   availableToolsMap: SelectableTool[];
   selectedTools: number[];
   onToolSelectionChange: (selectedIds: number[]) => void;
-  onToolConfirm?: (selectedIds: number[], selectedItemsData: SelectableTool[]) => void | Promise<void>;
+  onToolConfirm?: (
+    selectedIds: number[],
+    selectedItemsData: SelectableTool[]
+  ) => void | Promise<void>;
 
   // Optimization customization props
   initialCustomization: OptimizationCustomization;
@@ -43,16 +46,14 @@ export const CombinedCustomizationModal: React.FC<CombinedCustomizationModalProp
   showOptimizationTab = true,
 }) => {
   const [activeTab, setActiveTab] = useState<TabType>('tools');
-  const [pendingCustomization, setPendingCustomization] = useState<OptimizationCustomization>(initialCustomization);
+  const [pendingCustomization, setPendingCustomization] =
+    useState<OptimizationCustomization>(initialCustomization);
   const [pendingMoleculeName, setPendingMoleculeName] = useState<string>(initialMoleculeName);
-
 
   if (!isOpen) return null;
 
   const handleToolConfirm = async () => {
-    const selectedToolsData = availableToolsMap.filter(tool =>
-      selectedTools.includes(tool.id)
-    );
+    const selectedToolsData = availableToolsMap.filter((tool) => selectedTools.includes(tool.id));
 
     if (onToolConfirm) {
       await onToolConfirm(selectedTools, selectedToolsData);
@@ -176,18 +177,17 @@ export const CombinedCustomizationModal: React.FC<CombinedCustomizationModalProp
 
         {/* Footer with Apply/Cancel */}
         <div className="modal-footer">
-          <button
-            onClick={onClose}
-            className="btn btn-tertiary"
-          >
+          <button onClick={onClose} className="btn btn-tertiary">
             Cancel
           </button>
-          <button
-            onClick={handleApplyAndClose}
-            className="btn btn-primary flex-1"
-          >
+          <button onClick={handleApplyAndClose} className="btn btn-primary flex-1">
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M5 13l4 4L19 7"
+              />
             </svg>
             Apply Changes
           </button>

@@ -4,24 +4,25 @@ export const BOX_GAP = 160;
 export const BOX_HEIGHT = 100;
 
 export const NODE_STYLES = {
-  "normal": 'node-normal',
-  "red": 'node-error',
-  "yellow": 'node-computing',
+  normal: 'node-normal',
+  red: 'node-error',
+  yellow: 'node-computing',
 } as const;
 
 export const REACTION_STYLES = {
-  "normal": 'reaction-normal',
-  "red": 'reaction-highlight',
-  "yellow": 'reaction-highlight2',
+  normal: 'reaction-normal',
+  red: 'reaction-highlight',
+  yellow: 'reaction-highlight2',
 } as const;
 
 export const PROPERTY_NAMES: Record<string, string> = {
-  "density": "Crystalline Density",
-  "hof": "Heat of Formation",
-  "bandgap": "Band Gap"
+  density: 'Crystalline Density',
+  hof: 'Heat of Formation',
+  bandgap: 'Band Gap',
 } as const;
 
-export const DEFAULT_CUSTOM_SYSTEM_PROMPT = 'Respond with concise and clear answers, as well as JSONs for each SMILES string you return as `{"smiles": "<SMILES STRING GOES HERE>"}`.';
+export const DEFAULT_CUSTOM_SYSTEM_PROMPT =
+  'Respond with concise and clear answers, as well as JSONs for each SMILES string you return as `{"smiles": "<SMILES STRING GOES HERE>"}`.';
 
 // Pagination constant for reaction alternatives
 export const ITEMS_PER_PAGE = 100;
