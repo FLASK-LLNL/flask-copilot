@@ -8,7 +8,7 @@ from dataclasses import dataclass, asdict
 from charge.clients.autogen import AutoGenAgent
 import flask_mcp.retrosynthesis.AiZynthTools as aizynth_funcs
 from flask_mcp.chemistry import SMILES_utils
-from flask_mcp.LMO.molecular_property_utils import get_density
+from flask_mcp.lmo.molecular_property_utils import get_density
 from lc_conductor import CallbackLogger, RunSettings
 from charge_backend.moleculedb.molecule_naming import MolNameFormat
 
