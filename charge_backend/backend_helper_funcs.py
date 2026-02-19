@@ -6,9 +6,9 @@ from typing import Any, Dict, Optional, Literal, Tuple
 from dataclasses import dataclass, asdict
 
 from charge.clients.autogen import AutoGenAgent
-import charge.servers.AiZynthTools as aizynth_funcs
-from charge.servers import SMILES_utils
-from charge.servers.molecular_property_utils import get_density
+import flask_mcp.retrosynthesis.AiZynthTools as aizynth_funcs
+from flask_mcp.chemistry import SMILES_utils
+from flask_mcp.LMO.molecular_property_utils import get_density
 from lc_conductor import CallbackLogger, RunSettings
 from charge_backend.moleculedb.molecule_naming import MolNameFormat
 
