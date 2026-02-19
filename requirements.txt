@@ -4,3 +4,4 @@ python-multipart
 websockets
 requests
 lc-conductor
+python-dotenv

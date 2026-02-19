@@ -49,10 +49,6 @@ export default defineConfig({
   },
   build: {
     rollupOptions: {
-      // Completely disable CommonJS detection for scheduler
-      commonjsOptions: {
-        exclude: ['scheduler'], // Don't let commonjs plugin touch it
-      },
       // Explicitly tell Rollup: DO NOT externalize scheduler
       external: (id) => {
         if (id.includes('scheduler')) {
