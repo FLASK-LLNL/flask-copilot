@@ -1,6 +1,6 @@
 // TypeScript interfaces and types
 import { RDKitModule } from '@rdkit/rdkit';
-import { NODE_STYLES } from "./constants";
+import { NODE_STYLES } from './constants';
 import { Dispatch, SetStateAction } from 'react';
 
 // Class that only exists for UI preview purposes
@@ -18,7 +18,7 @@ export interface ReactionAlternative {
   hoverInfo: string;
   disabled?: boolean;
   disabledReason?: string;
-  pathway: PathwayStep[];  // For UI preview
+  pathway: PathwayStep[]; // For UI preview
 }
 
 export interface Reaction {
@@ -27,7 +27,7 @@ export interface Reaction {
   hoverInfo: string;
   highlight: keyof typeof NODE_STYLES;
   alternatives?: ReactionAlternative[];
-  templatesSearched: boolean;  // Whether to show the "Search Templates" button
+  templatesSearched: boolean; // Whether to show the "Search Templates" button
   mappedReaction?: RdkitjsReactionPayload;
 }
 
@@ -58,15 +58,6 @@ export interface Edge {
   label?: string;
 }
 
-
-export interface SidebarMessage {
-  id: number;
-  timestamp: string;
-  message: string;
-  smiles: string | null;
-  source: string;
-}
-
 export interface Tool {
   server?: string;
   names?: string[];
@@ -83,29 +74,25 @@ export interface ToolMap {
   selectedTools?: SelectableTool[];
 }
 
-export interface ToolServer {
-  id: string;
-  url: string;
-  name?: string;  // Optional display name
-}
-
 export type MoleculeNameFormat = 'brand' | 'iupac' | 'formula' | 'smiles';
 
-export interface RunSettings {
+export interface FlaskRunSettings {
   moleculeName: MoleculeNameFormat;
   promptDebugging: boolean;
 }
 
-export interface OrchestratorSettings {
-  backend: string;
-  useCustomUrl: boolean;
-  customUrl?: string;
-  model: string;
-  useCustomModel?: boolean;
-  apiKey: string;
-  backendLabel: string;
+import type {
+  OrchestratorSettings,
+  SidebarMessage,
+  SidebarState,
+  SidebarProps,
+  VisibleSources,
+  MarkdownTextProps,
+  ToolServer,
+} from 'lc-conductor';
+
+export interface FlaskOrchestratorSettings extends OrchestratorSettings {
   moleculeName?: MoleculeNameFormat;
-  toolServers?: ToolServer[];
 }
 
 // Optimization customization options
@@ -169,7 +156,7 @@ export interface WebSocketMessage {
   message?: SidebarMessage;
   tools?: Tool[];
   experimentContext?: string;
-  orchestratorSettings?: OrchestratorSettings;
+  orchestratorSettings?: FlaskOrchestratorSettings;
 
   withNode?: boolean;
   username?: string;
@@ -180,7 +167,6 @@ export interface WebSocketMessage {
   prompt?: string;
   metadata?: any;
 }
-
 
 export interface MetricDefinition {
   label: string;
@@ -198,10 +184,6 @@ export interface VisibleMetrics {
   sascore: boolean;
   density: boolean;
   yield: boolean;
-}
-
-export interface VisibleSources {
-  [key: string]: boolean;
 }
 
 export interface ContextMenuState {
@@ -249,10 +231,6 @@ export interface RdkitjsReactionPayload {
   reactant_mcs_smarts?: (string | null)[];
 }
 
-export interface MarkdownTextProps {
-  text: string;
-}
-
 export interface MoleculeGraphState {
   offset: Position;
   setOffset: Dispatch<SetStateAction<Position>>;
@@ -261,44 +239,29 @@ export interface MoleculeGraphState {
 }
 
 export interface MoleculeGraphProps extends MoleculeGraphState {
-    nodes: TreeNode[];
-    edges: Edge[];
-    ctx: ContextMenuState;
-    autoZoom: boolean;
-    setAutoZoom: Dispatch<SetStateAction<boolean>>;
-    handleNodeClick: (e: React.MouseEvent<HTMLDivElement>, node: TreeNode) => void;
-    handleReactionClick: (e: React.MouseEvent<HTMLDivElement>, node: TreeNode) => void;
-    handleReactionCardClick: (node: TreeNode) => void;
-    selectedReactionNodeId?: string;
-    reactionSidebarOpen: boolean;
-    rdkitModule: RDKitModule | null;
-}
-
-export interface SidebarState {
-    messages: SidebarMessage[];
-    setMessages: Dispatch<SetStateAction<SidebarMessage[]>>;
-    sourceFilterOpen: boolean;
-    setSourceFilterOpen: Dispatch<SetStateAction<boolean>>;
-    visibleSources: VisibleSources;
-    setVisibleSources: Dispatch<SetStateAction<VisibleSources>>;
-}
-
-export interface SidebarProps extends SidebarState {
-    // General state from app
-    setSidebarOpen: Dispatch<SetStateAction<boolean>>;
-    rdkitModule: RDKitModule | null;
+  nodes: TreeNode[];
+  edges: Edge[];
+  ctx: ContextMenuState;
+  autoZoom: boolean;
+  setAutoZoom: Dispatch<SetStateAction<boolean>>;
+  handleNodeClick: (e: React.MouseEvent<HTMLDivElement>, node: TreeNode) => void;
+  handleReactionClick: (e: React.MouseEvent<HTMLDivElement>, node: TreeNode) => void;
+  handleReactionCardClick: (node: TreeNode) => void;
+  selectedReactionNodeId?: string;
+  reactionSidebarOpen: boolean;
+  rdkitModule: RDKitModule | null;
 }
 
 export interface MetricsDashboardState {
-    metricsHistory: MetricHistoryItem[];
-    setMetricsHistory: Dispatch<SetStateAction<MetricHistoryItem[]>>;
-    visibleMetrics: VisibleMetrics;
-    setVisibleMetrics: Dispatch<SetStateAction<VisibleMetrics>>;
+  metricsHistory: MetricHistoryItem[];
+  setMetricsHistory: Dispatch<SetStateAction<MetricHistoryItem[]>>;
+  visibleMetrics: VisibleMetrics;
+  setVisibleMetrics: Dispatch<SetStateAction<VisibleMetrics>>;
 }
 
 export interface MetricsDashboardProps extends MetricsDashboardState {
-    // General state from app
-    treeNodes: TreeNode[];
+  // General state from app
+  treeNodes: TreeNode[];
 }
 
 // Experiment types
@@ -307,7 +270,7 @@ export interface Experiment {
   name: string;
   createdAt: string;
   lastModified: string;
-  isRunning?: boolean;  // Track if experiment is currently computing
+  isRunning?: boolean; // Track if experiment is currently computing
 
   // System state
   smiles?: string;

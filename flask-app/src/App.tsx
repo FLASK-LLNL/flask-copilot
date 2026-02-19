@@ -1,21 +1,66 @@
 /* eslint-disable react-hooks/exhaustive-deps */
 import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
-import { Loader2, FlaskConical, TestTubeDiagonal, Network, Play, RotateCcw, X, Send, RefreshCw, Sparkles, MessageCircleQuestion, StepForward, MessageSquareShare, Brain, PanelRightOpen, Sliders, Wrench, Settings, Bug, CheckCircle } from 'lucide-react';
+import {
+  Loader2,
+  FlaskConical,
+  TestTubeDiagonal,
+  Network,
+  Play,
+  RotateCcw,
+  X,
+  Send,
+  RefreshCw,
+  Sparkles,
+  MessageCircleQuestion,
+  StepForward,
+  MessageSquareShare,
+  Brain,
+  PanelRightOpen,
+  Sliders,
+  Wrench,
+  Settings,
+  Bug,
+  CheckCircle,
+} from 'lucide-react';
 import 'recharts';
 import 'react-markdown';
 import 'remark-gfm';
 import 'react-syntax-highlighter';
 import 'react-syntax-highlighter/dist/esm/styles/prism';
 
-import { WS_SERVER, VERSION } from './config';
+import { WS_SERVER, VERSION, HTTP_SERVER } from './config';
 import { DEFAULT_CUSTOM_SYSTEM_PROMPT, PROPERTY_NAMES } from './constants';
-import { TreeNode, Edge, ContextMenuState, SidebarMessage, Tool, WebSocketMessageToServer, WebSocketMessage, SelectableTool, Experiment, OrchestratorSettings, OptimizationCustomization, ReactionAlternative } from './types';
+import {
+  TreeNode,
+  Edge,
+  ContextMenuState,
+  SidebarMessage,
+  Tool,
+  WebSocketMessageToServer,
+  WebSocketMessage,
+  SelectableTool,
+  Experiment,
+  FlaskOrchestratorSettings,
+  OptimizationCustomization,
+  ReactionAlternative,
+} from './types';
 
 import { loadRDKit } from './components/molecule';
-import { ReasoningSidebar, useSidebarState } from './components/sidebar';
 import { MoleculeGraph, useGraphState } from './components/graph';
-import { ProjectSidebar, useProjectSidebar, useProjectManagement } from './components/project_sidebar';
-import { SettingsButton, BACKEND_OPTIONS } from './components/settings_button';
+import {
+  ProjectSidebar,
+  useProjectSidebar,
+  useProjectManagement,
+} from './components/project_sidebar';
+
+import {
+  SettingsButton,
+  ReasoningSidebar,
+  useSidebarState,
+  MarkdownText,
+  BACKEND_OPTIONS,
+} from 'lc-conductor';
+
 import { CombinedCustomizationModal } from './components/combined_customization_modal';
 import { Modal } from './components/modal';
 
@@ -25,9 +70,7 @@ import { copyToClipboard } from './utils';
 import './animations.css';
 import { MetricsDashboard, useMetricsDashboardState } from './components/metrics';
 import { useProjectData } from './hooks/useProjectData';
-import { MarkdownText } from './components/markdown';
 import { ReactionAlternativesSidebar } from './components/reaction_alternatives';
-
 
 const ChemistryTool: React.FC = () => {
   const [smiles, setSmiles] = useState<string>('');
@@ -45,7 +88,12 @@ const ChemistryTool: React.FC = () => {
   const [autoZoom, setAutoZoom] = useState<boolean>(true);
   const [treeNodes, setTreeNodes] = useState<TreeNode[]>([]);
   const [edges, setEdges] = useState<Edge[]>([]);
-  const [contextMenu, setContextMenu] = useState<ContextMenuState>({node: null, isReaction: false, x: 0, y: 0});
+  const [contextMenu, setContextMenu] = useState<ContextMenuState>({
+    node: null,
+    isReaction: false,
+    x: 0,
+    y: 0,
+  });
   const [customQueryModal, setCustomQueryModal] = useState<TreeNode | null>(null);
   const [customQueryText, setCustomQueryText] = useState<string>('');
   const [customQueryType, setCustomQueryType] = useState<string | null>(null);
@@ -88,7 +136,7 @@ const ChemistryTool: React.FC = () => {
   }, []);
 
   const getContextRef = useRef<() => Experiment>(() => {
-    throw new Error("getContext called before initialization");
+    throw new Error('getContext called before initialization');
   });
 
   const graphState = useGraphState();
@@ -113,7 +161,7 @@ const ChemistryTool: React.FC = () => {
   // Keep selectedReactionNode in sync with treeNodes updates
   useEffect(() => {
     if (selectedReactionNode) {
-      const updatedNode = treeNodes.find(n => n.id === selectedReactionNode.id);
+      const updatedNode = treeNodes.find((n) => n.id === selectedReactionNode.id);
       if (updatedNode && updatedNode !== selectedReactionNode) {
         setSelectedReactionNode(updatedNode);
       }
@@ -123,7 +171,7 @@ const ChemistryTool: React.FC = () => {
   // Auto-select all tools when they first become available
   useEffect(() => {
     if (availableToolsMap.length > 0 && selectedTools.length === 0) {
-      const allToolIds = availableToolsMap.map(tool => tool.id);
+      const allToolIds = availableToolsMap.map((tool) => tool.id);
       setSelectedTools(allToolIds);
       console.log('Auto-selected all tools:', allToolIds);
     }
@@ -142,7 +190,6 @@ const ChemistryTool: React.FC = () => {
     sidebarStateRef.current = sidebarState;
   }, [sidebarState]);
 
-
   // Load initial settings from localStorage
   const getInitialSettings = () => {
     const saved = localStorage.getItem('orchestratorSettings');
@@ -158,17 +205,18 @@ const ChemistryTool: React.FC = () => {
       customUrl: 'http://localhost:8000/v1',
       model: 'gpt-oss',
       apiKey: '',
-      backendLabel: 'vLLM'
+      backendLabel: 'vLLM',
     };
   };
-  const [orchestratorSettings, setOrchestratorSettings] = useState<OrchestratorSettings>(getInitialSettings());
+  const [orchestratorSettings, setOrchestratorSettings] =
+    useState<FlaskOrchestratorSettings>(getInitialSettings());
 
   // Add this helper function near the top of the ChemistryTool component
   const getDisplayUrl = (): string => {
     if (orchestratorSettings.useCustomUrl && orchestratorSettings.customUrl) {
       return orchestratorSettings.customUrl;
     }
-    const backendOption = BACKEND_OPTIONS.find(opt => opt.value === orchestratorSettings.backend);
+    const backendOption = BACKEND_OPTIONS.find((opt) => opt.value === orchestratorSettings.backend);
     return backendOption?.defaultUrl || 'Not configured';
   };
 
@@ -185,11 +233,11 @@ const ChemistryTool: React.FC = () => {
 
     if (wsRef.current && wsRef.current.readyState == WebSocket.OPEN) {
       const message: WebSocketMessageToServer = {
-        action: "select-tools-for-task",
-          enabledTools: {
-            selectedIds: selectedIds,
-            selectedTools: selectedItemsData,
-          }
+        action: 'select-tools-for-task',
+        enabledTools: {
+          selectedIds: selectedIds,
+          selectedTools: selectedItemsData,
+        },
       };
 
       wsRef.current.send(JSON.stringify(message));
@@ -200,9 +248,29 @@ const ChemistryTool: React.FC = () => {
     // await fetch(HTTP_SERVER + '/api/save-selection', { method: 'POST', body: JSON.stringify(payload) });
   };
 
+  // Callback function to handle molecule name preference changes
+  const handleMoleculeNameSave = async (moleculeName: string): Promise<void> => {
+    if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) {
+      alert('WebSocket not connected');
+      return;
+    }
+    console.log(`Updated Molecule Name Preference: ${moleculeName}`);
+
+    // Update local orchestrator settings with new molecule name
+    const updatedSettings = {
+      ...orchestratorSettings,
+      moleculeName: moleculeName,
+    };
+    setOrchestratorSettings(updatedSettings);
+    localStorage.setItem('orchestratorSettings', JSON.stringify(updatedSettings));
+
+    // Note: The molecule name is sent to backend as part of runSettings
+    // in each compute action, so no separate websocket message needed here.
+  };
+
   // Callback function to send updated settings to backend
   const handleSettingsUpdateConfirm = async (
-    settings: OrchestratorSettings,
+    settings: FlaskOrchestratorSettings
   ): Promise<void> => {
     if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) {
       alert('WebSocket not connected');
@@ -227,12 +295,12 @@ const ChemistryTool: React.FC = () => {
       // Refresh tools list after updating settings
       console.log('🔄 Refreshing tools list after settings update');
       refreshToolsList();
-     }
+    }
   };
 
   useEffect(() => {
     const handleClickOutside = (): void => {
-      setContextMenu({node: null, isReaction: false, x:0, y:0});
+      setContextMenu({ node: null, isReaction: false, x: 0, y: 0 });
       setSaveDropdownOpen(false);
       sidebarState.setSourceFilterOpen(false);
       setWsTooltipPinned(false);
@@ -244,23 +312,22 @@ const ChemistryTool: React.FC = () => {
     }
   }, [contextMenu, saveDropdownOpen, sidebarState, wsTooltipPinned, projectSidebar]);
 
-
   // State management
   const getContext = (): Experiment => {
     return getContextRef.current();
-  }
+  };
 
   const loadContextFromExperiment = (projectId: string, experimentId: string | null): void => {
     console.log('Loading context:', { projectId, experimentId });
-    const project = projectData.projectsRef.current.find(p => p.id === projectId);
+    const project = projectData.projectsRef.current.find((p) => p.id === projectId);
     if (project) {
-      const experiment = project.experiments.find(e => e.id === experimentId);
+      const experiment = project.experiments.find((e) => e.id === experimentId);
       if (experiment) {
         loadContext(experiment);
       }
     }
     return;
-  }
+  };
 
   const loadStateFromCurrentExperiment = (): void => {
     const { projectId, experimentId } = projectSidebar.selectionRef.current;
@@ -271,14 +338,15 @@ const ChemistryTool: React.FC = () => {
 
   const loadContext = (data: Experiment): void => {
     // Conditionally set everything that is in the context
-    (data.smiles !== undefined) && setSmiles(data.smiles);
-    (data.problemType !== undefined) && setProblemType(data.problemType);
-    (data.systemPrompt !== undefined) && setSystemPrompt(data.systemPrompt);
-    (data.problemPrompt !== undefined) && setProblemPrompt(data.problemPrompt);
-    (data.propertyType !== undefined) && setPropertyType(data.propertyType);
-    (data.customPropertyName !== undefined) && setCustomPropertyName(data.customPropertyName);
-    (data.customPropertyDesc !== undefined) && setCustomPropertyDesc(data.customPropertyDesc);
-    (data.customPropertyAscending !== undefined) && setCustomPropertyAscending(data.customPropertyAscending);
+    data.smiles !== undefined && setSmiles(data.smiles);
+    data.problemType !== undefined && setProblemType(data.problemType);
+    data.systemPrompt !== undefined && setSystemPrompt(data.systemPrompt);
+    data.problemPrompt !== undefined && setProblemPrompt(data.problemPrompt);
+    data.propertyType !== undefined && setPropertyType(data.propertyType);
+    data.customPropertyName !== undefined && setCustomPropertyName(data.customPropertyName);
+    data.customPropertyDesc !== undefined && setCustomPropertyDesc(data.customPropertyDesc);
+    data.customPropertyAscending !== undefined &&
+      setCustomPropertyAscending(data.customPropertyAscending);
     data.customization && setCustomization(data.customization);
     data.treeNodes && setTreeNodes(data.treeNodes);
     data.edges && setEdges(data.edges);
@@ -288,19 +356,20 @@ const ChemistryTool: React.FC = () => {
       graphState.setZoom(data.graphState.zoom);
       graphState.setOffset(data.graphState.offset);
     }
-    (data.autoZoom !== undefined) && setAutoZoom(data.autoZoom);
+    data.autoZoom !== undefined && setAutoZoom(data.autoZoom);
     if (data.sidebarState) {
       sidebarState.setMessages(data.sidebarState.messages);
       sidebarState.setVisibleSources(data.sidebarState.visibleSources);
     }
-    data.experimentContext && sendMessageToServer('load-context', {experimentContext: data.experimentContext});
-  }
+    data.experimentContext &&
+      sendMessageToServer('load-context', { experimentContext: data.experimentContext });
+  };
 
   const saveStateToExperiment = useCallback((): boolean => {
     // Use the ref directly to always get the latest selection
     const projectId = projectSidebar.selectionRef.current.projectId;
     const experimentId = projectSidebar.selectionRef.current.experimentId;
-    console.log("Saving experiments", projectId, experimentId);
+    console.log('Saving experiments', projectId, experimentId);
     if (projectId && experimentId) {
       projectManagement.updateExperiment(projectId, getContext());
       return true;
@@ -313,10 +382,11 @@ const ChemistryTool: React.FC = () => {
 
     // Default experiment names
     let experimentName = null;
-    if (problemType === "optimization") {
-      const propertyName = propertyType === "custom" ? customPropertyName : PROPERTY_NAMES[propertyType];
+    if (problemType === 'optimization') {
+      const propertyName =
+        propertyType === 'custom' ? customPropertyName : PROPERTY_NAMES[propertyType];
       experimentName = `Optimizing ${propertyName} for ${smiles}`;
-    } else if (problemType === "retrosynthesis") {
+    } else if (problemType === 'retrosynthesis') {
       experimentName = `Synthesizing ${smiles}`;
     }
 
@@ -342,7 +412,7 @@ const ChemistryTool: React.FC = () => {
         );
 
         projectSidebar.setSelection({ projectId, experimentId });
-        await new Promise(resolve => setTimeout(resolve, 100));
+        await new Promise((resolve) => setTimeout(resolve, 100));
       } catch (error) {
         console.error('Error creating project:', error);
         alert('Failed to create project');
@@ -353,7 +423,7 @@ const ChemistryTool: React.FC = () => {
       const projectId = projectSidebar.selectionRef.current.projectId!;
 
       // Find the project to count existing experiments
-      const project = projectData.projectsRef.current.find(p => p.id === projectId);
+      const project = projectData.projectsRef.current.find((p) => p.id === projectId);
       if (experimentName === null) {
         const experimentCount = project ? project.experiments.length + 1 : 1;
         experimentName = `Experiment ${experimentCount}`;
@@ -362,7 +432,7 @@ const ChemistryTool: React.FC = () => {
       try {
         const experiment = await projectManagement.createExperiment(projectId, experimentName);
         projectSidebar.setSelection({ projectId, experimentId: experiment.id });
-        await new Promise(resolve => setTimeout(resolve, 100));
+        await new Promise((resolve) => setTimeout(resolve, 100));
       } catch (error) {
         console.error('Error creating experiment:', error);
         alert('Failed to create experiment');
@@ -386,8 +456,11 @@ const ChemistryTool: React.FC = () => {
       customPropertyAscending,
       systemPrompt,
       userPrompt: problemPrompt,
-      runSettings: {promptDebugging: debugMode, moleculeName: orchestratorSettings.moleculeName || "brand"},
-      customization
+      runSettings: {
+        promptDebugging: debugMode,
+        moleculeName: orchestratorSettings.moleculeName || 'brand',
+      },
+      customization,
     };
 
     wsRef.current?.send(JSON.stringify(message));
@@ -399,9 +472,11 @@ const ChemistryTool: React.FC = () => {
     if (reconnectingRef.current) return; // Prevent overlapping reconnects
     reconnectingRef.current = true;
 
-    if (wsRef.current &&
-        (wsRef.current.readyState === WebSocket.OPEN ||
-         wsRef.current.readyState === WebSocket.CONNECTING)) {
+    if (
+      wsRef.current &&
+      (wsRef.current.readyState === WebSocket.OPEN ||
+        wsRef.current.readyState === WebSocket.CONNECTING)
+    ) {
       wsRef.current.close();
     }
 
@@ -416,7 +491,7 @@ const ChemistryTool: React.FC = () => {
       setWsConnected(true);
       setWsReconnecting(false);
       setWsError('');
-      reset();  // Server state must match UI state
+      reset(); // Server state must match UI state
 
       loadStateFromCurrentExperiment();
 
@@ -430,7 +505,7 @@ const ChemistryTool: React.FC = () => {
       const data: WebSocketMessage = JSON.parse(event.data);
 
       if (data.type === 'node') {
-        setTreeNodes(prev => [...prev, data.node!]);
+        setTreeNodes((prev) => [...prev, data.node!]);
       } else if (data.type === 'stopped') {
         // Handle explicit stop from backend
         console.log('Computation stopped by backend');
@@ -447,49 +522,47 @@ const ChemistryTool: React.FC = () => {
         const { id, ...restData } = data.node!;
 
         if (restData) {
-           setIsComputing(true);
-        }else {
-           setIsComputing(false);
-           setIsComputingTemplates(false);
+          setIsComputing(true);
+        } else {
+          setIsComputing(false);
+          setIsComputingTemplates(false);
         }
-        setTreeNodes(prev => prev.map(n =>
-          n.id === data.node!.id ? { ...n, ...restData } : n
-        ));
+        setTreeNodes((prev) =>
+          prev.map((n) => (n.id === data.node!.id ? { ...n, ...restData } : n))
+        );
       } else if (data.type === 'node_delete') {
-        setTreeNodes(prev => {
+        setTreeNodes((prev) => {
           const descendants = findAllDescendants(data.node!.id, prev);
-          return prev.filter(n => !descendants.has(n.id) && n.id !== data.node!.id);
+          return prev.filter((n) => !descendants.has(n.id) && n.id !== data.node!.id);
         });
-        setEdges(prev => prev.filter(e =>
-          e.fromNode !== data.node!.id && e.toNode !== data.node!.id
-        ));
+        setEdges((prev) =>
+          prev.filter((e) => e.fromNode !== data.node!.id && e.toNode !== data.node!.id)
+        );
       } else if (data.type === 'subtree_update') {
         const withNode = data.withNode || false;
         const { id, ...restData } = data.node!;
-        setTreeNodes(prev => {
+        setTreeNodes((prev) => {
           const descendants = findAllDescendants(data.node!.id, prev);
-          return prev.map(n =>
-            (descendants.has(n.id) || (withNode && n.id === data.node!.id))
+          return prev.map((n) =>
+            descendants.has(n.id) || (withNode && n.id === data.node!.id)
               ? { ...n, ...restData }
               : n
           );
         });
       } else if (data.type === 'edge') {
-        setEdges(prev => [...prev, data.edge!]);
+        setEdges((prev) => [...prev, data.edge!]);
       } else if (data.type === 'edge_update') {
         const { id, ...restData } = data.edge!;
-        setEdges(prev => prev.map(e =>
-          e.id === data.edge!.id ? { ...e, ...restData } : e
-         ));
+        setEdges((prev) => prev.map((e) => (e.id === data.edge!.id ? { ...e, ...restData } : e)));
       } else if (data.type === 'subtree_delete') {
         let descendantsSet: Set<string>;
-        setTreeNodes(prev => {
+        setTreeNodes((prev) => {
           descendantsSet = findAllDescendants(data.node!.id, prev);
-          return prev.filter(n => !descendantsSet.has(n.id));
+          return prev.filter((n) => !descendantsSet.has(n.id));
         });
-        setEdges(prev => prev.filter(e =>
-          !descendantsSet!.has(e.fromNode) && !descendantsSet!.has(e.toNode)
-        ));
+        setEdges((prev) =>
+          prev.filter((e) => !descendantsSet!.has(e.fromNode) && !descendantsSet!.has(e.toNode))
+        );
       } else if (data.type === 'response') {
         addSidebarMessage(data.message!);
         console.log('Server response:', data.message);
@@ -499,13 +572,13 @@ const ChemistryTool: React.FC = () => {
         setAvailableToolsMap(
           newTools.map((server: Tool, index: number) => ({
             id: index,
-            tool_server: server
+            tool_server: server,
           }))
         );
         setSelectedTools([]);
       } else if (data.type === 'server-update-orchestrator-settings') {
         // Handle orchestrator settings updates from server
-        const newSettings: OrchestratorSettings = {
+        const newSettings: FlaskOrchestratorSettings = {
           backend: data.orchestratorSettings!.backend,
           useCustomUrl: data.orchestratorSettings!.useCustomUrl,
           customUrl: data.orchestratorSettings!.customUrl,
@@ -514,14 +587,14 @@ const ChemistryTool: React.FC = () => {
           // Check the model against the list of models in copilot
           // useCustomModel: data.orchestratorSettings.useCustomModel,
           apiKey: data.orchestratorSettings!.apiKey,
-          backendLabel: data.orchestratorSettings!.backendLabel
+          backendLabel: data.orchestratorSettings!.backendLabel,
         };
         setOrchestratorSettings(newSettings);
         console.log('Updating the orchestrator settings ', newSettings);
         localStorage.setItem('orchestratorSettings', JSON.stringify(newSettings));
       } else if (data.type === 'error') {
         console.error(data.message);
-        alert("Server error: " + data.message);
+        alert('Server error: ' + data.message);
       } else if (data.type === 'save-context-response') {
         saveFullContext(data.experimentContext!);
       } else if (data.type === 'get-username-response') {
@@ -530,7 +603,7 @@ const ChemistryTool: React.FC = () => {
         console.log('Prompt breakpoint triggered:', data);
         setPromptBreakpoint({
           prompt: data.prompt || '',
-          metadata: data.metadata
+          metadata: data.metadata,
         });
         setEditedPrompt(data.prompt || '');
       }
@@ -586,7 +659,7 @@ const ChemistryTool: React.FC = () => {
     setIsComputing(false);
     graphState.setOffset({ x: 50, y: 50 });
     graphState.setZoom(1);
-    setContextMenu({node: null, isReaction: false, x:0, y:0});
+    setContextMenu({ node: null, isReaction: false, x: 0, y: 0 });
     setCustomQueryModal(null);
     metricsDashboardState.setMetricsHistory([]);
     sidebarState.setMessages([]);
@@ -603,9 +676,9 @@ const ChemistryTool: React.FC = () => {
   };
 
   const unhighlightNodes = (): void => {
-    setTreeNodes(prev => prev.map(n =>
-      n.highlight === "yellow" ? { ...n, highlight: "normal" } : n
-    ));
+    setTreeNodes((prev) =>
+      prev.map((n) => (n.highlight === 'yellow' ? { ...n, highlight: 'normal' } : n))
+    );
   };
 
   const stop = (): void => {
@@ -620,9 +693,9 @@ const ChemistryTool: React.FC = () => {
     getContextRef.current = () => {
       const projectId = projectSidebar.selectionRef.current.projectId;
       const experimentId = projectSidebar.selectionRef.current.experimentId;
-      const project = projectData.projectsRef.current.find(p => p.id === projectId);
+      const project = projectData.projectsRef.current.find((p) => p.id === projectId);
       if (project) {
-        const experiment = project.experiments.find(e => e.id === experimentId);
+        const experiment = project.experiments.find((e) => e.id === experimentId);
         if (experiment) {
           return {
             ...experiment,
@@ -641,17 +714,38 @@ const ChemistryTool: React.FC = () => {
             visibleMetrics: metricsDashboardState.visibleMetrics,
             graphState,
             autoZoom,
-            sidebarState: sidebarStateRef.current
+            sidebarState: sidebarStateRef.current,
           };
         }
       }
-      throw "No experiment found";
+      throw 'No experiment found';
     };
-  }, [smiles, problemType, graphState, metricsDashboardState, autoZoom,
-      systemPrompt, problemPrompt, propertyType, customPropertyName, customPropertyDesc, customPropertyAscending, customization, projectData, projectSidebar]);
+  }, [
+    smiles,
+    problemType,
+    graphState,
+    metricsDashboardState,
+    autoZoom,
+    systemPrompt,
+    problemPrompt,
+    propertyType,
+    customPropertyName,
+    customPropertyDesc,
+    customPropertyAscending,
+    customization,
+    projectData,
+    projectSidebar,
+  ]);
 
   const saveTree = (): void => {
-    const data = { version: '1.0', type: 'tree', timestamp: new Date().toISOString(), smiles, nodes: treeNodes, edges };
+    const data = {
+      version: '1.0',
+      type: 'tree',
+      timestamp: new Date().toISOString(),
+      smiles,
+      nodes: treeNodes,
+      edges,
+    };
     const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -668,8 +762,24 @@ const ChemistryTool: React.FC = () => {
   };
 
   const saveFullContext = (experimentContext: string): void => {
-    const data = { lastModified: new Date().toISOString(), smiles, problemType, systemPrompt, problemPrompt, propertyType, customPropertyName,
-                   customPropertyDesc, customPropertyAscending, customization, treeNodes, edges, graphState, metricsDashboardState, sidebarState, experimentContext };
+    const data = {
+      lastModified: new Date().toISOString(),
+      smiles,
+      problemType,
+      systemPrompt,
+      problemPrompt,
+      propertyType,
+      customPropertyName,
+      customPropertyDesc,
+      customPropertyAscending,
+      customization,
+      treeNodes,
+      edges,
+      graphState,
+      metricsDashboardState,
+      sidebarState,
+      experimentContext,
+    };
     const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -707,7 +817,11 @@ const ChemistryTool: React.FC = () => {
     setEditPromptsModal(false);
   };
 
-  const saveCustomProperty = (newPropertyName: string, newPropertyDesc: string, newPropertyAscending: boolean): void => {
+  const saveCustomProperty = (
+    newPropertyName: string,
+    newPropertyDesc: string,
+    newPropertyAscending: boolean
+  ): void => {
     setCustomPropertyName(newPropertyName);
     setCustomPropertyDesc(newPropertyDesc);
     setCustomPropertyAscending(newPropertyAscending);
@@ -719,11 +833,29 @@ const ChemistryTool: React.FC = () => {
     setProblemPrompt('');
     // Set default metrics
     if (problem_type === 'retrosynthesis') {
-      metricsDashboardState.setVisibleMetrics({cost: false, bandgap: false, sascore: false, yield: true, density: false});
+      metricsDashboardState.setVisibleMetrics({
+        cost: false,
+        bandgap: false,
+        sascore: false,
+        yield: true,
+        density: false,
+      });
     } else if (problem_type === 'optimization') {
-      metricsDashboardState.setVisibleMetrics({cost: false, bandgap: false, sascore: true, yield: false, density: true});
+      metricsDashboardState.setVisibleMetrics({
+        cost: false,
+        bandgap: false,
+        sascore: true,
+        yield: false,
+        density: true,
+      });
     } else if (problem_type === 'custom') {
-      metricsDashboardState.setVisibleMetrics({cost: false, bandgap: false, sascore: false, yield: false, density: false});
+      metricsDashboardState.setVisibleMetrics({
+        cost: false,
+        bandgap: false,
+        sascore: false,
+        yield: false,
+        density: false,
+      });
       setSystemPrompt(DEFAULT_CUSTOM_SYSTEM_PROMPT);
     }
     setProblemType(problem_type);
@@ -731,7 +863,7 @@ const ChemistryTool: React.FC = () => {
 
   const createNewRetrosynthesisExperiment = async (startingSmiles: string): Promise<void> => {
     // Close context menu
-    setContextMenu({node: null, isReaction: false, x: 0, y: 0});
+    setContextMenu({ node: null, isReaction: false, x: 0, y: 0 });
 
     saveStateToExperiment();
 
@@ -743,7 +875,7 @@ const ChemistryTool: React.FC = () => {
     try {
       experiment = await projectManagement.createExperiment(projectId, experimentName);
       projectSidebar.setSelection({ projectId, experimentId: experiment.id });
-      await new Promise(resolve => setTimeout(resolve, 100));
+      await new Promise((resolve) => setTimeout(resolve, 100));
     } catch (error) {
       console.error('Error creating experiment:', error);
       alert('Failed to create experiment');
@@ -752,30 +884,30 @@ const ChemistryTool: React.FC = () => {
 
     reset();
     setSmiles(startingSmiles);
-    resetProblemType("retrosynthesis");
+    resetProblemType('retrosynthesis');
     saveStateToExperiment();
-  }
+  };
 
   const handleNodeClick = (e: React.MouseEvent<HTMLDivElement>, node: TreeNode): void => {
-      e.stopPropagation();
-      if (isComputing) return; // Don't open menu while computing
-      setContextMenu({
-          node,
-          isReaction: false,
-          x: e.clientX,
-          y: e.clientY
-      });
+    e.stopPropagation();
+    if (isComputing) return; // Don't open menu while computing
+    setContextMenu({
+      node,
+      isReaction: false,
+      x: e.clientX,
+      y: e.clientY,
+    });
   };
 
   const handleReactionClick = (e: React.MouseEvent<HTMLDivElement>, node: TreeNode): void => {
-      e.stopPropagation();
-      if (isComputing) return; // Don't open menu while computing
-      setContextMenu({
-          node,
-          isReaction: true,
-          x: e.clientX,
-          y: e.clientY
-      });
+    e.stopPropagation();
+    if (isComputing) return; // Don't open menu while computing
+    setContextMenu({
+      node,
+      isReaction: true,
+      x: e.clientX,
+      y: e.clientY,
+    });
   };
 
   // Handle prompt approval/modification
@@ -785,56 +917,72 @@ const ChemistryTool: React.FC = () => {
       return;
     }
 
-    wsRef.current.send(JSON.stringify({
-      action: 'prompt-breakpoint-response',
-      prompt: editedPrompt,
-      metadata: promptBreakpoint?.metadata
-    }));
+    wsRef.current.send(
+      JSON.stringify({
+        action: 'prompt-breakpoint-response',
+        prompt: editedPrompt,
+        metadata: promptBreakpoint?.metadata,
+      })
+    );
 
     setPromptBreakpoint(null);
     setEditedPrompt('');
     setIsComputing(true); // Resume computation
   }, [editedPrompt, promptBreakpoint]);
 
-  const sendMessageToServer = useCallback((message: string, data?: Omit<WebSocketMessageToServer, 'action'>): void => {
-    if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) {
-      alert('WebSocket not connected');
-      return;
-    }
-    const msg: WebSocketMessageToServer = {
-      action: message,
-      runSettings: {promptDebugging: debugMode, moleculeName: orchestratorSettings.moleculeName || "brand"},
-      ...data
-    };
-    wsRef.current.send(JSON.stringify(msg));
-    setContextMenu({node: null, isReaction: false, x: 0, y: 0});
-  }, [debugMode, orchestratorSettings]);
+  const sendMessageToServer = useCallback(
+    (message: string, data?: Omit<WebSocketMessageToServer, 'action'>): void => {
+      if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) {
+        alert('WebSocket not connected');
+        return;
+      }
+      const msg: WebSocketMessageToServer = {
+        action: message,
+        runSettings: {
+          promptDebugging: debugMode,
+          moleculeName: orchestratorSettings.moleculeName || 'brand',
+        },
+        ...data,
+      };
+      wsRef.current.send(JSON.stringify(msg));
+      setContextMenu({ node: null, isReaction: false, x: 0, y: 0 });
+    },
+    [debugMode, orchestratorSettings]
+  );
 
-  const handleReactionCardClick = useCallback((node: TreeNode) => {
-    if (isComputing) return;
-    setSelectedReactionNode(node);
-    setReactionSidebarOpen(true);
-  }, [isComputing]);  // Only depend on isComputing boolean
+  const handleReactionCardClick = useCallback(
+    (node: TreeNode) => {
+      if (isComputing) return;
+      setSelectedReactionNode(node);
+      setReactionSidebarOpen(true);
+    },
+    [isComputing]
+  ); // Only depend on isComputing boolean
 
-  const handleSelectAlternative = useCallback((alt: ReactionAlternative) => {
-    const nodeId = selectedReactionNode?.id;
-    if (!nodeId) return;
-    if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) return;
+  const handleSelectAlternative = useCallback(
+    (alt: ReactionAlternative) => {
+      const nodeId = selectedReactionNode?.id;
+      if (!nodeId) return;
+      if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) return;
 
-    // Tell backend that the alternative subtree has been chosen
-    wsRef.current.send(JSON.stringify({
-      action: "set-reaction-alternative",
-      nodeId: nodeId,
-      alternativeId: alt.id
-    }));
+      // Tell backend that the alternative subtree has been chosen
+      wsRef.current.send(
+        JSON.stringify({
+          action: 'set-reaction-alternative',
+          nodeId: nodeId,
+          alternativeId: alt.id,
+        })
+      );
 
-    // Don't close the sidebar - let user see the active status update
-    setIsComputing(true);
-  }, [selectedReactionNode?.id]);  // Only depend on the ID, not the whole node
+      // Don't close the sidebar - let user see the active status update
+      setIsComputing(true);
+    },
+    [selectedReactionNode?.id]
+  ); // Only depend on the ID, not the whole node
 
   const handleCloseReactionAlternativesSidebar = useCallback(() => {
     setReactionSidebarOpen(false);
-  }, []);  // No dependencies - just a state setter
+  }, []); // No dependencies - just a state setter
 
   const handleComputeTemplates = useCallback(() => {
     const nodeId = selectedReactionNode?.id;
@@ -843,43 +991,55 @@ const ChemistryTool: React.FC = () => {
 
     setIsComputingTemplates(true);
     if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
-      wsRef.current.send(JSON.stringify({
-        action: "compute-reaction-templates",
-        nodeId: nodeId,
-        smiles: smiles,
-        runSettings: {promptDebugging: debugMode, moleculeName: orchestratorSettings.moleculeName || "brand"}
-      }));
-    }
-  }, [selectedReactionNode?.id, selectedReactionNode?.smiles, debugMode, orchestratorSettings]);  // Only depend on primitive values
-
-  const handleComputeFlaskAI = useCallback((customPrompt: boolean) => {
-    const nodeId = selectedReactionNode?.id;
-    if (!nodeId) return;
-
-    if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
-      if (customPrompt) {
-        handleCustomQuery(selectedReactionNode!, "compute-reaction-from")
-      } else {
-        wsRef.current.send(JSON.stringify({
-          action: "compute-reaction-from",
+      wsRef.current.send(
+        JSON.stringify({
+          action: 'compute-reaction-templates',
           nodeId: nodeId,
-          runSettings: {promptDebugging: debugMode, moleculeName: orchestratorSettings.moleculeName || "brand"},
-        }));
-      }
+          smiles: smiles,
+          runSettings: {
+            promptDebugging: debugMode,
+            moleculeName: orchestratorSettings.moleculeName || 'brand',
+          },
+        })
+      );
     }
-    setIsComputing(true);
-  }, [selectedReactionNode?.id, debugMode, orchestratorSettings]);  // Only depend on the ID
+  }, [selectedReactionNode?.id, selectedReactionNode?.smiles, debugMode, orchestratorSettings]); // Only depend on primitive values
+
+  const handleComputeFlaskAI = useCallback(
+    (customPrompt: boolean) => {
+      const nodeId = selectedReactionNode?.id;
+      if (!nodeId) return;
+
+      if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+        if (customPrompt) {
+          handleCustomQuery(selectedReactionNode!, 'compute-reaction-from');
+        } else {
+          wsRef.current.send(
+            JSON.stringify({
+              action: 'compute-reaction-from',
+              nodeId: nodeId,
+              runSettings: {
+                promptDebugging: debugMode,
+                moleculeName: orchestratorSettings.moleculeName || 'brand',
+              },
+            })
+          );
+        }
+      }
+      setIsComputing(true);
+    },
+    [selectedReactionNode?.id, debugMode, orchestratorSettings]
+  ); // Only depend on the ID
 
   const stableAlternatives = useMemo(() => {
     return selectedReactionNode?.reaction?.alternatives || [];
   }, [selectedReactionNode?.id, selectedReactionNode?.reaction?.alternatives]);
 
-
   const handleCustomQuery = (node: TreeNode, queryType: string | null): void => {
     setCustomQueryModal(node);
     setCustomQueryText('');
     setCustomQueryType(queryType);
-    setContextMenu({node: null, isReaction: false, x: 0, y: 0});
+    setContextMenu({ node: null, isReaction: false, x: 0, y: 0 });
   };
 
   const submitCustomQuery = (): void => {
@@ -889,7 +1049,7 @@ const ChemistryTool: React.FC = () => {
     }
 
     let propertyDetails = {};
-    if (problemType === "optimization") {
+    if (problemType === 'optimization') {
       propertyDetails = {
         propertyType,
         customPropertyName,
@@ -897,17 +1057,22 @@ const ChemistryTool: React.FC = () => {
         customPropertyAscending,
         smiles: customQueryModal?.smiles,
         xpos: customQueryModal?.x,
-        customization
+        customization,
       };
     }
 
     const message: WebSocketMessageToServer = {
-      action: customQueryType ?? (problemType === "optimization" ? "optimize-from" : "recompute-reaction"),
+      action:
+        customQueryType ??
+        (problemType === 'optimization' ? 'optimize-from' : 'recompute-reaction'),
       nodeId: customQueryModal?.id,
       smiles: customQueryModal?.smiles,
       query: customQueryText,
-      runSettings: {promptDebugging: debugMode, moleculeName: orchestratorSettings.moleculeName || "brand"},
-      ...propertyDetails
+      runSettings: {
+        promptDebugging: debugMode,
+        moleculeName: orchestratorSettings.moleculeName || 'brand',
+      },
+      ...propertyDetails,
     };
     wsRef.current.send(JSON.stringify(message));
 
@@ -921,13 +1086,13 @@ const ChemistryTool: React.FC = () => {
     message.id = Date.now();
     message.timestamp = new Date().toISOString();
     if (!message.source) {
-      message.source = "Backend";
+      message.source = 'Backend';
     }
 
-    sidebarState.setMessages(prev => [...prev, message]);
+    sidebarState.setMessages((prev) => [...prev, message]);
     setSidebarOpen(true);
 
-    sidebarState.setVisibleSources(prev => {
+    sidebarState.setVisibleSources((prev) => {
       if (!(message.source in prev)) {
         return { ...prev, [message.source]: true };
       }
@@ -952,27 +1117,36 @@ const ChemistryTool: React.FC = () => {
         <div className="content-wrapper">
           <div className="w-full">
             <div className="content-header">
-              { /* Left logos */ }
+              {/* Left logos */}
               <div className="text-white">
                 <div className="w-full flex app-logo">
                   <svg width="40" height="40" viewBox="0 0 28 28" fill="none">
-                    <path d="M13.967 0C6.65928 0 0.646366 5.60212 0 12.7273H2.77682C3.25522 11.7261 4.27793 11.0303 5.46222 11.0303C7.10365 11.0303 8.43891 12.3624 8.43891 14C8.43891 15.6376 7.10365 16.9697 5.46222 16.9697C4.27793 16.9697 3.25522 16.2739 2.77682 15.2727H0C0.646366 22.3979 6.65928 28 13.967 28C21.7043 28 28 21.7191 28 14C28 6.28091 21.7043 0 13.967 0ZM5.46222 19.5152C8.5112 19.5152 10.9904 17.0418 10.9904 14C10.9904 10.9582 8.5112 8.48485 5.46222 8.48485C5.32189 8.48485 5.18156 8.49121 5.04336 8.50182C6.3042 7.43273 7.935 6.78788 9.71463 6.78788C13.7013 6.78788 16.9437 10.0227 16.9437 14C16.9437 17.9773 13.7013 21.2121 9.71463 21.2121C7.935 21.2121 6.3042 20.5652 5.04336 19.4982C5.18156 19.5088 5.32189 19.5152 5.46222 19.5152ZM13.967 25.4545C11.6112 25.4545 9.42122 24.7418 7.59693 23.5242C8.27944 23.6749 8.98747 23.7576 9.71463 23.7576C15.1067 23.7576 19.4952 19.3794 19.4952 14C19.4952 8.62061 15.1067 4.24242 9.71463 4.24242C8.98747 4.24242 8.27944 4.32515 7.59693 4.47576C9.42122 3.25818 11.6112 2.54545 13.967 2.54545C20.2989 2.54545 25.4486 7.68303 25.4486 14C25.4486 20.317 20.2989 25.4545 13.967 25.4545Z" fill="white"/>
+                    <path
+                      d="M13.967 0C6.65928 0 0.646366 5.60212 0 12.7273H2.77682C3.25522 11.7261 4.27793 11.0303 5.46222 11.0303C7.10365 11.0303 8.43891 12.3624 8.43891 14C8.43891 15.6376 7.10365 16.9697 5.46222 16.9697C4.27793 16.9697 3.25522 16.2739 2.77682 15.2727H0C0.646366 22.3979 6.65928 28 13.967 28C21.7043 28 28 21.7191 28 14C28 6.28091 21.7043 0 13.967 0ZM5.46222 19.5152C8.5112 19.5152 10.9904 17.0418 10.9904 14C10.9904 10.9582 8.5112 8.48485 5.46222 8.48485C5.32189 8.48485 5.18156 8.49121 5.04336 8.50182C6.3042 7.43273 7.935 6.78788 9.71463 6.78788C13.7013 6.78788 16.9437 10.0227 16.9437 14C16.9437 17.9773 13.7013 21.2121 9.71463 21.2121C7.935 21.2121 6.3042 20.5652 5.04336 19.4982C5.18156 19.5088 5.32189 19.5152 5.46222 19.5152ZM13.967 25.4545C11.6112 25.4545 9.42122 24.7418 7.59693 23.5242C8.27944 23.6749 8.98747 23.7576 9.71463 23.7576C15.1067 23.7576 19.4952 19.3794 19.4952 14C19.4952 8.62061 15.1067 4.24242 9.71463 4.24242C8.98747 4.24242 8.27944 4.32515 7.59693 4.47576C9.42122 3.25818 11.6112 2.54545 13.967 2.54545C20.2989 2.54545 25.4486 7.68303 25.4486 14C25.4486 20.317 20.2989 25.4545 13.967 25.4545Z"
+                      fill="white"
+                    />
                   </svg>
-                  <p className="text-center font-['Geist',sans-serif] text-[32px] leading-[1.3] font-medium text-nowrap whitespace-pre text-white noselect"> Genesis Mission</p>
+                  <p className="text-center font-['Geist',sans-serif] text-[32px] leading-[1.3] font-medium text-nowrap whitespace-pre text-white noselect">
+                    {' '}
+                    Genesis Mission
+                  </p>
                 </div>
               </div>
 
-              { /* Right logos */ }
+              {/* Right logos */}
               <div className="app-logo-right group flex">
-                  <svg version="1.1" id="Layer_1" className="logo-svg" viewBox="0 0 40 40">
-                    <g>
-                      <rect x="1.73" y="0.01" fill="#FFFFFF" width="34.19" height="34.19"/>
-                      <path fill="#1E59AE" d="M35.92,0.01v17.53H18.95V0.01H35.92z M15.88,21.82c-1.12-0.07-1.72-0.78-1.79-2.1V0.01h-0.76v19.73
+                <svg version="1.1" id="Layer_1" className="logo-svg" viewBox="0 0 40 40">
+                  <g>
+                    <rect x="1.73" y="0.01" fill="#FFFFFF" width="34.19" height="34.19" />
+                    <path
+                      fill="#1E59AE"
+                      d="M35.92,0.01v17.53H18.95V0.01H35.92z M15.88,21.82c-1.12-0.07-1.72-0.78-1.79-2.1V0.01h-0.76v19.73
               c0.09,1.72,1,2.75,2.53,2.84h15.28l-4.83,5l-11.79,0c-3.04-0.36-6.22-2.93-6.14-6.98V0.01H7.6V20.6c-0.09,4.49,3.45,7.34,6.86,7.75
-              h11.09l-4.59,4.75h-6.68C9.71,32.93,3.19,29.44,2.99,21.13V0.01H0.05v37.3h35.87V17.62l-4.05,4.19L15.88,21.82z"/>
-                    </g>
-                  </svg>
-                  {orchestratorSettings?.backend === "alcf" && (
+              h11.09l-4.59,4.75h-6.68C9.71,32.93,3.19,29.44,2.99,21.13V0.01H0.05v37.3h35.87V17.62l-4.05,4.19L15.88,21.82z"
+                    />
+                  </g>
+                </svg>
+                {orchestratorSettings?.backend === 'alcf' && (
                   <svg className="logo-svg" viewBox="87 0 26 24">
                     <path fill="#007934" d="M95.9 15.3h-8.1l4 7z"></path>
                     <path d="M103.9 15.3h-8.1l-4 7H108l-4.1-7z" fill="#0082ca"></path>
@@ -982,8 +1156,8 @@ const ChemistryTool: React.FC = () => {
                     <path fill="#d9272e" d="M103.9 1.3l-4 7 4 7h8.1z"></path>
                     <path d="M95.9 15.3l4-7-4-7-8.1 14h8.1z" fill="#82bc00"></path>
                   </svg>
-                  )}
-                </div>
+                )}
+              </div>
             </div>
 
             <div className="app-header">
@@ -992,39 +1166,86 @@ const ChemistryTool: React.FC = () => {
                 <h1 className="app-title">FLASK Copilot</h1>
               </div>
               <p className="app-subtitle">Real-time molecular assistant</p>
-              <p className="app-subtitle">Connected to simulators at <code>llnl.gov</code> (LLNL)</p>
               <p className="app-subtitle">
-                Connected to orchestrator <code>{orchestratorSettings.model || 'Not configured'}</code> at
-                &nbsp;<code>{getDisplayUrl()}</code> ({orchestratorSettings.backendLabel})
+                Connected to simulators at <code>llnl.gov</code> (LLNL)
+              </p>
+              <p className="app-subtitle">
+                Connected to orchestrator{' '}
+                <code>{orchestratorSettings.model || 'Not configured'}</code> at &nbsp;
+                <code>{getDisplayUrl()}</code> ({orchestratorSettings.backendLabel})
               </p>
             </div>
 
-
             <div className="flex justify-end gap-2 mb-4">
-              <button onClick={loadContextFromFile} disabled={isComputing} className="btn btn-secondary btn-sm">
+              <button
+                onClick={loadContextFromFile}
+                disabled={isComputing}
+                className="btn btn-secondary btn-sm"
+              >
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"
+                  />
                 </svg>
                 Load
               </button>
               <div className="dropdown">
-                <button onClick={(e) => { e.stopPropagation(); setSaveDropdownOpen(!saveDropdownOpen); }} onMouseDown={(e) => e.stopPropagation()} disabled={isComputing || treeNodes.length === 0 || !wsConnected} className="btn btn-secondary btn-sm">
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setSaveDropdownOpen(!saveDropdownOpen);
+                  }}
+                  onMouseDown={(e) => e.stopPropagation()}
+                  disabled={isComputing || treeNodes.length === 0 || !wsConnected}
+                  className="btn btn-secondary btn-sm"
+                >
                   <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4" />
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4"
+                    />
                   </svg>
                   Save
-                  <svg className={`w-3 h-3 transition-transform ${saveDropdownOpen ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                  <svg
+                    className={`w-3 h-3 transition-transform ${
+                      saveDropdownOpen ? 'rotate-180' : ''
+                    }`}
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M19 9l-7 7-7-7"
+                    />
                   </svg>
                 </button>
                 {saveDropdownOpen && (
-                  <div className="dropdown-menu" onClick={(e) => e.stopPropagation()} onMouseDown={(e) => e.stopPropagation()}>
-                    <button onClick={saveTree} className="dropdown-item">Save Tree Only</button>
-                    <button onClick={requestSaveContext} className="dropdown-item dropdown-divider">Save Full Context</button>
+                  <div
+                    className="dropdown-menu"
+                    onClick={(e) => e.stopPropagation()}
+                    onMouseDown={(e) => e.stopPropagation()}
+                  >
+                    <button onClick={saveTree} className="dropdown-item">
+                      Save Tree Only
+                    </button>
+                    <button onClick={requestSaveContext} className="dropdown-item dropdown-divider">
+                      Save Full Context
+                    </button>
                   </div>
                 )}
               </div>
-              <button onClick={() => setSidebarOpen(!sidebarOpen)} className="btn btn-secondary btn-sm">
+              <button
+                onClick={() => setSidebarOpen(!sidebarOpen)}
+                className="btn btn-secondary btn-sm"
+              >
                 <Brain className="w-4 h-4" />
                 Reasoning
               </button>
@@ -1034,143 +1255,172 @@ const ChemistryTool: React.FC = () => {
                 onServerAdded={refreshToolsList}
                 onServerRemoved={refreshToolsList}
                 username={username}
+                httpServerUrl={HTTP_SERVER}
               />
 
               {/* WebSocket Status Indicator */}
-                <div
-                  className="ws-status-indicator group"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    if (!wsConnected) {
-                      reconnectWS();
-                    } else {
-                      setWsTooltipPinned(!wsTooltipPinned);
-                    }
-                  }}
-                  onDoubleClick={(e) => {
-                    e.stopPropagation();
+              <div
+                className="ws-status-indicator group"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  if (!wsConnected) {
                     reconnectWS();
-                  }}
-                  onMouseDown={(e) => e.stopPropagation()}
-                  title={wsTooltipPinned ? "" : "Click for details • Double-click to reconnect"}
-                >
-                  <div className="relative cursor-pointer">
-                    <div className={`status-indicator absolute ${
-                      wsReconnecting ? 'status-indicator-ping bg-yellow-400' :
-                      wsConnected ? '' :
-                      ''
-                    }`} />
-                    <div className={`status-indicator ${
-                      wsReconnecting ? 'status-indicator-reconnecting' :
-                      wsConnected ? 'status-indicator-connected' :
-                      'status-indicator-disconnected'
-                    } ${wsTooltipPinned ? 'ring-2 ring-white ring-offset-2 ring-offset-slate-900' : ''}`} />
-                  </div>
+                  } else {
+                    setWsTooltipPinned(!wsTooltipPinned);
+                  }
+                }}
+                onDoubleClick={(e) => {
+                  e.stopPropagation();
+                  reconnectWS();
+                }}
+                onMouseDown={(e) => e.stopPropagation()}
+                title={wsTooltipPinned ? '' : 'Click for details • Double-click to reconnect'}
+              >
+                <div className="relative cursor-pointer">
+                  <div
+                    className={`status-indicator absolute ${
+                      wsReconnecting ? 'status-indicator-ping bg-yellow-400' : wsConnected ? '' : ''
+                    }`}
+                  />
+                  <div
+                    className={`status-indicator ${
+                      wsReconnecting
+                        ? 'status-indicator-reconnecting'
+                        : wsConnected
+                          ? 'status-indicator-connected'
+                          : 'status-indicator-disconnected'
+                    } ${
+                      wsTooltipPinned ? 'ring-2 ring-white ring-offset-2 ring-offset-slate-900' : ''
+                    }`}
+                  />
+                </div>
 
-                  <div className={`ws-tooltip transition-opacity z-50 ${
-                    wsTooltipPinned ? 'opacity-100' : 'opacity-0 group-hover:opacity-100 pointer-events-none'
-                  }`}>
-                    <div
-                      onClick={(e) => e.stopPropagation()}
-                      onMouseDown={(e) => e.stopPropagation()}
-                    >
-                      <div className="flex items-center justify-between mb-1">
-                        <div className={`font-semibold ${
-                          wsReconnecting ? 'status-reconnecting' :
-                          wsConnected ? 'status-connected' :
-                          'status-disconnected'
-                        }`}>
-                          {wsReconnecting ? '● Reconnecting...' :
-                          wsConnected ? '● Connected' :
-                          '● Disconnected'}
-                          {wsConnected && username !== "<LOCAL USER>" && ` as ${username}`}
+                <div
+                  className={`ws-tooltip transition-opacity z-50 ${
+                    wsTooltipPinned
+                      ? 'opacity-100'
+                      : 'opacity-0 group-hover:opacity-100 pointer-events-none'
+                  }`}
+                >
+                  <div
+                    onClick={(e) => e.stopPropagation()}
+                    onMouseDown={(e) => e.stopPropagation()}
+                  >
+                    <div className="flex items-center justify-between mb-1">
+                      <div
+                        className={`font-semibold ${
+                          wsReconnecting
+                            ? 'status-reconnecting'
+                            : wsConnected
+                              ? 'status-connected'
+                              : 'status-disconnected'
+                        }`}
+                      >
+                        {wsReconnecting
+                          ? '● Reconnecting...'
+                          : wsConnected
+                            ? '● Connected'
+                            : '● Disconnected'}
+                        {wsConnected && username !== '<LOCAL USER>' && ` as ${username}`}
+                      </div>
+                      {wsTooltipPinned && (
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setWsTooltipPinned(false);
+                          }}
+                          className="text-muted hover:text-primary transition-colors cursor-pointer"
+                        >
+                          <X className="w-3 h-3" />
+                        </button>
+                      )}
+                    </div>
+                    <div className="text-secondary text-xs mt-1">
+                      {WS_SERVER}
+                      {wsError && <div className="text-tertiary text-xs mt-1">{wsError}</div>}
+                      {wsConnected && availableTools.length > 0 && (
+                        <div className="mt-3 pt-2 border-t border-secondary">
+                          <div className="text-tertiary text-xs font-semibold mb-1.5">
+                            Available Tool Servers ({availableTools.length})
+                          </div>
+                          <div className="custom-scrollbar max-h-60 overflow-y-auto pr-1">
+                            {availableTools.map((tool, idx) => (
+                              <div
+                                key={idx}
+                                className="text-xs bg-secondary rounded px-2 py-1 mb-1"
+                              >
+                                <div className="text-secondary font-medium">
+                                  {tool.server || ('server' as string)}
+                                </div>
+                                {tool.names && (
+                                  <div className="text-tertiary mt-0.5 text-[10px] leading-tight">
+                                    {tool.names.join(', ')}
+                                  </div>
+                                )}
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                      {wsConnected && availableTools.length === 0 && (
+                        <div className="mt-2 text-tertiary text-xs italic">
+                          No MCP tool servers detected!
+                        </div>
+                      )}
+                    </div>
+                    {!wsConnected && !wsReconnecting && (
+                      <div className="mt-2">
+                        <div className="text-tertiary text-xs italic">
+                          Backend server required for computation
                         </div>
                         {wsTooltipPinned && (
                           <button
                             onClick={(e) => {
                               e.stopPropagation();
-                              setWsTooltipPinned(false);
+                              reconnectWS();
                             }}
-                            className="text-muted hover:text-primary transition-colors cursor-pointer"
+                            className="mt-2 w-full btn btn-secondary btn-sm"
                           >
-                            <X className="w-3 h-3" />
+                            <RefreshCw className="w-3 h-3" />
+                            Reconnect
                           </button>
                         )}
                       </div>
-                      <div className="text-secondary text-xs mt-1">
-                        {WS_SERVER}
-                        {wsError && (
-                          <div className="text-tertiary text-xs mt-1">
-                            {wsError}
-                          </div>
-                        )}
-                        {wsConnected && availableTools.length > 0 && (
-                          <div className="mt-3 pt-2 border-t border-secondary">
-                            <div className="text-tertiary text-xs font-semibold mb-1.5">
-                              Available Tool Servers ({availableTools.length})
-                            </div>
-                            <div className="custom-scrollbar max-h-60 overflow-y-auto pr-1">
-                              {availableTools.map((tool, idx) => (
-                                <div key={idx} className="text-xs bg-secondary rounded px-2 py-1 mb-1">
-                                  <div className="text-secondary font-medium">{tool.server || "server" as string}</div>
-                                  {tool.names && (
-                                    <div className="text-tertiary mt-0.5 text-[10px] leading-tight">
-                                      {tool.names.join(", ")}
-                                    </div>
-                                  )}
-                                </div>
-                              ))}
-                            </div>
-                          </div>
-                        )}
-                        {wsConnected && availableTools.length === 0 && (
-                          <div className="mt-2 text-tertiary text-xs italic">
-                            No MCP tool servers detected!
-                          </div>
-                        )}
+                    )}
+                    {!wsTooltipPinned && (
+                      <div className="text-muted text-[10px] mt-2 italic text-center border-t border-secondary pt-1.5">
+                        {wsConnected
+                          ? 'Click to pin, double-click to reconnect'
+                          : 'Click to reconnect'}
                       </div>
-                      {!wsConnected && !wsReconnecting && (
-                        <div className="mt-2">
-                          <div className="text-tertiary text-xs italic">
-                            Backend server required for computation
-                          </div>
-                          {wsTooltipPinned && (
-                            <button
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                reconnectWS();
-                              }}
-                              className="mt-2 w-full btn btn-secondary btn-sm"
-                            >
-                              <RefreshCw className="w-3 h-3" />
-                              Reconnect
-                            </button>
-                          )}
-                        </div>
-                      )}
-                      {!wsTooltipPinned && (
-                        <div className="text-muted text-[10px] mt-2 italic text-center border-t border-secondary pt-1.5">
-                          {wsConnected ?
-                            "Click to pin, double-click to reconnect" :
-                            "Click to reconnect"
-                            }
-                        </div>
-                      )}
-                    </div>
+                    )}
                   </div>
                 </div>
+              </div>
             </div>
 
             <div className="card card-padding mb-6">
               <div className="input-row">
                 <div className="flex-1">
                   <label className="form-label">Starting Molecule (SMILES)</label>
-                  <input type="text" value={smiles} onChange={(e) => setSmiles(e.target.value)} disabled={isComputing} placeholder="Enter SMILES notation" className="form-input text-lg" />
+                  <input
+                    type="text"
+                    value={smiles}
+                    onChange={(e) => setSmiles(e.target.value)}
+                    disabled={isComputing}
+                    placeholder="Enter SMILES notation"
+                    className="form-input text-lg"
+                  />
                 </div>
                 <div className="flex-0.5">
                   <div>
                     <label className="form-label flex items-center gap-2 cursor-pointer">
-                      <input type="checkbox" checked={autoZoom} onChange={(e) => setAutoZoom(e.target.checked)} className="form-checkbox" />
+                      <input
+                        type="checkbox"
+                        checked={autoZoom}
+                        onChange={(e) => setAutoZoom(e.target.checked)}
+                        className="form-checkbox"
+                      />
                       Auto-zoom to fit
                     </label>
                   </div>
@@ -1191,63 +1441,86 @@ const ChemistryTool: React.FC = () => {
                 </div>
               </div>
 
-
               <div className="flex items-center gap-4">
                 <div className="input-row-controls">
                   <div>
                     <label className="form-label">
                       Problem Type
-                        {problemType === "custom" && (!systemPrompt || !problemPrompt) && (
-                          <span className="warning-tooltip">
-                            ⚠️
+                      {problemType === 'custom' && (!systemPrompt || !problemPrompt) && (
+                        <span className="warning-tooltip">
+                          ⚠️
                           <div className="warning-tooltip-content">
                             <div className="warning-tooltip-box">
                               Custom problem description not given
                             </div>
                           </div>
-                          </span>
-                        )}
+                        </span>
+                      )}
                     </label>
-                    <select value={problemType} onChange={(e) => {reset(); resetProblemType(e.target.value)}} disabled={isComputing} className="form-select">
+                    <select
+                      value={problemType}
+                      onChange={(e) => {
+                        reset();
+                        resetProblemType(e.target.value);
+                      }}
+                      disabled={isComputing}
+                      className="form-select"
+                    >
                       <option value="retrosynthesis">Retrosynthesis</option>
                       <option value="optimization">Lead Molecule Optimization</option>
                       <option value="custom">Custom</option>
                     </select>
                   </div>
-                  { /* Problem-specific UI */ }
-                  {problemType === "optimization" &&
+                  {/* Problem-specific UI */}
+                  {problemType === 'optimization' && (
                     <div>
                       <label className="form-label">
                         Property
-                        {propertyType === "custom" && (!customPropertyName || !customPropertyDesc) && (
-                          <span className="warning-tooltip">
-                            ⚠️
-                          <div className="warning-tooltip-content">
-                            <div className="warning-tooltip-box">
-                              Property name or description not given
-                            </div>
-                          </div>
-                          </span>
-                        )}
+                        {propertyType === 'custom' &&
+                          (!customPropertyName || !customPropertyDesc) && (
+                            <span className="warning-tooltip">
+                              ⚠️
+                              <div className="warning-tooltip-content">
+                                <div className="warning-tooltip-box">
+                                  Property name or description not given
+                                </div>
+                              </div>
+                            </span>
+                          )}
                       </label>
-                      <select value={propertyType} onChange={(e) => {setPropertyType(e.target.value)}} disabled={isComputing} className="form-select w-48">
-                        <option value="density">{PROPERTY_NAMES["density"]}</option>
-                        <option value="hof">{PROPERTY_NAMES["hof"]}</option>
-                        <option value="bandgap">{PROPERTY_NAMES["bandgap"]}</option>
+                      <select
+                        value={propertyType}
+                        onChange={(e) => {
+                          setPropertyType(e.target.value);
+                        }}
+                        disabled={isComputing}
+                        className="form-select w-48"
+                      >
+                        <option value="density">{PROPERTY_NAMES['density']}</option>
+                        <option value="hof">{PROPERTY_NAMES['hof']}</option>
+                        <option value="bandgap">{PROPERTY_NAMES['bandgap']}</option>
                         <option value="custom">Other</option>
                       </select>
                     </div>
-                  }
-                  {problemType === "optimization" && propertyType === "custom" &&
-                    <button onClick={() => setEditPropertyModal(true)} disabled={isComputing} className="btn btn-tertiary mt-5">
+                  )}
+                  {problemType === 'optimization' && propertyType === 'custom' && (
+                    <button
+                      onClick={() => setEditPropertyModal(true)}
+                      disabled={isComputing}
+                      className="btn btn-tertiary mt-5"
+                    >
                       Property...
                     </button>
-                  }
-                  {problemType === "custom" &&
-                    <button onClick={() => setEditPromptsModal(true)} disabled={isComputing || problemType !== "custom"} className="btn btn-tertiary mt-5">
+                  )}
+                  {problemType === 'custom' && (
+                    <button
+                      onClick={() => setEditPromptsModal(true)}
+                      disabled={isComputing || problemType !== 'custom'}
+                      className="btn btn-tertiary mt-5"
+                    >
                       Edit
                     </button>
-                  }
+                  )}
                   <button
                     onClick={() => setShowCustomizationModal(true)}
                     disabled={isComputing}
@@ -1255,7 +1528,8 @@ const ChemistryTool: React.FC = () => {
                   >
                     <Sliders className="w-4 h-4" />
                     Customize
-                    {(selectedTools.length > 0 || (problemType === "optimization" && customization.enableConstraints)) && (
+                    {(selectedTools.length > 0 ||
+                      (problemType === 'optimization' && customization.enableConstraints)) && (
                       <span className="ml-1 px-2 py-0.5 text-xs rounded-full bg-blue-500/20 text-blue-400 flex items-center gap-1">
                         {selectedTools.length > 0 && (
                           <>
@@ -1263,8 +1537,10 @@ const ChemistryTool: React.FC = () => {
                             <Wrench className="w-3 h-3" />
                           </>
                         )}
-                        {selectedTools.length > 0 && problemType === "optimization" && customization.enableConstraints && <span className="mx-0.5">•</span>}
-                        {problemType === "optimization" && customization.enableConstraints && (
+                        {selectedTools.length > 0 &&
+                          problemType === 'optimization' &&
+                          customization.enableConstraints && <span className="mx-0.5">•</span>}
+                        {problemType === 'optimization' && customization.enableConstraints && (
                           <>
                             ON
                             <Settings className="w-3 h-3" />
@@ -1278,25 +1554,48 @@ const ChemistryTool: React.FC = () => {
                 <div className="input-row-actions">
                   <div className="relative group">
                     <div>
-                      <label className="form-label">
-                        Actions
-                      </label>
-                      <button onClick={() => {
-                        if (treeNodes.length > 0) {
-                          if (!window.confirm('Are you sure you want to rerun this computation? This will clear all previous progress.')) {
-                            return;
+                      <label className="form-label">Actions</label>
+                      <button
+                        onClick={() => {
+                          if (treeNodes.length > 0) {
+                            if (
+                              !window.confirm(
+                                'Are you sure you want to rerun this computation? This will clear all previous progress.'
+                              )
+                            ) {
+                              return;
+                            }
                           }
-                        }
-                        runComputation();
-                      }} disabled={!wsConnected || isComputing || !smiles} className="btn btn-primary">
-                        {isComputing ? <><Loader2 className="w-5 h-5 animate-spin" />Computing</> : (treeNodes.length === 0 ? <><Play className="w-5 h-5" />Run</> : <><RefreshCw className="w-5 h-5" />Rerun</>)}
+                          runComputation();
+                        }}
+                        disabled={!wsConnected || isComputing || !smiles}
+                        className="btn btn-primary"
+                      >
+                        {isComputing ? (
+                          <>
+                            <Loader2 className="w-5 h-5 animate-spin" />
+                            Computing
+                          </>
+                        ) : treeNodes.length === 0 ? (
+                          <>
+                            <Play className="w-5 h-5" />
+                            Run
+                          </>
+                        ) : (
+                          <>
+                            <RefreshCw className="w-5 h-5" />
+                            Rerun
+                          </>
+                        )}
                       </button>
                       {(!wsConnected || isComputing || !smiles) && (
                         <div className="tooltip absolute bottom-full mb-2 left-1/2 transform -translate-x-1/2 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
                           <div className="tooltip-content whitespace-nowrap">
-                            {!wsConnected ? 'Backend server not connected' :
-                            isComputing ? 'Computation already running' :
-                            'Enter a SMILES string first'}
+                            {!wsConnected
+                              ? 'Backend server not connected'
+                              : isComputing
+                                ? 'Computation already running'
+                                : 'Enter a SMILES string first'}
                           </div>
                           {!wsConnected && (
                             <div className="text-tertiary text-xs mt-1">
@@ -1309,28 +1608,43 @@ const ChemistryTool: React.FC = () => {
                   </div>
                   <div>
                     <label className="form-label">&nbsp;</label>
-                    <button onClick={() => {
-                      const [updatedNodes, updatedEdges] = relayoutTree(treeNodes, edges);
-                      setTreeNodes(updatedNodes);
-                      setEdges(updatedEdges);
-                    }} disabled={isComputing || treeNodes.length === 0} className="btn btn-secondary">
-                      <Sparkles className="w-5 h-5" />Relayout
+                    <button
+                      onClick={() => {
+                        const [updatedNodes, updatedEdges] = relayoutTree(treeNodes, edges);
+                        setTreeNodes(updatedNodes);
+                        setEdges(updatedEdges);
+                      }}
+                      disabled={isComputing || treeNodes.length === 0}
+                      className="btn btn-secondary"
+                    >
+                      <Sparkles className="w-5 h-5" />
+                      Relayout
                     </button>
                   </div>
                   <div>
                     <label className="form-label">&nbsp;</label>
-                    <button onClick={() => {
-                      if (window.confirm('Are you sure you want to reset this window? This will clear all molecules.')) {
-                        reset();
-                      }
-                    }} disabled={isComputing} className="btn btn-tertiary">
-                      <RotateCcw className="w-5 h-5" />Reset
+                    <button
+                      onClick={() => {
+                        if (
+                          window.confirm(
+                            'Are you sure you want to reset this window? This will clear all molecules.'
+                          )
+                        ) {
+                          reset();
+                        }
+                      }}
+                      disabled={isComputing}
+                      className="btn btn-tertiary"
+                    >
+                      <RotateCcw className="w-5 h-5" />
+                      Reset
                     </button>
                   </div>
                   <div>
                     <label className="form-label">&nbsp;</label>
                     <button onClick={stop} disabled={!isComputing} className="btn btn-tertiary">
-                      <X className="w-5 h-5" />Stop
+                      <X className="w-5 h-5" />
+                      Stop
                     </button>
                   </div>
                 </div>
@@ -1342,10 +1656,13 @@ const ChemistryTool: React.FC = () => {
                 <div className="empty-state">
                   <FlaskConical className="empty-state-icon" />
                   <p className="empty-state-text">
-                    {wsConnected ?
-                      `Click "Run" to start ${problemType === "optimization" ? "molecular discovery" : "the molecular computation tree"}` :
-                      "Waiting for backend connection..."
-                    }
+                    {wsConnected
+                      ? `Click "Run" to start ${
+                          problemType === 'optimization'
+                            ? 'molecular discovery'
+                            : 'the molecular computation tree'
+                        }`
+                      : 'Waiting for backend connection...'}
                   </p>
                   <p className="empty-state-subtext">
                     {autoZoom ? 'Auto-zoom will fit all molecules' : 'Drag to pan • Scroll to zoom'}
@@ -1353,7 +1670,9 @@ const ChemistryTool: React.FC = () => {
                   {!wsConnected && (
                     <div className="alert alert-warning max-w-md mt-4">
                       <div className="alert-warning-text text-center">
-                        <strong>Backend Required:</strong> Start your Python backend server at <code className="bg-black/30 px-2 py-1 rounded">{WS_SERVER}</code> to enable molecular computations.
+                        <strong>Backend Required:</strong> Start your Python backend server at{' '}
+                        <code className="bg-black/30 px-2 py-1 rounded">{WS_SERVER}</code> to enable
+                        molecular computations.
                       </div>
                     </div>
                   )}
@@ -1398,7 +1717,9 @@ const ChemistryTool: React.FC = () => {
               <div className="alert alert-info">
                 <div className="alert-info-text">
                   <Loader2 className="w-5 h-5 animate-spin" />
-                  <span className="font-medium">Streaming molecules... {treeNodes.length} nodes discovered</span>
+                  <span className="font-medium">
+                    Streaming molecules... {treeNodes.length} nodes discovered
+                  </span>
                 </div>
               </div>
             )}
@@ -1414,19 +1735,18 @@ const ChemistryTool: React.FC = () => {
             )}
 
             {/* Metrics Dashboard */}
-            {(problemType === "optimization") && (treeNodes.length > 0) && (
+            {problemType === 'optimization' && treeNodes.length > 0 && (
               <MetricsDashboard {...metricsDashboardState} treeNodes={treeNodes} />
             )}
 
-
-          <div className="app-footer">
-            <p>This work was performed under the auspices of the U.S. Department of Energy
-            by Lawrence Livermore National Laboratory (LLNL) under Contract DE-AC52-07NA27344
-            (LLNL-CODE-2006345).</p>
-            {VERSION && (
-              <p>Server version: {VERSION}</p>
-            )}
-          </div>
+            <div className="app-footer">
+              <p>
+                This work was performed under the auspices of the U.S. Department of Energy by
+                Lawrence Livermore National Laboratory (LLNL) under Contract DE-AC52-07NA27344
+                (LLNL-CODE-2006345).
+              </p>
+              {VERSION && <p>Server version: {VERSION}</p>}
+            </div>
           </div>
         </div>
 
@@ -1440,13 +1760,23 @@ const ChemistryTool: React.FC = () => {
       </div>
 
       {contextMenu && contextMenu.node && (
-        <div className="context-menu" style={{ left: `${contextMenu.x + 10}px`, top: `${contextMenu.y + 10}px` }} onClick={(e) => e.stopPropagation()} onMouseDown={(e) => e.stopPropagation()}>
+        <div
+          className="context-menu"
+          style={{ left: `${contextMenu.x + 10}px`, top: `${contextMenu.y + 10}px` }}
+          onClick={(e) => e.stopPropagation()}
+          onMouseDown={(e) => e.stopPropagation()}
+        >
           <div className="context-menu-header">
-            <div className="context-menu-label">Actions for {(contextMenu.isReaction ? "Reaction Resulting in" : "Molecule")}</div>
-            <div className="context-menu-title" dangerouslySetInnerHTML={{__html: contextMenu.node.label}}></div>
+            <div className="context-menu-label">
+              Actions for {contextMenu.isReaction ? 'Reaction Resulting in' : 'Molecule'}
+            </div>
+            <div
+              className="context-menu-title"
+              dangerouslySetInnerHTML={{ __html: contextMenu.node.label }}
+            ></div>
           </div>
 
-          { !contextMenu.isReaction && (
+          {!contextMenu.isReaction && (
             <>
               <button
                 onClick={() => copyToClipboard(contextMenu.node!.smiles, 'smiles', setCopiedField)}
@@ -1457,21 +1787,31 @@ const ChemistryTool: React.FC = () => {
                 ) : (
                   <>
                     <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
+                        d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"
+                      />
                     </svg>
                     Copy SMILES
                   </>
                 )}
               </button>
-              <button onClick={() => handleCustomQuery(contextMenu.node!, "query-molecule")} className="context-menu-item">
+              <button
+                onClick={() => handleCustomQuery(contextMenu.node!, 'query-molecule')}
+                className="context-menu-item"
+              >
                 <MessageCircleQuestion className="w-4 h-4" /> Ask about molecule...
               </button>
             </>
           )}
 
-          { contextMenu.isReaction && (
+          {contextMenu.isReaction && (
             <button
-              onClick={() => copyToClipboard(contextMenu.node!.reaction!.hoverInfo, 'reaction', setCopiedField)}
+              onClick={() =>
+                copyToClipboard(contextMenu.node!.reaction!.hoverInfo, 'reaction', setCopiedField)
+              }
               className="context-menu-item"
             >
               {copiedField === 'reaction' ? (
@@ -1479,7 +1819,12 @@ const ChemistryTool: React.FC = () => {
               ) : (
                 <>
                   <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"
+                    />
                   </svg>
                   Copy details
                 </>
@@ -1487,68 +1832,121 @@ const ChemistryTool: React.FC = () => {
             </button>
           )}
 
-          {/* Lead Molecule Optimization */ (problemType === "optimization") && (
-            <>
-            <button onClick={() => {
-              const nodeId = contextMenu.node!.id;
-                // Delete all nodes from this point on
-                setTreeNodes(prev => {
-                  return prev.filter(n => n.x <= contextMenu.node!.x);
-                });
-                sendMessageToServer("optimize-from", {nodeId: nodeId, propertyType, customPropertyName, customPropertyDesc, customPropertyAscending, smiles: contextMenu.node!.smiles, xpos: contextMenu.node!.x});
-                setIsComputing(true);
-              }}  className="context-menu-item context-menu-divider">
-              <StepForward className="w-4 h-4" />
-              Refine search from here
-            </button>
-            <button onClick={() => {
-                const nodeId = contextMenu.node!.id;
-                // Delete all nodes from this point on
-                setTreeNodes(prev => {
-                  return prev.filter(n => n.x <= contextMenu.node!.x);
-                });
-                handleCustomQuery(contextMenu.node!, "optimize-from");
-              }}  className="context-menu-item">
-              <MessageSquareShare className="w-4 h-4" />
-              Refine search (with prompt)
-            </button>
-            <button onClick={() => { createNewRetrosynthesisExperiment(contextMenu.node!.smiles); }}  className="context-menu-item">
-              <FlaskConical className="w-4 h-4" />
-              Plan synthesis pathway
-            </button>
-            </>
-          )}
-
-          {/* Retrosynthesis (Molecule) */ (problemType == "retrosynthesis" && !contextMenu.isReaction) && (
-            <>
-              {!contextMenu.node.reaction && (
-                <button onClick={() => {sendMessageToServer("compute-reaction-from", {nodeId: contextMenu.node!.id});}} className="context-menu-item context-menu-divider">
-                  <TestTubeDiagonal className="w-4 h-4" />How do I make this?
+          {
+            /* Lead Molecule Optimization */ problemType === 'optimization' && (
+              <>
+                <button
+                  onClick={() => {
+                    const nodeId = contextMenu.node!.id;
+                    // Delete all nodes from this point on
+                    setTreeNodes((prev) => {
+                      return prev.filter((n) => n.x <= contextMenu.node!.x);
+                    });
+                    sendMessageToServer('optimize-from', {
+                      nodeId: nodeId,
+                      propertyType,
+                      customPropertyName,
+                      customPropertyDesc,
+                      customPropertyAscending,
+                      smiles: contextMenu.node!.smiles,
+                      xpos: contextMenu.node!.x,
+                    });
+                    setIsComputing(true);
+                  }}
+                  className="context-menu-item context-menu-divider"
+                >
+                  <StepForward className="w-4 h-4" />
+                  Refine search from here
                 </button>
-              )}
-              {!isRootNode(contextMenu.node.id, treeNodes) && (
-                <button onClick={() => {sendMessageToServer("recompute-parent-reaction", {nodeId: contextMenu.node!.id});}} className="context-menu-item context-menu-divider">
-                  <Network className="w-4 h-4" />Substitute Molecule
+                <button
+                  onClick={() => {
+                    const nodeId = contextMenu.node!.id;
+                    // Delete all nodes from this point on
+                    setTreeNodes((prev) => {
+                      return prev.filter((n) => n.x <= contextMenu.node!.x);
+                    });
+                    handleCustomQuery(contextMenu.node!, 'optimize-from');
+                  }}
+                  className="context-menu-item"
+                >
+                  <MessageSquareShare className="w-4 h-4" />
+                  Refine search (with prompt)
                 </button>
-              )}
-            </>
-          )}
+                <button
+                  onClick={() => {
+                    createNewRetrosynthesisExperiment(contextMenu.node!.smiles);
+                  }}
+                  className="context-menu-item"
+                >
+                  <FlaskConical className="w-4 h-4" />
+                  Plan synthesis pathway
+                </button>
+              </>
+            )
+          }
 
-          {/* Retrosynthesis (Reaction) */ (problemType == "retrosynthesis" && contextMenu.isReaction) && (
-            <>
-              <button onClick={() => handleCustomQuery(contextMenu.node!, "query-reaction")} className="context-menu-item">
-                <MessageCircleQuestion className="w-4 h-4" /> Ask about reaction...
-              </button>
-              <button onClick={() => {handleReactionCardClick(contextMenu.node!); setContextMenu({node: null, isReaction: false, x: 0, y: 0});}} className="context-menu-item context-menu-divider">
-                <PanelRightOpen className="w-4 h-4" />Other Reactions...
-              </button>
-            </>
-          )}
+          {
+            /* Retrosynthesis (Molecule) */ problemType == 'retrosynthesis' &&
+              !contextMenu.isReaction && (
+                <>
+                  {!contextMenu.node.reaction && (
+                    <button
+                      onClick={() => {
+                        sendMessageToServer('compute-reaction-from', {
+                          nodeId: contextMenu.node!.id,
+                        });
+                      }}
+                      className="context-menu-item context-menu-divider"
+                    >
+                      <TestTubeDiagonal className="w-4 h-4" />
+                      How do I make this?
+                    </button>
+                  )}
+                  {!isRootNode(contextMenu.node.id, treeNodes) && (
+                    <button
+                      onClick={() => {
+                        sendMessageToServer('recompute-parent-reaction', {
+                          nodeId: contextMenu.node!.id,
+                        });
+                      }}
+                      className="context-menu-item context-menu-divider"
+                    >
+                      <Network className="w-4 h-4" />
+                      Substitute Molecule
+                    </button>
+                  )}
+                </>
+              )
+          }
 
-          { contextMenu.isReaction && (
-              <div className="context-menu-details custom-scrollbar">
-                <MarkdownText text={contextMenu.node!.reaction!.hoverInfo} />
-              </div>
+          {
+            /* Retrosynthesis (Reaction) */ problemType == 'retrosynthesis' &&
+              contextMenu.isReaction && (
+                <>
+                  <button
+                    onClick={() => handleCustomQuery(contextMenu.node!, 'query-reaction')}
+                    className="context-menu-item"
+                  >
+                    <MessageCircleQuestion className="w-4 h-4" /> Ask about reaction...
+                  </button>
+                  <button
+                    onClick={() => {
+                      handleReactionCardClick(contextMenu.node!);
+                      setContextMenu({ node: null, isReaction: false, x: 0, y: 0 });
+                    }}
+                    className="context-menu-item context-menu-divider"
+                  >
+                    <PanelRightOpen className="w-4 h-4" />
+                    Other Reactions...
+                  </button>
+                </>
+              )
+          }
+
+          {contextMenu.isReaction && (
+            <div className="context-menu-details custom-scrollbar">
+              <MarkdownText text={contextMenu.node!.reaction!.hoverInfo} />
+            </div>
           )}
         </div>
       )}
@@ -1559,7 +1957,10 @@ const ChemistryTool: React.FC = () => {
             <div className="modal-header">
               <div>
                 <h2 className="modal-title">Custom Query</h2>
-                <div className="modal-subtitle" dangerouslySetInnerHTML={{__html: "for " + customQueryModal.label}}></div>
+                <div
+                  className="modal-subtitle"
+                  dangerouslySetInnerHTML={{ __html: 'for ' + customQueryModal.label }}
+                ></div>
               </div>
               <button onClick={() => setCustomQueryModal(null)} className="btn-icon">
                 <X className="w-6 h-6" />
@@ -1574,7 +1975,11 @@ const ChemistryTool: React.FC = () => {
             />
 
             <div className="modal-footer">
-              <button onClick={submitCustomQuery} disabled={!customQueryText.trim()} className="btn btn-primary flex-1">
+              <button
+                onClick={submitCustomQuery}
+                disabled={!customQueryText.trim()}
+                className="btn btn-primary flex-1"
+              >
                 <Send className="w-5 h-5" />
                 Submit Query
               </button>
@@ -1603,23 +2008,49 @@ const ChemistryTool: React.FC = () => {
             <div className="modal-body space-y-4">
               <div className="form-group">
                 <label className="form-label">System Prompt</label>
-                <textarea value={systemPrompt} onChange={(e) => setSystemPrompt(e.target.value)} placeholder="Enter system-level instructions..." className="form-textarea h-32" />
+                <textarea
+                  value={systemPrompt}
+                  onChange={(e) => setSystemPrompt(e.target.value)}
+                  placeholder="Enter system-level instructions..."
+                  className="form-textarea h-32"
+                />
               </div>
 
               <div className="form-group">
                 <label className="form-label">Problem Prompt</label>
-                <textarea value={problemPrompt} onChange={(e) => setProblemPrompt(e.target.value)} placeholder="Enter problem-specific instructions..." className="form-textarea h-32" />
+                <textarea
+                  value={problemPrompt}
+                  onChange={(e) => setProblemPrompt(e.target.value)}
+                  placeholder="Enter problem-specific instructions..."
+                  className="form-textarea h-32"
+                />
               </div>
             </div>
 
             <div className="modal-footer">
-              <button onClick={() => { savePrompts(DEFAULT_CUSTOM_SYSTEM_PROMPT, ''); }} className="btn btn-tertiary">
+              <button
+                onClick={() => {
+                  savePrompts(DEFAULT_CUSTOM_SYSTEM_PROMPT, '');
+                }}
+                className="btn btn-tertiary"
+              >
                 <RotateCcw className="w-4 h-4" />
                 Reset
               </button>
-              <button onClick={() => {savePrompts(systemPrompt, problemPrompt); setProblemType('custom');}} className="btn btn-primary flex-1">
+              <button
+                onClick={() => {
+                  savePrompts(systemPrompt, problemPrompt);
+                  setProblemType('custom');
+                }}
+                className="btn btn-primary flex-1"
+              >
                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M5 13l4 4L19 7"
+                  />
                 </svg>
                 Save Prompts
               </button>
@@ -1644,38 +2075,66 @@ const ChemistryTool: React.FC = () => {
               <div className="form-group">
                 <label className="form-label">Property Name</label>
                 <input
-                    type="text"
-                    value={customPropertyName}
-                    onChange={(e) => setCustomPropertyName(e.target.value)}
-                    placeholder="Enter a name for the property"
-                    className="form-input form-input-text"
-                  />
+                  type="text"
+                  value={customPropertyName}
+                  onChange={(e) => setCustomPropertyName(e.target.value)}
+                  placeholder="Enter a name for the property"
+                  className="form-input form-input-text"
+                />
               </div>
               <div className="form-group">
                 <label className="form-label">Property Description</label>
-                <textarea value={customPropertyDesc} onChange={(e) => setCustomPropertyDesc(e.target.value)} placeholder="Enter a description of the property and its units..." className="form-textarea h-32" />
+                <textarea
+                  value={customPropertyDesc}
+                  onChange={(e) => setCustomPropertyDesc(e.target.value)}
+                  placeholder="Enter a description of the property and its units..."
+                  className="form-textarea h-32"
+                />
               </div>
             </div>
             <div className="flex-center gap-md py-4">
               <span className="text-sm text-secondary">Higher is better</span>
               <button
                 onClick={() => setCustomPropertyAscending(!customPropertyAscending)}
-                className={`toggle-switch ${customPropertyAscending ? 'toggle-switch-off' : 'toggle-switch-on'}`}
+                className={`toggle-switch ${
+                  customPropertyAscending ? 'toggle-switch-off' : 'toggle-switch-on'
+                }`}
               >
                 <div
-                  className={`toggle-switch-handle ${customPropertyAscending ? 'toggle-switch-handle-off' : 'toggle-switch-handle-on'}`}
+                  className={`toggle-switch-handle ${
+                    customPropertyAscending ? 'toggle-switch-handle-off' : 'toggle-switch-handle-on'
+                  }`}
                 />
               </button>
               <span className="text-sm text-secondary">Lower is better</span>
             </div>
             <div className="modal-footer">
-              <button onClick={() => { saveCustomProperty('', '', true); }} className="btn btn-tertiary">
+              <button
+                onClick={() => {
+                  saveCustomProperty('', '', true);
+                }}
+                className="btn btn-tertiary"
+              >
                 <RotateCcw className="w-4 h-4" />
                 Reset
               </button>
-              <button onClick={() => {saveCustomProperty(customPropertyName, customPropertyDesc, customPropertyAscending);}} className="btn btn-primary flex-1">
+              <button
+                onClick={() => {
+                  saveCustomProperty(
+                    customPropertyName,
+                    customPropertyDesc,
+                    customPropertyAscending
+                  );
+                }}
+                className="btn btn-primary flex-1"
+              >
                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M5 13l4 4L19 7"
+                  />
                 </svg>
                 Save
               </button>
@@ -1694,7 +2153,9 @@ const ChemistryTool: React.FC = () => {
         onToolConfirm={handleToolSelectionConfirm}
         initialCustomization={customization}
         onCustomizationSave={setCustomization}
-        showOptimizationTab={problemType === "optimization"}
+        initialMoleculeName={orchestratorSettings.moleculeName || 'brand'}
+        onMoleculeNameSave={handleMoleculeNameSave}
+        showOptimizationTab={problemType === 'optimization'}
       />
 
       {/* Prompt Debugging Modal */}
@@ -1721,9 +2182,7 @@ const ChemistryTool: React.FC = () => {
         <div className="space-y-4">
           {promptBreakpoint?.metadata && (
             <div className="glass-panel">
-              <div className="text-sm font-semibold text-secondary mb-2">
-                Context Information:
-              </div>
+              <div className="text-sm font-semibold text-secondary mb-2">Context Information:</div>
               <pre className="text-xs text-tertiary overflow-x-auto">
                 {JSON.stringify(promptBreakpoint.metadata, null, 2)}
               </pre>
@@ -1733,9 +2192,7 @@ const ChemistryTool: React.FC = () => {
           <div className="form-group">
             <label className="form-label-block">
               Prompt Content
-              <span className="text-xs text-tertiary ml-2">
-                (Edit as needed before approving)
-              </span>
+              <span className="text-xs text-tertiary ml-2">(Edit as needed before approving)</span>
             </label>
             <textarea
               value={editedPrompt}
@@ -1748,8 +2205,8 @@ const ChemistryTool: React.FC = () => {
 
           <div className="alert alert-info">
             <div className="text-sm text-secondary">
-              You can review and modify this prompt before it is sent to the AI
-              model. Changes will be used for this request only.
+              You can review and modify this prompt before it is sent to the AI model. Changes will
+              be used for this request only.
             </div>
           </div>
         </div>

@@ -13,7 +13,7 @@ from charge.servers.AiZynthTools import is_molecule_synthesizable, RetroPlanner
 
 import charge.servers.retrosynthesis_reaction_server as RETRO_MCP
 from charge.servers.server_utils import update_mcp_network, get_hostname
-from tool_registration import register_tool_server, get_asgi_app
+from lc_conductor.tool_registration import register_tool_server, get_asgi_app
 
 
 @click.command()

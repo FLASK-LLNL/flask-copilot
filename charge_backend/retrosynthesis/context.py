@@ -8,7 +8,7 @@ from charge.clients.autogen import AutoGenAgent
 from fastapi import WebSocket
 from typing import Optional
 
-from charge_backend.backend_helper_funcs import Node, Edge, calculate_positions
+from backend_helper_funcs import Node, Edge, calculate_positions
 
 
 @dataclass

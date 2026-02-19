@@ -1,5 +1,18 @@
 import React, { useState, useRef, useMemo } from 'react';
-import { X, Loader2, FlaskConical, BookOpen, Check, ChevronDown, ChevronLeft, ChevronRight, AlertCircle, MessageSquareMore, Clock, Sparkles } from 'lucide-react';
+import {
+  X,
+  Loader2,
+  FlaskConical,
+  BookOpen,
+  Check,
+  ChevronDown,
+  ChevronLeft,
+  ChevronRight,
+  AlertCircle,
+  MessageSquareMore,
+  Clock,
+  Sparkles,
+} from 'lucide-react';
 import { ReactionAlternative } from '../types';
 import { ITEMS_PER_PAGE } from '../constants';
 
@@ -9,7 +22,6 @@ const stripHtml = (html: string): string => {
   tmp.innerHTML = html;
   return tmp.textContent || tmp.innerText || '';
 };
-
 
 interface ReactionAlternativesSidebarProps {
   isOpen: boolean;
@@ -28,7 +40,11 @@ interface ReactionAlternativesSidebarProps {
 }
 
 // Mini molecule preview component
-const MiniMoleculeSVG: React.FC<{ smiles: string; rdkitModule: any; moleculeName?: string }> = ({ smiles, rdkitModule, moleculeName }) => {
+const MiniMoleculeSVG: React.FC<{ smiles: string; rdkitModule: any; moleculeName?: string }> = ({
+  smiles,
+  rdkitModule,
+  moleculeName,
+}) => {
   const [svg, setSvg] = useState<string>('');
   const renderedRef = useRef<string>('');
 
@@ -109,11 +125,19 @@ const PathwayPreview: React.FC<{
         {alternative.pathway.map((step, stepIdx) => (
           <React.Fragment key={stepIdx}>
             <div className="flex flex-col gap-1">
-              <div className={`flex items-center gap-1 ${step.smiles.length > 1 ? 'flex-wrap max-w-[120px]' : ''}`}>
+              <div
+                className={`flex items-center gap-1 ${
+                  step.smiles.length > 1 ? 'flex-wrap max-w-[120px]' : ''
+                }`}
+              >
                 {step.smiles.map((smiles, molIdx) => (
                   <React.Fragment key={molIdx}>
                     <div className="flex flex-col items-center gap-0.5 flex-shrink-0">
-                      <MiniMoleculeSVG smiles={smiles} rdkitModule={rdkitModule} moleculeName={step.label[molIdx]} />
+                      <MiniMoleculeSVG
+                        smiles={smiles}
+                        rdkitModule={rdkitModule}
+                        moleculeName={step.label[molIdx]}
+                      />
                       <div
                         className="text-[8px] text-tertiary max-w-[45px] truncate text-center"
                         title={stripHtml(step.label[molIdx])}
@@ -191,7 +215,17 @@ const CollapsibleSection: React.FC<{
   currentPage: number;
   onPageChange: (page: number) => void;
   totalPages: number;
-}> = ({ title, count, dotColor, subtitle, defaultExpanded = false, children, currentPage, onPageChange, totalPages }) => {
+}> = ({
+  title,
+  count,
+  dotColor,
+  subtitle,
+  defaultExpanded = false,
+  children,
+  currentPage,
+  onPageChange,
+  totalPages,
+}) => {
   const [isExpanded, setIsExpanded] = useState(defaultExpanded);
 
   return (
@@ -202,7 +236,9 @@ const CollapsibleSection: React.FC<{
       >
         <div className="flex items-center gap-2">
           <div className={`w-2 h-2 rounded-full ${dotColor}`}></div>
-          <span className="section-label">{title} ({count})</span>
+          <span className="section-label">
+            {title} ({count})
+          </span>
         </div>
         {isExpanded ? (
           <ChevronDown className="w-4 h-4 text-muted" />
@@ -210,14 +246,10 @@ const CollapsibleSection: React.FC<{
           <ChevronRight className="w-4 h-4 text-muted" />
         )}
       </button>
-      {subtitle && (
-        <div className="text-xs text-tertiary ml-6 mb-2 italic">{subtitle}</div>
-      )}
+      {subtitle && <div className="text-xs text-tertiary ml-6 mb-2 italic">{subtitle}</div>}
       {isExpanded && (
         <div className="ml-2 mt-2">
-          <div className="space-y-2">
-            {children}
-          </div>
+          <div className="space-y-2">{children}</div>
           <PaginationControls
             currentPage={currentPage}
             totalPages={totalPages}
@@ -244,7 +276,7 @@ export const ReactionAlternativesSidebar: React.FC<ReactionAlternativesSidebarPr
     isComputing,
     isComputingTemplates,
     templatesSearched,
-    rdkitModule
+    rdkitModule,
   } = props;
 
   const [hoveredDisabled, setHoveredDisabled] = useState<string | null>(null);
@@ -256,10 +288,18 @@ export const ReactionAlternativesSidebar: React.FC<ReactionAlternativesSidebarPr
   const [aiPage, setAiPage] = useState(1);
 
   // Memoize computed values to prevent recalculation
-  const { exactMatches, templateMatches, aiMatches, hasExactMatches, hasTemplateMatches, hasAiMatches, showTemplateButton } = useMemo(() => {
-    const exact = alternatives.filter(a => a.type === 'exact');
-    const template = alternatives.filter(a => a.type === 'template');
-    const ai = alternatives.filter(a => a.type === 'ai');
+  const {
+    exactMatches,
+    templateMatches,
+    aiMatches,
+    hasExactMatches,
+    hasTemplateMatches,
+    hasAiMatches,
+    showTemplateButton,
+  } = useMemo(() => {
+    const exact = alternatives.filter((a) => a.type === 'exact');
+    const template = alternatives.filter((a) => a.type === 'template');
+    const ai = alternatives.filter((a) => a.type === 'ai');
     const hasExact = exact.length > 0;
     const hasTemplate = template.length > 0;
     const hasAi = ai.length > 0;
@@ -272,7 +312,7 @@ export const ReactionAlternativesSidebar: React.FC<ReactionAlternativesSidebarPr
       hasExactMatches: hasExact,
       hasTemplateMatches: hasTemplate,
       hasAiMatches: hasAi,
-      showTemplateButton: showButton
+      showTemplateButton: showButton,
     };
   }, [alternatives, templatesSearched]);
 
@@ -286,19 +326,19 @@ export const ReactionAlternativesSidebar: React.FC<ReactionAlternativesSidebarPr
   // Sets the page to show the active alternative
   React.useEffect(() => {
     // Find the active alternative in each category and set the page accordingly
-    const exactActiveIndex = exactMatches.findIndex(alt => alt.status === 'active');
+    const exactActiveIndex = exactMatches.findIndex((alt) => alt.status === 'active');
     if (exactActiveIndex !== -1) {
       const activePage = Math.ceil((exactActiveIndex + 1) / ITEMS_PER_PAGE);
       setExactPage(activePage);
     }
 
-    const templateActiveIndex = templateMatches.findIndex(alt => alt.status === 'active');
+    const templateActiveIndex = templateMatches.findIndex((alt) => alt.status === 'active');
     if (templateActiveIndex !== -1) {
       const activePage = Math.ceil((templateActiveIndex + 1) / ITEMS_PER_PAGE);
       setTemplatePage(activePage);
     }
 
-    const aiActiveIndex = aiMatches.findIndex(alt => alt.status === 'active');
+    const aiActiveIndex = aiMatches.findIndex((alt) => alt.status === 'active');
     if (aiActiveIndex !== -1) {
       const activePage = Math.ceil((aiActiveIndex + 1) / ITEMS_PER_PAGE);
       setAiPage(activePage);
@@ -345,9 +385,7 @@ export const ReactionAlternativesSidebar: React.FC<ReactionAlternativesSidebarPr
             title={alt.hoverInfo}
             className={`w-full glass-panel transition-all text-left relative ${
               isActive ? 'border-2 border-primary bg-primary/10' : ''
-            } ${
-              isDisabled ? 'opacity-60 cursor-not-allowed' : 'hover:bg-surface-hover'
-            } ${
+            } ${isDisabled ? 'opacity-60 cursor-not-allowed' : 'hover:bg-surface-hover'} ${
               alt.status === 'computing' || isActive ? 'cursor-default' : ''
             }`}
           >
@@ -360,13 +398,15 @@ export const ReactionAlternativesSidebar: React.FC<ReactionAlternativesSidebarPr
                 ) : (
                   <BookOpen className="w-3.5 h-3.5 text-muted flex-shrink-0" />
                 )}
-                <span className={`text-sm font-medium truncate ${isDisabled ? 'text-muted' : alt.type === 'ai' ? 'text-accent' : 'text-primary'}`}>
+                <span
+                  className={`text-sm font-medium truncate ${
+                    isDisabled ? 'text-muted' : alt.type === 'ai' ? 'text-accent' : 'text-primary'
+                  }`}
+                >
                   {alt.name}
                 </span>
               </div>
-              {isActive && !isDisabled && (
-                <Check className="w-4 h-4 text-success flex-shrink-0" />
-              )}
+              {isActive && !isDisabled && <Check className="w-4 h-4 text-success flex-shrink-0" />}
               {alt.status === 'computing' && (
                 <Loader2 className="w-4 h-4 animate-spin text-warning flex-shrink-0" />
               )}
@@ -405,11 +445,12 @@ export const ReactionAlternativesSidebar: React.FC<ReactionAlternativesSidebarPr
       <div className="h-full flex flex-col sidebar-inner backdrop-blur-lg border-l-2 border-primary shadow-2xl">
         <div className="flex items-center justify-between p-4 border-b border-secondary">
           <div className="flex-1 min-w-0">
-            <h3 className="text-lg font-semibold text-primary truncate">
-              Synthesis Pathways
-            </h3>
+            <h3 className="text-lg font-semibold text-primary truncate">Synthesis Pathways</h3>
             <p className="text-sm text-secondary truncate" title={productMolecule}>
-              <div className="modal-subtitle" dangerouslySetInnerHTML={{__html: "for " + productMolecule}}></div>
+              <div
+                className="modal-subtitle"
+                dangerouslySetInnerHTML={{ __html: 'for ' + productMolecule }}
+              ></div>
             </p>
           </div>
           <button onClick={onClose} className="btn-icon ml-2">
@@ -417,7 +458,10 @@ export const ReactionAlternativesSidebar: React.FC<ReactionAlternativesSidebarPr
           </button>
         </div>
 
-        <div ref={scrollContainerRef} className="flex-1 overflow-y-auto custom-scrollbar p-4 space-y-4">
+        <div
+          ref={scrollContainerRef}
+          className="flex-1 overflow-y-auto custom-scrollbar p-4 space-y-4"
+        >
           <div className="pb-2 border-b border-secondary">
             <div className="flex gap-2">
               <button
@@ -462,9 +506,15 @@ export const ReactionAlternativesSidebar: React.FC<ReactionAlternativesSidebarPr
               onPageChange={setAiPage}
               totalPages={aiTotalPages}
             >
-              {paginatedAiMatches.map(alt => (
+              {paginatedAiMatches.map((alt) => (
                 <div key={alt.id} className="relative">
-                  <div className="absolute -left-1 -right-1 -top-1 -bottom-1 rounded-lg blur-sm" style={{background: 'linear-gradient(to right, rgba(147, 51, 234, 0.2), rgba(236, 72, 153, 0.2))'}}></div>
+                  <div
+                    className="absolute -left-1 -right-1 -top-1 -bottom-1 rounded-lg blur-sm"
+                    style={{
+                      background:
+                        'linear-gradient(to right, rgba(147, 51, 234, 0.2), rgba(236, 72, 153, 0.2))',
+                    }}
+                  ></div>
                   <div className="relative">
                     <AlternativeCard alt={alt} />
                   </div>
@@ -484,7 +534,7 @@ export const ReactionAlternativesSidebar: React.FC<ReactionAlternativesSidebarPr
               onPageChange={setExactPage}
               totalPages={exactTotalPages}
             >
-              {paginatedExactMatches.map(alt => (
+              {paginatedExactMatches.map((alt) => (
                 <AlternativeCard key={alt.id} alt={alt} />
               ))}
             </CollapsibleSection>
@@ -507,17 +557,20 @@ export const ReactionAlternativesSidebar: React.FC<ReactionAlternativesSidebarPr
                   Searching templates...
                 </div>
               )}
-              {paginatedTemplateMatches.map(alt => (
+              {paginatedTemplateMatches.map((alt) => (
                 <AlternativeCard key={alt.id} alt={alt} />
               ))}
             </CollapsibleSection>
           )}
 
-          {!hasExactMatches && !hasTemplateMatches && !isComputingTemplates && templatesSearched && (
-            <div className="text-sm text-tertiary italic p-4 text-center glass-panel">
-              No alternative pathways found
-            </div>
-          )}
+          {!hasExactMatches &&
+            !hasTemplateMatches &&
+            !isComputingTemplates &&
+            templatesSearched && (
+              <div className="text-sm text-tertiary italic p-4 text-center glass-panel">
+                No alternative pathways found
+              </div>
+            )}
 
           {showTemplateButton && (
             <div className="pt-2">

@@ -1,4 +1,4 @@
-@import "tailwindcss";
+@import 'tailwindcss';
 
 /* ========================================
    DESIGN SYSTEM - FLASK Copilot
@@ -569,9 +569,10 @@
   flex-shrink: 0;
   height: 100vh;
   overflow: hidden;
-  transition: width 0.3s cubic-bezier(0.4, 0, 0.2, 1),
-              transform 0.3s cubic-bezier(0.4, 0, 0.2, 1),
-              opacity 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  transition:
+    width 0.3s cubic-bezier(0.4, 0, 0.2, 1),
+    transform 0.3s cubic-bezier(0.4, 0, 0.2, 1),
+    opacity 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .sidebar.resizing {
@@ -726,7 +727,7 @@
 }
 
 .experiment-item {
-     padding-left: 2rem;
+  padding-left: 2rem;
 }
 
 .project-actions {
@@ -863,8 +864,9 @@
 .graph-node {
   position: absolute;
   animation: fadeInScale 0.5s ease-out;
-  transition: left 0.6s cubic-bezier(0.34, 1.56, 0.64, 1),
-              top 0.6s cubic-bezier(0.34, 1.56, 0.64, 1);
+  transition:
+    left 0.6s cubic-bezier(0.34, 1.56, 0.64, 1),
+    top 0.6s cubic-bezier(0.34, 1.56, 0.64, 1);
 }
 
 .node-card {
@@ -888,8 +890,9 @@
 .graph-reaction {
   position: absolute;
   animation: fadeInScale 0.5s ease-out;
-  transition: left 0.6s cubic-bezier(0.34, 1.56, 0.64, 1),
-              top 0.6s cubic-bezier(0.34, 1.56, 0.64, 1);
+  transition:
+    left 0.6s cubic-bezier(0.34, 1.56, 0.64, 1),
+    top 0.6s cubic-bezier(0.34, 1.56, 0.64, 1);
 }
 
 .reaction-button {
@@ -969,11 +972,11 @@
 
 /* Edge labels in graph */
 .edge-normal {
-  stroke: #8B5CF6;
+  stroke: #8b5cf6;
 }
 
 .edge-computing {
-  stroke: #F59E0B;
+  stroke: #f59e0b;
 }
 
 .edge-highlighted {
@@ -1004,7 +1007,6 @@
   background: #a855f7;
   color: white;
 }
-
 
 .graph-controls {
   position: absolute;
@@ -2004,7 +2006,7 @@
   background: rgba(255, 255, 255, 0.2);
 }
 
-.tool-list-item input[type="checkbox"] {
+.tool-list-item input[type='checkbox'] {
   width: 1rem;
   height: 1rem;
   accent-color: #a855f7;
