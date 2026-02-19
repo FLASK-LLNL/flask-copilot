@@ -6,7 +6,6 @@ from typing import Any, Dict, Optional, Literal, Tuple
 from dataclasses import dataclass, asdict
 
 from charge.clients.autogen import AutoGenAgent
-import flask_mcp.retrosynthesis.AiZynthTools as aizynth_funcs
 from flask_mcp.chemistry import SMILES_utils
 from flask_mcp.lmo.molecular_property_utils import get_density
 from lc_conductor import CallbackLogger, RunSettings
