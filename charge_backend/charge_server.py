@@ -62,7 +62,7 @@ parser.add_argument(
 )
 
 parser.add_argument(
-    "--max_iterations",
+    "--max_retries",
     type=int,
     default=5,
 )

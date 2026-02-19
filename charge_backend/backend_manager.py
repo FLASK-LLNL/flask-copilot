@@ -170,14 +170,17 @@ class FlaskActionManager(ActionManager):
         diversity_penalty = customization.get("diversityPenalty", 0.0)
         exploration_rate = customization.get("explorationRate", 0.5)
         additional_constraints = customization.get("additionalConstraints", [])
+        number_of_molecules = customization.get("numberOfMolecules", 10)
+        num_top_candidates = customization.get("numTopCandidates", 3)
+        depth = customization.get("depth", 3)
 
         run_func = partial(
             generate_lead_molecule,
             data["smiles"],
             self.experiment,
             self.args.json_file,
-            self.args.max_iterations,
-            data.get("depth", 3),
+            self.args.max_retries,
+            depth,
             self.task_manager.available_tools or list_server_urls(),
             self.task_manager.websocket,
             self.run_settings,
@@ -191,6 +194,8 @@ class FlaskActionManager(ActionManager):
             diversity_penalty,
             exploration_rate,
             additional_constraints,
+            number_of_molecules,
+            num_top_candidates,
         )
         await self.task_manager.run_task(run_func())
 
