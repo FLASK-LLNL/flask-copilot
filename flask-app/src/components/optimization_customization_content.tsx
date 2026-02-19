@@ -14,6 +14,9 @@ export const DEFAULT_CUSTOMIZATION: OptimizationCustomization = {
   diversityPenalty: 0.0,
   explorationRate: 0.5,
   additionalConstraints: [],
+  numberOfMolecules: 10,
+  numTopCandidates: 3,
+  depth: 3,
 };
 
 export const CONSTRAINT_OPTIONS: ConstraintOption[] = [
@@ -237,6 +240,123 @@ export const OptimizationCustomizationContent: React.FC<OptimizationCustomizatio
             <p className="text-xs text-tertiary mt-1">
               Balance between exploiting good candidates (low) vs exploring new regions of chemical
               space (high).
+            </p>
+          </div>
+
+          {/* Number of Molecules */}
+          <div className="form-group">
+            <label className="form-label">
+              Number of Molecule Guesses per Iteration
+              <span className="text-sm text-tertiary ml-2">
+                (1 - 50)
+              </span>
+            </label>
+            <div className="flex items-center gap-4">
+              <input
+                type="range"
+                min="1"
+                max="50"
+                step="1"
+                value={customization.numberOfMolecules ?? 10}
+                onChange={(e) => onCustomizationChange({
+                  ...customization,
+                  numberOfMolecules: parseInt(e.target.value)
+                })}
+                className="flex-1"
+              />
+              <input
+                type="number"
+                min="1"
+                max="50"
+                step="1"
+                value={customization.numberOfMolecules ?? 10}
+                onChange={(e) => onCustomizationChange({
+                  ...customization,
+                  numberOfMolecules: parseInt(e.target.value)
+                })}
+                className="form-input w-20"
+              />
+            </div>
+            <p className="text-xs text-tertiary mt-1">
+              Number of candidate molecules to generate per iteration. More candidates increase diversity but require more computation.
+            </p>
+          </div>
+
+          {/* Number of Top Candidates */}
+          <div className="form-group">
+            <label className="form-label">
+              Number of Valid Molecules per Depth Level
+              <span className="text-sm text-tertiary ml-2">
+                (1 - 10)
+              </span>
+            </label>
+            <div className="flex items-center gap-4">
+              <input
+                type="range"
+                min="1"
+                max="10"
+                step="1"
+                value={customization.numTopCandidates ?? 3}
+                onChange={(e) => onCustomizationChange({
+                  ...customization,
+                  numTopCandidates: parseInt(e.target.value)
+                })}
+                className="flex-1"
+              />
+              <input
+                type="number"
+                min="1"
+                max="10"
+                step="1"
+                value={customization.numTopCandidates ?? 3}
+                onChange={(e) => onCustomizationChange({
+                  ...customization,
+                  numTopCandidates: parseInt(e.target.value)
+                })}
+                className="form-input w-20"
+              />
+            </div>
+            <p className="text-xs text-tertiary mt-1">
+              Number of valid new molecules to find before moving to the next depth level. Higher values allow more thorough exploration of each generation.
+            </p>
+          </div>
+
+          {/* Depth */}
+          <div className="form-group">
+            <label className="form-label">
+              Depth (Number of Generations)
+              <span className="text-sm text-tertiary ml-2">
+                (1 - 10)
+              </span>
+            </label>
+            <div className="flex items-center gap-4">
+              <input
+                type="range"
+                min="1"
+                max="10"
+                step="1"
+                value={customization.depth ?? 3}
+                onChange={(e) => onCustomizationChange({
+                  ...customization,
+                  depth: parseInt(e.target.value)
+                })}
+                className="flex-1"
+              />
+              <input
+                type="number"
+                min="1"
+                max="10"
+                step="1"
+                value={customization.depth ?? 3}
+                onChange={(e) => onCustomizationChange({
+                  ...customization,
+                  depth: parseInt(e.target.value)
+                })}
+                className="form-input w-20"
+              />
+            </div>
+            <p className="text-xs text-tertiary mt-1">
+              Number of generations/levels to run. Each generation builds on the best molecule from the previous generation.
             </p>
           </div>
 
