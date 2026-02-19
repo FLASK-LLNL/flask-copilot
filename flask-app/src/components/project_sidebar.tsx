@@ -484,7 +484,6 @@ export const ProjectSidebar: React.FC<ProjectSidebarProps> = ({
                   ) : (
                     <>
                       <button
-                        disabled={isComputing}
                         onClick={() => handleProjectClick(project)}
                         className={`project-button ${
                           selection.projectId === project.id ? 'project-button-active' : ''
@@ -569,7 +568,6 @@ export const ProjectSidebar: React.FC<ProjectSidebarProps> = ({
                         ) : (
                           <>
                             <button
-                              disabled={isComputing}
                               onClick={() => handleExperimentClick(project, experiment)}
                               className={`experiment-button ${
                                 selection.experimentId === experiment.id ? 'experiment-button-active' : ''
@@ -616,7 +614,6 @@ export const ProjectSidebar: React.FC<ProjectSidebarProps> = ({
                     {/* Create New Experiment (at bottom) */}
                     {creatingExperimentFor !== project.id ? (
                       <button
-                        disabled={isComputing}
                         onClick={() => handleCreateExperiment(project.id)}
                         className="experiment-button group w-full"
                       >

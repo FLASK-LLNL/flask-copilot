@@ -1,6 +1,7 @@
 import React from 'react';
 import { User, Plus, Trash2, Edit2, Loader2, Settings, Wrench } from 'lucide-react';
-import { OrchestratorSettings, ToolServer } from '../types';
+import { FlaskOrchestratorSettings, ToolServer } from '../types';
+type OrchestratorSettings = FlaskOrchestratorSettings;
 import { HTTP_SERVER } from '../config';
 
 interface SettingsButtonProps {

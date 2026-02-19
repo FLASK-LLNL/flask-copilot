@@ -64,6 +64,7 @@ class ComputationSession:
     is_cancelled: bool = False
     sent_nodes: list = field(default_factory=list)
     sent_edges: list = field(default_factory=list)
+    sent_messages: list = field(default_factory=list)  # reasoning/sidebar messages
     pending_nodes: list = field(default_factory=list)
     pending_edges: list = field(default_factory=list)
     current_index: int = 0
@@ -79,13 +80,38 @@ class ComputationSession:
         ``ws_connected = False`` so the computation can continue headless.
         Uses a lock to prevent interleaved sends from background task and
         WS read loop (e.g. during replay).
+
+        Every outgoing message is tagged with ``experimentId`` (when known)
+        so the frontend can route messages to the correct experiment and
+        ignore messages arriving for background experiments.
+
+        Reasoning messages (type=response) are ALWAYS tracked regardless
+        of ws_connected, so they survive browser disconnects and get
+        persisted to sidebar_state by save_session_to_db.
         """
+        # Track reasoning messages unconditionally (even when headless)
+        if payload.get("type") == "response" and payload.get("message"):
+            import time
+            msg = payload["message"]
+            if isinstance(msg, dict):
+                tracked_msg = {
+                    "id": int(time.time() * 1000) + len(self.sent_messages),
+                    "timestamp": datetime.now().isoformat(),
+                    **msg,
+                }
+                if "smiles" not in tracked_msg:
+                    tracked_msg["smiles"] = None
+                self.sent_messages.append(tracked_msg)
+
         if not self.ws_connected or self.websocket is None:
             return
         async with self._send_lock:
             if not self.ws_connected or self.websocket is None:
                 return
             try:
+                # Tag every message with the experiment it belongs to
+                if self.experiment_id and "experimentId" not in payload:
+                    payload = {**payload, "experimentId": self.experiment_id}
                 await self.websocket.send_json(payload)
             except (WebSocketDisconnect, RuntimeError, Exception) as exc:
                 logger.info(
@@ -224,11 +250,40 @@ async def save_session_to_db(session: ComputationSession) -> None:
             experiment.is_running = not session.is_complete
             experiment.last_modified = datetime.now(tz=None)
 
+            # Persist reasoning/sidebar messages so they survive browser
+            # disconnects and are visible when the user reopens the
+            # experiment later.  The server tracks every `response`
+            # message, so its list is authoritative.
+            if session.sent_messages:
+                experiment.sidebar_state = {
+                    "messages": session.sent_messages,
+                    "sourceFilterOpen": False,
+                    "visibleSources": {
+                        s
+                        for m in session.sent_messages
+                        if (s := m.get("source"))
+                    },
+                }
+                # Convert visible sources set to dict (frontend expects {source: bool})
+                experiment.sidebar_state["visibleSources"] = {
+                    src: True
+                    for src in experiment.sidebar_state["visibleSources"]
+                }
+
             # Ensure the serverSessionId is always stored in graph_state
             # so that a reconnecting browser can resume the computation.
+            # Also mirror sidebarMessages into graph_state so that both
+            # the session load path (_experiment_to_state) and the project
+            # load path (experiment_to_dict) can find the data.
             gs = experiment.graph_state or {}
+            gs_dirty = False
             if gs.get("serverSessionId") != session.session_id:
                 gs["serverSessionId"] = session.session_id
+                gs_dirty = True
+            if session.sent_messages:
+                gs["sidebarMessages"] = session.sent_messages
+                gs_dirty = True
+            if gs_dirty:
                 experiment.graph_state = gs
 
             await db.commit()
@@ -874,6 +929,9 @@ async def websocket_endpoint(websocket: WebSocket):
     molecule_format = "brand"
     username = "nobody"
     current_session_id = None
+    # Track ALL sessions spawned/resumed by this WS connection so we can
+    # persist every one of them when the browser disconnects.
+    ws_session_ids: set[str] = set()
     
     if "x-forwarded-user" in websocket.headers:
         username = websocket.headers["x-forwarded-user"]
@@ -890,25 +948,33 @@ async def websocket_endpoint(websocket: WebSocket):
             if data["action"] == "resume_session":
                 session_id = data.get("sessionId")
                 if session_id and session_id in active_sessions:
+                    # Detach previous session if switching to a different one
+                    if current_session_id and current_session_id != session_id and current_session_id in active_sessions:
+                        active_sessions[current_session_id].detach_ws()
+                        logger.info(f"Detached session {current_session_id} (switching to resumed session {session_id})")
+
                     session = active_sessions[session_id]
                     current_session_id = session_id
+                    ws_session_ids.add(session_id)
 
                     if session.is_cancelled:
                         await websocket.send_json({
                             "type": "session_status",
                             "sessionId": session_id,
+                            "experimentId": session.experiment_id,
                             "status": "cancelled",
                         })
                     elif session.is_complete:
                         # Computation already finished – replay the full
                         # result set so the new browser renders everything.
                         session.attach_ws(websocket)
+                        exp_id = session.experiment_id
                         async with session._send_lock:
                             for node in list(session.sent_nodes):
-                                await websocket.send_json({"type": "node", "node": node})
+                                await websocket.send_json({"type": "node", "node": node, "experimentId": exp_id})
                             for edge in list(session.sent_edges):
-                                await websocket.send_json({"type": "edge", "edge": edge})
-                            await websocket.send_json({"type": "complete"})
+                                await websocket.send_json({"type": "edge", "edge": edge, "experimentId": exp_id})
+                            await websocket.send_json({"type": "complete", "experimentId": exp_id})
                         logger.info(
                             f"Replayed completed session {session_id} "
                             f"({len(session.sent_nodes)} nodes)"
@@ -919,14 +985,16 @@ async def websocket_endpoint(websocket: WebSocket):
                         # this browser, and replay everything accumulated
                         # so far (the frontend deduplicates by id).
                         session.attach_ws(websocket)
+                        exp_id = session.experiment_id
                         async with session._send_lock:
                             for node in list(session.sent_nodes):
-                                await websocket.send_json({"type": "node", "node": node})
+                                await websocket.send_json({"type": "node", "node": node, "experimentId": exp_id})
                             for edge in list(session.sent_edges):
-                                await websocket.send_json({"type": "edge", "edge": edge})
+                                await websocket.send_json({"type": "edge", "edge": edge, "experimentId": exp_id})
                         await websocket.send_json({
                             "type": "session_resumed",
                             "sessionId": session_id,
+                            "experimentId": session.experiment_id,
                             "sentNodes": len(session.sent_nodes),
                             "isComplete": False,
                         })
@@ -955,6 +1023,13 @@ async def websocket_endpoint(websocket: WebSocket):
                 molecule_format = data["runSettings"]["moleculeName"]
 
             if data["action"] == "compute":
+                # Detach previous session so it continues headless
+                # while the new computation streams to the frontend.
+                if current_session_id and current_session_id in active_sessions:
+                    old_session = active_sessions[current_session_id]
+                    old_session.detach_ws()
+                    logger.info(f"Detached session {current_session_id} (starting new computation)")
+
                 # Create new session
                 session_id = data.get("sessionId") or str(uuid.uuid4())
                 depth = data.get("depth", 10 if data["problemType"] == "optimization" else 3)
@@ -970,11 +1045,13 @@ async def websocket_endpoint(websocket: WebSocket):
                 )
                 active_sessions[session_id] = session
                 current_session_id = session_id
+                ws_session_ids.add(session_id)
                 
                 # Send session ID to client
                 await websocket.send_json({
                     "type": "session_started",
                     "sessionId": session_id,
+                    "experimentId": data.get("experimentId"),
                 })
                 
                 logger.info(f"Started new session {session_id} for {data['problemType']}")
@@ -1068,9 +1145,19 @@ async def websocket_endpoint(websocket: WebSocket):
             elif data["action"] == "ui-update-orchestrator-settings":
                 molecule_format = data["moleculeName"]
             elif data["action"] == "stop":
+                # Stop supports targeting a specific session by sessionId,
+                # falling back to current_session_id for backwards compat.
+                target = data.get("sessionId") or current_session_id
+                if target and target in active_sessions:
+                    active_sessions[target].is_cancelled = True
+                    logger.info(f"Session {target} stopped by user")
+            elif data["action"] == "detach":
+                # Client is switching to a non-computing experiment.
+                # Detach the current session so it continues headless.
                 if current_session_id and current_session_id in active_sessions:
-                    active_sessions[current_session_id].is_cancelled = True
-                    logger.info(f"Session {current_session_id} stopped by user")
+                    active_sessions[current_session_id].detach_ws()
+                    logger.info(f"Detached session {current_session_id} by client request")
+                current_session_id = None
             elif data["action"] == "reset":
                 if current_session_id and current_session_id in active_sessions:
                     active_sessions[current_session_id].is_cancelled = True
@@ -1080,24 +1167,28 @@ async def websocket_endpoint(websocket: WebSocket):
             else:
                 print("WARN: Unhandled message:", data)
     except WebSocketDisconnect:
-        # Browser disconnected.  Detach the websocket from the session so
-        # the background computation task keeps running headless.  It will
-        # save progress to the DB periodically and on completion.
-        if current_session_id and current_session_id in active_sessions:
-            sess = active_sessions[current_session_id]
+        # Browser disconnected.  Detach ALL sessions owned by this WS
+        # connection so background computation keeps running headless,
+        # and persist every one of them to the DB immediately so a new
+        # browser can load the latest state.
+        saved_count = 0
+        for sid in ws_session_ids:
+            sess = active_sessions.get(sid)
+            if sess is None:
+                continue
             task_running = sess.task is not None and not sess.task.done()
             logger.info(
-                f"WebSocket disconnected for session {current_session_id} "
+                f"WebSocket disconnected: saving session {sid} "
                 f"({len(sess.sent_nodes)} nodes, task_running={task_running})"
             )
             sess.detach_ws()
-            # Immediately persist current state so a new browser can load it
             try:
                 await save_session_to_db(sess)
+                saved_count += 1
             except Exception as exc:
-                logger.error(f"Failed to save session on disconnect: {exc}")
-        else:
-            logger.info("WebSocket disconnected (no active session)")
+                logger.error(f"Failed to save session {sid} on disconnect: {exc}")
+        if saved_count == 0:
+            logger.info("WebSocket disconnected (no active sessions to save)")
 
 
 if __name__ == "__main__":

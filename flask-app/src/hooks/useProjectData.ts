@@ -285,9 +285,20 @@ class DatabaseDataSource implements ProjectDataSource {
             await this.localStorageSource.saveProjects(projects);
           }
           return experiment;
+        } else {
+          // HTTP error from the server (e.g. 500 from concurrent DB write).
+          // Do NOT fall back to localStorage: the experiment would appear locally
+          // but be invisible to the DB, causing data loss on next page load.
+          const text = await response.text().catch(() => response.status.toString());
+          throw new Error(`Failed to create experiment in database (HTTP ${response.status}): ${text}`);
         }
       } catch (error) {
-        console.warn('Database unavailable, using localStorage:', error);
+        if (error instanceof Error && error.message.startsWith('Failed to create experiment')) {
+          // Re-throw DB HTTP errors so the caller can surface them to the user.
+          throw error;
+        }
+        // Network error (DB unreachable) – fall back to localStorage.
+        console.warn('Database unavailable, using localStorage for experiment creation:', error);
         this.useLocalStorageFallback = true;
       }
     }
@@ -388,8 +399,15 @@ export const useProjectData = () => {
   // Use database-backed data source with localStorage fallback
   const dataSource = useRef(new DatabaseDataSource()).current;
 
+  // Track whether the initial load from the database has completed.
+  // Subsequent 2-second polls should NOT flip the loading flag to avoid
+  // the sidebar flickering a spinner every cycle.
+  const initialLoadDoneRef = useRef(false);
+
   const loadProjects = async () => {
-    setLoading(true);
+    if (!initialLoadDoneRef.current) {
+      setLoading(true);
+    }
     try {
       const data = await dataSource.loadProjects();
 
@@ -403,7 +421,10 @@ export const useProjectData = () => {
     } catch (error) {
       console.error('Error loading projects:', error);
     } finally {
-      setLoading(false);
+      if (!initialLoadDoneRef.current) {
+        setLoading(false);
+        initialLoadDoneRef.current = true;
+      }
     }
   };
 
