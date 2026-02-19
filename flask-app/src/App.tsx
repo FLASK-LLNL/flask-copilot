@@ -31,10 +31,10 @@ import 'react-syntax-highlighter/dist/esm/styles/prism';
 
 import { WS_SERVER, VERSION } from './config';
 import { DEFAULT_CUSTOM_SYSTEM_PROMPT, PROPERTY_NAMES } from './constants';
-import { TreeNode, Edge, ContextMenuState, SidebarMessage, Tool, WebSocketMessageToServer, WebSocketMessage, SelectableTool, Experiment, OrchestratorSettings, OptimizationCustomization, ReactionAlternative } from './types';
+import { TreeNode, Edge, ContextMenuState, SidebarMessage, Tool, WebSocketMessageToServer, WebSocketMessage, SelectableTool, Experiment, FlaskOrchestratorSettings as OrchestratorSettings, OptimizationCustomization, ReactionAlternative } from './types';
 
 import { loadRDKit } from './components/molecule';
-import { ReasoningSidebar, useSidebarState } from './components/sidebar';
+import { ReasoningSidebar, useSidebarState } from 'lc-conductor';
 import { MoleculeGraph, useGraphState } from './components/graph';
 import { ProjectSidebar, useProjectSidebar, useProjectManagement } from './components/project_sidebar';
 import { SettingsButton, BACKEND_OPTIONS } from './components/settings_button';
@@ -46,7 +46,7 @@ import { copyToClipboard } from './utils';
 import './animations.css';
 import { MetricsDashboard, useMetricsDashboardState } from './components/metrics';
 import { useProjectData } from './hooks/useProjectData';
-import { MarkdownText } from './components/markdown';
+import { MarkdownText } from 'lc-conductor';
 import { ReactionAlternativesSidebar } from './components/reaction_alternatives';
 import { useSessionPersistence, useAutoSave, SessionState } from './hooks/useSessionPersistence';
 
@@ -67,6 +67,9 @@ const ChemistryTool: React.FC = () => {
   const [autoZoom, setAutoZoom] = useState<boolean>(true);
   const [treeNodes, setTreeNodes] = useState<TreeNode[]>([]);
   const [edges, setEdges] = useState<Edge[]>([]);
+
+  // Track which experiments have running computations: experimentId → serverSessionId
+  const computingExperimentsRef = useRef<Map<string, string>>(new Map());
   const [contextMenu, setContextMenu] = useState<ContextMenuState>({node: null, isReaction: false, x: 0, y: 0});
   const [customQueryModal, setCustomQueryModal] = useState<TreeNode | null>(null);
   const [customQueryText, setCustomQueryText] = useState<string>('');
@@ -131,6 +134,7 @@ const ChemistryTool: React.FC = () => {
   const saveCheckpointRef = useRef<() => void>(() => {});
   const saveStateToExperimentRef = useRef<() => boolean>(() => false);
   const restoredSessionRef = useRef<SessionState | null>(null);
+  const sessionLoadCompleteRef = useRef(false);
   const isExperimentCompleteRef = useRef(false);
   const autoCheckpointEnabledRef = useRef(true);
 
@@ -302,7 +306,30 @@ const ChemistryTool: React.FC = () => {
     } else {
       console.warn('Project not found in projectsRef:', projectId, '(projects loaded:', projectData.projectsRef.current.length, ')');
     }
-    return;
+
+    // Multi-experiment: check if the experiment we're switching to has a
+    // running session.  If so, resume it; otherwise, detach the current
+    // server session so background computation continues headless.
+    if (experimentId) {
+      const sessionId = computingExperimentsRef.current.get(experimentId);
+      if (sessionId && wsRef.current?.readyState === WebSocket.OPEN) {
+        // Switching to a running experiment – resume the session stream
+        setIsComputing(true);
+        wsRef.current.send(JSON.stringify({
+          action: 'resume_session',
+          sessionId,
+        }));
+        console.log('Resuming session for experiment:', experimentId, sessionId);
+        return;
+      }
+    }
+
+    // Switching to a non-computing experiment – detach the current
+    // session on the server so it continues headless without streaming
+    // here.  This is a no-op if no session is active.
+    if (wsRef.current?.readyState === WebSocket.OPEN) {
+      wsRef.current.send(JSON.stringify({ action: 'detach' }));
+    }
   }
 
   const loadStateFromCurrentExperiment = (): void => {
@@ -457,11 +484,13 @@ const ChemistryTool: React.FC = () => {
     if (reconnectingRef.current) return; // Prevent overlapping reconnects
     reconnectingRef.current = true;
 
+    // Close any existing socket (may have been orphaned by StrictMode cleanup)
     if (wsRef.current &&
         (wsRef.current.readyState === WebSocket.OPEN ||
          wsRef.current.readyState === WebSocket.CONNECTING)) {
       wsRef.current.close();
     }
+    wsRef.current = null;  // Ensure old callbacks become no-ops
 
     setWsReconnecting(true);
 
@@ -482,10 +511,13 @@ const ChemistryTool: React.FC = () => {
         console.log('Applying restored session after reset');
         applyRestoredSession(restoredSessionRef.current);
         restoredSessionRef.current = null; // Clear after first apply
-      } else {
-        // Reconnection or no saved session: load from current sidebar selection
+      } else if (sessionLoadCompleteRef.current) {
+        // Session load finished but nothing to restore (reconnect case,
+        // or session was too old).  Load from current sidebar selection.
         loadStateFromCurrentExperiment();
       }
+      // else: initial connect with session load still in flight.
+      // The loadSavedSession callback will apply once it resolves.
 
       socket.send(JSON.stringify({ action: 'list-tools' }));
       socket.send(JSON.stringify({ action: 'get-username' }));
@@ -496,7 +528,16 @@ const ChemistryTool: React.FC = () => {
 
       const data: WebSocketMessage = JSON.parse(event.data);
 
+      // Multi-experiment routing: determine if this message belongs to
+      // the currently-selected experiment.  Messages without an
+      // experimentId (e.g. tool lists, username) are always applied.
+      const messageExperimentId = data.experimentId;
+      const currentExperimentId = projectSidebar.selectionRef.current.experimentId;
+      const isForCurrentExperiment =
+        !messageExperimentId || messageExperimentId === currentExperimentId;
+
       if (data.type === 'node') {
+        if (!isForCurrentExperiment) return; // Ignore background experiment nodes
         // Prevent duplicate nodes (can happen during session resume)
         setTreeNodes(prev => {
           const existingNode = prev.find(n => n.id === data.node!.id);
@@ -515,12 +556,25 @@ const ChemistryTool: React.FC = () => {
         }
       } else if (data.type === 'stopped') {
         // Handle explicit stop from backend
-        console.log('Computation stopped by backend');
+        console.log('Computation stopped by backend', messageExperimentId);
+        // Clean up computing map
+        if (messageExperimentId) {
+          computingExperimentsRef.current.delete(messageExperimentId);
+          // Find project containing this experiment and update isRunning
+          const project = projectData.projectsRef.current.find(p =>
+            p.experiments.some(e => e.id === messageExperimentId)
+          );
+          if (project) {
+            projectData.setExperimentRunning(project.id, messageExperimentId, false);
+          }
+        }
+        if (!isForCurrentExperiment) return;
         setIsComputing(false);
         setIsComputingTemplates(false);
         unhighlightNodes();
         saveStateToExperiment();
       } else if (data.type === 'node_update') {
+        if (!isForCurrentExperiment) return;
         const { id, ...restData } = data.node!;
 
         if (restData) {
@@ -533,6 +587,7 @@ const ChemistryTool: React.FC = () => {
           n.id === data.node!.id ? { ...n, ...restData } : n
         ));
       } else if (data.type === 'node_delete') {
+        if (!isForCurrentExperiment) return;
         setTreeNodes(prev => {
           const descendants = findAllDescendants(data.node!.id, prev);
           return prev.filter(n => !descendants.has(n.id) && n.id !== data.node!.id);
@@ -541,6 +596,7 @@ const ChemistryTool: React.FC = () => {
           e.fromNode !== data.node!.id && e.toNode !== data.node!.id
         ));
       } else if (data.type === 'subtree_update') {
+        if (!isForCurrentExperiment) return;
         const withNode = data.withNode || false;
         const { id, ...restData } = data.node!;
         setTreeNodes(prev => {
@@ -552,6 +608,7 @@ const ChemistryTool: React.FC = () => {
           );
         });
       } else if (data.type === 'edge') {
+        if (!isForCurrentExperiment) return;
         // Prevent duplicate edges (can happen during session resume)
         setEdges(prev => {
           const existingEdge = prev.find(e => e.id === data.edge!.id);
@@ -562,11 +619,13 @@ const ChemistryTool: React.FC = () => {
           return [...prev, data.edge!];
         });
       } else if (data.type === 'edge_update') {
+        if (!isForCurrentExperiment) return;
         const { id, ...restData } = data.edge!;
         setEdges(prev => prev.map(e =>
           e.id === data.edge!.id ? { ...e, ...restData } : e
          ));
       } else if (data.type === 'subtree_delete') {
+        if (!isForCurrentExperiment) return;
         let descendantsSet: Set<string>;
         setTreeNodes(prev => {
           descendantsSet = findAllDescendants(data.node!.id, prev);
@@ -576,6 +635,21 @@ const ChemistryTool: React.FC = () => {
           !descendantsSet!.has(e.fromNode) && !descendantsSet!.has(e.toNode)
         ));
       } else if (data.type === 'complete') {
+        // Clean up computing map regardless of which experiment completed
+        if (messageExperimentId) {
+          computingExperimentsRef.current.delete(messageExperimentId);
+          // Update isRunning flag for background experiment
+          const project = projectData.projectsRef.current.find(p =>
+            p.experiments.some(e => e.id === messageExperimentId)
+          );
+          if (project) {
+            projectData.setExperimentRunning(project.id, messageExperimentId, false);
+          }
+        }
+        if (!isForCurrentExperiment) {
+          console.log('Background experiment completed:', messageExperimentId);
+          return; // Server saves state on completion; no UI update needed
+        }
         setIsComputing(false);
         isExperimentCompleteRef.current = true;  // Mark experiment as complete to stop checkpointing
         unhighlightNodes();
@@ -593,14 +667,26 @@ const ChemistryTool: React.FC = () => {
         sessionPersistence.setSessionWasComputing(false);
       } else if (data.type === 'session_started') {
         // Store the server session ID for resume capability
-        const serverSessionId = (data as any).sessionId;
+        const serverSessionId = data.sessionId || (data as any).sessionId;
         console.log('Computation session started:', serverSessionId);
+        // Track in computing experiments map — prefer experimentId from
+        // the server message (includes it in the response), fall back to
+        // whatever the user currently has selected.
+        const expId = messageExperimentId || currentExperimentId;
+        if (expId && serverSessionId) {
+          computingExperimentsRef.current.set(expId, serverSessionId);
+        }
         sessionPersistence.setServerSessionId(serverSessionId);
         sessionPersistence.setSessionWasComputing(true);
       } else if (data.type === 'session_resumed') {
         // Successfully resumed a session
-        const serverSessionId = (data as any).sessionId;
+        const serverSessionId = data.sessionId || (data as any).sessionId;
         console.log('Computation session resumed:', serverSessionId);
+        // Track in computing experiments map
+        const expId = messageExperimentId || currentExperimentId;
+        if (expId && serverSessionId) {
+          computingExperimentsRef.current.set(expId, serverSessionId);
+        }
         sessionPersistence.setServerSessionId(serverSessionId);
         sessionPersistence.setSessionWasComputing(true);
         setIsComputing(true);
@@ -610,6 +696,10 @@ const ChemistryTool: React.FC = () => {
         console.log('Session status:', status);
         if (status === 'complete' || status === 'cancelled') {
           setIsComputing(false);
+          // Clean up computing map
+          if (messageExperimentId) {
+            computingExperimentsRef.current.delete(messageExperimentId);
+          }
           sessionPersistence.setServerSessionId(null);
           sessionPersistence.setSessionWasComputing(false);
         }
@@ -617,10 +707,19 @@ const ChemistryTool: React.FC = () => {
         // Server couldn't find the session to resume
         console.log('Session not found, cannot resume');
         setIsComputing(false);
+        // Clean up computing map for this experiment
+        if (messageExperimentId) {
+          computingExperimentsRef.current.delete(messageExperimentId);
+        }
         sessionPersistence.setServerSessionId(null);
         sessionPersistence.setSessionWasComputing(false);
         sessionPersistence.setPendingResume(null);
       } else if (data.type === 'response') {
+        // Only add reasoning messages for the currently-viewed experiment.
+        // Background experiment messages are tracked server-side and
+        // persisted to sidebar_state, so they appear when the user
+        // switches to that experiment.
+        if (!isForCurrentExperiment) return;
         addSidebarMessage(data.message!);
         console.log('Server response:', data.message);
       } else if (data.type === 'available-tools-response') {
@@ -671,6 +770,8 @@ const ChemistryTool: React.FC = () => {
         setAvailableTools([]);
         setSelectedTools([]);
         setAvailableToolsMap([]);
+        // All sessions lose their WS on error; server continues headless
+        computingExperimentsRef.current.clear();
       }
     };
 
@@ -687,6 +788,8 @@ const ChemistryTool: React.FC = () => {
         setAvailableTools([]);
         setSelectedTools([]);
         setAvailableToolsMap([]);
+        // All sessions lose their WS on close; server continues headless
+        computingExperimentsRef.current.clear();
       }
     };
   };
@@ -696,6 +799,10 @@ const ChemistryTool: React.FC = () => {
     reconnectWS();
 
     return () => {
+      // Clear the guard so a StrictMode re-mount can reconnect.
+      // The onclose handler only fires asynchronously, so the guard would
+      // otherwise still be set when the second mount calls reconnectWS().
+      reconnectingRef.current = false;
       if (wsRef.current) {
         wsRef.current.close();
         wsRef.current = null;
@@ -816,7 +923,13 @@ const ChemistryTool: React.FC = () => {
       alert('WebSocket not connected');
       return;
     }
-    wsRef.current.send(JSON.stringify({ action: 'stop' }));
+    // Include the sessionId so the server can stop the correct session
+    // (important when multiple experiments are running concurrently).
+    const experimentId = projectSidebar.selectionRef.current.experimentId;
+    const sessionId = experimentId
+      ? computingExperimentsRef.current.get(experimentId)
+      : undefined;
+    wsRef.current.send(JSON.stringify({ action: 'stop', sessionId }));
   };
 
   useEffect(() => {
@@ -864,8 +977,11 @@ const ChemistryTool: React.FC = () => {
     let nodesToSave = treeNodesRef.current;
     let edgesToSave = edgesRef.current;
     
-    // When computing, only save complete levels to avoid duplicate molecules on restore
-    if (isComputing && nodesToSave.length > 0) {
+    // When computing, only save complete levels to avoid duplicate molecules on restore.
+    // Skip filtering when the experiment has completed — the `complete` handler sets
+    // isExperimentCompleteRef synchronously, but React hasn't flushed setIsComputing(false)
+    // yet, so `isComputing` is still true in this closure.
+    if (isComputing && !isExperimentCompleteRef.current && nodesToSave.length > 0) {
       // Find the maximum level
       const maxLevel = Math.max(...nodesToSave.map(n => n.level));
       
@@ -1016,6 +1132,8 @@ const ChemistryTool: React.FC = () => {
     
     const loadSavedSession = async () => {
       const savedState = await sessionPersistence.loadSession();
+      sessionLoadCompleteRef.current = true;
+
       if (savedState) {
         console.log('Session loaded from database, storing for restore after WebSocket connects:', savedState);
         
@@ -1027,18 +1145,40 @@ const ChemistryTool: React.FC = () => {
         if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
           console.log('WebSocket already connected, applying restored session now');
           applyRestoredSession(savedState);
+          restoredSessionRef.current = null;
         }
         // Otherwise, it will be applied in the onopen handler
+      } else {
+        // No saved session.  If the WS already opened (won the race) and
+        // skipped loadStateFromCurrentExperiment because the load was
+        // pending, do it now.
+        if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+          loadStateFromCurrentExperiment();
+        }
       }
     };
     
     loadSavedSession();
+
+    return () => {
+      // Reset guard so StrictMode re-mount can load the session again
+      sessionLoadAttemptedRef.current = false;
+      sessionLoadCompleteRef.current = false;
+      restoredSessionRef.current = null;
+    };
   }, []); // Empty dependency array - only run once on mount
 
-  // Handle computation resume after WebSocket connects
-  // Only attempt resume if we have a valid server session ID from an interrupted computation
+  // Handle computation resume after WebSocket connects.
+  // Only attempt resume once we have both a live WS connection AND the
+  // session data from the DB (sessionLoaded).  Without the sessionLoaded
+  // guard, the effect may fire before loadSession() resolves, see no
+  // pending resume, and prematurely mark resumeAttempted = true.
   useEffect(() => {
     if (!wsConnected || sessionPersistence.resumeAttempted) return;
+
+    // Wait until the session has been loaded from the database so
+    // pendingResume has been populated (or confirmed absent).
+    if (!sessionPersistence.sessionLoaded) return;
     
     const pendingResume = sessionPersistence.getPendingResume();
     // Only attempt resume if we have a valid server session ID

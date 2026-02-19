@@ -17,6 +17,7 @@ from pydantic import BaseModel, Field
 from typing import Optional, Any, List
 from datetime import datetime
 from loguru import logger
+import asyncio
 import time
 import random
 
@@ -195,6 +196,14 @@ async def save_session(
                         "sidebarSourceFilterOpen": state.sidebarSourceFilterOpen,
                         "sidebarVisibleSources": state.sidebarVisibleSources,
                     }
+                    # Also keep the dedicated sidebar_state column in sync so
+                    # that the project/experiment load path (which reads this
+                    # column, NOT graph_state) shows the latest reasoning.
+                    experiment.sidebar_state = {
+                        "messages": state.sidebarMessages or [],
+                        "sourceFilterOpen": state.sidebarSourceFilterOpen or False,
+                        "visibleSources": state.sidebarVisibleSources or {},
+                    }
                     experiment.last_modified = datetime.utcnow()
                     
                     if request.name:
@@ -217,6 +226,7 @@ async def save_session(
                 if "1020" in str(e) and attempt < _MAX_RETRIES - 1:
                     logger.warning(f"Concurrent modification on experiment {request.sessionId}, retry {attempt + 1}/{_MAX_RETRIES}")
                     await db.rollback()
+                    await asyncio.sleep(0.05 * (attempt + 1))
                     continue
                 raise
     
@@ -278,7 +288,12 @@ async def save_session(
             "sidebarMessages": state.sidebarMessages,
             "sidebarSourceFilterOpen": state.sidebarSourceFilterOpen,
             "sidebarVisibleSources": state.sidebarVisibleSources,
-        }
+        },
+        sidebar_state={
+            "messages": state.sidebarMessages or [],
+            "sourceFilterOpen": state.sidebarSourceFilterOpen or False,
+            "visibleSources": state.sidebarVisibleSources or {},
+        },
     )
     
     project.last_modified = datetime.utcnow()
@@ -424,6 +439,20 @@ async def delete_session(
 def _experiment_to_state(experiment: models.Experiment) -> SessionState:
     """Convert an Experiment model to SessionState"""
     graph_state = experiment.graph_state or {}
+
+    # Prefer the dedicated sidebar_state column (written by both the
+    # session endpoint and the server-side save_session_to_db on WS
+    # disconnect).  Fall back to graph_state for older rows / data
+    # written by the frontend checkpoint path.
+    sidebar = experiment.sidebar_state
+    if sidebar:
+        sidebar_messages = sidebar.get("messages")
+        sidebar_filter_open = sidebar.get("sourceFilterOpen", False)
+        sidebar_visible = sidebar.get("visibleSources", {})
+    else:
+        sidebar_messages = graph_state.get("sidebarMessages")
+        sidebar_filter_open = graph_state.get("sidebarSourceFilterOpen")
+        sidebar_visible = graph_state.get("sidebarVisibleSources")
     
     return SessionState(
         # Project/Experiment identification
@@ -454,7 +483,7 @@ def _experiment_to_state(experiment: models.Experiment) -> SessionState:
         customPropertyAscending=graph_state.get("customPropertyAscending"),
         
         # Sidebar state
-        sidebarMessages=graph_state.get("sidebarMessages"),
-        sidebarSourceFilterOpen=graph_state.get("sidebarSourceFilterOpen"),
-        sidebarVisibleSources=graph_state.get("sidebarVisibleSources"),
+        sidebarMessages=sidebar_messages,
+        sidebarSourceFilterOpen=sidebar_filter_open,
+        sidebarVisibleSources=sidebar_visible,
     )
