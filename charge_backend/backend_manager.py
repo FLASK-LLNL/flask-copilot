@@ -14,7 +14,7 @@ from backend_helper_funcs import (
     FlaskRunSettings,
 )
 from retrosynthesis.context import RetrosynthesisContext
-from lmo_charge_backend_funcs import generate_lead_molecule
+from lmo.lmo_charge_backend_funcs import generate_lead_molecule
 from charge_backend_custom import run_custom_problem
 from functools import partial
 from lc_conductor.tool_registration import (
