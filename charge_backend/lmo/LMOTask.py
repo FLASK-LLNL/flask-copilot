@@ -1,6 +1,6 @@
 import charge
 from charge.tasks.Task import Task
-from flask_tools.chemistry import SMILES_utils
+from flask_tools.chemistry import smiles_utils
 from flask_tools.lmo.molecular_property_utils import get_density
 import charge.utils.helper_funcs
 from typing import Optional, List
@@ -53,7 +53,7 @@ class MoleculeOutputSchema(BaseModel):
         for smiles in smiles_list:
             if not isinstance(smiles, str):
                 raise ValueError("Each SMILES must be a string.")
-            if not SMILES_utils.verify_smiles(smiles):
+            if not smiles_utils.verify_smiles(smiles):
                 raise ValueError(f"Invalid SMILES string: {smiles}")
         return smiles_list
 
@@ -128,7 +128,7 @@ class LMOTask(Task):
         self.user_prompt = user_prompt
         self.verification_prompt = verification_prompt
         self.refinement_prompt = refinement_prompt
-        self.max_synth_score = SMILES_utils.get_synthesizability(lead_molecule)
+        self.max_synth_score = smiles_utils.get_synthesizability(lead_molecule)
         # Change this to be the min property value - add a function to get the right value
         # add a property name as well
         # Store property function and related attributes
@@ -173,10 +173,10 @@ class LMOTask(Task):
         # NOTE: This is used both by the LLM and during verification in the final
         # step of the task. So it needs to be deterministic and not
         # rely on any LLM calls.
-        if not SMILES_utils.verify_smiles(smiles):
+        if not smiles_utils.verify_smiles(smiles):
             raise ValueError(f"Invalid SMILES string: {smiles}")
 
-        synth_score = SMILES_utils.get_synthesizability(smiles)
+        synth_score = smiles_utils.get_synthesizability(smiles)
         if synth_score > self.max_synth_score:
             raise ValueError(
                 f"Synthesizability score too high: {synth_score} > {self.max_synth_score}"

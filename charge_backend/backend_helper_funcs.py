@@ -6,7 +6,7 @@ from typing import Any, Dict, Optional, Literal, Tuple
 from dataclasses import dataclass, asdict
 
 from charge.clients.autogen import AutoGenAgent
-from flask_tools.chemistry import SMILES_utils
+from flask_tools.chemistry import smiles_utils
 from flask_tools.lmo.molecular_property_utils import get_density
 from lc_conductor import CallbackLogger, RunSettings
 from charge_backend.moleculedb.molecule_naming import MolNameFormat
@@ -269,11 +269,11 @@ def post_process_lmo_smiles(
                         (avoids recalculation)
     """
     tool_properties = tool_properties or {}
-    canonical_smiles = SMILES_utils.canonicalize_smiles(smiles)
+    canonical_smiles = smiles_utils.canonicalize_smiles(smiles)
     density = float(tool_properties.get("density", get_density(canonical_smiles)))
     sascore = float(
         tool_properties.get(
-            "synthesizability", SMILES_utils.get_synthesizability(canonical_smiles)
+            "synthesizability", smiles_utils.get_synthesizability(canonical_smiles)
         )
     )
     bandgap = float(tool_properties.get("bandgap", get_bandgap(canonical_smiles)))

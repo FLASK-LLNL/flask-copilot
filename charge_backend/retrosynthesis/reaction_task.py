@@ -1,6 +1,6 @@
 from dataclasses import dataclass
 from typing import List, Optional
-from flask_tools.chemistry.SMILES_utils import verify_smiles
+from flask_tools.chemistry.smiles_utils import verify_smiles
 from charge.tasks.Task import Task
 
 try:

@@ -1,6 +1,6 @@
 # from rdkit import Chem
 # from rdkit.Chem import AllChem, Descriptors
-from flask_tools.chemistry import SMILES_utils
+from flask_tools.chemistry import smiles_utils
 from flask_tools.lmo.molecular_property_utils import get_density
 
 
@@ -14,8 +14,8 @@ def post_process_smiles(smiles: str, parent_id: int, node_id: int) -> dict:
     Returns:
         dict: The post-processed dictionary.
     """
-    canonical_smiles = SMILES_utils.canonicalize_smiles(smiles)
-    sascore = SMILES_utils.get_synthesizability(canonical_smiles)
+    canonical_smiles = smiles_utils.canonicalize_smiles(smiles)
+    sascore = smiles_utils.get_synthesizability(canonical_smiles)
     density = get_density(canonical_smiles)
 
     return {"smiles": canonical_smiles, "sascore": sascore, "density": density}
