@@ -21,6 +21,7 @@ import {
   Settings,
   Bug,
   CheckCircle,
+  Minus,
 } from 'lucide-react';
 import 'recharts';
 import 'react-markdown';
@@ -126,6 +127,7 @@ const ChemistryTool: React.FC = () => {
     metadata?: any;
   } | null>(null);
   const [editedPrompt, setEditedPrompt] = useState<string>('');
+  const [debugModalMinimized, setDebugModalMinimized] = useState<boolean>(false);
 
   // Function to refresh tools list from backend
   const refreshToolsList = useCallback(() => {
@@ -910,6 +912,18 @@ const ChemistryTool: React.FC = () => {
     });
   };
 
+  // Handle minimizing the prompt breakpoint modal
+  const handleMinimizePromptModal = useCallback(() => {
+    setDebugModalMinimized(true);
+    // Keep isComputing true to show that we're still in a computing state
+    // Don't clear promptBreakpoint or editedPrompt - preserve the state
+  }, []);
+
+  // Handle reopening the minimized prompt breakpoint modal
+  const handleReopenPromptModal = useCallback(() => {
+    setDebugModalMinimized(false);
+  }, []);
+
   // Handle prompt approval/modification
   const handlePromptBreakpointResponse = useCallback(() => {
     if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) {
@@ -927,6 +941,7 @@ const ChemistryTool: React.FC = () => {
 
     setPromptBreakpoint(null);
     setEditedPrompt('');
+    setDebugModalMinimized(false);
     setIsComputing(true); // Resume computation
   }, [editedPrompt, promptBreakpoint]);
 
@@ -1557,6 +1572,11 @@ const ChemistryTool: React.FC = () => {
                       <label className="form-label">Actions</label>
                       <button
                         onClick={() => {
+                          // If modal is minimized, reopen it
+                          if (debugModalMinimized) {
+                            handleReopenPromptModal();
+                            return;
+                          }
                           if (treeNodes.length > 0) {
                             if (
                               !window.confirm(
@@ -1568,10 +1588,19 @@ const ChemistryTool: React.FC = () => {
                           }
                           runComputation();
                         }}
-                        disabled={!wsConnected || isComputing || !smiles}
+                        disabled={
+                          !wsConnected ||
+                          (isComputing && !debugModalMinimized) ||
+                          (!smiles && !debugModalMinimized)
+                        }
                         className="btn btn-primary"
                       >
-                        {isComputing ? (
+                        {debugModalMinimized ? (
+                          <>
+                            <Bug className="w-5 h-5" />
+                            Continue
+                          </>
+                        ) : isComputing ? (
                           <>
                             <Loader2 className="w-5 h-5 animate-spin" />
                             Computing
@@ -1588,7 +1617,9 @@ const ChemistryTool: React.FC = () => {
                           </>
                         )}
                       </button>
-                      {(!wsConnected || isComputing || !smiles) && (
+                      {(!wsConnected ||
+                        (isComputing && !debugModalMinimized) ||
+                        (!smiles && !debugModalMinimized)) && (
                         <div className="tooltip absolute bottom-full mb-2 left-1/2 transform -translate-x-1/2 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
                           <div className="tooltip-content whitespace-nowrap">
                             {!wsConnected
@@ -2160,10 +2191,9 @@ const ChemistryTool: React.FC = () => {
 
       {/* Prompt Debugging Modal */}
       <Modal
-        isOpen={!!promptBreakpoint}
-        onClose={() => {
-          handlePromptBreakpointResponse();
-        }}
+        isOpen={!!promptBreakpoint && !debugModalMinimized}
+        onClose={handleMinimizePromptModal}
+        closeIcon={<Minus className="w-6 h-6" />}
         title="🔍 AI Prompt Breakpoint"
         subtitle="Review and modify the prompt before sending to the AI"
         size="lg"
