@@ -24,7 +24,7 @@ import json
 
 from dataclasses import dataclass, asdict
 from typing import Any, Dict, List, Optional
-from flask_mcp.chemistry.SMILES_utils import verify_smiles
+from flask_tools.chemistry.SMILES_utils import verify_smiles
 
 
 @dataclass

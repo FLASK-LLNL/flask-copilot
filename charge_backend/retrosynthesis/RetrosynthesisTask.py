@@ -3,8 +3,8 @@ from charge.tasks.Task import Task
 from charge.utils.log_progress import LOG_PROGRESS_SYSTEM_PROMPT
 from typing import List, Optional
 from pydantic import BaseModel, field_validator
-from flask_mcp.chemistry.SMARTS_reactions_utils import verify_reaction_SMARTS
-from flask_mcp.chemistry.SMILES_utils import verify_smiles
+from flask_tools.chemistry.SMARTS_reactions_utils import verify_reaction_SMARTS
+from flask_tools.chemistry.SMILES_utils import verify_smiles
 
 
 class ReactionOutputSchema(BaseModel):

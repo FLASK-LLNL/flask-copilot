@@ -1,0 +1,50 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "flask-copilot"
+version = "0.1.0"
+description = "FLASK-copilot: Interactive Agentic Framework for Molecular discovery"
+authors = []
+license = {file = "LICENSE"}
+readme = "README.md"
+requires-python = ">=3.10, <3.13"
+dependencies = [
+    "charge>=0.1.0",
+    "lc_conductor>=0.1.0",
+    "flask_tools>=0.1.0",
+    "mcp>=1.10.0",
+    "jsonschema>=4.17.3",
+    "loguru>=0.7.0",
+    "pydantic>=2.10.7",
+    "click",
+    "pre-commit",
+    "black",
+    "fastapi",
+    "uvicorn",
+    "python-multipart",
+    "websockets",
+    "requests",
+]
+
+# [tool.setuptools]
+# packages = ["flask_copilot"]
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["charge_backend*"]
+
+# This creates the console script
+[project.scripts]
+flask-copilot-install = "charge_backend.install:main"
+
+[project.optional-dependencies]
+# This is the manually identified set of necessary tools for AiZynthFinder 4.4.0 to work with a --no-deps install
+# pip3 install --no-deps aizynthfinder reaction-utils
+aizynthfinder = ["paretoset", "rdchiral", "wrapt_timeout_decorator", "swifter", "apted", "scipy", "onnxruntime", "dask[dataframe]>=2025.9.0", "tables", "networkx", "xxhash", "jinja2", " markupsafe"]
+
+# Define a set of optional packages for use when deploying persistent data services
+pds = ["flask-tools[aizynthfinder]"]
+
+all = ["flask-tools[aizynthfinder]"]

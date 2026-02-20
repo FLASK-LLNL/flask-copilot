@@ -1,7 +1,7 @@
 # from rdkit import Chem
 # from rdkit.Chem import AllChem, Descriptors
-from flask_mcp.chemistry import SMILES_utils
-from flask_mcp.lmo.molecular_property_utils import get_density
+from flask_tools.chemistry import SMILES_utils
+from flask_tools.lmo.molecular_property_utils import get_density
 
 
 def post_process_smiles(smiles: str, parent_id: int, node_id: int) -> dict:

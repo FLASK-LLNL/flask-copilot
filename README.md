@@ -10,8 +10,16 @@ WebSocket-powered server as the backend.
 ## Installing
 
 - Backend:
+
   - Make sure you have Python installed with a virtualenv.
   - Go to the main folder and run `pip install -r requirements.txt`
+  - Alternativey: To install the package, clone the repository and run:
+
+  ```bash
+  pip install -e .[all]
+  flask-copilot-install --extras all
+  ```
+
 - Frontend:
   - Install `npm`
   - `cd` into the `flask-app` folder and run `npm install`

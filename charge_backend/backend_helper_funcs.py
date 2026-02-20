@@ -6,8 +6,8 @@ from typing import Any, Dict, Optional, Literal, Tuple
 from dataclasses import dataclass, asdict
 
 from charge.clients.autogen import AutoGenAgent
-from flask_mcp.chemistry import SMILES_utils
-from flask_mcp.lmo.molecular_property_utils import get_density
+from flask_tools.chemistry import SMILES_utils
+from flask_tools.lmo.molecular_property_utils import get_density
 from lc_conductor import CallbackLogger, RunSettings
 from charge_backend.moleculedb.molecule_naming import MolNameFormat
 

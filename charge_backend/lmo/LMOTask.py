@@ -1,7 +1,7 @@
 import charge
 from charge.tasks.Task import Task
-from flask_mcp.chemistry import SMILES_utils
-from flask_mcp.lmo.molecular_property_utils import get_density
+from flask_tools.chemistry import SMILES_utils
+from flask_tools.lmo.molecular_property_utils import get_density
 import charge.utils.helper_funcs
 from typing import Optional, List
 from pydantic import BaseModel, field_validator
