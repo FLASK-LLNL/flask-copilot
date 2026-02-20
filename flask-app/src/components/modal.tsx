@@ -10,6 +10,7 @@ interface ModalProps {
   children: React.ReactNode;
   footer?: React.ReactNode;
   onOverlayClick?: () => void;
+  closeIcon?: React.ReactNode;
 }
 
 export const Modal: React.FC<ModalProps> = ({
@@ -21,6 +22,7 @@ export const Modal: React.FC<ModalProps> = ({
   children,
   footer,
   onOverlayClick,
+  closeIcon,
 }) => {
   if (!isOpen) return null;
 
@@ -39,7 +41,7 @@ export const Modal: React.FC<ModalProps> = ({
             {subtitle && <p className="modal-subtitle">{subtitle}</p>}
           </div>
           <button onClick={onClose} className="btn-icon">
-            <X className="w-6 h-6" />
+            {closeIcon || <X className="w-6 h-6" />}
           </button>
         </div>
         <div className="modal-body">{children}</div>
