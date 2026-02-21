@@ -3,7 +3,7 @@ import re
 
 from charge.experiments.AutoGenExperiment import AutoGenExperiment
 from charge.tasks.Task import Task
-from charge.servers.log_progress import LOG_PROGRESS_SYSTEM_PROMPT
+from charge.utils.log_progress import LOG_PROGRESS_SYSTEM_PROMPT
 from backend_helper_funcs import Node, CallbackHandler, RunSettings
 from moleculedb.molecule_naming import smiles_to_html
 from charge_backend.prompt_debugger import debug_prompt

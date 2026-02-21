@@ -24,7 +24,7 @@ from retrosynthesis.template import (
 from charge_backend.moleculedb.purchasable import is_purchasable
 from retrosynthesis.mapping import build_mapped_reaction_dict_or_none
 
-from charge.tasks.RetrosynthesisTask import (
+from retrosynthesis.retrosynthesis_task import (
     TemplateFreeRetrosynthesisTask as RetrosynthesisTask,
     TemplateFreeReactionOutputSchema as ReactionOutputSchema,
 )

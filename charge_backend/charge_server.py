@@ -15,7 +15,7 @@ from fastapi.middleware.cors import CORSMiddleware
 import os
 import argparse
 import httpx
-from charge.servers.server_utils import try_get_public_hostname
+from lc_conductor import try_get_public_hostname
 import os
 
 
