@@ -42,6 +42,6 @@ flask-copilot-install = "charge_backend.install:main"
 aizynthfinder = ["paretoset", "rdchiral", "wrapt_timeout_decorator", "swifter", "apted", "scipy", "onnxruntime", "dask[dataframe]>=2025.9.0", "tables", "networkx", "xxhash", "jinja2", " markupsafe"]
 
 # Define a set of optional packages for use when deploying persistent data services
-pds = ["flask-tools[aizynthfinder]"]
+pds = ["flask-copilot[aizynthfinder]"]
 
-all = ["flask-tools[aizynthfinder]"]
+all = ["flask-copilot[aizynthfinder]"]
