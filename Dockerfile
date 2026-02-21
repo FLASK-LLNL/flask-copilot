@@ -39,7 +39,7 @@ RUN . /venv/bin/activate && \
     pip install --upgrade pip && \
     git clone --recursive https://github.com/FLASK-LLNL/ChARGe.git charge.git && \
     cd /app/charge.git && \
-    pip install . && \
+    pip install .[all] && \
     cd /app && \
     pip install -e externals/lc_conductor && \
     git clone --recursive https://github.com/FLASK-LLNL/flask-tools.git flask-tools.git && \
