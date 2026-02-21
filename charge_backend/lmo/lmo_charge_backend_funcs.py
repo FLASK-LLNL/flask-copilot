@@ -10,7 +10,7 @@ from charge.clients.autogen_utils import chargeConnectionError
 from charge.utils.mcp_workbench_utils import call_mcp_tool_directly
 from charge_backend.prompt_debugger import debug_prompt_task
 from lc_conductor import CallbackLogger
-from lmo.LMOTask import (
+from charge_backend.lmo.lmo_task import (
     LMOTask as LeadMoleculeOptimization,
     MoleculeOutputSchema,
 )

@@ -1,5 +1,5 @@
 from fastapi import WebSocket
-from charge_backend.retrosynthesis import AiZynthTools as azf
+from charge_backend.retrosynthesis import aizynth_tools as azf
 from lc_conductor.callback_logger import CallbackLogger
 from typing import Optional, Union, TYPE_CHECKING
 from collections import deque

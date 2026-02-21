@@ -139,7 +139,9 @@ def main(no_extras, no_main, editable, git_tag, extras, dry_run):
                 install_cmd.append(f"{package_location}")
         else:
             if extras:
-                install_cmd.append(f'charge[{",".join(extras)}]@{package_location}')
+                install_cmd.append(
+                    f'flask_copilot[{",".join(extras)}]@{package_location}'
+                )
             else:
                 install_cmd.append(f"{package_location}")
 
