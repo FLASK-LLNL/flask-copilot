@@ -6,9 +6,8 @@ from typing import Any, Dict, Optional, Literal, Tuple
 from dataclasses import dataclass, asdict
 
 from charge.clients.autogen import AutoGenAgent
-import charge.servers.AiZynthTools as aizynth_funcs
-from charge.servers import SMILES_utils
-from charge.servers.molecular_property_utils import get_density
+from flask_tools.chemistry import smiles_utils
+from flask_tools.lmo.molecular_property_utils import get_density
 from lc_conductor import CallbackLogger, RunSettings
 from charge_backend.moleculedb.molecule_naming import MolNameFormat
 
@@ -270,11 +269,11 @@ def post_process_lmo_smiles(
                         (avoids recalculation)
     """
     tool_properties = tool_properties or {}
-    canonical_smiles = SMILES_utils.canonicalize_smiles(smiles)
+    canonical_smiles = smiles_utils.canonicalize_smiles(smiles)
     density = float(tool_properties.get("density", get_density(canonical_smiles)))
     sascore = float(
         tool_properties.get(
-            "synthesizability", SMILES_utils.get_synthesizability(canonical_smiles)
+            "synthesizability", smiles_utils.get_synthesizability(canonical_smiles)
         )
     )
     bandgap = float(tool_properties.get("bandgap", get_bandgap(canonical_smiles)))
@@ -286,3 +285,20 @@ def post_process_lmo_smiles(
         "sascore": sascore,
         "bandgap": bandgap,
     }
+
+
+def post_process_smiles(smiles: str, parent_id: int, node_id: int) -> dict:
+    """
+    Post-process a solution SMILES string, add additional properties and return
+    a dictionary that can be appended to the known molecules JSON file.
+
+    Args:
+        smiles (str): The input SMILES string.
+    Returns:
+        dict: The post-processed dictionary.
+    """
+    canonical_smiles = smiles_utils.canonicalize_smiles(smiles)
+    sascore = smiles_utils.get_synthesizability(canonical_smiles)
+    density = get_density(canonical_smiles)
+
+    return {"smiles": canonical_smiles, "sascore": sascore, "density": density}
