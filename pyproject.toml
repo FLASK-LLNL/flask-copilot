@@ -28,9 +28,6 @@ dependencies = [
     "requests",
 ]
 
-# [tool.setuptools]
-# packages = ["flask_copilot"]
-
 [tool.setuptools.packages.find]
 where = ["."]
 include = ["charge_backend*"]
