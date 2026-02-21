@@ -18,7 +18,7 @@ except (ImportError, ModuleNotFoundError) as e:
     HAS_AIZYNTHFINDER = False
     logger.warning(
         "Please install the aizynthfinder support packages to use this module."
-        "Install it with: pip install charge[aizynthfinder]",
+        "Install it with: pip install flask-copilot[aizynthfinder]",
     )
 import json
 
