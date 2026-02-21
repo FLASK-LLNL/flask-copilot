@@ -9,6 +9,7 @@ RUN mkdir /data/db
 
 WORKDIR /app
 COPY requirements.txt /app
+COPY pyproject.toml /app
 COPY flask-app /app/flask-app
 COPY charge_backend /app/charge_backend
 COPY externals /app/externals
@@ -35,12 +36,18 @@ WORKDIR /app/
 
 RUN python -m venv /venv
 RUN . /venv/bin/activate && \
-    pip install -e externals/lc_conductor && \
-    pip install -r requirements.txt && \
+    pip install --upgrade pip && \
     git clone --recursive https://github.com/FLASK-LLNL/ChARGe.git charge.git && \
     cd /app/charge.git && \
     pip install . && \
-    charge-install --extras aizynthfinder --extras autogen --extras rdkit --extras chemprice
+    cd /app && \
+    pip install -e externals/lc_conductor && \
+    git clone --recursive https://github.com/FLASK-LLNL/flask-tools.git flask-tools.git && \
+    cd /app/flask-tools.git && \
+    pip install . && \
+    cd /app && \
+    pip install .[all] && \
+    flask-copilot-install --no-main --extras aizynthfinder
 
 COPY mock_server.py /app
 COPY dockerscripts/launch_servers.sh /app
