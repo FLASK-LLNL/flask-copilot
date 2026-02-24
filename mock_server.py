@@ -756,7 +756,7 @@ async def generate_molecules(
 
             await asyncio.sleep(0.2)
 
-    # Send completion message
+    # Send completion reasoning (tracked in sent_messages by safe_send)
     await session.safe_send({
         "type": "response",
         "message": {
@@ -765,9 +765,14 @@ async def generate_molecules(
         }
     })
 
-    await session.safe_send({"type": "complete"})
+    # Persist to DB BEFORE sending the 'complete' WebSocket message.
+    # This ensures that when the frontend receives 'complete' and
+    # refreshes project data, the sidebar_state (including this
+    # completion message) is already in the database.
     session.is_complete = True
     await save_session_to_db(session)
+
+    await session.safe_send({"type": "complete"})
     logger.info(
         f"Session {session.session_id}: computation finished "
         f"({len(session.sent_nodes)} nodes, ws_connected={session.ws_connected})"
@@ -898,7 +903,7 @@ async def lead_molecule(
 
         await asyncio.sleep(0.8)
 
-    # Send completion reasoning message
+    # Send completion reasoning (tracked in sent_messages by safe_send)
     await session.safe_send({
         "type": "response",
         "message": {
@@ -906,10 +911,15 @@ async def lead_molecule(
             "message": f"**Optimization Complete**\n\nSuccessfully generated {depth} molecules in the optimization pathway.",
         }
     })
-    
-    await session.safe_send({"type": "complete"})
+
+    # Persist to DB BEFORE sending the 'complete' WebSocket message.
+    # This ensures that when the frontend receives 'complete' and
+    # refreshes project data, the sidebar_state (including this
+    # completion message) is already in the database.
     session.is_complete = True
     await save_session_to_db(session)
+
+    await session.safe_send({"type": "complete"})
     logger.info(
         f"Session {session.session_id}: optimization finished "
         f"({len(session.sent_nodes)} nodes, ws_connected={session.ws_connected})"
@@ -981,6 +991,11 @@ async def websocket_endpoint(websocket: WebSocket):
                                 await websocket.send_json({"type": "node", "node": node, "experimentId": exp_id})
                             for edge in list(session.sent_edges):
                                 await websocket.send_json({"type": "edge", "edge": edge, "experimentId": exp_id})
+                            # Replay reasoning/sidebar messages so the
+                            # frontend populates the reasoning panel
+                            # (including "Retrosynthesis Complete").
+                            for msg in list(session.sent_messages):
+                                await websocket.send_json({"type": "response", "message": msg, "experimentId": exp_id})
                             await websocket.send_json({"type": "complete", "experimentId": exp_id})
                         logger.info(
                             f"Replayed completed session {session_id} "

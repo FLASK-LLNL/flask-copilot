@@ -195,14 +195,17 @@ async def save_session(
                     experiment.visible_metrics = state.visibleMetrics
                     experiment.is_running = state.isComputing
 
-                    # Guard sidebar_state: don't overwrite non-empty
-                    # messages with empty data (same as tree_nodes guard).
+                    # Guard sidebar_state: never replace a longer (authoritative)
+                    # message list with a shorter (stale) one.  Sidebar messages
+                    # are append-only, so fewer incoming messages means the
+                    # frontend hadn't processed the latest server-sent messages
+                    # when it captured its state (React batched-state race).
                     incoming_sidebar_msgs = state.sidebarMessages or []
                     existing_sidebar_msgs = []
                     if experiment.sidebar_state and isinstance(experiment.sidebar_state, dict):
                         existing_sidebar_msgs = experiment.sidebar_state.get("messages", [])
 
-                    if incoming_sidebar_msgs or not existing_sidebar_msgs:
+                    if len(incoming_sidebar_msgs) >= len(existing_sidebar_msgs):
                         experiment.sidebar_state = {
                             "messages": state.sidebarMessages or [],
                             "sourceFilterOpen": state.sidebarSourceFilterOpen or False,
@@ -211,7 +214,8 @@ async def save_session(
                     else:
                         logger.info(
                             f"save_session: keeping existing {len(existing_sidebar_msgs)} "
-                            f"sidebar messages for {request.sessionId} (incoming was empty)"
+                            f"sidebar messages for {request.sessionId} "
+                            f"(incoming had only {len(incoming_sidebar_msgs)})"
                         )
 
                     # Guard graph_state.sidebarMessages similarly.
@@ -228,7 +232,7 @@ async def save_session(
                         "customPropertyDesc": state.customPropertyDesc,
                         "customPropertyAscending": state.customPropertyAscending,
                         # Sidebar state
-                        "sidebarMessages": incoming_sidebar_msgs if incoming_sidebar_msgs else existing_gs_msgs,
+                        "sidebarMessages": incoming_sidebar_msgs if len(incoming_sidebar_msgs) >= len(existing_gs_msgs) else existing_gs_msgs,
                         "sidebarSourceFilterOpen": state.sidebarSourceFilterOpen,
                         "sidebarVisibleSources": state.sidebarVisibleSources,
                     }

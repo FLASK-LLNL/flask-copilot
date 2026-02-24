@@ -332,14 +332,25 @@ const ChemistryTool: React.FC = () => {
     if (experimentId) {
       const sessionId = computingExperimentsRef.current.get(experimentId);
       if (sessionId && wsRef.current?.readyState === WebSocket.OPEN) {
-        // Switching to a running experiment – resume the session stream
-        setIsComputing(true);
-        wsRef.current.send(JSON.stringify({
-          action: 'resume_session',
-          sessionId,
-        }));
-        console.log('Resuming session for experiment:', experimentId, sessionId);
-        return;
+        // If the experiment already completed headless (the 2-second DB
+        // poll picked up isRunning=false), skip the resume and load
+        // directly from the in-memory cache which already has the
+        // sidebar_state from DB.
+        const cachedExp = project?.experiments.find(e => e.id === experimentId);
+        if (cachedExp && !cachedExp.isRunning) {
+          console.log('Experiment completed headless, loading from cache:', experimentId);
+          computingExperimentsRef.current.delete(experimentId);
+          loadContext(cachedExp);
+        } else {
+          // Switching to a running experiment – resume the session stream
+          setIsComputing(true);
+          wsRef.current.send(JSON.stringify({
+            action: 'resume_session',
+            sessionId,
+          }));
+          console.log('Resuming session for experiment:', experimentId, sessionId);
+          return;
+        }
       }
     }
 
@@ -705,7 +716,13 @@ const ChemistryTool: React.FC = () => {
         }
         if (!isForCurrentExperiment) {
           console.log('Background experiment completed:', messageExperimentId);
-          return; // Server saves state on completion; no UI update needed
+          // Refresh project data from DB so the sidebar_state
+          // (including "Retrosynthesis Complete" / "Optimization Complete")
+          // is in the in-memory cache when the user switches to this
+          // experiment.  The server persists sidebar_state to DB before
+          // sending 'complete', so the refresh will find the data.
+          projectData.refreshProjects();
+          return;
         }
         setIsComputing(false);
         isExperimentCompleteRef.current = true;  // Mark experiment as complete to stop checkpointing
@@ -1548,6 +1565,12 @@ const ChemistryTool: React.FC = () => {
     if (!message.source) {
       message.source = "Backend";
     }
+
+    // Update the ref synchronously so that getSessionState() (called from
+    // the 'complete' handler in the same event-loop tick) always sees the
+    // latest messages, even before React commits the batched setState.
+    const updatedMessages = [...sidebarStateRef.current.messages, message];
+    sidebarStateRef.current = { ...sidebarStateRef.current, messages: updatedMessages };
 
     sidebarState.setMessages(prev => [...prev, message]);
     setSidebarOpen(true);

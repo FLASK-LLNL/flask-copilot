@@ -166,3 +166,7 @@ flask-app/public/rdkit/
 /blob-report/
 /playwright/.cache/
 /playwright/.auth/
+
+# envfiles
+.env-launchit
+.env-local

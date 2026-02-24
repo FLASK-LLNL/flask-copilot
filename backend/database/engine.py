@@ -84,8 +84,8 @@ try:
         _conn.execute(text('SELECT 1'))
     
     # Also create async engine for compatibility
-    # For aiomysql, SSL configuration is different - don't pass ssl context
-    async_connect_args = {} if not USE_SQLITE_FALLBACK else {"check_same_thread": False}
+    # aiomysql accepts the same ssl= context as pymysql
+    async_connect_args = {"check_same_thread": False} if USE_SQLITE_FALLBACK else SSL_KW
     engine = create_async_engine(
         ASYNC_DATABASE_URL,
         echo=False,
