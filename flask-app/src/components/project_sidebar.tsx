@@ -168,9 +168,14 @@ export const ProjectSidebar: React.FC<ProjectSidebarProps> = ({
       return;
     }
 
-    // Save before selecting away
-    if (onSaveContext())
+    // Save before selecting away — tolerate errors so the switch always proceeds.
+    try {
+      if (onSaveContext())
+        onReset();
+    } catch (e) {
+      console.warn('Failed to save context before project switch, resetting anyway:', e);
       onReset();
+    }
 
     // Auto-select the last experiment if the project has any
     const lastExperiment = project.experiments.length > 0
@@ -197,9 +202,14 @@ export const ProjectSidebar: React.FC<ProjectSidebarProps> = ({
       return;
     }
 
-    // Save before selecting away
-    if (onSaveContext())
+    // Save before selecting away — tolerate errors so the switch always proceeds.
+    try {
+      if (onSaveContext())
+        onReset();
+    } catch (e) {
+      console.warn('Failed to save context before experiment switch, resetting anyway:', e);
       onReset();
+    }
 
     const newSelection: ProjectSelection = {
       projectId: project.id,
@@ -220,9 +230,13 @@ export const ProjectSidebar: React.FC<ProjectSidebarProps> = ({
 
     const newProjectName = `Project ${timestamp}`;
 
-    // Save before selecting away
-    if (onSaveContext()) {
-      // Reset UI state
+    // Save before selecting away — tolerate errors so creation always proceeds.
+    try {
+      if (onSaveContext()) {
+        onReset();
+      }
+    } catch (e) {
+      console.warn('Failed to save context before project creation, resetting anyway:', e);
       onReset();
     }
 
@@ -249,9 +263,13 @@ export const ProjectSidebar: React.FC<ProjectSidebarProps> = ({
       newExperimentName = `Experiment ${i}`;
     }
 
-    // Save before selecting away
-    if (onSaveContext()) {
-      // Reset UI state
+    // Save before selecting away — tolerate errors so creation always proceeds.
+    try {
+      if (onSaveContext()) {
+        onReset();
+      }
+    } catch (e) {
+      console.warn('Failed to save context before experiment creation, resetting anyway:', e);
       onReset();
     }
 

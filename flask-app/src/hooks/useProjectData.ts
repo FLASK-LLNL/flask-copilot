@@ -450,6 +450,25 @@ export const useProjectData = () => {
   };
 
   const updateExperiment = async (projectId: string, experiment: Experiment) => {
+    // Immediately update projectsRef so any synchronous reads in the same
+    // event loop tick (e.g., loadContextFromExperiment after a sidebar
+    // click) see the freshly-saved data instead of waiting for the next
+    // 2-second poll.
+    const updatedProjects = projectsRef.current.map(p => {
+      if (p.id !== projectId) return p;
+      return {
+        ...p,
+        experiments: p.experiments.map(e =>
+          e.id === experiment.id
+            ? { ...experiment, lastModified: new Date().toISOString() }
+            : e
+        ),
+        lastModified: new Date().toISOString(),
+      };
+    });
+    projectsRef.current = updatedProjects;
+    setProjects(updatedProjects);
+
     await dataSource.updateExperiment(projectId, experiment);
   };
 

@@ -170,18 +170,54 @@ async def save_session(
                 experiment = result.scalar_one_or_none()
                 
                 if experiment:
-                    # Update existing session
-                    experiment.smiles = state.smiles
+                    # Update existing session.
+                    # Guard: don't overwrite non-empty tree_nodes/edges/smiles
+                    # with empty data (same protection as the PUT experiment
+                    # endpoint).  This prevents sendBeacon / stale session
+                    # saves from erasing results that save_session_to_db
+                    # persisted while the browser was closed.
+                    incoming_nodes = state.treeNodes or []
+                    incoming_edges = state.edges or []
+                    incoming_smiles = state.smiles or ""
+
+                    if incoming_smiles or not experiment.smiles:
+                        experiment.smiles = state.smiles
+                    if incoming_nodes or not experiment.tree_nodes:
+                        experiment.tree_nodes = state.treeNodes
+                    if incoming_edges or not experiment.edges:
+                        experiment.edges = state.edges
+
                     experiment.problem_type = state.problemType
                     experiment.system_prompt = state.systemPrompt
                     experiment.problem_prompt = state.problemPrompt
                     experiment.auto_zoom = state.autoZoom
-                    experiment.tree_nodes = state.treeNodes
-                    experiment.edges = state.edges
                     experiment.metrics_history = state.metricsHistory
                     experiment.visible_metrics = state.visibleMetrics
                     experiment.is_running = state.isComputing
-                    experiment.graph_state = {
+
+                    # Guard sidebar_state: don't overwrite non-empty
+                    # messages with empty data (same as tree_nodes guard).
+                    incoming_sidebar_msgs = state.sidebarMessages or []
+                    existing_sidebar_msgs = []
+                    if experiment.sidebar_state and isinstance(experiment.sidebar_state, dict):
+                        existing_sidebar_msgs = experiment.sidebar_state.get("messages", [])
+
+                    if incoming_sidebar_msgs or not existing_sidebar_msgs:
+                        experiment.sidebar_state = {
+                            "messages": state.sidebarMessages or [],
+                            "sourceFilterOpen": state.sidebarSourceFilterOpen or False,
+                            "visibleSources": state.sidebarVisibleSources or {},
+                        }
+                    else:
+                        logger.info(
+                            f"save_session: keeping existing {len(existing_sidebar_msgs)} "
+                            f"sidebar messages for {request.sessionId} (incoming was empty)"
+                        )
+
+                    # Guard graph_state.sidebarMessages similarly.
+                    existing_gs = experiment.graph_state or {}
+                    existing_gs_msgs = existing_gs.get("sidebarMessages") or []
+                    new_gs = {
                         "offset": state.offset,
                         "zoom": state.zoom,
                         "promptsModified": state.promptsModified,
@@ -192,18 +228,11 @@ async def save_session(
                         "customPropertyDesc": state.customPropertyDesc,
                         "customPropertyAscending": state.customPropertyAscending,
                         # Sidebar state
-                        "sidebarMessages": state.sidebarMessages,
+                        "sidebarMessages": incoming_sidebar_msgs if incoming_sidebar_msgs else existing_gs_msgs,
                         "sidebarSourceFilterOpen": state.sidebarSourceFilterOpen,
                         "sidebarVisibleSources": state.sidebarVisibleSources,
                     }
-                    # Also keep the dedicated sidebar_state column in sync so
-                    # that the project/experiment load path (which reads this
-                    # column, NOT graph_state) shows the latest reasoning.
-                    experiment.sidebar_state = {
-                        "messages": state.sidebarMessages or [],
-                        "sourceFilterOpen": state.sidebarSourceFilterOpen or False,
-                        "visibleSources": state.sidebarVisibleSources or {},
-                    }
+                    experiment.graph_state = new_gs
                     experiment.last_modified = datetime.utcnow()
                     
                     if request.name:

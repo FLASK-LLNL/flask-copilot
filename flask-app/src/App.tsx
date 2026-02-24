@@ -39,6 +39,7 @@ import { MoleculeGraph, useGraphState } from './components/graph';
 import { ProjectSidebar, useProjectSidebar, useProjectManagement } from './components/project_sidebar';
 import { SettingsButton, BACKEND_OPTIONS } from './components/settings_button';
 import { CombinedCustomizationModal } from './components/combined_customization_modal';
+import { Modal } from './components/modal';
 
 import { findAllDescendants, hasDescendants, isRootNode, relayoutTree } from './tree_utils';
 import { copyToClipboard } from './utils';
@@ -301,10 +302,28 @@ const ChemistryTool: React.FC = () => {
       if (experiment) {
         loadContext(experiment);
       } else {
-        console.warn('Experiment not found in project:', experimentId);
+        console.warn('Experiment not found in project, triggering refresh:', experimentId);
+        // Force a DB refresh then retry once
+        projectData.refreshProjects().then(() => {
+          const p2 = projectData.projectsRef.current.find(p => p.id === projectId);
+          const e2 = p2?.experiments.find(e => e.id === experimentId);
+          if (e2) loadContext(e2);
+          else console.error('Experiment still not found after refresh:', experimentId);
+        });
       }
     } else {
-      console.warn('Project not found in projectsRef:', projectId, '(projects loaded:', projectData.projectsRef.current.length, ')');
+      console.warn('Project not found in projectsRef, triggering refresh:', projectId);
+      // Force a DB refresh then retry once
+      projectData.refreshProjects().then(() => {
+        const p2 = projectData.projectsRef.current.find(p => p.id === projectId);
+        if (p2) {
+          const e2 = p2.experiments.find(e => e.id === experimentId);
+          if (e2) loadContext(e2);
+          else console.error('Experiment not found after refresh:', experimentId);
+        } else {
+          console.error('Project still not found after refresh:', projectId);
+        }
+      });
     }
 
     // Multi-experiment: check if the experiment we're switching to has a
@@ -387,11 +406,46 @@ const ChemistryTool: React.FC = () => {
     const experimentId = projectSidebar.selectionRef.current.experimentId;
     console.log("Saving experiments", projectId, experimentId);
     if (projectId && experimentId) {
-      projectManagement.updateExperiment(projectId, getContext());
-      return true;
+      try {
+        const ctx = getContext();
+
+        // Guard: don't save empty local state over non-empty DB data.
+        // This prevents a session-restore + experiment-switch cycle from
+        // overwriting data that save_session_to_db persisted while the
+        // browser was closed.
+        const localHasData = (ctx.treeNodes && ctx.treeNodes.length > 0) || !!ctx.smiles;
+        if (!localHasData) {
+          const project = projectData.projectsRef.current.find(p => p.id === projectId);
+          const dbExp = project?.experiments.find(e => e.id === experimentId);
+          const dbHasData = dbExp && ((dbExp.treeNodes && dbExp.treeNodes.length > 0) || !!dbExp.smiles);
+          if (dbHasData) {
+            console.warn('saveStateToExperiment: skipping save — local state is empty but DB has data for', experimentId);
+            return false;
+          }
+        }
+
+        // Guard: preserve sidebar messages from DB if local has none
+        // but DB has reasoning messages (e.g. after browser reopen).
+        const localSidebarMsgs = ctx.sidebarState?.messages ?? [];
+        if (localSidebarMsgs.length === 0) {
+          const project = projectData.projectsRef.current.find(p => p.id === projectId);
+          const dbExp = project?.experiments.find(e => e.id === experimentId);
+          const dbSidebarMsgs = dbExp?.sidebarState?.messages ?? [];
+          if (dbSidebarMsgs.length > 0) {
+            console.log(`saveStateToExperiment: local has 0 sidebar msgs but DB has ${dbSidebarMsgs.length} — preserving DB sidebar`);
+            ctx.sidebarState = dbExp!.sidebarState;
+          }
+        }
+
+        projectManagement.updateExperiment(projectId, ctx);
+        return true;
+      } catch (e) {
+        console.warn('saveStateToExperiment: getContext failed, skipping save:', e);
+        return false;
+      }
     }
     return false;
-  }, [projectSidebar.selectionRef, projectManagement, getContext]);
+  }, [projectSidebar.selectionRef, projectManagement, getContext, projectData]);
 
   const runComputation = async (): Promise<void> => {
     setSidebarOpen(true);
@@ -547,11 +601,14 @@ const ChemistryTool: React.FC = () => {
           }
           return [...prev, data.node!];
         });
-        // Save checkpoint when new molecule is generated (if auto-checkpoint is enabled)
+        // Save state when new molecule is generated (if auto-checkpoint is enabled).
+        // Only saveStateToExperiment is called here.  saveCheckpoint uses
+        // getSessionState() which historically applied level filtering,
+        // creating a race where filtered data could overwrite full data in
+        // the DB (both endpoints write to the same experiment row).
         if (autoCheckpointEnabledRef.current) {
           setTimeout(() => {
-            saveCheckpointRef.current();          // Save to database
-            saveStateToExperimentRef.current();    // Save to localStorage so it survives DB outages
+            saveStateToExperimentRef.current();
           }, 100); // Small delay to ensure state is updated
         }
       } else if (data.type === 'stopped') {
@@ -816,6 +873,7 @@ const ChemistryTool: React.FC = () => {
     setTreeNodes([]);
     setEdges([]);
     setIsComputing(false);
+    isExperimentCompleteRef.current = false;
     graphState.setOffset({ x: 50, y: 50 });
     graphState.setZoom(1);
     setContextMenu({node: null, isReaction: false, x:0, y:0});
@@ -851,6 +909,27 @@ const ChemistryTool: React.FC = () => {
         projectId: savedState.projectId || null,
         experimentId: savedState.experimentId || null,
       });
+    }
+
+    // If the DB (projectsRef) has a richer version of this experiment
+    // (e.g. save_session_to_db ran after the browser closed but before
+    // this page load), prefer the DB data over the stale session.
+    if (savedState.projectId && savedState.experimentId) {
+      const proj = projectData.projectsRef.current.find(p => p.id === savedState.projectId);
+      const dbExp = proj?.experiments.find(e => e.id === savedState.experimentId);
+      if (dbExp) {
+        const dbNodeCount = dbExp.treeNodes?.length ?? 0;
+        const sessionNodeCount = savedState.treeNodes?.length ?? 0;
+        const dbSidebarMsgCount = dbExp.sidebarState?.messages?.length ?? 0;
+        const sessionSidebarMsgCount = savedState.sidebarMessages?.length ?? 0;
+        if (dbNodeCount > sessionNodeCount || (dbNodeCount === sessionNodeCount && dbSidebarMsgCount > sessionSidebarMsgCount)) {
+          console.log(
+            `applyRestoredSession: DB has ${dbNodeCount} nodes/${dbSidebarMsgCount} sidebar msgs vs session's ${sessionNodeCount}/${sessionSidebarMsgCount}. Loading from DB instead.`
+          );
+          loadContext(dbExp);
+          return;
+        }
+      }
     }
     
     // Restore core state
@@ -973,34 +1052,18 @@ const ChemistryTool: React.FC = () => {
     const project = projectData.projectsRef.current.find(p => p.id === projectId);
     const experiment = project?.experiments.find(e => e.id === experimentId);
     
-    // Get current tree nodes and edges
-    let nodesToSave = treeNodesRef.current;
-    let edgesToSave = edgesRef.current;
-    
-    // When computing, only save complete levels to avoid duplicate molecules on restore.
-    // Skip filtering when the experiment has completed — the `complete` handler sets
-    // isExperimentCompleteRef synchronously, but React hasn't flushed setIsComputing(false)
-    // yet, so `isComputing` is still true in this closure.
-    if (isComputing && !isExperimentCompleteRef.current && nodesToSave.length > 0) {
-      // Find the maximum level
-      const maxLevel = Math.max(...nodesToSave.map(n => n.level));
-      
-      // If we have more than one level, exclude the deepest level (it may be incomplete)
-      if (maxLevel > 0) {
-        nodesToSave = nodesToSave.filter(n => n.level < maxLevel);
-        
-        // Filter edges to only include those connecting saved nodes
-        const savedNodeIds = new Set(nodesToSave.map(n => n.id));
-        edgesToSave = edgesToSave.filter(e => 
-          savedNodeIds.has(e.fromNode) && savedNodeIds.has(e.toNode)
-        );
-      }
-      
-      console.log(`Checkpoint: saving ${nodesToSave.length} nodes (excluded level ${maxLevel})`);
-    }
-    
-    // Also filter out any edges with 'computing' status
-    edgesToSave = edgesToSave.filter(e => e.status !== 'computing');
+    // Get current tree nodes and edges.  Save the full tree without
+    // level filtering.  Previously, the deepest level was excluded during
+    // computation to avoid saving an incomplete frontier.  However,
+    // duplicate-node dedup on resume (the node handler checks
+    // prev.find(n => n.id === data.node.id)) already handles this, and
+    // the filtering created a race condition: the session-save endpoint
+    // wrote filtered data while the experiment-save endpoint wrote full
+    // data to the same DB row.  Whichever settled last determined the
+    // final state, causing intermittent data loss.
+    const nodesToSave = treeNodesRef.current;
+    // Filter out transient 'computing' edges that have no value on restore.
+    const edgesToSave = edgesRef.current.filter(e => e.status !== 'computing');
     
     return {
       // Project/Experiment identification

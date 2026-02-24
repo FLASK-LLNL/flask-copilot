@@ -74,6 +74,7 @@ web_modules/
 # dotenv environment variable files
 .env
 .env.*
+.env-*
 !.env.example
 
 # parcel-bundler cache (https://parceljs.org/)
@@ -158,3 +159,10 @@ flask-app/public/rdkit/
 
 # readme
 *.md
+
+# Playwright
+/test-results/
+/playwright-report/
+/blob-report/
+/playwright/.cache/
+/playwright/.auth/

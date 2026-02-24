@@ -250,6 +250,13 @@ async def save_session_to_db(session: ComputationSession) -> None:
             experiment.is_running = not session.is_complete
             experiment.last_modified = datetime.now(tz=None)
 
+            # Also persist SMILES and problem_type so the experiment
+            # record is complete even when the frontend never saved.
+            if session.smiles and not experiment.smiles:
+                experiment.smiles = session.smiles
+            if session.problem_type and not experiment.problem_type:
+                experiment.problem_type = session.problem_type
+
             # Persist reasoning/sidebar messages so they survive browser
             # disconnects and are visible when the user reopens the
             # experiment later.  The server tracks every `response`
