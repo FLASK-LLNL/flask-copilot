@@ -81,15 +81,7 @@ export interface FlaskRunSettings {
   promptDebugging: boolean;
 }
 
-import type {
-  OrchestratorSettings,
-  SidebarMessage,
-  SidebarState,
-  SidebarProps,
-  VisibleSources,
-  MarkdownTextProps,
-  ToolServer,
-} from 'lc-conductor';
+import type { OrchestratorSettings, SidebarMessage, SidebarState } from 'lc-conductor';
 
 export interface FlaskOrchestratorSettings extends OrchestratorSettings {
   moleculeName?: MoleculeNameFormat;
@@ -130,7 +122,7 @@ export interface WebSocketMessageToServer {
   xpos?: number;
 
   // Settings
-  runSettings?: RunSettings;
+  runSettings?: FlaskRunSettings;
 
   // Optimization customization
   customization?: OptimizationCustomization;

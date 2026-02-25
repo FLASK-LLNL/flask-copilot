@@ -2,7 +2,7 @@ import { defineConfig } from 'vite';
 import tailwindcss from '@tailwindcss/vite';
 import react from '@vitejs/plugin-react';
 import { resolve } from 'path';
-import { copyFileSync, mkdirSync, writeFileSync } from 'fs';
+import { copyFileSync, mkdirSync } from 'fs';
 
 // Plugin to copy RDKit files during build
 function copyRDKitFiles() {
@@ -48,11 +48,11 @@ export default defineConfig({
     force: true, // Force re-optimization
   },
   build: {
+    // Completely disable CommonJS detection for scheduler
+    commonjsOptions: {
+      exclude: ['scheduler'], // Don't let commonjs plugin touch it
+    },
     rollupOptions: {
-      // Completely disable CommonJS detection for scheduler
-      commonjsOptions: {
-        exclude: ['scheduler'], // Don't let commonjs plugin touch it
-      },
       // Explicitly tell Rollup: DO NOT externalize scheduler
       external: (id) => {
         if (id.includes('scheduler')) {
