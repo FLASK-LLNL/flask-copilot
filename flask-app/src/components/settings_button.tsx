@@ -1,6 +1,7 @@
 import React from 'react';
-import { User, Plus, Trash2, Edit2, Loader2, Settings, Wrench } from 'lucide-react';
-import { OrchestratorSettings, ToolServer } from '../types';
+import { Plus, Trash2, Edit2, Loader2, Settings, Wrench } from 'lucide-react';
+import { FlaskOrchestratorSettings } from '../types';
+import { OrchestratorSettings, ToolServer } from 'lc-conductor';
 import { HTTP_SERVER } from '../config';
 
 interface SettingsButtonProps {
@@ -106,7 +107,7 @@ export const SettingsButton: React.FC<SettingsButtonProps> = ({
   >({});
 
   // Default settings
-  const defaultSettings: OrchestratorSettings = {
+  const defaultSettings: FlaskOrchestratorSettings = {
     backend: 'openai',
     backendLabel: 'OpenAI',
     useCustomUrl: false,

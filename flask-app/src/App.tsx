@@ -35,7 +35,6 @@ import {
   TreeNode,
   Edge,
   ContextMenuState,
-  SidebarMessage,
   Tool,
   WebSocketMessageToServer,
   WebSocketMessage,
@@ -55,6 +54,7 @@ import {
 } from './components/project_sidebar';
 
 import {
+  SidebarMessage,
   SettingsButton,
   ReasoningSidebar,
   useSidebarState,
@@ -65,7 +65,7 @@ import {
 import { CombinedCustomizationModal } from './components/combined_customization_modal';
 import { Modal } from './components/modal';
 
-import { findAllDescendants, hasDescendants, isRootNode, relayoutTree } from './tree_utils';
+import { findAllDescendants, isRootNode, relayoutTree } from './tree_utils';
 import { copyToClipboard } from './utils';
 
 import './animations.css';
@@ -261,7 +261,7 @@ const ChemistryTool: React.FC = () => {
     // Update local orchestrator settings with new molecule name
     const updatedSettings = {
       ...orchestratorSettings,
-      moleculeName: moleculeName,
+      runSettings: { moleculeName: moleculeName },
     };
     setOrchestratorSettings(updatedSettings);
     localStorage.setItem('orchestratorSettings', JSON.stringify(updatedSettings));
@@ -1891,7 +1891,7 @@ const ChemistryTool: React.FC = () => {
                 </button>
                 <button
                   onClick={() => {
-                    const nodeId = contextMenu.node!.id;
+                    // const nodeId = contextMenu.node!.id;
                     // Delete all nodes from this point on
                     setTreeNodes((prev) => {
                       return prev.filter((n) => n.x <= contextMenu.node!.x);
