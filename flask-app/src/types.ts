@@ -94,7 +94,17 @@ export interface FlaskRunSettings {
   promptDebugging: boolean;
 }
 
-import type { OrchestratorSettings, SidebarMessage, SidebarState } from 'lc-conductor';
+import type { OrchestratorSettings, SidebarMessage, SidebarState, SidebarProps, VisibleSources, MarkdownTextProps, ToolServer } from 'lc-conductor';
+
+export type {
+  OrchestratorSettings,
+  SidebarMessage,
+  SidebarState,
+  SidebarProps,
+  VisibleSources,
+  MarkdownTextProps,
+  ToolServer,
+};
 
 export interface FlaskOrchestratorSettings extends OrchestratorSettings {
   moleculeName?: MoleculeNameFormat;
@@ -127,6 +137,7 @@ export interface WebSocketMessageToServer {
   query?: string;
   experimentContext?: string;
   enabledTools?: ToolMap;
+  experimentId?: string;
 
   // Lead molecule optimization
   propertyType?: string;
@@ -176,6 +187,10 @@ export interface WebSocketMessage {
   username?: string;
 
   alternatives?: ReactionAlternative[];
+
+  // Identifies which experiment a message belongs to (for multi-experiment routing)
+  experimentId?: string;
+  sessionId?: string;
 
   // Prompt debugging
   prompt?: string;
