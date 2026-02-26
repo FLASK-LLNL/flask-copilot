@@ -6,3 +6,4 @@ requests
 charge
 lc-conductor
 flask-tools
+python-dotenv

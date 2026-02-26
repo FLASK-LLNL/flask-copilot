@@ -1,3 +1,9 @@
+# Python bytecode
+*.pyc
+*.pyo
+*.pyd
+__pycache__/
+
 # Logs
 logs
 *.log
@@ -68,6 +74,7 @@ web_modules/
 # dotenv environment variable files
 .env
 .env.*
+.env-*
 !.env.example
 
 # parcel-bundler cache (https://parceljs.org/)
@@ -149,3 +156,17 @@ __pycache__/
 
 # Public assets
 flask-app/public/rdkit/
+
+# readme
+*.md
+
+# Playwright
+/test-results/
+/playwright-report/
+/blob-report/
+/playwright/.cache/
+/playwright/.auth/
+
+# envfiles
+.env-launchit
+.env-local
