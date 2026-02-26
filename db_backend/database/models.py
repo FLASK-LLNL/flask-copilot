@@ -9,7 +9,7 @@ from sqlalchemy import Column, String, DateTime, Boolean, ForeignKey, Index, Tex
 from sqlalchemy.orm import relationship, Mapped, mapped_column
 from datetime import datetime
 from typing import Optional
-from backend.database.engine import Base
+from db_backend.database.engine import Base
 
 
 class Project(Base):

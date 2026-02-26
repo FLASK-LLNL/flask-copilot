@@ -1,0 +1,13 @@
+
+> flask-app@0.1.0 dev
+> vite
+
+✓ RDKit files copied to assets
+8:43:48 PM [vite] (client) Forced re-optimization of dependencies
+Port 5173 is in use, trying another one...
+
+  VITE v7.3.0  ready in 300 ms
+
+  ➜  Local:   http://localhost:5174/
+  ➜  Network: use --host to expose
+  ➜  press h + enter to show help

@@ -24,9 +24,9 @@ import random
 # Max retries for concurrent modification errors (MariaDB error 1020)
 _MAX_RETRIES = 3
 
-from backend.database.engine import get_db
-from backend.auth import get_forwarded_user
-from backend.database import models
+from db_backend.database.engine import get_db
+from db_backend.auth import get_forwarded_user
+from db_backend.database import models
 
 router = APIRouter(prefix="/api/sessions", tags=["sessions"])
 

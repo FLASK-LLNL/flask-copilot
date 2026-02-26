@@ -1,0 +1,23 @@
+{
+  "name": "flask-copilot",
+  "version": "1.0.0",
+  "description": "This is a Web UI for the FLASK Copilot, which presents computed molecules and their properties. It can be used for reaction prediction, lead molecule optimization, and other custom prompts.",
+  "main": "index.js",
+  "scripts": {},
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/amarathe84/flask-copilot.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/amarathe84/flask-copilot/issues"
+  },
+  "homepage": "https://github.com/amarathe84/flask-copilot#readme",
+  "devDependencies": {
+    "@playwright/test": "^1.58.2",
+    "@types/node": "^25.2.3"
+  }
+}

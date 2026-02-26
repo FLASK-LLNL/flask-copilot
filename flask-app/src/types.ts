@@ -81,15 +81,7 @@ export interface FlaskRunSettings {
   promptDebugging: boolean;
 }
 
-import type {
-  OrchestratorSettings,
-  SidebarMessage,
-  SidebarState,
-  SidebarProps,
-  VisibleSources,
-  MarkdownTextProps,
-  ToolServer,
-} from 'lc-conductor';
+import type { OrchestratorSettings, SidebarMessage, SidebarState, SidebarProps, VisibleSources, MarkdownTextProps, ToolServer } from 'lc-conductor';
 
 export type {
   OrchestratorSettings,

@@ -29,25 +29,46 @@ import 'remark-gfm';
 import 'react-syntax-highlighter';
 import 'react-syntax-highlighter/dist/esm/styles/prism';
 
-import { WS_SERVER, VERSION } from './config';
+import { WS_SERVER, HTTP_SERVER, VERSION } from './config';
 import { DEFAULT_CUSTOM_SYSTEM_PROMPT, PROPERTY_NAMES } from './constants';
-import { TreeNode, Edge, ContextMenuState, SidebarMessage, Tool, WebSocketMessageToServer, WebSocketMessage, SelectableTool, Experiment, FlaskOrchestratorSettings as OrchestratorSettings, OptimizationCustomization, ReactionAlternative } from './types';
+import {
+  TreeNode,
+  Edge,
+  ContextMenuState,
+  Tool,
+  WebSocketMessageToServer,
+  WebSocketMessage,
+  SelectableTool,
+  Experiment,
+  FlaskOrchestratorSettings as OrchestratorSettings,
+  OptimizationCustomization,
+  ReactionAlternative,
+} from './types';
 
 import { loadRDKit } from './components/molecule';
-import { ReasoningSidebar, useSidebarState } from 'lc-conductor';
 import { MoleculeGraph, useGraphState } from './components/graph';
-import { ProjectSidebar, useProjectSidebar, useProjectManagement } from './components/project_sidebar';
-import { SettingsButton, BACKEND_OPTIONS } from './components/settings_button';
+import {
+  ProjectSidebar,
+  useProjectSidebar,
+  useProjectManagement,
+} from './components/project_sidebar';
+import {
+  SidebarMessage,
+  SettingsButton,
+  ReasoningSidebar,
+  useSidebarState,
+  MarkdownText,
+  BACKEND_OPTIONS,
+} from 'lc-conductor';
 import { CombinedCustomizationModal } from './components/combined_customization_modal';
 import { Modal } from './components/modal';
 
-import { findAllDescendants, hasDescendants, isRootNode, relayoutTree } from './tree_utils';
+import { findAllDescendants, isRootNode, relayoutTree } from './tree_utils';
 import { copyToClipboard } from './utils';
 
 import './animations.css';
 import { MetricsDashboard, useMetricsDashboardState } from './components/metrics';
 import { useProjectData } from './hooks/useProjectData';
-import { MarkdownText } from 'lc-conductor';
 import { ReactionAlternativesSidebar } from './components/reaction_alternatives';
 import { useSessionPersistence, useAutoSave, SessionState } from './hooks/useSessionPersistence';
 
@@ -239,6 +260,26 @@ const ChemistryTool: React.FC = () => {
 
     // Optional: Add any additional processing or API calls here
     // await fetch(HTTP_SERVER + '/api/save-selection', { method: 'POST', body: JSON.stringify(payload) });
+  };
+
+  // Callback function to handle molecule name preference changes
+  const handleMoleculeNameSave = async (moleculeName: string): Promise<void> => {
+    if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) {
+      alert('WebSocket not connected');
+      return;
+    }
+    console.log(`Updated Molecule Name Preference: ${moleculeName}`);
+
+    // Update local orchestrator settings with new molecule name
+    const updatedSettings = {
+      ...orchestratorSettings,
+      runSettings: { moleculeName: moleculeName },
+    };
+    setOrchestratorSettings(updatedSettings);
+    localStorage.setItem('orchestratorSettings', JSON.stringify(updatedSettings));
+
+    // Note: The molecule name is sent to backend as part of runSettings
+    // in each compute action, so no separate websocket message needed here.
   };
 
   // Callback function to send updated settings to backend
@@ -944,6 +985,12 @@ const ChemistryTool: React.FC = () => {
             `applyRestoredSession: DB has ${dbNodeCount} nodes/${dbSidebarMsgCount} sidebar msgs vs session's ${sessionNodeCount}/${sessionSidebarMsgCount}. Loading from DB instead.`
           );
           loadContext(dbExp);
+          // If the DB experiment has no problemType but the session
+          // does, prefer the session's value (the DB row may not have
+          // been updated yet when the projects were fetched).
+          if (!dbExp.problemType && savedState.problemType) {
+            setProblemType(savedState.problemType);
+          }
           return;
         }
       }
@@ -1741,6 +1788,7 @@ const ChemistryTool: React.FC = () => {
                 onServerAdded={refreshToolsList}
                 onServerRemoved={refreshToolsList}
                 username={username}
+                httpServerUrl={HTTP_SERVER}
               />
 
               {/* WebSocket Status Indicator */}
@@ -2214,37 +2262,58 @@ const ChemistryTool: React.FC = () => {
             </button>
           )}
 
-          {/* Lead Molecule Optimization */ (problemType === "optimization") && (
-            <>
-            <button onClick={() => {
-              const nodeId = contextMenu.node!.id;
-                // Delete all nodes from this point on
-                setTreeNodes(prev => {
-                  return prev.filter(n => n.x <= contextMenu.node!.x);
-                });
-                sendMessageToServer("optimize-from", {nodeId: nodeId, propertyType, customPropertyName, customPropertyDesc, customPropertyAscending, smiles: contextMenu.node!.smiles, xpos: contextMenu.node!.x});
-                setIsComputing(true);
-              }}  className="context-menu-item context-menu-divider">
-              <StepForward className="w-4 h-4" />
-              Refine search from here
-            </button>
-            <button onClick={() => {
-                const nodeId = contextMenu.node!.id;
-                // Delete all nodes from this point on
-                setTreeNodes(prev => {
-                  return prev.filter(n => n.x <= contextMenu.node!.x);
-                });
-                handleCustomQuery(contextMenu.node!, "optimize-from");
-              }}  className="context-menu-item">
-              <MessageSquareShare className="w-4 h-4" />
-              Refine search (with prompt)
-            </button>
-            <button onClick={() => { createNewRetrosynthesisExperiment(contextMenu.node!.smiles); }}  className="context-menu-item">
-              <FlaskConical className="w-4 h-4" />
-              Plan synthesis pathway
-            </button>
-            </>
-          )}
+          {
+            /* Lead Molecule Optimization */ problemType === 'optimization' && (
+              <>
+                <button
+                  onClick={() => {
+                    const nodeId = contextMenu.node!.id;
+                    // Delete all nodes from this point on
+                    setTreeNodes((prev) => {
+                      return prev.filter((n) => n.x <= contextMenu.node!.x);
+                    });
+                    sendMessageToServer('optimize-from', {
+                      nodeId: nodeId,
+                      propertyType,
+                      customPropertyName,
+                      customPropertyDesc,
+                      customPropertyAscending,
+                      smiles: contextMenu.node!.smiles,
+                      xpos: contextMenu.node!.x,
+                    });
+                    setIsComputing(true);
+                  }}
+                  className="context-menu-item context-menu-divider"
+                >
+                  <StepForward className="w-4 h-4" />
+                  Refine search from here
+                </button>
+                <button
+                  onClick={() => {
+                    // const nodeId = contextMenu.node!.id;
+                    // Delete all nodes from this point on
+                    setTreeNodes((prev) => {
+                      return prev.filter((n) => n.x <= contextMenu.node!.x);
+                    });
+                    handleCustomQuery(contextMenu.node!, 'optimize-from');
+                  }}
+                  className="context-menu-item"
+                >
+                  <MessageSquareShare className="w-4 h-4" />
+                  Refine search (with prompt)
+                </button>
+                <button
+                  onClick={() => {
+                    createNewRetrosynthesisExperiment(contextMenu.node!.smiles);
+                  }}
+                  className="context-menu-item"
+                >
+                  <FlaskConical className="w-4 h-4" />
+                  Plan synthesis pathway
+                </button>
+              </>
+            )
+          }
 
           {/* Retrosynthesis (Molecule) */ (problemType == "retrosynthesis" && !contextMenu.isReaction) && (
             <>

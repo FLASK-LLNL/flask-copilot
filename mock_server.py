@@ -36,9 +36,9 @@ from charge_backend.moleculedb.molecule_naming import smiles_to_html, MolNameFor
 
 # Import database components
 sys.path.insert(0, os.path.dirname(__file__))
-from backend.database.engine import engine, Base
-from backend.routers import sessions as sessionsrouter
-from backend.routers import projects as projectsrouter
+from db_backend.database.engine import engine, Base
+from db_backend.routers import sessions as sessionsrouter
+from db_backend.routers import projects as projectsrouter
 
 
 # Session tracking for computation resume
@@ -154,8 +154,8 @@ async def save_session_to_db(session: ComputationSession) -> None:
     by the WebSocket handler).  If no matching row is found it falls back
     to the most-recently-modified running experiment for the user.
     """
-    from backend.database.engine import AsyncSessionLocal
-    from backend.database import models as db_models
+    from db_backend.database.engine import AsyncSessionLocal
+    from db_backend.database import models as db_models
     from sqlalchemy import select, and_, cast, String, func
 
     if AsyncSessionLocal is None:
@@ -163,7 +163,33 @@ async def save_session_to_db(session: ComputationSession) -> None:
         return
 
     if not session.sent_nodes:
-        logger.debug(f"save_session_to_db: session {session.session_id} has no nodes, skipping")
+        # Even with no nodes, persist problem_type and smiles so the
+        # experiment record is correct if the user reloads before any
+        # results arrive.
+        if session.experiment_id and (session.problem_type or session.smiles):
+            try:
+                async with AsyncSessionLocal() as db:
+                    result = await db.execute(
+                        select(db_models.Experiment).where(
+                            db_models.Experiment.id == session.experiment_id
+                        )
+                    )
+                    experiment = result.scalar_one_or_none()
+                    if experiment:
+                        if session.problem_type:
+                            experiment.problem_type = session.problem_type
+                        if session.smiles and not experiment.smiles:
+                            experiment.smiles = session.smiles
+                        await db.commit()
+                        logger.debug(
+                            f"save_session_to_db: no nodes yet, saved "
+                            f"problem_type/smiles for {session.session_id}"
+                        )
+            except Exception as exc:
+                logger.error(
+                    f"save_session_to_db: problem_type-only save failed "
+                    f"for {session.session_id}: {exc}"
+                )
         return
 
     try:
@@ -254,7 +280,10 @@ async def save_session_to_db(session: ComputationSession) -> None:
             # record is complete even when the frontend never saved.
             if session.smiles and not experiment.smiles:
                 experiment.smiles = session.smiles
-            if session.problem_type and not experiment.problem_type:
+            # Always update problem_type from the session — the server
+            # knows the authoritative computation type from the original
+            # 'compute' request.
+            if session.problem_type:
                 experiment.problem_type = session.problem_type
 
             # Persist reasoning/sidebar messages so they survive browser
@@ -1077,6 +1106,30 @@ async def websocket_endpoint(websocket: WebSocket):
                 })
                 
                 logger.info(f"Started new session {session_id} for {data['problemType']}")
+                
+                # Immediately persist problem_type to the experiment DB
+                # row so it is available even if the user reloads before
+                # any nodes are generated.
+                if session.experiment_id and session.problem_type:
+                    try:
+                        from db_backend.database.engine import AsyncSessionLocal
+                        from db_backend.database import models as db_models
+                        from sqlalchemy import select as sa_select
+                        if AsyncSessionLocal is not None:
+                            async with AsyncSessionLocal() as _db:
+                                _result = await _db.execute(
+                                    sa_select(db_models.Experiment).where(
+                                        db_models.Experiment.id == session.experiment_id
+                                    )
+                                )
+                                _exp = _result.scalar_one_or_none()
+                                if _exp:
+                                    _exp.problem_type = session.problem_type
+                                    if session.smiles and not _exp.smiles:
+                                        _exp.smiles = session.smiles
+                                    await _db.commit()
+                    except Exception as exc:
+                        logger.debug(f"Early problem_type persist failed: {exc}")
                 
                 # Launch computation as a *background task* so the WS
                 # read loop keeps processing stop / reset / query messages.
