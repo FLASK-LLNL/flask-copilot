@@ -1,8 +1,8 @@
 from fastapi import WebSocket
 import re
 
-from charge.experiments.AutoGenExperiment import AutoGenExperiment
-from charge.tasks.Task import Task
+from charge.experiments.experiment import Experiment
+from charge.tasks.task import Task
 from charge.utils.log_progress import LOG_PROGRESS_SYSTEM_PROMPT
 from backend_helper_funcs import Node, CallbackHandler, RunSettings
 from moleculedb.molecule_naming import smiles_to_html
@@ -13,7 +13,7 @@ async def run_custom_problem(
     start_smiles: str,
     system_prompt: str,
     user_prompt: str,
-    experiment: AutoGenExperiment,
+    experiment: Experiment,
     available_tools: list[str],
     websocket: WebSocket,
     run_settings: RunSettings,

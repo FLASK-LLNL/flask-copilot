@@ -29,7 +29,9 @@ from retrosynthesis.retrosynthesis_task import (
     TemplateFreeReactionOutputSchema as ReactionOutputSchema,
 )
 
-from charge.experiments.AutoGenExperiment import AutoGenExperiment
+from charge.experiments.experiment import Experiment
+from charge.clients.agent_factory import AgentFactory
+
 
 RETROSYNTH_UNCONSTRAINED_USER_PROMPT_TEMPLATE = (
     "Provide a retrosynthetic pathway for the target molecule {target_molecule}. "
@@ -59,7 +61,7 @@ async def ai_based_retrosynthesis(
     query: Optional[str],
     constraint: Optional[str],
     websocket: WebSocket,
-    experiment: AutoGenExperiment,
+    experiment: Experiment,
     config_file: str,
     run_settings: RunSettings,
     available_tools: Optional[Union[str, list[str]]] = None,
@@ -82,8 +84,8 @@ async def ai_based_retrosynthesis(
         runner = context.node_id_to_charge_client[node_id]
     else:
         # New context
-        agent_name = experiment.agent_pool.create_agent_name(
-            prefix=f"retrosynth_{node_id}_"
+        agent_name = AgentFactory.create_agent(
+            task=None, agent_name=f"retrosynth_{node_id}"
         )
         runner = experiment.create_agent_with_experiment_state(
             task=None,

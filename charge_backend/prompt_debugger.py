@@ -6,7 +6,7 @@ prompt using the given websocket.
 import asyncio
 from dataclasses import dataclass, asdict
 from charge.clients.autogen import AutoGenAgent
-from charge.tasks.Task import Task
+from charge.tasks.task import Task
 from fastapi import WebSocket
 from typing import Any
 

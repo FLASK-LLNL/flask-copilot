@@ -5,9 +5,8 @@ import os
 from lc_conductor import ActionManager, TaskManager, CallbackLogger
 from loguru import logger
 from concurrent.futures import ProcessPoolExecutor
-from charge.experiments.AutoGenExperiment import AutoGenExperiment
-from charge.clients.autogen_utils import chargeConnectionError
-from charge.tasks.Task import Task
+from charge.experiments.experiment import Experiment
+from charge.tasks.task import Task
 from backend_helper_funcs import (
     CallbackHandler,
     Reaction,
@@ -37,7 +36,7 @@ class FlaskActionManager(ActionManager):
     def __init__(
         self,
         task_manager: TaskManager,
-        experiment: AutoGenExperiment,
+        experiment: Experiment,
         args,
         username: str,
     ):

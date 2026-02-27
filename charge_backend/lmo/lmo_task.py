@@ -1,5 +1,5 @@
 import charge
-from charge.tasks.Task import Task
+from charge.tasks.task import Task
 from flask_tools.chemistry import smiles_utils
 from flask_tools.lmo.molecular_property_utils import get_density
 import charge.utils.helper_funcs
