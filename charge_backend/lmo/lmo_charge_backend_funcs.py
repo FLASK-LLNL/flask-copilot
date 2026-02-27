@@ -21,7 +21,7 @@ from backend_helper_funcs import (
     post_process_lmo_smiles,
     get_price,
     CallbackHandler,
-    RunSettings,
+    FlaskRunSettings,
 )
 from moleculedb.molecule_naming import smiles_to_html, MolNameFormat
 
@@ -54,7 +54,7 @@ async def generate_lead_molecule(
     depth: int,
     available_tools: list[str],
     websocket: WebSocket,
-    run_settings: RunSettings,
+    run_settings: FlaskRunSettings,
     property: str = "density",
     property_description: str = "molecular density (g/cc)",
     calculate_property_tool: str = "calculate_property_hf",

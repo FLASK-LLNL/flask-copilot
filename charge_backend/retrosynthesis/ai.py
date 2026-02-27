@@ -10,7 +10,7 @@ from backend_helper_funcs import (
     Reaction,
     ReactionAlternative,
     PathwayStep,
-    RunSettings,
+    FlaskRunSettings,
 )
 from charge_backend.prompt_debugger import debug_prompt
 from retrosynthesis.context import RetrosynthesisContext
@@ -63,7 +63,7 @@ async def ai_based_retrosynthesis(
     websocket: WebSocket,
     experiment: Experiment,
     config_file: str,
-    run_settings: RunSettings,
+    run_settings: FlaskRunSettings,
     available_tools: Optional[Union[str, list[str]]] = None,
 ):
     """Performs template-free retrosynthesis using the AI orchestrator."""
@@ -84,12 +84,9 @@ async def ai_based_retrosynthesis(
         runner = context.node_id_to_charge_client[node_id]
     else:
         # New context
-        agent_name = AgentFactory.create_agent(
-            task=None, agent_name=f"retrosynth_{node_id}"
-        )
         runner = experiment.create_agent_with_experiment_state(
             task=None,
-            agent_name=agent_name,
+            agent_name=f"retrosynth_{node_id}",
             callback=CallbackHandler(websocket),
         )
         context.node_id_to_charge_client[node_id] = runner

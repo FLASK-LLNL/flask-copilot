@@ -10,7 +10,7 @@ from backend_helper_funcs import (
     Reaction,
     ReactionAlternative,
     PathwayStep,
-    RunSettings,
+    FlaskRunSettings,
 )
 from charge_backend.moleculedb.molecule_naming import (
     smiles_to_html,
@@ -74,7 +74,7 @@ async def find_exact_reactions(
     context: RetrosynthesisContext,
     clogger: CallbackLogger,
     websocket: WebSocket,
-    run_settings: RunSettings,
+    run_settings: FlaskRunSettings,
 ) -> Reaction | None:
     # Load state
     global REACTIONDB_HANDLE

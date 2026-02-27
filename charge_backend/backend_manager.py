@@ -58,6 +58,7 @@ class FlaskActionManager(ActionManager):
             self.run_settings = FlaskRunSettings(**data["runSettings"])
 
     async def handle_compute(self, data: dict) -> None:
+        self.experiment.reset()
         self.setup_run_settings(data)
         problem_type = data.get("problemType")
         if problem_type == "optimization":
@@ -442,6 +443,7 @@ class FlaskActionManager(ActionManager):
             if self.run_settings.prompt_debugging:
                 await debug_prompt(agent, self.websocket)
             result = await agent.run()
+            self.experiment.add_to_context(agent, task, result)
             # Report answer
             await self._send_processing_message(result, source="Agent")
             await self.websocket.send_json({"type": "complete"})
@@ -501,7 +503,7 @@ class FlaskActionManager(ActionManager):
             if self.run_settings.prompt_debugging:
                 await debug_prompt(agent, self.websocket)
             result = await agent.run()
-            await self.experiment.add_to_context(agent, task, result)
+            self.experiment.add_to_context(agent, task, result)
             # Report answer
             await self._send_processing_message(result, source="Agent")
             await self.websocket.send_json({"type": "complete"})

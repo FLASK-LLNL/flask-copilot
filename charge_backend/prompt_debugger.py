@@ -5,7 +5,7 @@ prompt using the given websocket.
 
 import asyncio
 from dataclasses import dataclass, asdict
-from charge.clients.autogen import AutoGenAgent
+from charge.clients.agent_factory import Agent
 from charge.tasks.task import Task
 from fastapi import WebSocket
 from typing import Any
@@ -63,7 +63,7 @@ async def debug_prompt_task(task: Task, websocket: WebSocket):
         task.user_prompt = json["prompt"]
 
 
-async def debug_prompt(runner: AutoGenAgent, websocket: WebSocket):
+async def debug_prompt(runner: Agent, websocket: WebSocket):
     """
     Prompts the Web UI to approve/edit the prompt (and potential metadata).
     Modifies the runner in place. Should be called before running.
@@ -71,4 +71,5 @@ async def debug_prompt(runner: AutoGenAgent, websocket: WebSocket):
     :param runner: A ChARGe agent.
     :param websocket: Websocket to the web UI.
     """
+    assert runner.task is not None
     await debug_prompt_task(runner.task, websocket)
