@@ -5,9 +5,8 @@ import os
 from lc_conductor import ActionManager, TaskManager, CallbackLogger
 from loguru import logger
 from concurrent.futures import ProcessPoolExecutor
-from charge.experiments.AutoGenExperiment import AutoGenExperiment
-from charge.clients.autogen_utils import chargeConnectionError
-from charge.tasks.Task import Task
+from charge.experiments.experiment import Experiment
+from charge.tasks.task import Task
 from backend_helper_funcs import (
     CallbackHandler,
     Reaction,
@@ -37,7 +36,7 @@ class FlaskActionManager(ActionManager):
     def __init__(
         self,
         task_manager: TaskManager,
-        experiment: AutoGenExperiment,
+        experiment: Experiment,
         args,
         username: str,
     ):
@@ -59,6 +58,7 @@ class FlaskActionManager(ActionManager):
             self.run_settings = FlaskRunSettings(**data["runSettings"])
 
     async def handle_compute(self, data: dict) -> None:
+        self.experiment.reset()
         self.setup_run_settings(data)
         problem_type = data.get("problemType")
         if problem_type == "optimization":
@@ -443,6 +443,7 @@ class FlaskActionManager(ActionManager):
             if self.run_settings.prompt_debugging:
                 await debug_prompt(agent, self.websocket)
             result = await agent.run()
+            self.experiment.add_to_context(agent, task, result)
             # Report answer
             await self._send_processing_message(result, source="Agent")
             await self.websocket.send_json({"type": "complete"})
@@ -502,7 +503,7 @@ class FlaskActionManager(ActionManager):
             if self.run_settings.prompt_debugging:
                 await debug_prompt(agent, self.websocket)
             result = await agent.run()
-            await self.experiment.add_to_context(agent, task, result)
+            self.experiment.add_to_context(agent, task, result)
             # Report answer
             await self._send_processing_message(result, source="Agent")
             await self.websocket.send_json({"type": "complete"})

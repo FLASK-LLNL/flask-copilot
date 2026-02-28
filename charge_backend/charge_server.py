@@ -18,14 +18,11 @@ import httpx
 from lc_conductor import try_get_public_hostname
 import os
 
-
-import logging
-from aizynthfinder.utils.logging import setup_logger
-
 from loguru import logger
-from charge.clients.Client import Client
-from charge.experiments.AutoGenExperiment import AutoGenExperiment
-from charge.clients.autogen import AutoGenPool
+from charge.clients.client import Client
+from charge.clients.autogen import AutoGenBackend
+from charge.experiments.experiment import Experiment
+from charge.clients.agent_factory import AgentFactory
 
 
 from lc_conductor.tool_registration import (
@@ -229,13 +226,15 @@ async def websocket_endpoint(websocket: WebSocket):
         backend = args.backend
 
     # set up an AutoGenAgent pool for tasks on this endpoint
-
-    autogen_pool = AutoGenPool(
-        model=model, backend=backend, api_key=API_KEY, base_url=BASE_URL
+    AgentFactory.register_backend(
+        "autogen",
+        AutoGenBackend(
+            model=model, backend=backend, api_key=API_KEY, base_url=BASE_URL
+        ),
     )
 
     # Set up an experiment class for current endpoint
-    experiment = AutoGenExperiment(task=None, agent_pool=autogen_pool)
+    experiment = Experiment(task=None)
 
     task_manager = TaskManager(websocket)
 

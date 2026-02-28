@@ -1,5 +1,5 @@
 import charge
-from charge.tasks.Task import Task
+from charge.tasks.task import Task
 from flask_tools.chemistry import smiles_utils
 from flask_tools.lmo.molecular_property_utils import get_density
 import charge.utils.helper_funcs
@@ -7,7 +7,6 @@ from typing import Optional, List
 from pydantic import BaseModel, field_validator
 from charge.utils.log_progress import LOG_PROGRESS_SYSTEM_PROMPT
 from charge.utils.mcp_workbench_utils import call_mcp_tool_directly
-import asyncio
 
 SYSTEM_PROMPT = (
     "You are a world-class medicinal chemist with expertise in drug"

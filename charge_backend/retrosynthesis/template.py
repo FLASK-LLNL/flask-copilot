@@ -9,7 +9,7 @@ from backend_helper_funcs import (
     Reaction,
     ReactionAlternative,
     PathwayStep,
-    RunSettings,
+    FlaskRunSettings,
 )
 from retrosynthesis.context import RetrosynthesisContext
 from charge_backend.moleculedb.molecule_naming import (
@@ -173,7 +173,7 @@ async def run_retro_planner(
     config_file: str,
     smiles: str,
     clogger: CallbackLogger,
-    run_settings: RunSettings,
+    run_settings: FlaskRunSettings,
     reaction_id: str = "azf",
     all_inactive: bool = False,
 ) -> tuple[Reaction | None, list[azf.ReactionPath]]:
@@ -250,7 +250,7 @@ async def template_based_retrosynthesis(
     config_file: str,
     context: RetrosynthesisContext,
     websocket: WebSocket,
-    run_settings: RunSettings,
+    run_settings: FlaskRunSettings,
     available_tools: Optional[Union[str, list[str]]] = None,
 ):
     """Stream positioned nodes and edges"""
@@ -360,7 +360,7 @@ async def compute_templates_for_node(
     config_file: str,
     context: RetrosynthesisContext,
     websocket: WebSocket,
-    run_settings: RunSettings,
+    run_settings: FlaskRunSettings,
     available_tools: Optional[Union[str, list[str]]] = None,
 ):
     """Computes all templates for node"""

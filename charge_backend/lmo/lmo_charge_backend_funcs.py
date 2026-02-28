@@ -5,8 +5,7 @@ from loguru import logger
 import sys
 import os
 from pathlib import Path
-from charge.experiments.AutoGenExperiment import AutoGenExperiment
-from charge.clients.autogen_utils import chargeConnectionError
+from charge.experiments.experiment import Experiment
 from charge.utils.mcp_workbench_utils import call_mcp_tool_directly
 from charge_backend.prompt_debugger import debug_prompt_task
 from lc_conductor import CallbackLogger
@@ -22,7 +21,7 @@ from backend_helper_funcs import (
     post_process_lmo_smiles,
     get_price,
     CallbackHandler,
-    RunSettings,
+    FlaskRunSettings,
 )
 from moleculedb.molecule_naming import smiles_to_html, MolNameFormat
 
@@ -49,13 +48,13 @@ with open(PROMPTS_DIR / "lmo_refine_prompt.txt", "r") as f:
 
 async def generate_lead_molecule(
     start_smiles: str,
-    experiment: AutoGenExperiment,
+    experiment: Experiment,
     mol_file_path: str,
     max_retries: int,
     depth: int,
     available_tools: list[str],
     websocket: WebSocket,
-    run_settings: RunSettings,
+    run_settings: FlaskRunSettings,
     property: str = "density",
     property_description: str = "molecular density (g/cc)",
     calculate_property_tool: str = "calculate_property_hf",
@@ -75,7 +74,7 @@ async def generate_lead_molecule(
     """Generate a lead molecule and stream its progress.
     Args:
         start_smiles (str): The starting SMILES string for the lead molecule.
-        experiment (AutoGenExperiment): The experiment instance to run tasks.
+        experiment (Experiment): The experiment instance to run tasks.
         mol_file_path (str): Path to the file where molecules are stored.
         max_retries (int): Maximum number of retries for calling AI in molecule generation.
         available_tools (list[str]): List of available tools for molecule generation.
@@ -542,7 +541,7 @@ async def generate_lead_molecule(
             except asyncio.CancelledError:
                 await websocket.send_json({"type": "stopped"})
                 raise  # re-raise so cancellation propagates
-            except chargeConnectionError as e:
+            except ConnectionError as e:
                 logger.error(f"Charge connection error: {e}")
                 await websocket.send_json({"type": "stopped"})
 

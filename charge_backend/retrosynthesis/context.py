@@ -4,7 +4,7 @@ Retrosynthesis context management
 
 from collections import defaultdict
 from dataclasses import dataclass, field
-from charge.clients.autogen import AutoGenAgent
+from charge.clients.agent_factory import Agent
 from fastapi import WebSocket
 from typing import Optional
 
@@ -18,7 +18,7 @@ class RetrosynthesisContext:
     """
 
     node_ids: dict[str, Node] = field(default_factory=dict)
-    node_id_to_charge_client: dict[str, AutoGenAgent] = field(default_factory=dict)
+    node_id_to_charge_client: dict[str, Agent] = field(default_factory=dict)
     node_id_to_reasoning_summary: dict[str, str] = field(default_factory=dict)
     nodes_per_level: dict[int, int] = field(default_factory=lambda: defaultdict(int))
     parents: dict[str, str] = field(default_factory=dict)

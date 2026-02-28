@@ -10,7 +10,7 @@ from backend_helper_funcs import (
     Reaction,
     ReactionAlternative,
     PathwayStep,
-    RunSettings,
+    FlaskRunSettings,
 )
 from charge_backend.prompt_debugger import debug_prompt
 from retrosynthesis.context import RetrosynthesisContext
@@ -29,7 +29,9 @@ from retrosynthesis.retrosynthesis_task import (
     TemplateFreeReactionOutputSchema as ReactionOutputSchema,
 )
 
-from charge.experiments.AutoGenExperiment import AutoGenExperiment
+from charge.experiments.experiment import Experiment
+from charge.clients.agent_factory import AgentFactory
+
 
 RETROSYNTH_UNCONSTRAINED_USER_PROMPT_TEMPLATE = (
     "Provide a retrosynthetic pathway for the target molecule {target_molecule}. "
@@ -59,9 +61,9 @@ async def ai_based_retrosynthesis(
     query: Optional[str],
     constraint: Optional[str],
     websocket: WebSocket,
-    experiment: AutoGenExperiment,
+    experiment: Experiment,
     config_file: str,
-    run_settings: RunSettings,
+    run_settings: FlaskRunSettings,
     available_tools: Optional[Union[str, list[str]]] = None,
 ):
     """Performs template-free retrosynthesis using the AI orchestrator."""
@@ -82,12 +84,9 @@ async def ai_based_retrosynthesis(
         runner = context.node_id_to_charge_client[node_id]
     else:
         # New context
-        agent_name = experiment.agent_pool.create_agent_name(
-            prefix=f"retrosynth_{node_id}_"
-        )
         runner = experiment.create_agent_with_experiment_state(
             task=None,
-            agent_name=agent_name,
+            agent_name=f"retrosynth_{node_id}",
             callback=CallbackHandler(websocket),
         )
         context.node_id_to_charge_client[node_id] = runner
