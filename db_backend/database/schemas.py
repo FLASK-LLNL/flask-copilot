@@ -31,7 +31,9 @@ class ExperimentUpdate(BaseModel):
     property_type: Optional[str] = Field(None, alias="propertyType")
     custom_property_name: Optional[str] = Field(None, alias="customPropertyName")
     custom_property_desc: Optional[str] = Field(None, alias="customPropertyDesc")
-    custom_property_ascending: Optional[bool] = Field(None, alias="customPropertyAscending")
+    custom_property_ascending: Optional[bool] = Field(
+        None, alias="customPropertyAscending"
+    )
 
     # Complex nested data (stored as JSON)
     tree_nodes: Optional[Any] = Field(None, alias="treeNodes")
@@ -66,7 +68,9 @@ class Experiment(ExperimentBase):
     property_type: Optional[str] = Field(None, alias="propertyType")
     custom_property_name: Optional[str] = Field(None, alias="customPropertyName")
     custom_property_desc: Optional[str] = Field(None, alias="customPropertyDesc")
-    custom_property_ascending: Optional[bool] = Field(None, alias="customPropertyAscending")
+    custom_property_ascending: Optional[bool] = Field(
+        None, alias="customPropertyAscending"
+    )
 
     # Complex nested data
     tree_nodes: Optional[Any] = Field(None, alias="treeNodes")

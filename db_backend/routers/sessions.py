@@ -41,12 +41,13 @@ def generate_id(prefix: str) -> str:
 # Pydantic models for session API
 class SessionState(BaseModel):
     """The state to save/restore for a session"""
+
     # Project/Experiment identification
     projectId: Optional[str] = None
     projectName: Optional[str] = None
     experimentId: Optional[str] = None
     experimentName: Optional[str] = None
-    
+
     # Core experiment state
     smiles: Optional[str] = None
     problemType: Optional[str] = None
@@ -62,13 +63,13 @@ class SessionState(BaseModel):
     visibleMetrics: Optional[Any] = None
     isComputing: Optional[bool] = None
     serverSessionId: Optional[str] = None
-    
+
     # Property optimization
     propertyType: Optional[str] = None
     customPropertyName: Optional[str] = None
     customPropertyDesc: Optional[str] = None
     customPropertyAscending: Optional[bool] = None
-    
+
     # Sidebar state
     sidebarMessages: Optional[Any] = None
     sidebarSourceFilterOpen: Optional[bool] = None
@@ -77,6 +78,7 @@ class SessionState(BaseModel):
 
 class SessionSaveRequest(BaseModel):
     """Request body for saving a session"""
+
     sessionId: Optional[str] = None  # If provided, update existing session
     name: Optional[str] = None  # Optional name for the session
     state: SessionState
@@ -84,6 +86,7 @@ class SessionSaveRequest(BaseModel):
 
 class SessionResponse(BaseModel):
     """Response for session operations"""
+
     sessionId: str
     name: str
     createdAt: datetime
@@ -97,6 +100,7 @@ class SessionResponse(BaseModel):
 
 class SessionListItem(BaseModel):
     """Summary info for listing sessions"""
+
     sessionId: str
     name: str
     smiles: Optional[str] = None
@@ -116,16 +120,17 @@ DEFAULT_PROJECT_NAME = "Auto-Save Sessions"
 async def get_or_create_default_project(user: str, db: AsyncSession) -> models.Project:
     """Get or create the default project for auto-save sessions"""
     result = await db.execute(
-        select(models.Project).where(
+        select(models.Project)
+        .where(
             and_(
-                models.Project.user == user,
-                models.Project.name == DEFAULT_PROJECT_NAME
+                models.Project.user == user, models.Project.name == DEFAULT_PROJECT_NAME
             )
-        ).order_by(models.Project.created_at.asc())
+        )
+        .order_by(models.Project.created_at.asc())
         .limit(1)
     )
     project = result.scalar_one_or_none()
-    
+
     if not project:
         project = models.Project(
             id=generate_id("project"),
@@ -136,7 +141,7 @@ async def get_or_create_default_project(user: str, db: AsyncSession) -> models.P
         )
         db.add(project)
         await db.flush()  # Get the ID without committing
-    
+
     return project
 
 
@@ -144,7 +149,7 @@ async def get_or_create_default_project(user: str, db: AsyncSession) -> models.P
 async def save_session(
     request: SessionSaveRequest,
     user: str = Depends(get_forwarded_user),
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
 ):
     """
     Save or update a session. If sessionId is provided, updates existing session.
@@ -152,9 +157,9 @@ async def save_session(
     """
     if db is None:
         raise HTTPException(status_code=503, detail="Database not available")
-    
+
     state = request.state
-    
+
     # If sessionId provided, try to update existing
     if request.sessionId:
         for attempt in range(_MAX_RETRIES):
@@ -163,12 +168,12 @@ async def save_session(
                     select(models.Experiment).where(
                         and_(
                             models.Experiment.id == request.sessionId,
-                            models.Experiment.user == user
+                            models.Experiment.user == user,
                         )
                     )
                 )
                 experiment = result.scalar_one_or_none()
-                
+
                 if experiment:
                     # Update existing session.
                     # Guard: don't overwrite non-empty tree_nodes/edges/smiles
@@ -202,8 +207,12 @@ async def save_session(
                     # when it captured its state (React batched-state race).
                     incoming_sidebar_msgs = state.sidebarMessages or []
                     existing_sidebar_msgs = []
-                    if experiment.sidebar_state and isinstance(experiment.sidebar_state, dict):
-                        existing_sidebar_msgs = experiment.sidebar_state.get("messages", [])
+                    if experiment.sidebar_state and isinstance(
+                        experiment.sidebar_state, dict
+                    ):
+                        existing_sidebar_msgs = experiment.sidebar_state.get(
+                            "messages", []
+                        )
 
                     if len(incoming_sidebar_msgs) >= len(existing_sidebar_msgs):
                         experiment.sidebar_state = {
@@ -232,37 +241,43 @@ async def save_session(
                         "customPropertyDesc": state.customPropertyDesc,
                         "customPropertyAscending": state.customPropertyAscending,
                         # Sidebar state
-                        "sidebarMessages": incoming_sidebar_msgs if len(incoming_sidebar_msgs) >= len(existing_gs_msgs) else existing_gs_msgs,
+                        "sidebarMessages": (
+                            incoming_sidebar_msgs
+                            if len(incoming_sidebar_msgs) >= len(existing_gs_msgs)
+                            else existing_gs_msgs
+                        ),
                         "sidebarSourceFilterOpen": state.sidebarSourceFilterOpen,
                         "sidebarVisibleSources": state.sidebarVisibleSources,
                     }
                     experiment.graph_state = new_gs
                     experiment.last_modified = datetime.utcnow()
-                    
+
                     if request.name:
                         experiment.name = request.name
-                    
+
                     await db.commit()
                     await db.refresh(experiment)
-                    
+
                     return SessionResponse(
                         sessionId=experiment.id,
                         name=experiment.name,
                         createdAt=experiment.created_at,
                         lastModified=experiment.last_modified,
                         isRunning=experiment.is_running,
-                        state=_experiment_to_state(experiment)
+                        state=_experiment_to_state(experiment),
                     )
                 else:
                     break  # Experiment not found, fall through to create
             except OperationalError as e:
                 if "1020" in str(e) and attempt < _MAX_RETRIES - 1:
-                    logger.warning(f"Concurrent modification on experiment {request.sessionId}, retry {attempt + 1}/{_MAX_RETRIES}")
+                    logger.warning(
+                        f"Concurrent modification on experiment {request.sessionId}, retry {attempt + 1}/{_MAX_RETRIES}"
+                    )
                     await db.rollback()
                     await asyncio.sleep(0.05 * (attempt + 1))
                     continue
                 raise
-    
+
     # Create new session.
     # The frontend must supply a projectId that maps to an existing project.
     # If none is provided (or it doesn't exist), reject the save so that
@@ -284,12 +299,16 @@ async def save_session(
             status_code=422,
             detail="No valid project specified. Create a project first.",
         )
-    
+
     # Generate session name if not provided
-    session_name = request.name or f"Session {datetime.now().strftime('%Y-%m-%d %H:%M')}"
+    session_name = (
+        request.name or f"Session {datetime.now().strftime('%Y-%m-%d %H:%M')}"
+    )
     if state.smiles:
-        session_name = f"{state.smiles[:20]}..." if len(state.smiles) > 20 else state.smiles
-    
+        session_name = (
+            f"{state.smiles[:20]}..." if len(state.smiles) > 20 else state.smiles
+        )
+
     new_experiment = models.Experiment(
         id=generate_id("session"),
         project_id=project.id,
@@ -328,32 +347,31 @@ async def save_session(
             "visibleSources": state.sidebarVisibleSources or {},
         },
     )
-    
+
     project.last_modified = datetime.utcnow()
-    
+
     db.add(new_experiment)
     await db.commit()
     await db.refresh(new_experiment)
-    
+
     return SessionResponse(
         sessionId=new_experiment.id,
         name=new_experiment.name,
         createdAt=new_experiment.created_at,
         lastModified=new_experiment.last_modified,
         isRunning=new_experiment.is_running,
-        state=_experiment_to_state(new_experiment)
+        state=_experiment_to_state(new_experiment),
     )
 
 
 @router.get("/latest", response_model=Optional[SessionResponse])
 async def get_latest_session(
-    user: str = Depends(get_forwarded_user),
-    db: AsyncSession = Depends(get_db)
+    user: str = Depends(get_forwarded_user), db: AsyncSession = Depends(get_db)
 ):
     """Get the most recently modified session for the user"""
     if db is None:
         return None
-    
+
     result = await db.execute(
         select(models.Experiment)
         .where(models.Experiment.user == user)
@@ -361,17 +379,17 @@ async def get_latest_session(
         .limit(1)
     )
     experiment = result.scalar_one_or_none()
-    
+
     if not experiment:
         return None
-    
+
     return SessionResponse(
         sessionId=experiment.id,
         name=experiment.name,
         createdAt=experiment.created_at,
         lastModified=experiment.last_modified,
         isRunning=experiment.is_running,
-        state=_experiment_to_state(experiment)
+        state=_experiment_to_state(experiment),
     )
 
 
@@ -379,32 +397,29 @@ async def get_latest_session(
 async def get_session(
     session_id: str,
     user: str = Depends(get_forwarded_user),
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
 ):
     """Get a specific session by ID"""
     if db is None:
         raise HTTPException(status_code=503, detail="Database not available")
-    
+
     result = await db.execute(
         select(models.Experiment).where(
-            and_(
-                models.Experiment.id == session_id,
-                models.Experiment.user == user
-            )
+            and_(models.Experiment.id == session_id, models.Experiment.user == user)
         )
     )
     experiment = result.scalar_one_or_none()
-    
+
     if not experiment:
         raise HTTPException(status_code=404, detail="Session not found")
-    
+
     return SessionResponse(
         sessionId=experiment.id,
         name=experiment.name,
         createdAt=experiment.created_at,
         lastModified=experiment.last_modified,
         isRunning=experiment.is_running,
-        state=_experiment_to_state(experiment)
+        state=_experiment_to_state(experiment),
     )
 
 
@@ -412,12 +427,12 @@ async def get_session(
 async def list_sessions(
     limit: int = 20,
     user: str = Depends(get_forwarded_user),
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
 ):
     """List all sessions for the user, ordered by last modified"""
     if db is None:
         return []
-    
+
     result = await db.execute(
         select(models.Experiment)
         .where(models.Experiment.user == user)
@@ -425,7 +440,7 @@ async def list_sessions(
         .limit(limit)
     )
     experiments = result.scalars().all()
-    
+
     return [
         SessionListItem(
             sessionId=exp.id,
@@ -434,7 +449,7 @@ async def list_sessions(
             problemType=exp.problem_type,
             createdAt=exp.created_at,
             lastModified=exp.last_modified,
-            isRunning=exp.is_running
+            isRunning=exp.is_running,
         )
         for exp in experiments
     ]
@@ -444,28 +459,25 @@ async def list_sessions(
 async def delete_session(
     session_id: str,
     user: str = Depends(get_forwarded_user),
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
 ):
     """Delete a session"""
     if db is None:
         raise HTTPException(status_code=503, detail="Database not available")
-    
+
     result = await db.execute(
         select(models.Experiment).where(
-            and_(
-                models.Experiment.id == session_id,
-                models.Experiment.user == user
-            )
+            and_(models.Experiment.id == session_id, models.Experiment.user == user)
         )
     )
     experiment = result.scalar_one_or_none()
-    
+
     if not experiment:
         raise HTTPException(status_code=404, detail="Session not found")
-    
+
     await db.delete(experiment)
     await db.commit()
-    
+
     return {"success": True}
 
 
@@ -486,13 +498,12 @@ def _experiment_to_state(experiment: models.Experiment) -> SessionState:
         sidebar_messages = graph_state.get("sidebarMessages")
         sidebar_filter_open = graph_state.get("sidebarSourceFilterOpen")
         sidebar_visible = graph_state.get("sidebarVisibleSources")
-    
+
     return SessionState(
         # Project/Experiment identification
         projectId=experiment.project_id,
         experimentId=experiment.id,
         experimentName=experiment.name,
-        
         # Core experiment state
         smiles=experiment.smiles,
         problemType=experiment.problem_type,
@@ -508,13 +519,11 @@ def _experiment_to_state(experiment: models.Experiment) -> SessionState:
         visibleMetrics=experiment.visible_metrics,
         isComputing=experiment.is_running,
         serverSessionId=graph_state.get("serverSessionId"),
-        
         # Property optimization
         propertyType=graph_state.get("propertyType"),
         customPropertyName=graph_state.get("customPropertyName"),
         customPropertyDesc=graph_state.get("customPropertyDesc"),
         customPropertyAscending=graph_state.get("customPropertyAscending"),
-        
         # Sidebar state
         sidebarMessages=sidebar_messages,
         sidebarSourceFilterOpen=sidebar_filter_open,
