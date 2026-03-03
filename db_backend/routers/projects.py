@@ -151,11 +151,11 @@ async def get_projects(
     """Get all projects for the current user."""
     try:
         logger.info(f"Loading projects for user: {user}")
-        
+
         if db is None:
             logger.warning("Database not available")
             return []
-        
+
         query = (
             select(models.Project)
             .options(selectinload(models.Project.experiments))
@@ -165,17 +165,20 @@ async def get_projects(
 
         result = await db.execute(query)
         projects = result.scalars().all()
-        
+
         # Convert to dicts
         project_dicts = []
         for proj in projects:
             project_dicts.append(project_to_dict(proj))
-        
-        logger.info(f"Returning {len(project_dicts)} projects with total {sum(len(p['experiments']) for p in project_dicts)} experiments")
+
+        logger.info(
+            f"Returning {len(project_dicts)} projects with total {sum(len(p['experiments']) for p in project_dicts)} experiments"
+        )
         return project_dicts
     except Exception as e:
         logger.error(f"Error in get_projects: {e}")
         import traceback
+
         logger.error(traceback.format_exc())
         raise
 
@@ -184,12 +187,12 @@ async def get_projects(
 async def create_project(
     request: CreateProjectRequest,
     db: AsyncSession = Depends(get_db),
-    user: str = Depends(get_forwarded_user)
+    user: str = Depends(get_forwarded_user),
 ):
     """Create a new project"""
     project_id = generate_id("proj")
     now = datetime.utcnow()
-    
+
     project = models.Project(
         id=project_id,
         user=user,
@@ -197,11 +200,11 @@ async def create_project(
         created_at=now,
         last_modified=now,
     )
-    
+
     db.add(project)
     await db.commit()
     await db.refresh(project)
-    
+
     return {
         "id": project.id,
         "name": project.name,
@@ -236,9 +239,7 @@ async def delete_all_projects(
             )
         )
         await db.execute(
-            delete(models.Project).where(
-                models.Project.id.in_(project_ids)
-            )
+            delete(models.Project).where(models.Project.id.in_(project_ids))
         )
     await db.commit()
     logger.info(f"Deleted {count} projects for user {user}")
@@ -249,23 +250,22 @@ async def delete_all_projects(
 async def delete_project(
     project_id: str,
     db: AsyncSession = Depends(get_db),
-    user: str = Depends(get_forwarded_user)
+    user: str = Depends(get_forwarded_user),
 ):
     """Delete a project and all its experiments"""
     result = await db.execute(
         select(models.Project).where(
-            models.Project.id == project_id,
-            models.Project.user == user
+            models.Project.id == project_id, models.Project.user == user
         )
     )
     project = result.scalar_one_or_none()
-    
+
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
-    
+
     await db.delete(project)
     await db.commit()
-    
+
     return {"status": "deleted"}
 
 
@@ -274,26 +274,25 @@ async def update_project(
     project_id: str,
     request: CreateProjectRequest,
     db: AsyncSession = Depends(get_db),
-    user: str = Depends(get_forwarded_user)
+    user: str = Depends(get_forwarded_user),
 ):
     """Update project name"""
     result = await db.execute(
         select(models.Project).where(
-            models.Project.id == project_id,
-            models.Project.user == user
+            models.Project.id == project_id, models.Project.user == user
         )
     )
     project = result.scalar_one_or_none()
-    
+
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
-    
+
     project.name = request.name
     project.last_modified = datetime.utcnow()
-    
+
     await db.commit()
     await db.refresh(project)
-    
+
     # Load experiments
     exp_result = await db.execute(
         select(models.Experiment)
@@ -301,7 +300,7 @@ async def update_project(
         .order_by(models.Experiment.created_at)
     )
     project.experiments = exp_result.scalars().all()
-    
+
     return project_to_dict(project)
 
 
@@ -310,26 +309,27 @@ async def create_experiment(
     project_id: str,
     request: CreateExperimentRequest,
     db: AsyncSession = Depends(get_db),
-    user: str = Depends(get_forwarded_user)
+    user: str = Depends(get_forwarded_user),
 ):
     """Create a new experiment in a project"""
-    logger.info(f"Creating experiment '{request.name}' in project {project_id} for user {user}")
-    
+    logger.info(
+        f"Creating experiment '{request.name}' in project {project_id} for user {user}"
+    )
+
     # Verify project exists
     result = await db.execute(
         select(models.Project).where(
-            models.Project.id == project_id,
-            models.Project.user == user
+            models.Project.id == project_id, models.Project.user == user
         )
     )
     project = result.scalar_one_or_none()
-    
+
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
-    
+
     experiment_id = generate_id("exp")
     now = datetime.utcnow()
-    
+
     experiment = models.Experiment(
         id=experiment_id,
         project_id=project_id,
@@ -338,14 +338,14 @@ async def create_experiment(
         created_at=now,
         last_modified=now,
     )
-    
+
     db.add(experiment)
-    
+
     # Note: project.last_modified is intentionally NOT updated here.
     # Updating the shared project row concurrently from multiple experiment
     # creates/updates causes MariaDB error 1020.  The 2-second sidebar poll
     # keeps the project list current without relying on this timestamp.
-    
+
     for attempt in range(_MAX_RETRIES):
         try:
             await db.commit()
@@ -354,7 +354,9 @@ async def create_experiment(
             return experiment_to_dict(experiment)
         except OperationalError as e:
             if "1020" in str(e) and attempt < _MAX_RETRIES - 1:
-                logger.warning(f"Concurrent modification creating experiment {experiment_id}, retry {attempt + 1}/{_MAX_RETRIES}")
+                logger.warning(
+                    f"Concurrent modification creating experiment {experiment_id}, retry {attempt + 1}/{_MAX_RETRIES}"
+                )
                 await db.rollback()
                 await asyncio.sleep(0.05 * (attempt + 1))
                 # Re-add the experiment after rollback clears it from the session
@@ -377,7 +379,7 @@ async def update_experiment(
     experiment_id: str,
     request: UpdateExperimentRequest,
     db: AsyncSession = Depends(get_db),
-    user: str = Depends(get_forwarded_user)
+    user: str = Depends(get_forwarded_user),
 ):
     """Update an experiment's full state"""
     exp_data = request.experiment
@@ -388,14 +390,14 @@ async def update_experiment(
                 select(models.Experiment).where(
                     models.Experiment.id == experiment_id,
                     models.Experiment.project_id == project_id,
-                    models.Experiment.user == user
+                    models.Experiment.user == user,
                 )
             )
             experiment = result.scalar_one_or_none()
-            
+
             if not experiment:
                 raise HTTPException(status_code=404, detail="Experiment not found")
-            
+
             # Update all fields from request.  For tree_nodes,
             # edges, and smiles: protect non-empty DB data from being
             # overwritten by an empty payload (e.g. a stale frontend
@@ -479,18 +481,20 @@ async def update_experiment(
                     f"update_experiment: keeping existing smiles for "
                     f"{experiment_id} (incoming was empty)"
                 )
-            
+
             # Note: project.last_modified is intentionally NOT updated here
             # to avoid contention on the shared project row when multiple
             # experiments in the same project are updated concurrently.
-            
+
             await db.commit()
             await db.refresh(experiment)
-            
+
             return experiment_to_dict(experiment)
         except OperationalError as e:
             if "1020" in str(e) and attempt < _MAX_RETRIES - 1:
-                logger.warning(f"Concurrent modification on experiment {experiment_id}, retry {attempt + 1}/{_MAX_RETRIES}")
+                logger.warning(
+                    f"Concurrent modification on experiment {experiment_id}, retry {attempt + 1}/{_MAX_RETRIES}"
+                )
                 await db.rollback()
                 await asyncio.sleep(0.05 * (attempt + 1))  # brief backoff
                 continue
@@ -502,23 +506,23 @@ async def delete_experiment(
     project_id: str,
     experiment_id: str,
     db: AsyncSession = Depends(get_db),
-    user: str = Depends(get_forwarded_user)
+    user: str = Depends(get_forwarded_user),
 ):
     """Delete an experiment"""
     result = await db.execute(
         select(models.Experiment).where(
             models.Experiment.id == experiment_id,
             models.Experiment.project_id == project_id,
-            models.Experiment.user == user
+            models.Experiment.user == user,
         )
     )
     experiment = result.scalar_one_or_none()
-    
+
     if not experiment:
         raise HTTPException(status_code=404, detail="Experiment not found")
-    
+
     await db.delete(experiment)
-    
+
     # Update project's last_modified
     proj_result = await db.execute(
         select(models.Project).where(models.Project.id == project_id)
@@ -526,9 +530,9 @@ async def delete_experiment(
     project = proj_result.scalar_one_or_none()
     if project:
         project.last_modified = datetime.utcnow()
-    
+
     await db.commit()
-    
+
     return {"status": "deleted"}
 
 
@@ -538,7 +542,7 @@ async def set_experiment_running(
     experiment_id: str,
     is_running: bool,
     db: AsyncSession = Depends(get_db),
-    user: str = Depends(get_forwarded_user)
+    user: str = Depends(get_forwarded_user),
 ):
     """Update experiment's running status"""
     for attempt in range(_MAX_RETRIES):
@@ -547,23 +551,25 @@ async def set_experiment_running(
                 select(models.Experiment).where(
                     models.Experiment.id == experiment_id,
                     models.Experiment.project_id == project_id,
-                    models.Experiment.user == user
+                    models.Experiment.user == user,
                 )
             )
             experiment = result.scalar_one_or_none()
-            
+
             if not experiment:
                 raise HTTPException(status_code=404, detail="Experiment not found")
-            
+
             experiment.is_running = is_running
             experiment.last_modified = datetime.utcnow()
-            
+
             await db.commit()
-            
+
             return {"status": "updated"}
         except OperationalError as e:
             if "1020" in str(e) and attempt < _MAX_RETRIES - 1:
-                logger.warning(f"Concurrent modification on experiment {experiment_id} (running), retry {attempt + 1}/{_MAX_RETRIES}")
+                logger.warning(
+                    f"Concurrent modification on experiment {experiment_id} (running), retry {attempt + 1}/{_MAX_RETRIES}"
+                )
                 await db.rollback()
                 await asyncio.sleep(0.05 * (attempt + 1))
                 continue

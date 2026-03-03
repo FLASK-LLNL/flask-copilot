@@ -169,7 +169,10 @@ class DatabaseDataSource implements ProjectDataSource {
           this.useLocalStorageFallback = true;
         }
       } catch (error) {
-        console.warn('[DatabaseDataSource] Database unavailable, falling back to localStorage:', error);
+        console.warn(
+          '[DatabaseDataSource] Database unavailable, falling back to localStorage:',
+          error
+        );
         this.useLocalStorageFallback = true;
       }
     }
@@ -224,14 +227,14 @@ class DatabaseDataSource implements ProjectDataSource {
         this.useLocalStorageFallback = true;
       }
     }
-    
+
     return this.localStorageSource.createProject(name);
   }
 
   async updateProject(project: Project): Promise<void> {
     // Update localStorage cache first
     await this.localStorageSource.updateProject(project);
-    
+
     if (!this.useLocalStorageFallback) {
       try {
         const response = await fetch(`${HTTP_SERVER}/api/projects/${project.id}`, {
@@ -251,7 +254,7 @@ class DatabaseDataSource implements ProjectDataSource {
   async deleteProject(projectId: string): Promise<void> {
     // Delete from localStorage cache
     await this.localStorageSource.deleteProject(projectId);
-    
+
     if (!this.useLocalStorageFallback) {
       try {
         const response = await fetch(`${HTTP_SERVER}/api/projects/${projectId}`, {
@@ -278,7 +281,7 @@ class DatabaseDataSource implements ProjectDataSource {
           const experiment = await response.json();
           // Update localStorage cache
           const projects = await this.localStorageSource.loadProjects();
-          const project = projects.find(p => p.id === projectId);
+          const project = projects.find((p) => p.id === projectId);
           if (project) {
             project.experiments.push(experiment);
             project.lastModified = new Date().toISOString();
@@ -290,7 +293,9 @@ class DatabaseDataSource implements ProjectDataSource {
           // Do NOT fall back to localStorage: the experiment would appear locally
           // but be invisible to the DB, causing data loss on next page load.
           const text = await response.text().catch(() => response.status.toString());
-          throw new Error(`Failed to create experiment in database (HTTP ${response.status}): ${text}`);
+          throw new Error(
+            `Failed to create experiment in database (HTTP ${response.status}): ${text}`
+          );
         }
       } catch (error) {
         if (error instanceof Error && error.message.startsWith('Failed to create experiment')) {
@@ -302,21 +307,24 @@ class DatabaseDataSource implements ProjectDataSource {
         this.useLocalStorageFallback = true;
       }
     }
-    
+
     return this.localStorageSource.createExperiment(projectId, name);
   }
 
   async updateExperiment(projectId: string, experiment: Experiment): Promise<void> {
     // Update localStorage cache first
     await this.localStorageSource.updateExperiment(projectId, experiment);
-    
+
     if (!this.useLocalStorageFallback) {
       try {
-        const response = await fetch(`${HTTP_SERVER}/api/projects/${projectId}/experiments/${experiment.id}`, {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ experiment }),
-        });
+        const response = await fetch(
+          `${HTTP_SERVER}/api/projects/${projectId}/experiments/${experiment.id}`,
+          {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ experiment }),
+          }
+        );
         if (!response.ok) {
           console.warn('Failed to update experiment in database');
         }
@@ -329,12 +337,15 @@ class DatabaseDataSource implements ProjectDataSource {
   async deleteExperiment(projectId: string, experimentId: string): Promise<void> {
     // Delete from localStorage cache
     await this.localStorageSource.deleteExperiment(projectId, experimentId);
-    
+
     if (!this.useLocalStorageFallback) {
       try {
-        const response = await fetch(`${HTTP_SERVER}/api/projects/${projectId}/experiments/${experimentId}`, {
-          method: 'DELETE',
-        });
+        const response = await fetch(
+          `${HTTP_SERVER}/api/projects/${projectId}/experiments/${experimentId}`,
+          {
+            method: 'DELETE',
+          }
+        );
         if (!response.ok) {
           console.warn('Failed to delete experiment from database');
         }
@@ -344,15 +355,22 @@ class DatabaseDataSource implements ProjectDataSource {
     }
   }
 
-  async setExperimentRunning(projectId: string, experimentId: string, isRunning: boolean): Promise<void> {
+  async setExperimentRunning(
+    projectId: string,
+    experimentId: string,
+    isRunning: boolean
+  ): Promise<void> {
     // Update localStorage cache
     await this.localStorageSource.setExperimentRunning(projectId, experimentId, isRunning);
-    
+
     if (!this.useLocalStorageFallback) {
       try {
-        const response = await fetch(`${HTTP_SERVER}/api/projects/${projectId}/experiments/${experimentId}/running?is_running=${isRunning}`, {
-          method: 'PUT',
-        });
+        const response = await fetch(
+          `${HTTP_SERVER}/api/projects/${projectId}/experiments/${experimentId}/running?is_running=${isRunning}`,
+          {
+            method: 'PUT',
+          }
+        );
         if (!response.ok) {
           console.warn('Failed to update experiment running status in database');
         }
@@ -454,14 +472,12 @@ export const useProjectData = () => {
     // event loop tick (e.g., loadContextFromExperiment after a sidebar
     // click) see the freshly-saved data instead of waiting for the next
     // 2-second poll.
-    const updatedProjects = projectsRef.current.map(p => {
+    const updatedProjects = projectsRef.current.map((p) => {
       if (p.id !== projectId) return p;
       return {
         ...p,
-        experiments: p.experiments.map(e =>
-          e.id === experiment.id
-            ? { ...experiment, lastModified: new Date().toISOString() }
-            : e
+        experiments: p.experiments.map((e) =>
+          e.id === experiment.id ? { ...experiment, lastModified: new Date().toISOString() } : e
         ),
         lastModified: new Date().toISOString(),
       };
@@ -516,6 +532,6 @@ export const useProjectData = () => {
     deleteExperiment,
     setExperimentRunning,
     refreshProjects: loadProjects,
-    clearAllProjects
+    clearAllProjects,
   };
 };

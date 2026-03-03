@@ -3,7 +3,14 @@
  * This provides automatic session save/restore functionality.
  */
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { TreeNode, Edge, MetricHistoryItem, VisibleMetrics, SidebarMessage, VisibleSources } from '../types';
+import {
+  TreeNode,
+  Edge,
+  MetricHistoryItem,
+  VisibleMetrics,
+  SidebarMessage,
+  VisibleSources,
+} from '../types';
 import { HTTP_SERVER } from '../config';
 
 // Auto-save interval in milliseconds
@@ -19,7 +26,7 @@ export interface SessionState {
   projectName?: string;
   experimentId?: string;
   experimentName?: string;
-  
+
   // Core experiment state
   smiles?: string;
   problemType?: string;
@@ -35,13 +42,13 @@ export interface SessionState {
   visibleMetrics?: VisibleMetrics;
   isComputing?: boolean;
   serverSessionId?: string | null;
-  
+
   // Property optimization
   propertyType?: string;
   customPropertyName?: string;
   customPropertyDesc?: string;
   customPropertyAscending?: boolean;
-  
+
   // Sidebar state
   sidebarMessages?: SidebarMessage[];
   sidebarSourceFilterOpen?: boolean;
@@ -70,14 +77,20 @@ export interface SessionPersistenceState {
 }
 
 export interface SessionPersistenceActions {
-  saveSession: (state: SessionState, force?: boolean, options?: { checkpoint?: boolean; name?: string }) => Promise<void>;
+  saveSession: (
+    state: SessionState,
+    force?: boolean,
+    options?: { checkpoint?: boolean; name?: string }
+  ) => Promise<void>;
   loadSession: () => Promise<SessionState | null>;
   clearSession: () => Promise<void>;
   setServerSessionId: (id: string | null) => void;
   setSessionWasComputing: (computing: boolean) => void;
   setResumeAttempted: (attempted: boolean) => void;
   getPendingResume: () => { sessionId: string | null; smiles: string; problemType: string } | null;
-  setPendingResume: (data: { sessionId: string | null; smiles: string; problemType: string } | null) => void;
+  setPendingResume: (
+    data: { sessionId: string | null; smiles: string; problemType: string } | null
+  ) => void;
 }
 
 export const useSessionPersistence = (): SessionPersistenceState & SessionPersistenceActions => {
@@ -90,16 +103,22 @@ export const useSessionPersistence = (): SessionPersistenceState & SessionPersis
   const [serverSessionId, setServerSessionId] = useState<string | null>(null);
   const [sessionWasComputing, setSessionWasComputing] = useState(false);
   const [resumeAttempted, setResumeAttempted] = useState(false);
-  
+
   const isSavingRef = useRef(false);
   const dbSessionIdRef = useRef<string | null>(null);
-  const pendingResumeRef = useRef<{ sessionId: string | null; smiles: string; problemType: string } | null>(null);
-  const saveQueueRef = useRef<Array<{
-    state: SessionState;
-    checkpoint: boolean;
-    name?: string;
-    resolve: () => void;
-  }>>([]);
+  const pendingResumeRef = useRef<{
+    sessionId: string | null;
+    smiles: string;
+    problemType: string;
+  } | null>(null);
+  const saveQueueRef = useRef<
+    Array<{
+      state: SessionState;
+      checkpoint: boolean;
+      name?: string;
+      resolve: () => void;
+    }>
+  >([]);
   const processingQueueRef = useRef(false);
 
   useEffect(() => {
@@ -122,7 +141,7 @@ export const useSessionPersistence = (): SessionPersistenceState & SessionPersis
       // persistence tracking ID for edge cases.
       const effectiveSessionId = next.checkpoint
         ? null
-        : (next.state.experimentId || dbSessionIdRef.current);
+        : next.state.experimentId || dbSessionIdRef.current;
       const response = await fetch(`${HTTP_SERVER}/api/sessions/save`, {
         method: 'POST',
         headers: {
@@ -160,30 +179,33 @@ export const useSessionPersistence = (): SessionPersistenceState & SessionPersis
     }
   }, []);
 
-  const saveSession = useCallback(async (
-    state: SessionState,
-    force = false,
-    options?: { checkpoint?: boolean; name?: string }
-  ): Promise<void> => {
-    // Only save if there's meaningful data or force save
-    if (!force && (!state.treeNodes || state.treeNodes.length === 0) && !state.smiles) return;
+  const saveSession = useCallback(
+    async (
+      state: SessionState,
+      force = false,
+      options?: { checkpoint?: boolean; name?: string }
+    ): Promise<void> => {
+      // Only save if there's meaningful data or force save
+      if (!force && (!state.treeNodes || state.treeNodes.length === 0) && !state.smiles) return;
 
-    const checkpoint = options?.checkpoint ?? false;
-    const name = options?.name;
+      const checkpoint = options?.checkpoint ?? false;
+      const name = options?.name;
 
-    return new Promise<void>((resolve) => {
-      saveQueueRef.current.push({ state, checkpoint, name, resolve });
+      return new Promise<void>((resolve) => {
+        saveQueueRef.current.push({ state, checkpoint, name, resolve });
 
-      if (!processingQueueRef.current) {
-        void processSaveQueue();
-      }
-    });
-  }, [processSaveQueue]);
+        if (!processingQueueRef.current) {
+          void processSaveQueue();
+        }
+      });
+    },
+    [processSaveQueue]
+  );
 
   const loadSession = useCallback(async (): Promise<SessionState | null> => {
     try {
       const response = await fetch(`${HTTP_SERVER}/api/sessions/latest`);
-      
+
       if (!response.ok) {
         if (response.status === 404) {
           console.log('No previous session found');
@@ -191,36 +213,34 @@ export const useSessionPersistence = (): SessionPersistenceState & SessionPersis
         setSessionLoaded(true);
         return null;
       }
-      
+
       const data: SessionResponse | null = await response.json();
-      
+
       if (!data) {
         setSessionLoaded(true);
         return null;
       }
-      
+
       const state = data.state;
-      
+
       // Check if session is recent (within SESSION_EXPIRY_HOURS)
       const sessionTime = new Date(data.lastModified);
       const now = new Date();
       const hoursDiff = (now.getTime() - sessionTime.getTime()) / (1000 * 60 * 60);
-      
+
       if (hoursDiff > SESSION_EXPIRY_HOURS) {
         console.log('Session too old, ignoring');
         setSessionLoaded(true);
         return null;
       }
-      
+
       // Store the database session ID
       setDbSessionId(data.sessionId);
-      
+
       // Check if computation was in progress - either by isComputing flag or by detecting incomplete edges
-      const hasIncompleteEdges = state.edges && state.edges.some(e => 
-        e.status === 'computing'
-      );
+      const hasIncompleteEdges = state.edges && state.edges.some((e) => e.status === 'computing');
       const wasComputing = state.isComputing || hasIncompleteEdges;
-      
+
       if (wasComputing && state.smiles) {
         console.log('Detected incomplete computation, will attempt to resume');
         setSessionWasComputing(true);
@@ -230,15 +250,19 @@ export const useSessionPersistence = (): SessionPersistenceState & SessionPersis
         pendingResumeRef.current = {
           sessionId: state.serverSessionId || null,
           smiles: state.smiles,
-          problemType: state.problemType || 'retrosynthesis'
+          problemType: state.problemType || 'retrosynthesis',
         };
       }
-      
+
       setSessionLoaded(true);
       setSessionRestored(true);
       setLastSaved(sessionTime);
-      
-      console.log('Session restored from database:', data.sessionId, state.serverSessionId ? `(server session: ${state.serverSessionId})` : '');
+
+      console.log(
+        'Session restored from database:',
+        data.sessionId,
+        state.serverSessionId ? `(server session: ${state.serverSessionId})` : ''
+      );
       return state;
     } catch (error) {
       console.error('Failed to load session from database:', error);
@@ -269,10 +293,13 @@ export const useSessionPersistence = (): SessionPersistenceState & SessionPersis
   }, [dbSessionId]);
 
   const getPendingResume = useCallback(() => pendingResumeRef.current, []);
-  
-  const setPendingResume = useCallback((data: { sessionId: string | null; smiles: string; problemType: string } | null) => {
-    pendingResumeRef.current = data;
-  }, []);
+
+  const setPendingResume = useCallback(
+    (data: { sessionId: string | null; smiles: string; problemType: string } | null) => {
+      pendingResumeRef.current = data;
+    },
+    []
+  );
 
   return {
     // State
@@ -308,7 +335,7 @@ export const useCheckpointOnUnload = (
 ): void => {
   const { dbSessionId, saveSession } = sessionPersistence;
   const getStateRef = useRef(getState);
-  
+
   // Keep the getState ref updated
   useEffect(() => {
     getStateRef.current = getState;
@@ -319,18 +346,21 @@ export const useCheckpointOnUnload = (
     const handleBeforeUnload = () => {
       const state = getStateRef.current();
       if ((!state.treeNodes || state.treeNodes.length === 0) && !state.smiles) return;
-      
+
       // Prefer the sidebar experimentId so the beacon updates the correct row
       const effectiveSessionId = state.experimentId || dbSessionId;
       const payload = JSON.stringify({
         sessionId: effectiveSessionId,
         state: state,
       });
-      
+
       // sendBeacon is more reliable than fetch for unload events
-      navigator.sendBeacon(`${HTTP_SERVER}/api/sessions/save`, new Blob([payload], { type: 'application/json' }));
+      navigator.sendBeacon(
+        `${HTTP_SERVER}/api/sessions/save`,
+        new Blob([payload], { type: 'application/json' })
+      );
     };
-    
+
     window.addEventListener('beforeunload', handleBeforeUnload);
     return () => {
       window.removeEventListener('beforeunload', handleBeforeUnload);
