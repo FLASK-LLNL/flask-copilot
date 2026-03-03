@@ -18,7 +18,9 @@ class Project(Base):
     id: Mapped[str] = mapped_column(String(255), primary_key=True)
     user: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
     name: Mapped[str] = mapped_column(String(255), nullable=False)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, default=datetime.utcnow, nullable=False
+    )
     last_modified: Mapped[datetime] = mapped_column(
         DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False
     )
@@ -34,10 +36,14 @@ class Experiment(Base):
     __tablename__ = "experiments"
 
     id: Mapped[str] = mapped_column(String(255), primary_key=True)
-    project_id: Mapped[str] = mapped_column(String(255), ForeignKey("projects.id", ondelete="CASCADE"), nullable=False)
+    project_id: Mapped[str] = mapped_column(
+        String(255), ForeignKey("projects.id", ondelete="CASCADE"), nullable=False
+    )
     user: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
     name: Mapped[str] = mapped_column(String(255), nullable=False)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, default=datetime.utcnow, nullable=False
+    )
     last_modified: Mapped[datetime] = mapped_column(
         DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False
     )
@@ -50,9 +56,13 @@ class Experiment(Base):
     system_prompt: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     problem_prompt: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     property_type: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
-    custom_property_name: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    custom_property_name: Mapped[Optional[str]] = mapped_column(
+        String(255), nullable=True
+    )
     custom_property_desc: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
-    custom_property_ascending: Mapped[Optional[bool]] = mapped_column(Boolean, nullable=True)
+    custom_property_ascending: Mapped[Optional[bool]] = mapped_column(
+        Boolean, nullable=True
+    )
 
     # Complex JSON fields for nested data structures
     tree_nodes: Mapped[Optional[str]] = mapped_column(JSON, nullable=True)

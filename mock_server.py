@@ -51,6 +51,7 @@ class ComputationSession:
     but the background computation task keeps running, accumulating nodes
     and edges.  A reconnecting browser can re-attach via ``resume_session``.
     """
+
     session_id: str
     smiles: str
     problem_type: str
@@ -92,6 +93,7 @@ class ComputationSession:
         # Track reasoning messages unconditionally (even when headless)
         if payload.get("type") == "response" and payload.get("message"):
             import time
+
             msg = payload["message"]
             if isinstance(msg, dict):
                 tracked_msg = {
@@ -134,6 +136,7 @@ class ComputationSession:
 
 active_sessions: dict[str, ComputationSession] = {}
 SESSION_TIMEOUT_HOURS = 24
+
 
 def cleanup_old_sessions():
     """Remove sessions older than SESSION_TIMEOUT_HOURS"""
@@ -209,7 +212,8 @@ async def save_session_to_db(session: ComputationSession) -> None:
             if experiment is None:
                 try:
                     result = await db.execute(
-                        select(db_models.Experiment).where(
+                        select(db_models.Experiment)
+                        .where(
                             func.json_unquote(
                                 func.json_extract(
                                     db_models.Experiment.graph_state,
@@ -217,21 +221,28 @@ async def save_session_to_db(session: ComputationSession) -> None:
                                 )
                             )
                             == session.session_id
-                        ).order_by(db_models.Experiment.last_modified.desc()).limit(1)
+                        )
+                        .order_by(db_models.Experiment.last_modified.desc())
+                        .limit(1)
                     )
                     experiment = result.scalar_one_or_none()
                 except Exception as e:
-                    logger.debug(f"save_session_to_db: JSON query failed ({e}), trying fallback")
+                    logger.debug(
+                        f"save_session_to_db: JSON query failed ({e}), trying fallback"
+                    )
 
             # Strategy 2: fall back to latest running experiment with matching smiles
             if experiment is None:
                 result = await db.execute(
-                    select(db_models.Experiment).where(
+                    select(db_models.Experiment)
+                    .where(
                         and_(
                             db_models.Experiment.is_running == True,
                             db_models.Experiment.smiles == session.smiles,
                         )
-                    ).order_by(db_models.Experiment.last_modified.desc()).limit(1)
+                    )
+                    .order_by(db_models.Experiment.last_modified.desc())
+                    .limit(1)
                 )
                 experiment = result.scalar_one_or_none()
 
@@ -295,15 +306,12 @@ async def save_session_to_db(session: ComputationSession) -> None:
                     "messages": session.sent_messages,
                     "sourceFilterOpen": False,
                     "visibleSources": {
-                        s
-                        for m in session.sent_messages
-                        if (s := m.get("source"))
+                        s for m in session.sent_messages if (s := m.get("source"))
                     },
                 }
                 # Convert visible sources set to dict (frontend expects {source: bool})
                 experiment.sidebar_state["visibleSources"] = {
-                    src: True
-                    for src in experiment.sidebar_state["visibleSources"]
+                    src: True for src in experiment.sidebar_state["visibleSources"]
                 }
 
             # Ensure the serverSessionId is always stored in graph_state
@@ -341,7 +349,9 @@ async def lifespan(app: FastAPI):
                 await conn.run_sync(Base.metadata.create_all)
             logger.info("Database tables initialized successfully")
         except Exception as e:
-            logger.warning(f"Database initialization failed (app will run without persistence): {e}")
+            logger.warning(
+                f"Database initialization failed (app will run without persistence): {e}"
+            )
     else:
         logger.warning("No database engine available. Running without persistence.")
     yield
@@ -675,26 +685,30 @@ async def generate_molecules(
     positioned_nodes = calculate_positions(nodes)
 
     # Send initial reasoning message
-    await session.safe_send({
-        "type": "response",
-        "message": {
-            "source": "Reasoning",
-            "message": f"**Starting Retrosynthesis Analysis**\n\nTarget molecule: `{start_smiles}`\n\nExploring synthetic pathways with depth {depth}...",
+    await session.safe_send(
+        {
+            "type": "response",
+            "message": {
+                "source": "Reasoning",
+                "message": f"**Starting Retrosynthesis Analysis**\n\nTarget molecule: `{start_smiles}`\n\nExploring synthetic pathways with depth {depth}...",
+            },
         }
-    })
+    )
 
     # Stream root first
     root = positioned_nodes[0]
     await session.safe_send({"type": "node", "node": root.json()})
     session.sent_nodes.append(root.json())
 
-    await session.safe_send({
-        "type": "response",
-        "message": {
-            "source": "Reasoning",
-            "message": "Identified target molecule. Now analyzing possible disconnection strategies...",
+    await session.safe_send(
+        {
+            "type": "response",
+            "message": {
+                "source": "Reasoning",
+                "message": "Identified target molecule. Now analyzing possible disconnection strategies...",
+            },
         }
-    })
+    )
     await asyncio.sleep(0.8)
 
     # Retrosynthesis reasoning templates
@@ -728,23 +742,27 @@ async def generate_molecules(
             edge_data["edge"]["toNode"] = node.id
             await session.safe_send(edge_data)
             # Track the computing edge; will be updated to 'complete' below.
-            session.sent_edges.append({
-                "id": edge.id,
-                "fromNode": edge.fromNode,
-                "toNode": edge.toNode,
-                "status": "computing",
-                "label": f"Computing: {edge.label}",
-            })
+            session.sent_edges.append(
+                {
+                    "id": edge.id,
+                    "fromNode": edge.fromNode,
+                    "toNode": edge.toNode,
+                    "status": "computing",
+                    "label": f"Computing: {edge.label}",
+                }
+            )
 
             # Send reasoning about this step
             reasoning_msg = retro_reasoning[i % len(retro_reasoning)]
-            await session.safe_send({
-                "type": "response",
-                "message": {
-                    "source": "Reasoning",
-                    "message": f"**Step {i}**: {reasoning_msg}",
+            await session.safe_send(
+                {
+                    "type": "response",
+                    "message": {
+                        "source": "Reasoning",
+                        "message": f"**Step {i}**: {reasoning_msg}",
+                    },
                 }
-            })
+            )
 
             await asyncio.sleep(0.6)
 
@@ -753,14 +771,16 @@ async def generate_molecules(
             session.sent_nodes.append(node.json())
 
             # Send info about the discovered precursor
-            await session.safe_send({
-                "type": "response",
-                "message": {
-                    "source": "Logger (Info)",
-                    "message": f"Found precursor: `{node.smiles}`",
-                    "smiles": node.smiles,
+            await session.safe_send(
+                {
+                    "type": "response",
+                    "message": {
+                        "source": "Logger (Info)",
+                        "message": f"Found precursor: `{node.smiles}`",
+                        "smiles": node.smiles,
+                    },
                 }
-            })
+            )
 
             # Update edge to complete
             edge_complete = {
@@ -780,19 +800,24 @@ async def generate_molecules(
                     break
 
             # Periodic DB save so headless progress is visible to other browsers
-            if not session.ws_connected and len(session.sent_nodes) % session._db_save_interval == 0:
+            if (
+                not session.ws_connected
+                and len(session.sent_nodes) % session._db_save_interval == 0
+            ):
                 await save_session_to_db(session)
 
             await asyncio.sleep(0.2)
 
     # Send completion reasoning (tracked in sent_messages by safe_send)
-    await session.safe_send({
-        "type": "response",
-        "message": {
-            "source": "Reasoning",
-            "message": f"**Retrosynthesis Complete**\n\nSuccessfully identified {len(positioned_nodes)} molecules in the synthetic pathway.",
+    await session.safe_send(
+        {
+            "type": "response",
+            "message": {
+                "source": "Reasoning",
+                "message": f"**Retrosynthesis Complete**\n\nSuccessfully identified {len(positioned_nodes)} molecules in the synthetic pathway.",
+            },
         }
-    })
+    )
 
     # Persist to DB BEFORE sending the 'complete' WebSocket message.
     # This ensures that when the frontend receives 'complete' and
@@ -836,20 +861,24 @@ async def lead_molecule(
     ]
 
     # Send initial reasoning message
-    await session.safe_send({
-        "type": "response",
-        "message": {
-            "source": "Reasoning",
-            "message": f"**Starting Lead Molecule Optimization**\n\nInitial molecule: `{start_smiles}`\n\nPlanned optimization depth: {depth} iterations",
+    await session.safe_send(
+        {
+            "type": "response",
+            "message": {
+                "source": "Reasoning",
+                "message": f"**Starting Lead Molecule Optimization**\n\nInitial molecule: `{start_smiles}`\n\nPlanned optimization depth: {depth} iterations",
+            },
         }
-    })
+    )
     await asyncio.sleep(0.3)
 
     # Generate one node at a time
     for i in range(depth):
         # Check for cancellation
         if session.is_cancelled:
-            logger.info(f"Session {session.session_id}: cancelled, stopping optimization")
+            logger.info(
+                f"Session {session.session_id}: cancelled, stopping optimization"
+            )
             break
 
         if i > 0:
@@ -869,17 +898,19 @@ async def lead_molecule(
                 if tracked["id"] == f"edge_{i-1}_{i}":
                     tracked["status"] = "complete"
                     break
-        
+
         # Send reasoning message for this iteration
         reasoning_idx = i % len(reasoning_templates)
-        await session.safe_send({
-            "type": "response",
-            "message": {
-                "source": "Reasoning",
-                "message": f"**Iteration {i + 1}/{depth}**\n\n{reasoning_templates[reasoning_idx]}",
+        await session.safe_send(
+            {
+                "type": "response",
+                "message": {
+                    "source": "Reasoning",
+                    "message": f"**Iteration {i + 1}/{depth}**\n\n{reasoning_templates[reasoning_idx]}",
+                },
             }
-        })
-        
+        )
+
         node = dict(
             id=f"node_{i}",
             smiles=start_smiles + "C" * i,
@@ -892,17 +923,19 @@ async def lead_molecule(
         )
         await session.safe_send({"type": "node", "node": node})
         session.sent_nodes.append(node)
-        
+
         # Send a Logger (Info) message about the generated molecule
-        await session.safe_send({
-            "type": "response",
-            "message": {
-                "source": "Logger (Info)",
-                "message": f"Generated molecule: `{start_smiles + 'C' * i}`",
-                "smiles": start_smiles + "C" * i,
+        await session.safe_send(
+            {
+                "type": "response",
+                "message": {
+                    "source": "Logger (Info)",
+                    "message": f"Generated molecule: `{start_smiles + 'C' * i}`",
+                    "smiles": start_smiles + "C" * i,
+                },
             }
-        })
-        
+        )
+
         if i == depth - 1:
             break
         edge_data = {
@@ -918,28 +951,35 @@ async def lead_molecule(
         await session.safe_send(edge_data)
         # Record edge immediately; its status will be updated to complete
         # on the next iteration's edge_update message.
-        session.sent_edges.append({
-            "id": f"edge_{i}_{i+1}",
-            "fromNode": f"node_{i}",
-            "toNode": f"node_{i+1}",
-            "status": "computing",
-            "label": "Optimizing",
-        })
+        session.sent_edges.append(
+            {
+                "id": f"edge_{i}_{i+1}",
+                "fromNode": f"node_{i}",
+                "toNode": f"node_{i+1}",
+                "status": "computing",
+                "label": "Optimizing",
+            }
+        )
 
         # Periodic DB save so headless progress is visible to other browsers
-        if not session.ws_connected and len(session.sent_nodes) % session._db_save_interval == 0:
+        if (
+            not session.ws_connected
+            and len(session.sent_nodes) % session._db_save_interval == 0
+        ):
             await save_session_to_db(session)
 
         await asyncio.sleep(0.8)
 
     # Send completion reasoning (tracked in sent_messages by safe_send)
-    await session.safe_send({
-        "type": "response",
-        "message": {
-            "source": "Reasoning",
-            "message": f"**Optimization Complete**\n\nSuccessfully generated {depth} molecules in the optimization pathway.",
+    await session.safe_send(
+        {
+            "type": "response",
+            "message": {
+                "source": "Reasoning",
+                "message": f"**Optimization Complete**\n\nSuccessfully generated {depth} molecules in the optimization pathway.",
+            },
         }
-    })
+    )
 
     # Persist to DB BEFORE sending the 'complete' WebSocket message.
     # This ensures that when the frontend receives 'complete' and
@@ -958,13 +998,13 @@ async def lead_molecule(
 def _add_task_done_callback(task: asyncio.Task, session: ComputationSession) -> None:
     """Attach a done-callback that logs unhandled exceptions from the
     background computation task so they are not silently swallowed."""
+
     def _on_done(t: asyncio.Task) -> None:
         if t.cancelled():
             logger.info(f"Session {session.session_id}: task was cancelled")
         elif t.exception():
-            logger.error(
-                f"Session {session.session_id}: task raised {t.exception()!r}"
-            )
+            logger.error(f"Session {session.session_id}: task raised {t.exception()!r}")
+
     task.add_done_callback(_on_done)
 
 
@@ -978,10 +1018,10 @@ async def websocket_endpoint(websocket: WebSocket):
     # Track ALL sessions spawned/resumed by this WS connection so we can
     # persist every one of them when the browser disconnects.
     ws_session_ids: set[str] = set()
-    
+
     if "x-forwarded-user" in websocket.headers:
         username = websocket.headers["x-forwarded-user"]
-    
+
     # Cleanup old sessions periodically
     cleanup_old_sessions()
 
@@ -989,27 +1029,35 @@ async def websocket_endpoint(websocket: WebSocket):
     try:
         while True:
             data = await websocket.receive_json()
-            
+
             # Handle session resume request
             if data["action"] == "resume_session":
                 session_id = data.get("sessionId")
                 if session_id and session_id in active_sessions:
                     # Detach previous session if switching to a different one
-                    if current_session_id and current_session_id != session_id and current_session_id in active_sessions:
+                    if (
+                        current_session_id
+                        and current_session_id != session_id
+                        and current_session_id in active_sessions
+                    ):
                         active_sessions[current_session_id].detach_ws()
-                        logger.info(f"Detached session {current_session_id} (switching to resumed session {session_id})")
+                        logger.info(
+                            f"Detached session {current_session_id} (switching to resumed session {session_id})"
+                        )
 
                     session = active_sessions[session_id]
                     current_session_id = session_id
                     ws_session_ids.add(session_id)
 
                     if session.is_cancelled:
-                        await websocket.send_json({
-                            "type": "session_status",
-                            "sessionId": session_id,
-                            "experimentId": session.experiment_id,
-                            "status": "cancelled",
-                        })
+                        await websocket.send_json(
+                            {
+                                "type": "session_status",
+                                "sessionId": session_id,
+                                "experimentId": session.experiment_id,
+                                "status": "cancelled",
+                            }
+                        )
                     elif session.is_complete:
                         # Computation already finished – replay the full
                         # result set so the new browser renders everything.
@@ -1017,15 +1065,35 @@ async def websocket_endpoint(websocket: WebSocket):
                         exp_id = session.experiment_id
                         async with session._send_lock:
                             for node in list(session.sent_nodes):
-                                await websocket.send_json({"type": "node", "node": node, "experimentId": exp_id})
+                                await websocket.send_json(
+                                    {
+                                        "type": "node",
+                                        "node": node,
+                                        "experimentId": exp_id,
+                                    }
+                                )
                             for edge in list(session.sent_edges):
-                                await websocket.send_json({"type": "edge", "edge": edge, "experimentId": exp_id})
+                                await websocket.send_json(
+                                    {
+                                        "type": "edge",
+                                        "edge": edge,
+                                        "experimentId": exp_id,
+                                    }
+                                )
                             # Replay reasoning/sidebar messages so the
                             # frontend populates the reasoning panel
                             # (including "Retrosynthesis Complete").
                             for msg in list(session.sent_messages):
-                                await websocket.send_json({"type": "response", "message": msg, "experimentId": exp_id})
-                            await websocket.send_json({"type": "complete", "experimentId": exp_id})
+                                await websocket.send_json(
+                                    {
+                                        "type": "response",
+                                        "message": msg,
+                                        "experimentId": exp_id,
+                                    }
+                                )
+                            await websocket.send_json(
+                                {"type": "complete", "experimentId": exp_id}
+                            )
                         logger.info(
                             f"Replayed completed session {session_id} "
                             f"({len(session.sent_nodes)} nodes)"
@@ -1039,16 +1107,30 @@ async def websocket_endpoint(websocket: WebSocket):
                         exp_id = session.experiment_id
                         async with session._send_lock:
                             for node in list(session.sent_nodes):
-                                await websocket.send_json({"type": "node", "node": node, "experimentId": exp_id})
+                                await websocket.send_json(
+                                    {
+                                        "type": "node",
+                                        "node": node,
+                                        "experimentId": exp_id,
+                                    }
+                                )
                             for edge in list(session.sent_edges):
-                                await websocket.send_json({"type": "edge", "edge": edge, "experimentId": exp_id})
-                        await websocket.send_json({
-                            "type": "session_resumed",
-                            "sessionId": session_id,
-                            "experimentId": session.experiment_id,
-                            "sentNodes": len(session.sent_nodes),
-                            "isComplete": False,
-                        })
+                                await websocket.send_json(
+                                    {
+                                        "type": "edge",
+                                        "edge": edge,
+                                        "experimentId": exp_id,
+                                    }
+                                )
+                        await websocket.send_json(
+                            {
+                                "type": "session_resumed",
+                                "sessionId": session_id,
+                                "experimentId": session.experiment_id,
+                                "sentNodes": len(session.sent_nodes),
+                                "isComplete": False,
+                            }
+                        )
                         logger.info(
                             f"Reconnected browser to running session {session_id} "
                             f"(replayed {len(session.sent_nodes)} nodes, "
@@ -1057,17 +1139,21 @@ async def websocket_endpoint(websocket: WebSocket):
                     else:
                         # Task reference missing or already finished
                         # without marking complete (edge case).
-                        await websocket.send_json({
-                            "type": "session_status",
-                            "sessionId": session_id,
-                            "status": "unknown",
-                        })
+                        await websocket.send_json(
+                            {
+                                "type": "session_status",
+                                "sessionId": session_id,
+                                "status": "unknown",
+                            }
+                        )
                 else:
                     # Session not found or expired
-                    await websocket.send_json({
-                        "type": "session_not_found",
-                        "sessionId": session_id,
-                    })
+                    await websocket.send_json(
+                        {
+                            "type": "session_not_found",
+                            "sessionId": session_id,
+                        }
+                    )
                 continue
 
             if "runSettings" in data:
@@ -1079,12 +1165,16 @@ async def websocket_endpoint(websocket: WebSocket):
                 if current_session_id and current_session_id in active_sessions:
                     old_session = active_sessions[current_session_id]
                     old_session.detach_ws()
-                    logger.info(f"Detached session {current_session_id} (starting new computation)")
+                    logger.info(
+                        f"Detached session {current_session_id} (starting new computation)"
+                    )
 
                 # Create new session
                 session_id = data.get("sessionId") or str(uuid.uuid4())
-                depth = data.get("depth", 10 if data["problemType"] == "optimization" else 3)
-                
+                depth = data.get(
+                    "depth", 10 if data["problemType"] == "optimization" else 3
+                )
+
                 session = ComputationSession(
                     session_id=session_id,
                     smiles=data["smiles"],
@@ -1097,16 +1187,20 @@ async def websocket_endpoint(websocket: WebSocket):
                 active_sessions[session_id] = session
                 current_session_id = session_id
                 ws_session_ids.add(session_id)
-                
+
                 # Send session ID to client
-                await websocket.send_json({
-                    "type": "session_started",
-                    "sessionId": session_id,
-                    "experimentId": data.get("experimentId"),
-                })
-                
-                logger.info(f"Started new session {session_id} for {data['problemType']}")
-                
+                await websocket.send_json(
+                    {
+                        "type": "session_started",
+                        "sessionId": session_id,
+                        "experimentId": data.get("experimentId"),
+                    }
+                )
+
+                logger.info(
+                    f"Started new session {session_id} for {data['problemType']}"
+                )
+
                 # Immediately persist problem_type to the experiment DB
                 # row so it is available even if the user reloads before
                 # any nodes are generated.
@@ -1115,6 +1209,7 @@ async def websocket_endpoint(websocket: WebSocket):
                         from db_backend.database.engine import AsyncSessionLocal
                         from db_backend.database import models as db_models
                         from sqlalchemy import select as sa_select
+
                         if AsyncSessionLocal is not None:
                             async with AsyncSessionLocal() as _db:
                                 _result = await _db.execute(
@@ -1130,7 +1225,7 @@ async def websocket_endpoint(websocket: WebSocket):
                                     await _db.commit()
                     except Exception as exc:
                         logger.debug(f"Early problem_type persist failed: {exc}")
-                
+
                 # Launch computation as a *background task* so the WS
                 # read loop keeps processing stop / reset / query messages.
                 # If the browser disconnects, the task continues headless.
@@ -1231,7 +1326,9 @@ async def websocket_endpoint(websocket: WebSocket):
                 # Detach the current session so it continues headless.
                 if current_session_id and current_session_id in active_sessions:
                     active_sessions[current_session_id].detach_ws()
-                    logger.info(f"Detached session {current_session_id} by client request")
+                    logger.info(
+                        f"Detached session {current_session_id} by client request"
+                    )
                 current_session_id = None
             elif data["action"] == "reset":
                 if current_session_id and current_session_id in active_sessions:

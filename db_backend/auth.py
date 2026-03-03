@@ -10,7 +10,9 @@ from typing import Optional
 import os
 
 
-async def get_forwarded_user(x_forwarded_user: Optional[str] = Header(None, alias="X-Forwarded-User")) -> str:
+async def get_forwarded_user(
+    x_forwarded_user: Optional[str] = Header(None, alias="X-Forwarded-User")
+) -> str:
     """
     Extract authenticated user from X-Forwarded-User header.
     Falls back to 'default_user' for local development.
