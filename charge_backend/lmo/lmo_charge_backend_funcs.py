@@ -5,6 +5,7 @@ from loguru import logger
 import sys
 import os
 from pathlib import Path
+import json
 from charge.experiments.experiment import Experiment
 from charge.utils.mcp_workbench_utils import call_mcp_tool_directly
 from charge_backend.prompt_debugger import debug_prompt_task
@@ -141,12 +142,12 @@ async def generate_lead_molecule(
         },
         urls=available_tools,
     )
-    results = property_result_msg.result
-    if len(results) > 1:
-        property_result = float(property_result_msg.result[1].content)
-    else:
-        property_result = 0.0
-        raise ValueError(f"{property_result_msg.result[0].content}")
+    try:
+        property_name, property_result = json.loads(property_result_msg.content)
+    except json.decoder.JSONDecodeError as err:
+        msg = f"{calculate_property_tool} returned a bare string, not a json message: {property_result_msg}"
+        await clogger.error(msg)
+        raise ValueError(msg)
 
     lead_molecule_data = post_process_lmo_smiles(
         smiles=lead_molecule_smiles,
