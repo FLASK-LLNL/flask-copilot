@@ -8,7 +8,7 @@
 import asyncio
 from concurrent.futures import ProcessPoolExecutor
 from functools import partial
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Request
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Request, HTTPException
 from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
@@ -42,8 +42,10 @@ from builtin_tools import list_builtin_tool_definitions
 from charge_backend import prompt_debugger
 
 # Pydantic models for new endpoints
-from pydantic import BaseModel
+from pydantic import BaseModel, ValidationError
 from typing import Optional
+from db_backend.database.engine import AsyncSessionLocal
+from db_backend import session_state_service
 
 
 class CheckServersRequest(BaseModel):
@@ -216,11 +218,165 @@ def _log_background_action_failure(task: asyncio.Task) -> None:
     logger.exception(f"Background websocket action failed: {exc}")
 
 
+def _model_to_json(model):
+    if model is None:
+        return None
+    if hasattr(model, "model_dump"):
+        return model.model_dump(mode="json")
+    if hasattr(model, "dict"):
+        return model.dict()
+    return model
+
+
+async def _handle_session_ws_action(
+    websocket: WebSocket, data: dict, username: str
+) -> bool:
+    action = data.get("action")
+    request_id = data.get("requestId")
+    session_actions = {
+        "session_save",
+        "session_get_latest",
+        "session_get",
+        "session_list",
+        "session_delete",
+    }
+
+    if action not in session_actions:
+        return False
+
+    if AsyncSessionLocal is None:
+        await websocket.send_json(
+            {
+                "type": "session_error",
+                "requestId": request_id,
+                "error": "Database not available",
+                "statusCode": 503,
+            }
+        )
+        return True
+
+    try:
+        async with AsyncSessionLocal() as db:
+            if action == "session_save":
+                state_data = data.get("state") or {}
+                request = session_state_service.SessionSaveRequest(
+                    sessionId=data.get("sessionId"),
+                    name=data.get("name"),
+                    state=session_state_service.SessionState(**state_data),
+                )
+                response = await session_state_service.save_session(
+                    request, user=username, db=db
+                )
+                await websocket.send_json(
+                    {
+                        "type": "session_save_response",
+                        "requestId": request_id,
+                        "session": _model_to_json(response),
+                    }
+                )
+                return True
+
+            if action == "session_get_latest":
+                response = await session_state_service.get_latest_session(
+                    user=username, db=db
+                )
+                await websocket.send_json(
+                    {
+                        "type": "session_get_latest_response",
+                        "requestId": request_id,
+                        "session": _model_to_json(response),
+                    }
+                )
+                return True
+
+            if action == "session_get":
+                session_id = data.get("sessionId")
+                if not session_id:
+                    raise HTTPException(status_code=422, detail="Missing sessionId")
+                response = await session_state_service.get_session(
+                    session_id, user=username, db=db
+                )
+                await websocket.send_json(
+                    {
+                        "type": "session_get_response",
+                        "requestId": request_id,
+                        "session": _model_to_json(response),
+                    }
+                )
+                return True
+
+            if action == "session_list":
+                response = await session_state_service.list_sessions(
+                    limit=data.get("limit", 20),
+                    user=username,
+                    db=db,
+                )
+                await websocket.send_json(
+                    {
+                        "type": "session_list_response",
+                        "requestId": request_id,
+                        "sessions": _model_to_json(response),
+                    }
+                )
+                return True
+
+            if action == "session_delete":
+                session_id = data.get("sessionId")
+                if not session_id:
+                    raise HTTPException(status_code=422, detail="Missing sessionId")
+                response = await session_state_service.delete_session(
+                    session_id,
+                    user=username,
+                    db=db,
+                )
+                await websocket.send_json(
+                    {
+                        "type": "session_delete_response",
+                        "requestId": request_id,
+                        "result": _model_to_json(response),
+                    }
+                )
+                return True
+    except ValidationError as exc:
+        await websocket.send_json(
+            {
+                "type": "session_error",
+                "requestId": request_id,
+                "error": str(exc),
+                "statusCode": 422,
+            }
+        )
+        return True
+    except HTTPException as exc:
+        await websocket.send_json(
+            {
+                "type": "session_error",
+                "requestId": request_id,
+                "error": str(exc.detail),
+                "statusCode": exc.status_code,
+            }
+        )
+        return True
+    except Exception as exc:
+        logger.error(f"Session websocket action failed: {action} - {exc}")
+        await websocket.send_json(
+            {
+                "type": "session_error",
+                "requestId": request_id,
+                "error": "Session operation failed",
+                "statusCode": 500,
+            }
+        )
+        return True
+
+    return False
+
+
 @app.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket):
     logger.info(f"Request for websocket received. Headers: {str(websocket.headers)}")
 
-    username = "nobody"
+    username = os.getenv("DEFAULT_USER", "default_user")
     if "x-forwarded-user" in websocket.headers:
         username = websocket.headers["x-forwarded-user"]
 
@@ -298,6 +454,9 @@ async def websocket_endpoint(websocket: WebSocket):
             try:
                 data = await websocket.receive_json()
                 action = data.get("action")
+
+                if await _handle_session_ws_action(websocket, data, username):
+                    continue
 
                 if action == "prompt-breakpoint-response":  # AI debugging
                     prompt_debugger.DEBUG_PROMPT_RESPONSES[websocket].set_result(data)
