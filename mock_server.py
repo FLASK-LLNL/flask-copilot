@@ -15,7 +15,7 @@ Supported messages from frontend to server:
     * ``custom_query``: Execute custom user query
 """
 
-from fastapi import FastAPI, Request, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, Request, WebSocket, WebSocketDisconnect, HTTPException
 from fastapi.responses import JSONResponse, HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
@@ -32,13 +32,14 @@ from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 import requests
 from loguru import logger
+from pydantic import ValidationError
 from charge_backend.moleculedb.molecule_naming import smiles_to_html, MolNameFormat
 
 # Import database components
 sys.path.insert(0, os.path.dirname(__file__))
-from db_backend.database.engine import engine, Base
-from db_backend.routers import sessions as sessionsrouter
+from db_backend.database.engine import engine, Base, AsyncSessionLocal
 from db_backend.routers import projects as projectsrouter
+from db_backend import session_state_service
 
 
 # Session tracking for computation resume
@@ -136,6 +137,163 @@ class ComputationSession:
 
 active_sessions: dict[str, ComputationSession] = {}
 SESSION_TIMEOUT_HOURS = 24
+
+
+def _model_to_json(model: Any) -> Any:
+    if model is None:
+        return None
+    if hasattr(model, "model_dump"):
+        return model.model_dump(mode="json")
+    if hasattr(model, "dict"):
+        return model.dict()
+    return model
+
+
+async def _handle_session_ws_action(
+    websocket: WebSocket,
+    data: dict[str, Any],
+    username: str,
+) -> bool:
+    action = data.get("action")
+    request_id = data.get("requestId")
+    session_actions = {
+        "session_save",
+        "session_get_latest",
+        "session_get",
+        "session_list",
+        "session_delete",
+    }
+
+    if action not in session_actions:
+        return False
+
+    if AsyncSessionLocal is None:
+        await websocket.send_json(
+            {
+                "type": "session_error",
+                "requestId": request_id,
+                "error": "Database not available",
+                "statusCode": 503,
+            }
+        )
+        return True
+
+    try:
+        async with AsyncSessionLocal() as db:
+            if action == "session_save":
+                state_data = data.get("state") or {}
+                request = session_state_service.SessionSaveRequest(
+                    sessionId=data.get("sessionId"),
+                    name=data.get("name"),
+                    state=session_state_service.SessionState(**state_data),
+                )
+                response = await session_state_service.save_session(
+                    request, user=username, db=db
+                )
+                await websocket.send_json(
+                    {
+                        "type": "session_save_response",
+                        "requestId": request_id,
+                        "session": _model_to_json(response),
+                    }
+                )
+                return True
+
+            if action == "session_get_latest":
+                response = await session_state_service.get_latest_session(
+                    user=username, db=db
+                )
+                await websocket.send_json(
+                    {
+                        "type": "session_get_latest_response",
+                        "requestId": request_id,
+                        "session": _model_to_json(response),
+                    }
+                )
+                return True
+
+            if action == "session_get":
+                session_id = data.get("sessionId")
+                if not session_id:
+                    raise HTTPException(status_code=422, detail="Missing sessionId")
+                response = await session_state_service.get_session(
+                    session_id, user=username, db=db
+                )
+                await websocket.send_json(
+                    {
+                        "type": "session_get_response",
+                        "requestId": request_id,
+                        "session": _model_to_json(response),
+                    }
+                )
+                return True
+
+            if action == "session_list":
+                limit = data.get("limit", 20)
+                response = await session_state_service.list_sessions(
+                    limit=limit,
+                    user=username,
+                    db=db,
+                )
+                await websocket.send_json(
+                    {
+                        "type": "session_list_response",
+                        "requestId": request_id,
+                        "sessions": _model_to_json(response),
+                    }
+                )
+                return True
+
+            if action == "session_delete":
+                session_id = data.get("sessionId")
+                if not session_id:
+                    raise HTTPException(status_code=422, detail="Missing sessionId")
+                response = await session_state_service.delete_session(
+                    session_id,
+                    user=username,
+                    db=db,
+                )
+                await websocket.send_json(
+                    {
+                        "type": "session_delete_response",
+                        "requestId": request_id,
+                        "result": _model_to_json(response),
+                    }
+                )
+                return True
+    except ValidationError as exc:
+        await websocket.send_json(
+            {
+                "type": "session_error",
+                "requestId": request_id,
+                "error": str(exc),
+                "statusCode": 422,
+            }
+        )
+        return True
+    except HTTPException as exc:
+        await websocket.send_json(
+            {
+                "type": "session_error",
+                "requestId": request_id,
+                "error": str(exc.detail),
+                "statusCode": exc.status_code,
+            }
+        )
+        return True
+    except Exception as exc:
+        logger.error(f"Session websocket action failed: {action} - {exc}")
+        await websocket.send_json(
+            {
+                "type": "session_error",
+                "requestId": request_id,
+                "error": "Session operation failed",
+                "statusCode": 500,
+            }
+        )
+        return True
+
+    return False
 
 
 def cleanup_old_sessions():
@@ -368,8 +526,6 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Include the sessions router for database persistence
-app.include_router(sessionsrouter.router)
 # Include the projects router for multi-browser experiment sharing
 app.include_router(projectsrouter.router)
 
@@ -1013,7 +1169,7 @@ async def websocket_endpoint(websocket: WebSocket):
     logger.info(f"Request for websocket received. Headers: {str(websocket.headers)}")
 
     molecule_format = "brand"
-    username = "nobody"
+    username = os.getenv("DEFAULT_USER", "default_user")
     current_session_id = None
     # Track ALL sessions spawned/resumed by this WS connection so we can
     # persist every one of them when the browser disconnects.
@@ -1029,6 +1185,10 @@ async def websocket_endpoint(websocket: WebSocket):
     try:
         while True:
             data = await websocket.receive_json()
+
+            # Handle session persistence actions over websocket
+            if await _handle_session_ws_action(websocket, data, username):
+                continue
 
             # Handle session resume request
             if data["action"] == "resume_session":
@@ -1367,16 +1527,14 @@ if __name__ == "__main__":
     import uvicorn
     import logging
 
-    # Filter out the noisy /api/sessions/save access log lines
-    class SuppressSessionSave(logging.Filter):
+    # Filter out noisy health/poll access log lines
+    class SuppressNoisyAccess(logging.Filter):
         def filter(self, record: logging.LogRecord) -> bool:
             msg = record.getMessage()
-            if "/api/sessions/save" in msg:
-                return False
             if "/api/projects/" in msg and "GET" in msg:
                 return False
             return True
 
-    logging.getLogger("uvicorn.access").addFilter(SuppressSessionSave())
+    logging.getLogger("uvicorn.access").addFilter(SuppressNoisyAccess())
 
     uvicorn.run(app, host="127.0.0.1", port=8001)

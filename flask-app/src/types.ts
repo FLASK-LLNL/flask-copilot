@@ -125,6 +125,7 @@ export interface ConstraintOption {
 
 export interface WebSocketMessageToServer {
   action?: string;
+  requestId?: string;
   smiles?: string;
   problemType?: string;
   nodeId?: string;
@@ -132,6 +133,10 @@ export interface WebSocketMessageToServer {
   experimentContext?: string;
   enabledTools?: ToolMap;
   experimentId?: string;
+  sessionId?: string;
+  name?: string;
+  state?: any;
+  limit?: number;
 
   // Lead molecule optimization
   propertyType?: string;
@@ -161,6 +166,12 @@ export interface WebSocketMessageToServer {
 // Messages received from backend
 export interface WebSocketMessage {
   type: string;
+  requestId?: string;
+  error?: string;
+  statusCode?: number;
+  session?: any;
+  sessions?: any[];
+  result?: any;
 
   node?: TreeNode;
   edge?: Edge;

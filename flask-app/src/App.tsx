@@ -152,7 +152,7 @@ const ChemistryTool: React.FC = () => {
   const projectSidebar = useProjectSidebar();
   const projectData = useProjectData();
   const projectManagement = useProjectManagement(projectData);
-  const sessionPersistence = useSessionPersistence();
+  const sessionPersistence = useSessionPersistence(wsRef);
 
   const treeNodesRef = useRef(treeNodes);
   const edgesRef = useRef(edges);
@@ -674,6 +674,10 @@ const ChemistryTool: React.FC = () => {
       if (wsRef.current !== socket) return; // Ignore messages from old sockets
 
       const data: WebSocketMessage = JSON.parse(event.data);
+
+      if (sessionPersistence.handleWebSocketMessage(data)) {
+        return;
+      }
 
       // Multi-experiment routing: determine if this message belongs to
       // the currently-selected experiment.  Messages without an

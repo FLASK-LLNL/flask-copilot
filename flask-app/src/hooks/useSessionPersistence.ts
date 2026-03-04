@@ -2,7 +2,7 @@
  * Session persistence hook for auto-saving experiment state to MariaDB.
  * This provides automatic session save/restore functionality.
  */
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef, useCallback, MutableRefObject } from 'react';
 import {
   TreeNode,
   Edge,
@@ -11,7 +11,6 @@ import {
   SidebarMessage,
   VisibleSources,
 } from '../types';
-import { HTTP_SERVER } from '../config';
 
 // Auto-save interval in milliseconds
 const AUTO_SAVE_INTERVAL = 10000; // 10 seconds
@@ -91,9 +90,16 @@ export interface SessionPersistenceActions {
   setPendingResume: (
     data: { sessionId: string | null; smiles: string; problemType: string } | null
   ) => void;
+  handleWebSocketMessage: (data: any) => boolean;
+  sendSessionSaveNow: (
+    state: SessionState,
+    options?: { checkpoint?: boolean; name?: string }
+  ) => void;
 }
 
-export const useSessionPersistence = (): SessionPersistenceState & SessionPersistenceActions => {
+export const useSessionPersistence = (
+  wsRef?: MutableRefObject<WebSocket | null>
+): SessionPersistenceState & SessionPersistenceActions => {
   const [dbSessionId, setDbSessionId] = useState<string | null>(null);
   const [sessionLoaded, setSessionLoaded] = useState(false);
   const [sessionRestored, setSessionRestored] = useState(false);
@@ -120,10 +126,83 @@ export const useSessionPersistence = (): SessionPersistenceState & SessionPersis
     }>
   >([]);
   const processingQueueRef = useRef(false);
+  const requestCounterRef = useRef(0);
+  const pendingRequestsRef = useRef<
+    Map<
+      string,
+      {
+        resolve: (data: any) => void;
+        reject: (error: Error) => void;
+        timeoutId: number;
+      }
+    >
+  >(new Map());
 
   useEffect(() => {
     dbSessionIdRef.current = dbSessionId;
   }, [dbSessionId]);
+
+  const waitForOpenWebSocket = useCallback(
+    async (timeoutMs = 10000): Promise<WebSocket> => {
+      const startedAt = Date.now();
+
+      while (Date.now() - startedAt < timeoutMs) {
+        const socket = wsRef?.current;
+        if (socket && socket.readyState === WebSocket.OPEN) {
+          return socket;
+        }
+        await new Promise((resolve) => setTimeout(resolve, 100));
+      }
+
+      throw new Error('WebSocket not connected');
+    },
+    [wsRef]
+  );
+
+  const sendWsRequest = useCallback(
+    async (action: string, payload: Record<string, any>, timeoutMs = 10000): Promise<any> => {
+      const socket = await waitForOpenWebSocket(timeoutMs);
+      const requestId = `${action}-${Date.now()}-${requestCounterRef.current++}`;
+
+      return new Promise((resolve, reject) => {
+        const timeoutId = window.setTimeout(() => {
+          pendingRequestsRef.current.delete(requestId);
+          reject(new Error(`${action} timed out`));
+        }, timeoutMs);
+
+        pendingRequestsRef.current.set(requestId, { resolve, reject, timeoutId });
+
+        socket.send(
+          JSON.stringify({
+            action,
+            requestId,
+            ...payload,
+          })
+        );
+      });
+    },
+    [waitForOpenWebSocket]
+  );
+
+  const sendSessionSaveNow = useCallback(
+    (state: SessionState, options?: { checkpoint?: boolean; name?: string }): void => {
+      const socket = wsRef?.current;
+      if (!socket || socket.readyState !== WebSocket.OPEN) return;
+
+      const checkpoint = options?.checkpoint ?? false;
+      const effectiveSessionId = checkpoint ? null : state.experimentId || dbSessionIdRef.current;
+
+      socket.send(
+        JSON.stringify({
+          action: 'session_save',
+          sessionId: effectiveSessionId,
+          name: options?.name,
+          state,
+        })
+      );
+    },
+    [wsRef]
+  );
 
   const processSaveQueue = useCallback(async (): Promise<void> => {
     if (processingQueueRef.current) return;
@@ -142,31 +221,24 @@ export const useSessionPersistence = (): SessionPersistenceState & SessionPersis
       const effectiveSessionId = next.checkpoint
         ? null
         : next.state.experimentId || dbSessionIdRef.current;
-      const response = await fetch(`${HTTP_SERVER}/api/sessions/save`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          sessionId: effectiveSessionId,
-          name: next.name,
-          state: next.state,
-        }),
+      const data = await sendWsRequest('session_save', {
+        sessionId: effectiveSessionId,
+        name: next.name,
+        state: next.state,
       });
 
-      if (response.ok) {
-        const data: SessionResponse = await response.json();
-        setDbSessionId(data.sessionId);
-        setLastSaved(new Date(data.lastModified));
-        console.log('Session saved to database:', data.sessionId);
+      if (data?.session) {
+        const sessionData: SessionResponse = data.session;
+        setDbSessionId(sessionData.sessionId);
+        setLastSaved(new Date(sessionData.lastModified));
+        console.log('Session saved over WebSocket:', sessionData.sessionId);
         next.resolve();
       } else {
-        console.error('Failed to save session to database:', response.status);
-        setSaveError(`Save failed: ${response.status}`);
+        setSaveError('Save failed: malformed response');
         next.resolve();
       }
     } catch (error) {
-      console.error('Failed to save session to database:', error);
+      console.error('Failed to save session over WebSocket:', error);
       setSaveError('Save failed: network error');
       next.resolve();
     } finally {
@@ -177,7 +249,7 @@ export const useSessionPersistence = (): SessionPersistenceState & SessionPersis
         void processSaveQueue();
       }
     }
-  }, []);
+  }, [sendWsRequest]);
 
   const saveSession = useCallback(
     async (
@@ -204,17 +276,8 @@ export const useSessionPersistence = (): SessionPersistenceState & SessionPersis
 
   const loadSession = useCallback(async (): Promise<SessionState | null> => {
     try {
-      const response = await fetch(`${HTTP_SERVER}/api/sessions/latest`);
-
-      if (!response.ok) {
-        if (response.status === 404) {
-          console.log('No previous session found');
-        }
-        setSessionLoaded(true);
-        return null;
-      }
-
-      const data: SessionResponse | null = await response.json();
+      const response = await sendWsRequest('session_get_latest', {});
+      const data: SessionResponse | null = response?.session ?? null;
 
       if (!data) {
         setSessionLoaded(true);
@@ -265,21 +328,19 @@ export const useSessionPersistence = (): SessionPersistenceState & SessionPersis
       );
       return state;
     } catch (error) {
-      console.error('Failed to load session from database:', error);
+      console.error('Failed to load session over WebSocket:', error);
       setSessionLoaded(true);
       return null;
     }
-  }, []);
+  }, [sendWsRequest]);
 
   const clearSession = useCallback(async (): Promise<void> => {
     if (dbSessionId) {
       try {
-        await fetch(`${HTTP_SERVER}/api/sessions/${dbSessionId}`, {
-          method: 'DELETE',
-        });
-        console.log('Session deleted from database:', dbSessionId);
+        await sendWsRequest('session_delete', { sessionId: dbSessionId });
+        console.log('Session deleted over WebSocket:', dbSessionId);
       } catch (error) {
-        console.error('Failed to delete session from database:', error);
+        console.error('Failed to delete session over WebSocket:', error);
       }
     }
     setDbSessionId(null);
@@ -290,7 +351,53 @@ export const useSessionPersistence = (): SessionPersistenceState & SessionPersis
     setResumeAttempted(false);
     pendingResumeRef.current = null;
     console.log('Session cleared');
-  }, [dbSessionId]);
+  }, [dbSessionId, sendWsRequest]);
+
+  const handleWebSocketMessage = useCallback((data: any): boolean => {
+    const responseTypes = new Set([
+      'session_save_response',
+      'session_get_latest_response',
+      'session_get_response',
+      'session_list_response',
+      'session_delete_response',
+      'session_error',
+    ]);
+
+    if (!data?.type || !responseTypes.has(data.type)) {
+      return false;
+    }
+
+    const requestId = data.requestId;
+    if (!requestId) {
+      return true;
+    }
+
+    const pending = pendingRequestsRef.current.get(requestId);
+    if (!pending) {
+      return true;
+    }
+
+    window.clearTimeout(pending.timeoutId);
+    pendingRequestsRef.current.delete(requestId);
+
+    if (data.type === 'session_error') {
+      pending.reject(new Error(data.error || 'Session operation failed'));
+      return true;
+    }
+
+    pending.resolve(data);
+    return true;
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      pendingRequestsRef.current.forEach((pending) => {
+        window.clearTimeout(pending.timeoutId);
+        pending.reject(new Error('Session request cancelled'));
+      });
+      pendingRequestsRef.current.clear();
+    };
+  }, []);
 
   const getPendingResume = useCallback(() => pendingResumeRef.current, []);
 
@@ -321,6 +428,8 @@ export const useSessionPersistence = (): SessionPersistenceState & SessionPersis
     setResumeAttempted,
     getPendingResume,
     setPendingResume,
+    handleWebSocketMessage,
+    sendSessionSaveNow,
   };
 };
 
@@ -333,7 +442,7 @@ export const useCheckpointOnUnload = (
   sessionPersistence: SessionPersistenceState & SessionPersistenceActions,
   getState: () => SessionState
 ): void => {
-  const { dbSessionId, saveSession } = sessionPersistence;
+  const { saveSession, sendSessionSaveNow } = sessionPersistence;
   const getStateRef = useRef(getState);
 
   // Keep the getState ref updated
@@ -341,24 +450,13 @@ export const useCheckpointOnUnload = (
     getStateRef.current = getState;
   }, [getState]);
 
-  // Save session before page unload (using sendBeacon for reliability)
+  // Save session before page unload (best-effort websocket send)
   useEffect(() => {
     const handleBeforeUnload = () => {
       const state = getStateRef.current();
       if ((!state.treeNodes || state.treeNodes.length === 0) && !state.smiles) return;
 
-      // Prefer the sidebar experimentId so the beacon updates the correct row
-      const effectiveSessionId = state.experimentId || dbSessionId;
-      const payload = JSON.stringify({
-        sessionId: effectiveSessionId,
-        state: state,
-      });
-
-      // sendBeacon is more reliable than fetch for unload events
-      navigator.sendBeacon(
-        `${HTTP_SERVER}/api/sessions/save`,
-        new Blob([payload], { type: 'application/json' })
-      );
+      sendSessionSaveNow(state);
     };
 
     window.addEventListener('beforeunload', handleBeforeUnload);
@@ -367,7 +465,7 @@ export const useCheckpointOnUnload = (
       // Save on unmount
       saveSession(getStateRef.current(), true);
     };
-  }, [dbSessionId, saveSession]);
+  }, [saveSession, sendSessionSaveNow]);
 };
 
 // Keep the old name for backward compatibility but it now just sets up unload handler
