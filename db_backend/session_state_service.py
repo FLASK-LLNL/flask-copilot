@@ -5,50 +5,46 @@
 ## SPDX-License-Identifier: Apache-2.0
 ################################################################################
 """
-Serves routes for auto-save session management (``/api/sessions/*``).
-This provides a simpler interface for automatic session persistence without
-requiring explicit project/experiment management.
+Shared session state service for WebSocket and API integrations.
+
+This module contains the session persistence models and business logic,
+without binding to FastAPI router/dependency wiring.
 """
-from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.exc import OperationalError
-from sqlalchemy import select, and_
-from pydantic import BaseModel, Field
-from typing import Optional, Any, List
+
 from datetime import datetime
-from loguru import logger
+from typing import Any, List, Optional
 import asyncio
-import time
 import random
+import time
+
+from fastapi import HTTPException
+from loguru import logger
+from pydantic import BaseModel
+from sqlalchemy import and_, select
+from sqlalchemy.exc import OperationalError
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from db_backend.database import models
 
 # Max retries for concurrent modification errors (MariaDB error 1020)
 _MAX_RETRIES = 3
 
-from db_backend.database.engine import get_db
-from db_backend.auth import get_forwarded_user
-from db_backend.database import models
-
-router = APIRouter(prefix="/api/sessions", tags=["sessions"])
-
 
 def generate_id(prefix: str) -> str:
-    """Generate unique ID"""
+    """Generate unique ID."""
     timestamp = int(time.time() * 1000)
     random_str = "".join(random.choices("abcdefghijklmnopqrstuvwxyz0123456789", k=9))
     return f"{prefix}_{timestamp}_{random_str}"
 
 
-# Pydantic models for session API
 class SessionState(BaseModel):
-    """The state to save/restore for a session"""
+    """The state to save/restore for a session."""
 
-    # Project/Experiment identification
     projectId: Optional[str] = None
     projectName: Optional[str] = None
     experimentId: Optional[str] = None
     experimentName: Optional[str] = None
 
-    # Core experiment state
     smiles: Optional[str] = None
     problemType: Optional[str] = None
     systemPrompt: Optional[str] = None
@@ -64,28 +60,26 @@ class SessionState(BaseModel):
     isComputing: Optional[bool] = None
     serverSessionId: Optional[str] = None
 
-    # Property optimization
     propertyType: Optional[str] = None
     customPropertyName: Optional[str] = None
     customPropertyDesc: Optional[str] = None
     customPropertyAscending: Optional[bool] = None
 
-    # Sidebar state
     sidebarMessages: Optional[Any] = None
     sidebarSourceFilterOpen: Optional[bool] = None
     sidebarVisibleSources: Optional[Any] = None
 
 
 class SessionSaveRequest(BaseModel):
-    """Request body for saving a session"""
+    """Request body for saving a session."""
 
-    sessionId: Optional[str] = None  # If provided, update existing session
-    name: Optional[str] = None  # Optional name for the session
+    sessionId: Optional[str] = None
+    name: Optional[str] = None
     state: SessionState
 
 
 class SessionResponse(BaseModel):
-    """Response for session operations"""
+    """Response for session operations."""
 
     sessionId: str
     name: str
@@ -99,7 +93,7 @@ class SessionResponse(BaseModel):
 
 
 class SessionListItem(BaseModel):
-    """Summary info for listing sessions"""
+    """Summary info for listing sessions."""
 
     sessionId: str
     name: str
@@ -113,54 +107,17 @@ class SessionListItem(BaseModel):
         from_attributes = True
 
 
-# Default project for auto-save sessions
-DEFAULT_PROJECT_NAME = "Auto-Save Sessions"
-
-
-async def get_or_create_default_project(user: str, db: AsyncSession) -> models.Project:
-    """Get or create the default project for auto-save sessions"""
-    result = await db.execute(
-        select(models.Project)
-        .where(
-            and_(
-                models.Project.user == user, models.Project.name == DEFAULT_PROJECT_NAME
-            )
-        )
-        .order_by(models.Project.created_at.asc())
-        .limit(1)
-    )
-    project = result.scalar_one_or_none()
-
-    if not project:
-        project = models.Project(
-            id=generate_id("project"),
-            user=user,
-            name=DEFAULT_PROJECT_NAME,
-            created_at=datetime.utcnow(),
-            last_modified=datetime.utcnow(),
-        )
-        db.add(project)
-        await db.flush()  # Get the ID without committing
-
-    return project
-
-
-@router.post("/save", response_model=SessionResponse)
 async def save_session(
     request: SessionSaveRequest,
-    user: str = Depends(get_forwarded_user),
-    db: AsyncSession = Depends(get_db),
-):
-    """
-    Save or update a session. If sessionId is provided, updates existing session.
-    Otherwise creates a new session.
-    """
+    user: str,
+    db: AsyncSession,
+) -> SessionResponse:
+    """Save or update a session."""
     if db is None:
         raise HTTPException(status_code=503, detail="Database not available")
 
     state = request.state
 
-    # If sessionId provided, try to update existing
     if request.sessionId:
         for attempt in range(_MAX_RETRIES):
             try:
@@ -175,12 +132,6 @@ async def save_session(
                 experiment = result.scalar_one_or_none()
 
                 if experiment:
-                    # Update existing session.
-                    # Guard: don't overwrite non-empty tree_nodes/edges/smiles
-                    # with empty data (same protection as the PUT experiment
-                    # endpoint).  This prevents sendBeacon / stale session
-                    # saves from erasing results that save_session_to_db
-                    # persisted while the browser was closed.
                     incoming_nodes = state.treeNodes or []
                     incoming_edges = state.edges or []
                     incoming_smiles = state.smiles or ""
@@ -200,11 +151,6 @@ async def save_session(
                     experiment.visible_metrics = state.visibleMetrics
                     experiment.is_running = state.isComputing
 
-                    # Guard sidebar_state: never replace a longer (authoritative)
-                    # message list with a shorter (stale) one.  Sidebar messages
-                    # are append-only, so fewer incoming messages means the
-                    # frontend hadn't processed the latest server-sent messages
-                    # when it captured its state (React batched-state race).
                     incoming_sidebar_msgs = state.sidebarMessages or []
                     existing_sidebar_msgs = []
                     if experiment.sidebar_state and isinstance(
@@ -227,20 +173,17 @@ async def save_session(
                             f"(incoming had only {len(incoming_sidebar_msgs)})"
                         )
 
-                    # Guard graph_state.sidebarMessages similarly.
                     existing_gs = experiment.graph_state or {}
                     existing_gs_msgs = existing_gs.get("sidebarMessages") or []
-                    new_gs = {
+                    experiment.graph_state = {
                         "offset": state.offset,
                         "zoom": state.zoom,
                         "promptsModified": state.promptsModified,
                         "serverSessionId": state.serverSessionId,
-                        # Property optimization
                         "propertyType": state.propertyType,
                         "customPropertyName": state.customPropertyName,
                         "customPropertyDesc": state.customPropertyDesc,
                         "customPropertyAscending": state.customPropertyAscending,
-                        # Sidebar state
                         "sidebarMessages": (
                             incoming_sidebar_msgs
                             if len(incoming_sidebar_msgs) >= len(existing_gs_msgs)
@@ -249,7 +192,6 @@ async def save_session(
                         "sidebarSourceFilterOpen": state.sidebarSourceFilterOpen,
                         "sidebarVisibleSources": state.sidebarVisibleSources,
                     }
-                    experiment.graph_state = new_gs
                     experiment.last_modified = datetime.utcnow()
 
                     if request.name:
@@ -266,10 +208,9 @@ async def save_session(
                         isRunning=experiment.is_running,
                         state=_experiment_to_state(experiment),
                     )
-                else:
-                    break  # Experiment not found, fall through to create
-            except OperationalError as e:
-                if "1020" in str(e) and attempt < _MAX_RETRIES - 1:
+                break
+            except OperationalError as exc:
+                if "1020" in str(exc) and attempt < _MAX_RETRIES - 1:
                     logger.warning(
                         f"Concurrent modification on experiment {request.sessionId}, retry {attempt + 1}/{_MAX_RETRIES}"
                     )
@@ -278,10 +219,6 @@ async def save_session(
                     continue
                 raise
 
-    # Create new session.
-    # The frontend must supply a projectId that maps to an existing project.
-    # If none is provided (or it doesn't exist), reject the save so that
-    # stale checkpoint/unload saves cannot resurrect data after a clear.
     project = None
     if state.projectId:
         result = await db.execute(
@@ -300,7 +237,6 @@ async def save_session(
             detail="No valid project specified. Create a project first.",
         )
 
-    # Generate session name if not provided
     session_name = (
         request.name or f"Session {datetime.now().strftime('%Y-%m-%d %H:%M')}"
     )
@@ -331,12 +267,10 @@ async def save_session(
             "zoom": state.zoom,
             "promptsModified": state.promptsModified,
             "serverSessionId": state.serverSessionId,
-            # Property optimization
             "propertyType": state.propertyType,
             "customPropertyName": state.customPropertyName,
             "customPropertyDesc": state.customPropertyDesc,
             "customPropertyAscending": state.customPropertyAscending,
-            # Sidebar state
             "sidebarMessages": state.sidebarMessages,
             "sidebarSourceFilterOpen": state.sidebarSourceFilterOpen,
             "sidebarVisibleSources": state.sidebarVisibleSources,
@@ -364,11 +298,11 @@ async def save_session(
     )
 
 
-@router.get("/latest", response_model=Optional[SessionResponse])
 async def get_latest_session(
-    user: str = Depends(get_forwarded_user), db: AsyncSession = Depends(get_db)
-):
-    """Get the most recently modified session for the user"""
+    user: str,
+    db: AsyncSession,
+) -> Optional[SessionResponse]:
+    """Get the most recently modified session for the user."""
     if db is None:
         return None
 
@@ -393,13 +327,12 @@ async def get_latest_session(
     )
 
 
-@router.get("/{session_id}", response_model=SessionResponse)
 async def get_session(
     session_id: str,
-    user: str = Depends(get_forwarded_user),
-    db: AsyncSession = Depends(get_db),
-):
-    """Get a specific session by ID"""
+    user: str,
+    db: AsyncSession,
+) -> SessionResponse:
+    """Get a specific session by ID."""
     if db is None:
         raise HTTPException(status_code=503, detail="Database not available")
 
@@ -423,13 +356,12 @@ async def get_session(
     )
 
 
-@router.get("/", response_model=List[SessionListItem])
 async def list_sessions(
-    limit: int = 20,
-    user: str = Depends(get_forwarded_user),
-    db: AsyncSession = Depends(get_db),
-):
-    """List all sessions for the user, ordered by last modified"""
+    limit: int,
+    user: str,
+    db: AsyncSession,
+) -> List[SessionListItem]:
+    """List all sessions for the user, ordered by last modified."""
     if db is None:
         return []
 
@@ -455,13 +387,12 @@ async def list_sessions(
     ]
 
 
-@router.delete("/{session_id}")
 async def delete_session(
     session_id: str,
-    user: str = Depends(get_forwarded_user),
-    db: AsyncSession = Depends(get_db),
-):
-    """Delete a session"""
+    user: str,
+    db: AsyncSession,
+) -> dict:
+    """Delete a session."""
     if db is None:
         raise HTTPException(status_code=503, detail="Database not available")
 
@@ -482,13 +413,8 @@ async def delete_session(
 
 
 def _experiment_to_state(experiment: models.Experiment) -> SessionState:
-    """Convert an Experiment model to SessionState"""
     graph_state = experiment.graph_state or {}
 
-    # Prefer the dedicated sidebar_state column (written by both the
-    # session endpoint and the server-side save_session_to_db on WS
-    # disconnect).  Fall back to graph_state for older rows / data
-    # written by the frontend checkpoint path.
     sidebar = experiment.sidebar_state
     if sidebar:
         sidebar_messages = sidebar.get("messages")
@@ -500,11 +426,9 @@ def _experiment_to_state(experiment: models.Experiment) -> SessionState:
         sidebar_visible = graph_state.get("sidebarVisibleSources")
 
     return SessionState(
-        # Project/Experiment identification
         projectId=experiment.project_id,
         experimentId=experiment.id,
         experimentName=experiment.name,
-        # Core experiment state
         smiles=experiment.smiles,
         problemType=experiment.problem_type,
         systemPrompt=experiment.system_prompt,
@@ -519,12 +443,10 @@ def _experiment_to_state(experiment: models.Experiment) -> SessionState:
         visibleMetrics=experiment.visible_metrics,
         isComputing=experiment.is_running,
         serverSessionId=graph_state.get("serverSessionId"),
-        # Property optimization
         propertyType=graph_state.get("propertyType"),
         customPropertyName=graph_state.get("customPropertyName"),
         customPropertyDesc=graph_state.get("customPropertyDesc"),
         customPropertyAscending=graph_state.get("customPropertyAscending"),
-        # Sidebar state
         sidebarMessages=sidebar_messages,
         sidebarSourceFilterOpen=sidebar_filter_open,
         sidebarVisibleSources=sidebar_visible,
