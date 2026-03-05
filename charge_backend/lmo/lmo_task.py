@@ -5,6 +5,8 @@ from flask_tools.lmo.molecular_property_utils import get_density
 import charge.utils.helper_funcs
 from typing import Optional, List
 from pydantic import BaseModel, field_validator
+import json
+from loguru import logger
 from charge.utils.log_progress import LOG_PROGRESS_SYSTEM_PROMPT
 from charge.utils.mcp_workbench_utils import call_mcp_tool_directly
 
@@ -147,12 +149,12 @@ class LMOTask(Task):
             urls=self.server_urls or [],
             paths=self.server_files or [],
         )
-        results = property_result_msg.result
-        if len(results) > 1:
-            property_result = float(property_result_msg.result[1].content)
-        else:
-            property_result = 0.0
-            raise ValueError(f"{property_result_msg.result[0].content}")
+        try:
+            property_name, property_result = json.loads(property_result_msg.content)
+        except json.decoder.JSONDecodeError as err:
+            msg = f"{self.property_tool_name} returned a bare string, not a json message: {property_result_msg}"
+            await logger.error(msg)
+            raise ValueError(msg)
 
         self.reference_property_value = property_result
 
@@ -191,12 +193,12 @@ class LMOTask(Task):
             paths=self.server_files,
         )
 
-        results = property_result_msg.result
-        if len(results) > 1:
-            property_value = float(property_result_msg.result[1].content)
-        else:
-            property_value = 0.0
-            raise ValueError(f"{property_result_msg.result[0].content}")
+        try:
+            property_name, property_value = json.loads(property_result_msg.content)
+        except json.decoder.JSONDecodeError as err:
+            msg = f"{self.property_tool_name} returned a bare string, not a json message: {property_result_msg}"
+            await logger.error(msg)
+            raise ValueError(msg)
 
         # Check if property meets optimization criteria
         if self.optimize_direction == "greater":

@@ -268,15 +268,16 @@ def post_process_lmo_smiles(
                         (avoids recalculation)
     """
     tool_properties = tool_properties or {}
+    # For properties where there are "fast" approximate values (from RDKit), estimate them
     canonical_smiles = smiles_utils.canonicalize_smiles(smiles)
-    density = float(tool_properties.get("density", get_density(canonical_smiles)))
+    density = float(tool_properties.get("density", get_density(canonical_smiles)[1]))
     sascore = float(
         tool_properties.get(
             "synthesizability", smiles_utils.get_synthesizability(canonical_smiles)
         )
     )
     bandgap = float(tool_properties.get("bandgap", get_bandgap(canonical_smiles)))
-    return {
+    lmo_props = {
         "smiles": canonical_smiles,
         "parent_id": parent_id,
         "node_id": node_id,
@@ -284,6 +285,10 @@ def post_process_lmo_smiles(
         "sascore": sascore,
         "bandgap": bandgap,
     }
+    for k, v in tool_properties.items():
+        if k not in lmo_props:
+            lmo_props[k] = v
+    return lmo_props
 
 
 def post_process_smiles(smiles: str, parent_id: int, node_id: int) -> dict:
