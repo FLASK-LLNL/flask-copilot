@@ -137,6 +137,9 @@ export interface WebSocketMessageToServer {
   // Prompt debugging
   prompt?: string;
   metadata?: any;
+
+  // Graph stuff
+  nodes?: TreeNode[];
 }
 
 // Messages received from backend

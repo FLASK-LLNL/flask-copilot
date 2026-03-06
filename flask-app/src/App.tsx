@@ -365,6 +365,17 @@ const ChemistryTool: React.FC = () => {
     }
     data.experimentContext &&
       sendMessageToServer('load-context', { experimentContext: data.experimentContext });
+
+    // I was getting "websocket not connected" alerts (which I assume
+    // applies above as well, but I don't have a good use-case with
+    // non-null experimentContent...)
+    if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+      data.treeNodes &&
+        sendMessageToServer('restore-graph', {
+          problemType: data.problemType,
+          nodes: data.treeNodes,
+        });
+    }
   };
 
   const saveStateToExperiment = useCallback((): boolean => {
