@@ -31,6 +31,3 @@ Rounds 1..{rounds}) Each round:
 - Generate ~{candidates_per_round} similar candidates (scaffold-preserving preferred).
 - Evaluate each candidate via the tool pipeline and record results.
 - Refine based on what increased the property while staying similar.
-
-FINAL OUTPUT:
-- Return a JSON object with keys: "reasoning_summary" (string), "smiles_list" (list of canonical SMILES strings), "property_name" (string), and "property_list" (list of numbers aligned 1:1 with smiles_list). Rank best-first.

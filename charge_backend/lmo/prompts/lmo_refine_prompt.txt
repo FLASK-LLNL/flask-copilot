@@ -30,6 +30,3 @@ WORKFLOW:
 Step 0) Score lead via the tool pipeline and store as baseline.
 Step 1) Generate ~{candidates_per_round} candidates guided by what improved vs. failed previously; avoid duplicates and poor patterns.
 Step 2) Evaluate each candidate via the tool pipeline and select the best consistent with the objective and similarity.
-
-FINAL OUTPUT:
-- Return a JSON object with keys: "reasoning_summary" (string), "smiles_list" (list of canonical SMILES strings), "property_name" (string), and "property_list" (list of numbers aligned 1:1 with smiles_list). Rank best-first.
