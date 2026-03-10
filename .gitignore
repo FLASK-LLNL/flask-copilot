@@ -157,16 +157,9 @@ __pycache__/
 # Public assets
 flask-app/public/rdkit/
 
-# readme
-*.md
-
 # Playwright
 /test-results/
 /playwright-report/
 /blob-report/
 /playwright/.cache/
 /playwright/.auth/
-
-# envfiles
-.env-launchit
-.env-local

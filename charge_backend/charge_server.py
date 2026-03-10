@@ -42,7 +42,7 @@ from charge_backend import prompt_debugger
 # Pydantic models for new endpoints
 from pydantic import BaseModel, ValidationError
 from typing import Optional
-from db_backend.database.engine import AsyncSessionLocal
+from db_backend.database.engine import get_async_session_factory
 from db_backend import session_state_service
 
 
@@ -229,7 +229,8 @@ async def _handle_session_ws_action(
     if action not in session_actions:
         return False
 
-    if AsyncSessionLocal is None:
+    session_factory = get_async_session_factory()
+    if session_factory is None:
         await websocket.send_json(
             {
                 "type": "session_error",
@@ -241,7 +242,7 @@ async def _handle_session_ws_action(
         return True
 
     try:
-        async with AsyncSessionLocal() as db:
+        async with session_factory() as db:
             if action == "session_save":
                 state_data = data.get("state") or {}
                 request = session_state_service.SessionSaveRequest(

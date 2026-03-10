@@ -14,7 +14,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.exc import OperationalError
 from sqlalchemy import select, delete
 from sqlalchemy.orm import selectinload
-from pydantic import BaseModel
 from typing import Optional, List, Dict, Any
 from datetime import datetime
 from loguru import logger
@@ -26,7 +25,7 @@ _MAX_RETRIES = 3
 
 from db_backend.database.engine import get_db
 from db_backend.auth import get_forwarded_user
-from db_backend.database import models
+from db_backend.database import models, schemas
 
 router = APIRouter(prefix="/api/projects", tags=["projects"])
 
@@ -36,53 +35,6 @@ def generate_id(prefix: str) -> str:
     timestamp = int(time.time() * 1000)
     random_str = "".join(random.choices("abcdefghijklmnopqrstuvwxyz0123456789", k=9))
     return f"{prefix}_{timestamp}_{random_str}"
-
-
-# Pydantic models
-class ExperimentData(BaseModel):
-    id: str
-    name: str
-    createdAt: str
-    lastModified: str
-    isRunning: Optional[bool] = None
-    smiles: Optional[str] = None
-    problemType: Optional[str] = None
-    problemName: Optional[str] = None
-    systemPrompt: Optional[str] = None
-    problemPrompt: Optional[str] = None
-    propertyType: Optional[str] = None
-    customPropertyName: Optional[str] = None
-    customPropertyDesc: Optional[str] = None
-    customPropertyAscending: Optional[bool] = None
-    customization: Optional[Dict[str, Any]] = None
-    treeNodes: Optional[List[Dict[str, Any]]] = None
-    edges: Optional[List[Dict[str, Any]]] = None
-    metricsHistory: Optional[List[Dict[str, Any]]] = None
-    visibleMetrics: Optional[Dict[str, bool]] = None
-    graphState: Optional[Dict[str, Any]] = None
-    autoZoom: Optional[bool] = None
-    sidebarState: Optional[Dict[str, Any]] = None
-    experimentContext: Optional[str] = None
-
-
-class ProjectData(BaseModel):
-    id: str
-    name: str
-    createdAt: str
-    lastModified: str
-    experiments: List[ExperimentData]
-
-
-class CreateProjectRequest(BaseModel):
-    name: str
-
-
-class CreateExperimentRequest(BaseModel):
-    name: str
-
-
-class UpdateExperimentRequest(BaseModel):
-    experiment: ExperimentData
 
 
 def experiment_to_dict(exp: models.Experiment) -> Dict[str, Any]:
@@ -143,7 +95,7 @@ def project_to_dict(proj: models.Project) -> Dict[str, Any]:
     }
 
 
-@router.get("/", response_model=List[ProjectData])
+@router.get("/", response_model=List[schemas.ProjectData])
 async def get_projects(
     db: AsyncSession = Depends(get_db),
     user: str = Depends(get_forwarded_user),
@@ -183,9 +135,9 @@ async def get_projects(
         raise
 
 
-@router.post("/", response_model=ProjectData)
+@router.post("/", response_model=schemas.ProjectData)
 async def create_project(
-    request: CreateProjectRequest,
+    request: schemas.CreateProjectRequest,
     db: AsyncSession = Depends(get_db),
     user: str = Depends(get_forwarded_user),
 ):
@@ -272,7 +224,7 @@ async def delete_project(
 @router.put("/{project_id}")
 async def update_project(
     project_id: str,
-    request: CreateProjectRequest,
+    request: schemas.CreateProjectRequest,
     db: AsyncSession = Depends(get_db),
     user: str = Depends(get_forwarded_user),
 ):
@@ -304,10 +256,10 @@ async def update_project(
     return project_to_dict(project)
 
 
-@router.post("/{project_id}/experiments", response_model=ExperimentData)
+@router.post("/{project_id}/experiments", response_model=schemas.ExperimentData)
 async def create_experiment(
     project_id: str,
-    request: CreateExperimentRequest,
+    request: schemas.CreateExperimentRequest,
     db: AsyncSession = Depends(get_db),
     user: str = Depends(get_forwarded_user),
 ):
@@ -377,7 +329,7 @@ async def create_experiment(
 async def update_experiment(
     project_id: str,
     experiment_id: str,
-    request: UpdateExperimentRequest,
+    request: schemas.UpdateExperimentRequest,
     db: AsyncSession = Depends(get_db),
     user: str = Depends(get_forwarded_user),
 ):
