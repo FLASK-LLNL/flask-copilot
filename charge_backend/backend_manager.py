@@ -519,15 +519,17 @@ class FlaskActionManager(ActionManager):
             }
         )
 
-    async def restore_graph(self, ctxt: RetrosynthesisContext, data: dict):
+    async def restore_retrosynth_context(self, ctxt: RetrosynthesisContext, data: dict):
         node_data = data.get("nodes")
         for n in node_data:
             n["yield_"] = n["yield"]
             del n["yield"]
             await ctxt.add_node(Node(**n))
 
-    async def handle_restore_graph(self, data: dict) -> None:
+    async def handle_restore_context(self, data: dict) -> None:
         problem_type = data.get("problemType")
         if problem_type == "retrosynthesis":
             if not self.retro_synth_context:
-                await self.restore_graph(self.get_retro_synth_context(), data)
+                await self.restore_retrosynth_context(
+                    self.get_retro_synth_context(), data
+                )

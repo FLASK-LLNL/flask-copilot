@@ -371,7 +371,7 @@ const ChemistryTool: React.FC = () => {
     // non-null experimentContent...)
     if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
       data.treeNodes &&
-        sendMessageToServer('restore-graph', {
+        sendMessageToServer('restore-context', {
           problemType: data.problemType,
           nodes: data.treeNodes,
         });
