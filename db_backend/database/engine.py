@@ -5,15 +5,23 @@
 ## SPDX-License-Identifier: Apache-2.0
 ################################################################################
 
-from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
-from sqlalchemy.exc import OperationalError
-from sqlalchemy.orm import declarative_base
-from sqlalchemy import create_engine, text
-from sqlalchemy.orm import sessionmaker
+from __future__ import annotations
+
 import os
 import ssl
 from pathlib import Path
+from threading import Lock
+from typing import Any
+
 from dotenv import load_dotenv
+from sqlalchemy.exc import OperationalError
+from sqlalchemy.ext.asyncio import (
+    AsyncEngine,
+    AsyncSession,
+    async_sessionmaker,
+    create_async_engine,
+)
+from sqlalchemy.orm import declarative_base
 
 # Load credentials from .env file (user-local, gitignored)
 # Override with: FLASK_ENV_FILE=.env-local python3 ...
@@ -21,121 +29,136 @@ _project_root = Path(__file__).resolve().parent.parent.parent
 _env_file = _project_root / os.getenv("FLASK_ENV_FILE", ".env")
 load_dotenv(dotenv_path=_env_file)
 
-# Allow a local SQLite fallback so the app can run even if MariaDB is unreachable.
-USE_SQLITE_FALLBACK = os.getenv("USE_SQLITE_FALLBACK", "0") == "1"
-
-if USE_SQLITE_FALLBACK:
-    SQLITE_PATH = os.getenv("SQLITE_PATH", "sqlite:///flaskcopilot.db")
-    DATABASE_URL = SQLITE_PATH.replace("sqlite:///", "sqlite+pysqlite:///")
-    ASYNC_DATABASE_URL = SQLITE_PATH.replace("sqlite:///", "sqlite+aiosqlite:///")
-else:
-    # Remote LLNL LaunchIT MariaDB configuration (via SSH tunnel)
-    # SSH tunnel command: ssh -L 32636:cz-marathe1-mymariadb1.apps.czapps.llnl.gov:32636 <user>@oslic.llnl.gov
-    # All credentials loaded from .env file (see .env.example for template)
-    DB_USER = os.getenv("DB_USER")
-    DB_PASSWORD = os.getenv("DB_PASSWORD", "")  # Empty password allowed for local dev
-    DB_HOST = os.getenv("DB_HOST")
-    DB_PORT = os.getenv("DB_PORT")
-    DB_NAME = os.getenv("DB_NAME")
-
-    # Validate required DB settings are present in .env (password can be empty for local dev)
-    _missing = [
-        k
-        for k, v in {
-            "DB_USER": DB_USER,
-            "DB_HOST": DB_HOST,
-            "DB_PORT": DB_PORT,
-            "DB_NAME": DB_NAME,
-        }.items()
-        if not v
-    ]
-    if _missing:
-        print(f"WARNING: Missing database config in .env: {', '.join(_missing)}")
-        print("See .env.example for the required variables.")
-        print("Falling back to SQLite...")
-        USE_SQLITE_FALLBACK = True
-        SQLITE_PATH = os.getenv("SQLITE_PATH", "sqlite:///flaskcopilot.db")
-        DATABASE_URL = SQLITE_PATH.replace("sqlite:///", "sqlite+pysqlite:///")
-        ASYNC_DATABASE_URL = SQLITE_PATH.replace("sqlite:///", "sqlite+aiosqlite:///")
-    else:
-        # MariaDB over SSH tunnel with mandatory TLS; use PyMySQL/AioMySQL with lax cert check (self-signed)
-        DATABASE_URL = (
-            f"mysql+pymysql://{DB_USER}:{DB_PASSWORD}@{DB_HOST}:{DB_PORT}/{DB_NAME}"
-        )
-        ASYNC_DATABASE_URL = (
-            f"mysql+aiomysql://{DB_USER}:{DB_PASSWORD}@{DB_HOST}:{DB_PORT}/{DB_NAME}"
-        )
-
-# Common SSL settings (server uses self-signed cert; tunnel already encrypts)
-if not USE_SQLITE_FALLBACK:
-    SSL_CONTEXT = ssl.create_default_context()
-    SSL_CONTEXT.check_hostname = False
-    SSL_CONTEXT.verify_mode = ssl.CERT_NONE
-    SSL_KW = {"ssl": SSL_CONTEXT}
-else:
-    SSL_KW = {}
-
-# Create sync engine (SSL required by server; skip cert verification because tunnel is trusted)
-try:
-    connect_args = {"check_same_thread": False} if USE_SQLITE_FALLBACK else SSL_KW
-    sync_engine = create_engine(
-        DATABASE_URL,
-        echo=False,  # Set to True for SQL debug logging
-        pool_size=10,
-        max_overflow=20,
-        pool_pre_ping=True,
-        pool_recycle=3600,
-        connect_args=connect_args,
-    )
-    SyncSessionLocal = sessionmaker(bind=sync_engine, expire_on_commit=False)
-
-    # Eagerly verify the connection so OperationalError is caught here
-    # rather than deferred to the first query (SQLAlchemy uses lazy connect).
-    with sync_engine.connect() as _conn:
-        _conn.execute(text("SELECT 1"))
-
-    # Also create async engine for compatibility
-    # aiomysql accepts the same ssl= context as pymysql
-    async_connect_args = {"check_same_thread": False} if USE_SQLITE_FALLBACK else SSL_KW
-    engine = create_async_engine(
-        ASYNC_DATABASE_URL,
-        echo=False,
-        pool_size=10,
-        max_overflow=20,
-        pool_pre_ping=True,
-        pool_recycle=3600,
-        connect_args=async_connect_args,
-    )
-    AsyncSessionLocal = async_sessionmaker(
-        engine, class_=AsyncSession, expire_on_commit=False
-    )
-except (OperationalError, Exception) as exc:
-    print(f"Warning: Could not connect to database: {exc}")
-    print("Database features will be disabled.")
-    engine = AsyncSessionLocal = None
-    sync_engine = SyncSessionLocal = None
-
 Base = declarative_base()
 
+# Exported for compatibility with existing imports, but initialized lazily.
+engine: AsyncEngine | None = None
+AsyncSessionLocal: async_sessionmaker[AsyncSession] | None = None
 
-def get_sync_db():
-    """Get a synchronous database session (more reliable with SSL)"""
-    if SyncSessionLocal is None:
-        return None
-    session = SyncSessionLocal()
-    try:
-        return session
-    except Exception:
-        session.rollback()
-        raise
+_engine_lock = Lock()
+
+
+def _resolve_database_url() -> tuple[bool, str]:
+    """Resolve the async database URL from environment settings."""
+    use_sqlite_fallback = os.getenv("USE_SQLITE_FALLBACK", "0") == "1"
+    if use_sqlite_fallback:
+        sqlite_path = os.getenv("SQLITE_PATH", "sqlite:///flaskcopilot.db")
+        return (
+            True,
+            sqlite_path.replace("sqlite:///", "sqlite+aiosqlite:///"),
+        )
+
+    # All credentials loaded from .env file (see .env.example for template)
+    db_user = os.getenv("DB_USER")
+    db_password = os.getenv("DB_PASSWORD", "")  # Empty password allowed for local dev
+    db_host = os.getenv("DB_HOST")
+    db_port = os.getenv("DB_PORT")
+    db_name = os.getenv("DB_NAME")
+
+    missing = [
+        key
+        for key, value in {
+            "DB_USER": db_user,
+            "DB_HOST": db_host,
+            "DB_PORT": db_port,
+            "DB_NAME": db_name,
+        }.items()
+        if not value
+    ]
+    if missing:
+        print(f"WARNING: Missing database config in .env: {', '.join(missing)}")
+        print("See .env.example for the required variables.")
+        print("Falling back to SQLite...")
+        sqlite_path = os.getenv("SQLITE_PATH", "sqlite:///flaskcopilot.db")
+        return (
+            True,
+            sqlite_path.replace("sqlite:///", "sqlite+aiosqlite:///"),
+        )
+
+    return (
+        False,
+        f"mysql+aiomysql://{db_user}:{db_password}@{db_host}:{db_port}/{db_name}",
+    )
+
+
+def _build_connect_args(use_sqlite_fallback: bool) -> dict[str, Any]:
+    """Build connection arguments for the selected backend."""
+    if use_sqlite_fallback:
+        return {"check_same_thread": False}
+
+    ssl_context = ssl.create_default_context()
+    ssl_context.check_hostname = False
+    ssl_context.verify_mode = ssl.CERT_NONE
+    return {"ssl": ssl_context}
+
+
+def _build_engine_kwargs(
+    use_sqlite_fallback: bool, connect_args: dict[str, Any]
+) -> dict[str, Any]:
+    """Common engine settings, without applying MariaDB-only pool options to SQLite."""
+    kwargs: dict[str, Any] = {
+        "echo": False,
+        "connect_args": connect_args,
+    }
+    if not use_sqlite_fallback:
+        kwargs.update(
+            {
+                "pool_size": 10,
+                "max_overflow": 20,
+                "pool_pre_ping": True,
+                "pool_recycle": 3600,
+            }
+        )
+    return kwargs
+
+
+def get_async_engine() -> AsyncEngine | None:
+    """Create and cache the async engine lazily.
+
+    The async engine is the primary runtime path for API and WebSocket-backed
+    persistence.
+    """
+    global engine, AsyncSessionLocal
+
+    if engine is not None and AsyncSessionLocal is not None:
+        return engine
+
+    with _engine_lock:
+        if engine is not None and AsyncSessionLocal is not None:
+            return engine
+
+        try:
+            use_sqlite_fallback, async_database_url = _resolve_database_url()
+            connect_args = _build_connect_args(use_sqlite_fallback)
+            engine_kwargs = _build_engine_kwargs(use_sqlite_fallback, connect_args)
+
+            engine = create_async_engine(async_database_url, **engine_kwargs)
+            AsyncSessionLocal = async_sessionmaker(
+                engine, class_=AsyncSession, expire_on_commit=False
+            )
+        except (OperationalError, Exception) as exc:
+            print(f"Warning: Could not connect to database: {exc}")
+            print("Database features will be disabled.")
+            engine = AsyncSessionLocal = None
+
+    return engine
+
+
+def get_async_session_factory() -> async_sessionmaker[AsyncSession] | None:
+    """Return the lazily initialized async session factory."""
+    if AsyncSessionLocal is None:
+        get_async_engine()
+    return AsyncSessionLocal
 
 
 async def get_db():
-    """Dependency for getting async database sessions"""
-    if AsyncSessionLocal is None:
+    """Dependency for getting async database sessions."""
+    session_factory = get_async_session_factory()
+    if session_factory is None:
         yield None
         return
-    async with AsyncSessionLocal() as session:
+
+    async with session_factory() as session:
         try:
             yield session
             await session.commit()

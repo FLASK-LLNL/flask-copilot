@@ -37,7 +37,7 @@ from charge_backend.moleculedb.molecule_naming import smiles_to_html, MolNameFor
 
 # Import database components
 sys.path.insert(0, os.path.dirname(__file__))
-from db_backend.database.engine import engine, Base, AsyncSessionLocal
+from db_backend.database.engine import Base, get_async_engine, get_async_session_factory
 from db_backend.routers import projects as projectsrouter
 from db_backend import session_state_service
 
@@ -167,7 +167,8 @@ async def _handle_session_ws_action(
     if action not in session_actions:
         return False
 
-    if AsyncSessionLocal is None:
+    session_factory = get_async_session_factory()
+    if session_factory is None:
         await websocket.send_json(
             {
                 "type": "session_error",
@@ -179,7 +180,7 @@ async def _handle_session_ws_action(
         return True
 
     try:
-        async with AsyncSessionLocal() as db:
+        async with session_factory() as db:
             if action == "session_save":
                 state_data = data.get("state") or {}
                 request = session_state_service.SessionSaveRequest(
@@ -315,11 +316,12 @@ async def save_session_to_db(session: ComputationSession) -> None:
     by the WebSocket handler).  If no matching row is found it falls back
     to the most-recently-modified running experiment for the user.
     """
-    from db_backend.database.engine import AsyncSessionLocal
+    from db_backend.database.engine import get_async_session_factory
     from db_backend.database import models as db_models
     from sqlalchemy import select, and_, cast, String, func
 
-    if AsyncSessionLocal is None:
+    session_factory = get_async_session_factory()
+    if session_factory is None:
         logger.warning("save_session_to_db: no database engine available")
         return
 
@@ -329,7 +331,7 @@ async def save_session_to_db(session: ComputationSession) -> None:
         # results arrive.
         if session.experiment_id and (session.problem_type or session.smiles):
             try:
-                async with AsyncSessionLocal() as db:
+                async with session_factory() as db:
                     result = await db.execute(
                         select(db_models.Experiment).where(
                             db_models.Experiment.id == session.experiment_id
@@ -354,7 +356,7 @@ async def save_session_to_db(session: ComputationSession) -> None:
         return
 
     try:
-        async with AsyncSessionLocal() as db:
+        async with session_factory() as db:
             experiment = None
 
             # Strategy 0: direct lookup by experiment_id (set from frontend)
@@ -501,9 +503,10 @@ async def save_session_to_db(session: ComputationSession) -> None:
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Database initialization on startup"""
-    if engine is not None:
+    db_engine = get_async_engine()
+    if db_engine is not None:
         try:
-            async with engine.begin() as conn:
+            async with db_engine.begin() as conn:
                 await conn.run_sync(Base.metadata.create_all)
             logger.info("Database tables initialized successfully")
         except Exception as e:
@@ -1366,12 +1369,13 @@ async def websocket_endpoint(websocket: WebSocket):
                 # any nodes are generated.
                 if session.experiment_id and session.problem_type:
                     try:
-                        from db_backend.database.engine import AsyncSessionLocal
+                        from db_backend.database.engine import get_async_session_factory
                         from db_backend.database import models as db_models
                         from sqlalchemy import select as sa_select
 
-                        if AsyncSessionLocal is not None:
-                            async with AsyncSessionLocal() as _db:
+                        session_factory = get_async_session_factory()
+                        if session_factory is not None:
+                            async with session_factory() as _db:
                                 _result = await _db.execute(
                                     sa_select(db_models.Experiment).where(
                                         db_models.Experiment.id == session.experiment_id
