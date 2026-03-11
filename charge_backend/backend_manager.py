@@ -28,6 +28,7 @@ from retrosynthesis.template import (
 from retrosynthesis.ai import ai_based_retrosynthesis
 from retrosynthesis.alternatives import set_reaction_alternative
 from charge_backend.prompt_debugger import debug_prompt
+from backend_helper_funcs import Node
 
 
 class FlaskActionManager(ActionManager):
@@ -517,3 +518,20 @@ class FlaskActionManager(ActionManager):
                 "username": self.username,
             }
         )
+
+    async def restore_retrosynth_context(self, ctxt: RetrosynthesisContext, data: dict):
+        node_data = data.get("nodes")
+        for n in node_data:
+            n["yield_"] = n["yield"]
+            del n["yield"]
+            await ctxt.add_node(Node(**n))
+
+    async def handle_load_state(self, data: dict, *args, **kwargs) -> None:
+        await super().handle_load_state(data, *args, **kwargs)
+
+        problem_type = data.get("problemType")
+        if problem_type == "retrosynthesis":
+            if not self.retro_synth_context:
+                await self.restore_retrosynth_context(
+                    self.get_retro_synth_context(), data
+                )

@@ -363,8 +363,16 @@ const ChemistryTool: React.FC = () => {
       sidebarState.setMessages(data.sidebarState.messages);
       sidebarState.setVisibleSources(data.sidebarState.visibleSources);
     }
-    data.experimentContext &&
-      sendMessageToServer('load-context', { experimentContext: data.experimentContext });
+
+    // I was getting "websocket not connected" alerts
+    if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+      (data.experimentContext || data.treeNodes) &&
+        sendMessageToServer('load-context', {
+          experimentContext: data.experimentContext,
+          nodes: data.treeNodes,
+          problemType: data.problemType,
+        });
+    }
   };
 
   const saveStateToExperiment = useCallback((): boolean => {
