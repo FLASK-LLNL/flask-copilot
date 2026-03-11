@@ -526,7 +526,9 @@ class FlaskActionManager(ActionManager):
             del n["yield"]
             await ctxt.add_node(Node(**n))
 
-    async def handle_restore_context(self, data: dict) -> None:
+    async def handle_load_state(self, data: dict, *args, **kwargs) -> None:
+        await super().handle_load_state(data, *args, **kwargs)
+
         problem_type = data.get("problemType")
         if problem_type == "retrosynthesis":
             if not self.retro_synth_context:

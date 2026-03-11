@@ -257,7 +257,6 @@ async def websocket_endpoint(websocket: WebSocket):
         # Context management
         "save-context": action_manager.handle_save_state,
         "load-context": action_manager.handle_load_state,
-        "restore-context": action_manager.handle_restore_context,
         # Lead molecule optimization
         "optimize-from": action_manager.handle_optimize_from,
         # Retrosynthesis
