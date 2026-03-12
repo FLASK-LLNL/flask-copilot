@@ -29,7 +29,7 @@ import 'remark-gfm';
 import 'react-syntax-highlighter';
 import 'react-syntax-highlighter/dist/esm/styles/prism';
 
-import { WS_SERVER, VERSION, HTTP_SERVER } from './config';
+import { WS_SERVER, HTTP_SERVER, VERSION } from './config';
 import { DEFAULT_CUSTOM_SYSTEM_PROMPT, PROPERTY_NAMES } from './constants';
 import {
   TreeNode,
@@ -40,7 +40,7 @@ import {
   WebSocketMessage,
   SelectableTool,
   Experiment,
-  FlaskOrchestratorSettings,
+  FlaskOrchestratorSettings as OrchestratorSettings,
   OptimizationCustomization,
   ReactionAlternative,
 } from './types';
@@ -52,7 +52,6 @@ import {
   useProjectSidebar,
   useProjectManagement,
 } from './components/project_sidebar';
-
 import {
   SidebarMessage,
   SettingsButton,
@@ -61,7 +60,6 @@ import {
   MarkdownText,
   BACKEND_OPTIONS,
 } from 'lc-conductor';
-
 import { CombinedCustomizationModal } from './components/combined_customization_modal';
 import { Modal } from './components/modal';
 
@@ -72,6 +70,7 @@ import './animations.css';
 import { MetricsDashboard, useMetricsDashboardState } from './components/metrics';
 import { useProjectData } from './hooks/useProjectData';
 import { ReactionAlternativesSidebar } from './components/reaction_alternatives';
+import { useSessionPersistence, useAutoSave, SessionState } from './hooks/useSessionPersistence';
 
 const ChemistryTool: React.FC = () => {
   const [smiles, setSmiles] = useState<string>('');
@@ -89,6 +88,9 @@ const ChemistryTool: React.FC = () => {
   const [autoZoom, setAutoZoom] = useState<boolean>(true);
   const [treeNodes, setTreeNodes] = useState<TreeNode[]>([]);
   const [edges, setEdges] = useState<Edge[]>([]);
+
+  // Track which experiments have running computations: experimentId → serverSessionId
+  const computingExperimentsRef = useRef<Map<string, string>>(new Map());
   const [contextMenu, setContextMenu] = useState<ContextMenuState>({
     node: null,
     isReaction: false,
@@ -100,6 +102,9 @@ const ChemistryTool: React.FC = () => {
   const [customQueryType, setCustomQueryType] = useState<string | null>(null);
   const [wsConnected, setWsConnected] = useState<boolean>(false);
   const [saveDropdownOpen, setSaveDropdownOpen] = useState<boolean>(false);
+  const [loadDropdownOpen, setLoadDropdownOpen] = useState<boolean>(false);
+  const [checkpointDropdownOpen, setCheckpointDropdownOpen] = useState<boolean>(false);
+  const [autoCheckpointEnabled, setAutoCheckpointEnabled] = useState<boolean>(true);
   const [wsError, setWsError] = useState<string>('');
   const [wsReconnecting, setWsReconnecting] = useState<boolean>(false);
   const rdkitModule = loadRDKit();
@@ -132,7 +137,7 @@ const ChemistryTool: React.FC = () => {
   // Function to refresh tools list from backend
   const refreshToolsList = useCallback(() => {
     if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
-      console.log('🔄 Refreshing tools list from backend');
+      console.log('Refreshing tools list from backend');
       wsRef.current.send(JSON.stringify({ action: 'list-tools' }));
     }
   }, []);
@@ -147,10 +152,17 @@ const ChemistryTool: React.FC = () => {
   const projectSidebar = useProjectSidebar();
   const projectData = useProjectData();
   const projectManagement = useProjectManagement(projectData);
+  const sessionPersistence = useSessionPersistence(wsRef);
 
   const treeNodesRef = useRef(treeNodes);
   const edgesRef = useRef(edges);
   const sidebarStateRef = useRef(sidebarState);
+  const saveCheckpointRef = useRef<() => void>(() => {});
+  const saveStateToExperimentRef = useRef<() => boolean>(() => false);
+  const restoredSessionRef = useRef<SessionState | null>(null);
+  const sessionLoadCompleteRef = useRef(false);
+  const isExperimentCompleteRef = useRef(false);
+  const autoCheckpointEnabledRef = useRef(true);
 
   const [selectedTools, setSelectedTools] = useState<number[]>([]);
   const [availableToolsMap, setAvailableToolsMap] = useState<SelectableTool[]>([]);
@@ -192,6 +204,10 @@ const ChemistryTool: React.FC = () => {
     sidebarStateRef.current = sidebarState;
   }, [sidebarState]);
 
+  useEffect(() => {
+    autoCheckpointEnabledRef.current = autoCheckpointEnabled;
+  }, [autoCheckpointEnabled]);
+
   // Load initial settings from localStorage
   const getInitialSettings = () => {
     const saved = localStorage.getItem('orchestratorSettings');
@@ -211,7 +227,7 @@ const ChemistryTool: React.FC = () => {
     };
   };
   const [orchestratorSettings, setOrchestratorSettings] =
-    useState<FlaskOrchestratorSettings>(getInitialSettings());
+    useState<OrchestratorSettings>(getInitialSettings());
 
   // Add this helper function near the top of the ChemistryTool component
   const getDisplayUrl = (): string => {
@@ -271,9 +287,7 @@ const ChemistryTool: React.FC = () => {
   };
 
   // Callback function to send updated settings to backend
-  const handleSettingsUpdateConfirm = async (
-    settings: FlaskOrchestratorSettings
-  ): Promise<void> => {
+  const handleSettingsUpdateConfirm = async (settings: OrchestratorSettings): Promise<void> => {
     if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) {
       alert('WebSocket not connected');
       return;
@@ -291,11 +305,12 @@ const ChemistryTool: React.FC = () => {
         customUrl: settings.customUrl,
         model: settings.model,
         apiKey: settings.apiKey,
+        moleculeName: settings.moleculeName,
       };
       wsRef.current.send(JSON.stringify(message));
 
       // Refresh tools list after updating settings
-      console.log('🔄 Refreshing tools list after settings update');
+      console.log('Refreshing tools list after settings update');
       refreshToolsList();
     }
   };
@@ -304,15 +319,32 @@ const ChemistryTool: React.FC = () => {
     const handleClickOutside = (): void => {
       setContextMenu({ node: null, isReaction: false, x: 0, y: 0 });
       setSaveDropdownOpen(false);
+      setLoadDropdownOpen(false);
+      setCheckpointDropdownOpen(false);
       sidebarState.setSourceFilterOpen(false);
       setWsTooltipPinned(false);
       setCopiedField(null);
     };
-    if (contextMenu || saveDropdownOpen || sidebarState.sourceFilterOpen || wsTooltipPinned) {
+    if (
+      contextMenu ||
+      saveDropdownOpen ||
+      loadDropdownOpen ||
+      checkpointDropdownOpen ||
+      sidebarState.sourceFilterOpen ||
+      wsTooltipPinned
+    ) {
       window.addEventListener('mousedown', handleClickOutside);
       return () => window.removeEventListener('mousedown', handleClickOutside);
     }
-  }, [contextMenu, saveDropdownOpen, sidebarState, wsTooltipPinned, projectSidebar]);
+  }, [
+    contextMenu,
+    saveDropdownOpen,
+    loadDropdownOpen,
+    checkpointDropdownOpen,
+    sidebarState,
+    wsTooltipPinned,
+    projectSidebar,
+  ]);
 
   // State management
   const getContext = (): Experiment => {
@@ -320,58 +352,145 @@ const ChemistryTool: React.FC = () => {
   };
 
   const loadContextFromExperiment = (projectId: string, experimentId: string | null): void => {
-    console.log('Loading context:', { projectId, experimentId });
+    console.log('Loading context:', {
+      projectId,
+      experimentId,
+      projectCount: projectData.projectsRef.current.length,
+    });
     const project = projectData.projectsRef.current.find((p) => p.id === projectId);
     if (project) {
       const experiment = project.experiments.find((e) => e.id === experimentId);
       if (experiment) {
         loadContext(experiment);
+      } else {
+        console.warn('Experiment not found in project, triggering refresh:', experimentId);
+        // Force a DB refresh then retry once
+        projectData.refreshProjects().then(() => {
+          const p2 = projectData.projectsRef.current.find((p) => p.id === projectId);
+          const e2 = p2?.experiments.find((e) => e.id === experimentId);
+          if (e2) loadContext(e2);
+          else console.error('Experiment still not found after refresh:', experimentId);
+        });
+      }
+    } else {
+      console.warn('Project not found in projectsRef, triggering refresh:', projectId);
+      // Force a DB refresh then retry once
+      projectData.refreshProjects().then(() => {
+        const p2 = projectData.projectsRef.current.find((p) => p.id === projectId);
+        if (p2) {
+          const e2 = p2.experiments.find((e) => e.id === experimentId);
+          if (e2) loadContext(e2);
+          else console.error('Experiment not found after refresh:', experimentId);
+        } else {
+          console.error('Project still not found after refresh:', projectId);
+        }
+      });
+    }
+
+    // Multi-experiment: check if the experiment we're switching to has a
+    // running session.  If so, resume it; otherwise, detach the current
+    // server session so background computation continues headless.
+    if (experimentId) {
+      const sessionId = computingExperimentsRef.current.get(experimentId);
+      if (sessionId && wsRef.current?.readyState === WebSocket.OPEN) {
+        // If the experiment already completed headless (the 2-second DB
+        // poll picked up isRunning=false), skip the resume and load
+        // directly from the in-memory cache which already has the
+        // sidebar_state from DB.
+        const cachedExp = project?.experiments.find((e) => e.id === experimentId);
+        if (cachedExp && !cachedExp.isRunning) {
+          console.log('Experiment completed headless, loading from cache:', experimentId);
+          computingExperimentsRef.current.delete(experimentId);
+          loadContext(cachedExp);
+        } else {
+          // Switching to a running experiment – resume the session stream
+          setIsComputing(true);
+          wsRef.current.send(
+            JSON.stringify({
+              action: 'resume_session',
+              sessionId,
+            })
+          );
+          console.log('Resuming session for experiment:', experimentId, sessionId);
+          return;
+        }
       }
     }
-    return;
+
+    // Switching to a non-computing experiment – detach the current
+    // session on the server so it continues headless without streaming
+    // here.  This is a no-op if no session is active.
+    if (wsRef.current?.readyState === WebSocket.OPEN) {
+      wsRef.current.send(JSON.stringify({ action: 'detach' }));
+    }
   };
 
   const loadStateFromCurrentExperiment = (): void => {
     const { projectId, experimentId } = projectSidebar.selectionRef.current;
+    console.log('loadStateFromCurrentExperiment:', { projectId, experimentId });
     if (projectId && experimentId) {
       loadContextFromExperiment(projectId, experimentId);
     }
   };
 
   const loadContext = (data: Experiment): void => {
-    // Conditionally set everything that is in the context
-    data.smiles !== undefined && setSmiles(data.smiles);
-    data.problemType !== undefined && setProblemType(data.problemType);
-    data.systemPrompt !== undefined && setSystemPrompt(data.systemPrompt);
-    data.problemPrompt !== undefined && setProblemPrompt(data.problemPrompt);
-    data.propertyType !== undefined && setPropertyType(data.propertyType);
-    data.customPropertyName !== undefined && setCustomPropertyName(data.customPropertyName);
-    data.customPropertyDesc !== undefined && setCustomPropertyDesc(data.customPropertyDesc);
-    data.customPropertyAscending !== undefined &&
-      setCustomPropertyAscending(data.customPropertyAscending);
-    data.customization && setCustomization(data.customization);
-    data.treeNodes && setTreeNodes(data.treeNodes);
-    data.edges && setEdges(data.edges);
-    data.metricsHistory && metricsDashboardState.setMetricsHistory(data.metricsHistory);
-    data.visibleMetrics && metricsDashboardState.setVisibleMetrics(data.visibleMetrics);
+    // Always reset to defaults first, then apply experiment data.
+    // This ensures switching to a fresh/empty experiment clears old state.
+    setSmiles(data.smiles ?? '');
+    setProblemType(data.problemType ?? 'retrosynthesis');
+    setSystemPrompt(data.systemPrompt ?? DEFAULT_CUSTOM_SYSTEM_PROMPT);
+    setProblemPrompt(data.problemPrompt ?? '');
+    setPropertyType(data.propertyType ?? 'density');
+    setCustomPropertyName(data.customPropertyName ?? '');
+    setCustomPropertyDesc(data.customPropertyDesc ?? '');
+    setCustomPropertyAscending(data.customPropertyAscending ?? true);
+    setCustomization(
+      data.customization ?? {
+        enableConstraints: false,
+        molecularSimilarity: 0.7,
+        diversityPenalty: 0.0,
+        explorationRate: 0.5,
+        additionalConstraints: [],
+      }
+    );
+    setTreeNodes(data.treeNodes ?? []);
+    setEdges(data.edges ?? []);
+    metricsDashboardState.setMetricsHistory(data.metricsHistory ?? []);
+    metricsDashboardState.setVisibleMetrics(
+      data.visibleMetrics ?? {
+        cost: false,
+        bandgap: false,
+        sascore: false,
+        yield: true,
+        density: false,
+      }
+    );
     if (data.graphState) {
       graphState.setZoom(data.graphState.zoom);
       graphState.setOffset(data.graphState.offset);
+    } else {
+      graphState.setZoom(1);
+      graphState.setOffset({ x: 50, y: 50 });
     }
-    data.autoZoom !== undefined && setAutoZoom(data.autoZoom);
+    setAutoZoom(data.autoZoom ?? true);
     if (data.sidebarState) {
       sidebarState.setMessages(data.sidebarState.messages);
       sidebarState.setVisibleSources(data.sidebarState.visibleSources);
+    } else {
+      sidebarState.setMessages([]);
     }
 
-    // I was getting "websocket not connected" alerts
-    if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
-      (data.experimentContext || data.treeNodes) &&
-        sendMessageToServer('load-context', {
-          experimentContext: data.experimentContext,
-          nodes: data.treeNodes,
-          problemType: data.problemType,
-        });
+    // Only restore backend context when the websocket is ready.
+    if (
+      wsRef.current &&
+      wsRef.current.readyState === WebSocket.OPEN &&
+      (data.experimentContext || data.treeNodes)
+    ) {
+      sendMessageToServer('load-context', {
+        experimentContext: data.experimentContext,
+        nodes: data.treeNodes,
+        problemType: data.problemType,
+      });
     }
   };
 
@@ -381,11 +500,52 @@ const ChemistryTool: React.FC = () => {
     const experimentId = projectSidebar.selectionRef.current.experimentId;
     console.log('Saving experiments', projectId, experimentId);
     if (projectId && experimentId) {
-      projectManagement.updateExperiment(projectId, getContext());
-      return true;
+      try {
+        const ctx = getContext();
+
+        // Guard: don't save empty local state over non-empty DB data.
+        // This prevents a session-restore + experiment-switch cycle from
+        // overwriting data that save_session_to_db persisted while the
+        // browser was closed.
+        const localHasData = (ctx.treeNodes && ctx.treeNodes.length > 0) || !!ctx.smiles;
+        if (!localHasData) {
+          const project = projectData.projectsRef.current.find((p) => p.id === projectId);
+          const dbExp = project?.experiments.find((e) => e.id === experimentId);
+          const dbHasData =
+            dbExp && ((dbExp.treeNodes && dbExp.treeNodes.length > 0) || !!dbExp.smiles);
+          if (dbHasData) {
+            console.warn(
+              'saveStateToExperiment: skipping save — local state is empty but DB has data for',
+              experimentId
+            );
+            return false;
+          }
+        }
+
+        // Guard: preserve sidebar messages from DB if local has none
+        // but DB has reasoning messages (e.g. after browser reopen).
+        const localSidebarMsgs = ctx.sidebarState?.messages ?? [];
+        if (localSidebarMsgs.length === 0) {
+          const project = projectData.projectsRef.current.find((p) => p.id === projectId);
+          const dbExp = project?.experiments.find((e) => e.id === experimentId);
+          const dbSidebarMsgs = dbExp?.sidebarState?.messages ?? [];
+          if (dbSidebarMsgs.length > 0) {
+            console.log(
+              `saveStateToExperiment: local has 0 sidebar msgs but DB has ${dbSidebarMsgs.length} — preserving DB sidebar`
+            );
+            ctx.sidebarState = dbExp!.sidebarState;
+          }
+        }
+
+        projectManagement.updateExperiment(projectId, ctx);
+        return true;
+      } catch (e) {
+        console.warn('saveStateToExperiment: getContext failed, skipping save:', e);
+        return false;
+      }
     }
     return false;
-  }, [projectSidebar.selectionRef, projectManagement, getContext]);
+  }, [projectSidebar.selectionRef, projectManagement, getContext, projectData]);
 
   const runComputation = async (): Promise<void> => {
     setSidebarOpen(true);
@@ -466,11 +626,8 @@ const ChemistryTool: React.FC = () => {
       customPropertyAscending,
       systemPrompt,
       userPrompt: problemPrompt,
-      runSettings: {
-        promptDebugging: debugMode,
-        moleculeName: orchestratorSettings.moleculeName || 'brand',
-      },
       customization,
+      experimentId: projectSidebar.selectionRef.current.experimentId || undefined,
     };
 
     wsRef.current?.send(JSON.stringify(message));
@@ -482,6 +639,7 @@ const ChemistryTool: React.FC = () => {
     if (reconnectingRef.current) return; // Prevent overlapping reconnects
     reconnectingRef.current = true;
 
+    // Close any existing socket (may have been orphaned by StrictMode cleanup)
     if (
       wsRef.current &&
       (wsRef.current.readyState === WebSocket.OPEN ||
@@ -489,6 +647,7 @@ const ChemistryTool: React.FC = () => {
     ) {
       wsRef.current.close();
     }
+    wsRef.current = null; // Ensure old callbacks become no-ops
 
     setWsReconnecting(true);
 
@@ -501,9 +660,21 @@ const ChemistryTool: React.FC = () => {
       setWsConnected(true);
       setWsReconnecting(false);
       setWsError('');
-      reset(); // Server state must match UI state
+      resetLocalState(); // Clear UI state without killing server-side sessions
+      isExperimentCompleteRef.current = false; // Reset experiment complete flag
 
-      loadStateFromCurrentExperiment();
+      // Apply restored session from database if available (first connect only)
+      if (restoredSessionRef.current) {
+        console.log('Applying restored session after reset');
+        applyRestoredSession(restoredSessionRef.current);
+        restoredSessionRef.current = null; // Clear after first apply
+      } else if (sessionLoadCompleteRef.current) {
+        // Session load finished but nothing to restore (reconnect case,
+        // or session was too old).  Load from current sidebar selection.
+        loadStateFromCurrentExperiment();
+      }
+      // else: initial connect with session load still in flight.
+      // The loadSavedSession callback will apply once it resolves.
 
       socket.send(JSON.stringify({ action: 'list-tools' }));
       socket.send(JSON.stringify({ action: 'get-username' }));
@@ -514,21 +685,60 @@ const ChemistryTool: React.FC = () => {
 
       const data: WebSocketMessage = JSON.parse(event.data);
 
+      if (sessionPersistence.handleWebSocketMessage(data)) {
+        return;
+      }
+
+      // Multi-experiment routing: determine if this message belongs to
+      // the currently-selected experiment.  Messages without an
+      // experimentId (e.g. tool lists, username) are always applied.
+      const messageExperimentId = data.experimentId;
+      const currentExperimentId = projectSidebar.selectionRef.current.experimentId;
+      const isForCurrentExperiment =
+        !messageExperimentId || messageExperimentId === currentExperimentId;
+
       if (data.type === 'node') {
-        setTreeNodes((prev) => [...prev, data.node!]);
+        if (!isForCurrentExperiment) return; // Ignore background experiment nodes
+        // Prevent duplicate nodes (can happen during session resume)
+        setTreeNodes((prev) => {
+          const existingNode = prev.find((n) => n.id === data.node!.id);
+          if (existingNode) {
+            console.log('Skipping duplicate node:', data.node!.id);
+            return prev;
+          }
+          return [...prev, data.node!];
+        });
+        // Save state when new molecule is generated (if auto-checkpoint is enabled).
+        // Only saveStateToExperiment is called here.  saveCheckpoint uses
+        // getSessionState() which historically applied level filtering,
+        // creating a race where filtered data could overwrite full data in
+        // the DB (both endpoints write to the same experiment row).
+        if (autoCheckpointEnabledRef.current) {
+          setTimeout(() => {
+            saveStateToExperimentRef.current();
+          }, 100); // Small delay to ensure state is updated
+        }
       } else if (data.type === 'stopped') {
         // Handle explicit stop from backend
-        console.log('Computation stopped by backend');
-        setIsComputing(false);
-        setIsComputingTemplates(false);
-        unhighlightNodes();
-        saveStateToExperiment();
-      } else if (data.type === 'complete') {
+        console.log('Computation stopped by backend', messageExperimentId);
+        // Clean up computing map
+        if (messageExperimentId) {
+          computingExperimentsRef.current.delete(messageExperimentId);
+          // Find project containing this experiment and update isRunning
+          const project = projectData.projectsRef.current.find((p) =>
+            p.experiments.some((e) => e.id === messageExperimentId)
+          );
+          if (project) {
+            projectData.setExperimentRunning(project.id, messageExperimentId, false);
+          }
+        }
+        if (!isForCurrentExperiment) return;
         setIsComputing(false);
         setIsComputingTemplates(false);
         unhighlightNodes();
         saveStateToExperiment();
       } else if (data.type === 'node_update') {
+        if (!isForCurrentExperiment) return;
         const { id, ...restData } = data.node!;
 
         if (restData) {
@@ -541,6 +751,7 @@ const ChemistryTool: React.FC = () => {
           prev.map((n) => (n.id === data.node!.id ? { ...n, ...restData } : n))
         );
       } else if (data.type === 'node_delete') {
+        if (!isForCurrentExperiment) return;
         setTreeNodes((prev) => {
           const descendants = findAllDescendants(data.node!.id, prev);
           return prev.filter((n) => !descendants.has(n.id) && n.id !== data.node!.id);
@@ -549,6 +760,7 @@ const ChemistryTool: React.FC = () => {
           prev.filter((e) => e.fromNode !== data.node!.id && e.toNode !== data.node!.id)
         );
       } else if (data.type === 'subtree_update') {
+        if (!isForCurrentExperiment) return;
         const withNode = data.withNode || false;
         const { id, ...restData } = data.node!;
         setTreeNodes((prev) => {
@@ -560,11 +772,22 @@ const ChemistryTool: React.FC = () => {
           );
         });
       } else if (data.type === 'edge') {
-        setEdges((prev) => [...prev, data.edge!]);
+        if (!isForCurrentExperiment) return;
+        // Prevent duplicate edges (can happen during session resume)
+        setEdges((prev) => {
+          const existingEdge = prev.find((e) => e.id === data.edge!.id);
+          if (existingEdge) {
+            console.log('Skipping duplicate edge:', data.edge!.id);
+            return prev;
+          }
+          return [...prev, data.edge!];
+        });
       } else if (data.type === 'edge_update') {
+        if (!isForCurrentExperiment) return;
         const { id, ...restData } = data.edge!;
         setEdges((prev) => prev.map((e) => (e.id === data.edge!.id ? { ...e, ...restData } : e)));
       } else if (data.type === 'subtree_delete') {
+        if (!isForCurrentExperiment) return;
         let descendantsSet: Set<string>;
         setTreeNodes((prev) => {
           descendantsSet = findAllDescendants(data.node!.id, prev);
@@ -573,7 +796,98 @@ const ChemistryTool: React.FC = () => {
         setEdges((prev) =>
           prev.filter((e) => !descendantsSet!.has(e.fromNode) && !descendantsSet!.has(e.toNode))
         );
+      } else if (data.type === 'complete') {
+        // Clean up computing map regardless of which experiment completed
+        if (messageExperimentId) {
+          computingExperimentsRef.current.delete(messageExperimentId);
+          // Update isRunning flag for background experiment
+          const project = projectData.projectsRef.current.find((p) =>
+            p.experiments.some((e) => e.id === messageExperimentId)
+          );
+          if (project) {
+            projectData.setExperimentRunning(project.id, messageExperimentId, false);
+          }
+        }
+        if (!isForCurrentExperiment) {
+          console.log('Background experiment completed:', messageExperimentId);
+          // Refresh project data from DB so the sidebar_state
+          // (including "Retrosynthesis Complete" / "Optimization Complete")
+          // is in the in-memory cache when the user switches to this
+          // experiment.  The server persists sidebar_state to DB before
+          // sending 'complete', so the refresh will find the data.
+          projectData.refreshProjects();
+          return;
+        }
+        setIsComputing(false);
+        isExperimentCompleteRef.current = true; // Mark experiment as complete to stop checkpointing
+        unhighlightNodes();
+        saveStateToExperiment(); // Keep experiment up to date (localStorage / project data)
+
+        // Persist final state to MariaDB so other browsers see the completed tree.
+        // Use force=true to bypass the "no data" guard.
+        sessionPersistence.saveSession(
+          getSessionStateRef.current(),
+          true // force
+        );
+
+        // Clear server session ID on completion
+        sessionPersistence.setServerSessionId(null);
+        sessionPersistence.setSessionWasComputing(false);
+      } else if (data.type === 'session_started') {
+        // Store the server session ID for resume capability
+        const serverSessionId = data.sessionId || (data as any).sessionId;
+        console.log('Computation session started:', serverSessionId);
+        // Track in computing experiments map — prefer experimentId from
+        // the server message (includes it in the response), fall back to
+        // whatever the user currently has selected.
+        const expId = messageExperimentId || currentExperimentId;
+        if (expId && serverSessionId) {
+          computingExperimentsRef.current.set(expId, serverSessionId);
+        }
+        sessionPersistence.setServerSessionId(serverSessionId);
+        sessionPersistence.setSessionWasComputing(true);
+      } else if (data.type === 'session_resumed') {
+        // Successfully resumed a session
+        const serverSessionId = data.sessionId || (data as any).sessionId;
+        console.log('Computation session resumed:', serverSessionId);
+        // Track in computing experiments map
+        const expId = messageExperimentId || currentExperimentId;
+        if (expId && serverSessionId) {
+          computingExperimentsRef.current.set(expId, serverSessionId);
+        }
+        sessionPersistence.setServerSessionId(serverSessionId);
+        sessionPersistence.setSessionWasComputing(true);
+        setIsComputing(true);
+      } else if (data.type === 'session_status') {
+        // Handle session status updates during resume
+        const status = (data as any).status;
+        console.log('Session status:', status);
+        if (status === 'complete' || status === 'cancelled') {
+          setIsComputing(false);
+          // Clean up computing map
+          if (messageExperimentId) {
+            computingExperimentsRef.current.delete(messageExperimentId);
+          }
+          sessionPersistence.setServerSessionId(null);
+          sessionPersistence.setSessionWasComputing(false);
+        }
+      } else if (data.type === 'session_not_found') {
+        // Server couldn't find the session to resume
+        console.log('Session not found, cannot resume');
+        setIsComputing(false);
+        // Clean up computing map for this experiment
+        if (messageExperimentId) {
+          computingExperimentsRef.current.delete(messageExperimentId);
+        }
+        sessionPersistence.setServerSessionId(null);
+        sessionPersistence.setSessionWasComputing(false);
+        sessionPersistence.setPendingResume(null);
       } else if (data.type === 'response') {
+        // Only add reasoning messages for the currently-viewed experiment.
+        // Background experiment messages are tracked server-side and
+        // persisted to sidebar_state, so they appear when the user
+        // switches to that experiment.
+        if (!isForCurrentExperiment) return;
         addSidebarMessage(data.message!);
         console.log('Server response:', data.message);
       } else if (data.type === 'available-tools-response') {
@@ -588,7 +902,7 @@ const ChemistryTool: React.FC = () => {
         setSelectedTools([]);
       } else if (data.type === 'server-update-orchestrator-settings') {
         // Handle orchestrator settings updates from server
-        const newSettings: FlaskOrchestratorSettings = {
+        const newSettings: OrchestratorSettings = {
           backend: data.orchestratorSettings!.backend,
           useCustomUrl: data.orchestratorSettings!.useCustomUrl,
           customUrl: data.orchestratorSettings!.customUrl,
@@ -609,13 +923,6 @@ const ChemistryTool: React.FC = () => {
         saveFullContext(data.experimentContext!);
       } else if (data.type === 'get-username-response') {
         setUsername(data.username!);
-      } else if (data.type === 'prompt-breakpoint') {
-        console.log('Prompt breakpoint triggered:', data);
-        setPromptBreakpoint({
-          prompt: data.prompt || '',
-          metadata: data.metadata,
-        });
-        setEditedPrompt(data.prompt || '');
       }
     };
 
@@ -631,6 +938,8 @@ const ChemistryTool: React.FC = () => {
         setAvailableTools([]);
         setSelectedTools([]);
         setAvailableToolsMap([]);
+        // All sessions lose their WS on error; server continues headless
+        computingExperimentsRef.current.clear();
       }
     };
 
@@ -647,6 +956,8 @@ const ChemistryTool: React.FC = () => {
         setAvailableTools([]);
         setSelectedTools([]);
         setAvailableToolsMap([]);
+        // All sessions lose their WS on close; server continues headless
+        computingExperimentsRef.current.clear();
       }
     };
   };
@@ -656,6 +967,10 @@ const ChemistryTool: React.FC = () => {
     reconnectWS();
 
     return () => {
+      // Clear the guard so a StrictMode re-mount can reconnect.
+      // The onclose handler only fires asynchronously, so the guard would
+      // otherwise still be set when the second mount calls reconnectWS().
+      reconnectingRef.current = false;
       if (wsRef.current) {
         wsRef.current.close();
         wsRef.current = null;
@@ -663,10 +978,13 @@ const ChemistryTool: React.FC = () => {
     };
   }, []);
 
-  const reset = (): void => {
+  // Reset local UI state only (no server message).
+  // Used on WebSocket open so a session restore or resume can follow.
+  const resetLocalState = (): void => {
     setTreeNodes([]);
     setEdges([]);
     setIsComputing(false);
+    isExperimentCompleteRef.current = false;
     graphState.setOffset({ x: 50, y: 50 });
     graphState.setZoom(1);
     setContextMenu({ node: null, isReaction: false, x: 0, y: 0 });
@@ -674,15 +992,126 @@ const ChemistryTool: React.FC = () => {
     metricsDashboardState.setMetricsHistory([]);
     sidebarState.setMessages([]);
     setSaveDropdownOpen(false);
+    setCheckpointDropdownOpen(false);
     sidebarState.setSourceFilterOpen(false);
     setWsTooltipPinned(false);
     // Clear and close reaction alternatives sidebar
     setReactionSidebarOpen(false);
     setSelectedReactionNode(null);
     setIsComputingTemplates(false);
+  };
+
+  // Full reset: clear local state AND tell the server to discard its session.
+  // Only used for explicit user actions (Reset button, new computation).
+  const reset = (): void => {
+    resetLocalState();
     if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
       wsRef.current.send(JSON.stringify({ action: 'reset' }));
     }
+  };
+
+  // Apply restored session state from database (called after reset in onopen)
+  const applyRestoredSession = (savedState: SessionState): void => {
+    console.log('Applying restored session state:', savedState);
+
+    // Restore sidebar selection so saveStateToExperiment works after restore
+    if (savedState.projectId || savedState.experimentId) {
+      projectSidebar.setSelection({
+        projectId: savedState.projectId || null,
+        experimentId: savedState.experimentId || null,
+      });
+    }
+
+    // If the DB (projectsRef) has a richer version of this experiment
+    // (e.g. save_session_to_db ran after the browser closed but before
+    // this page load), prefer the DB data over the stale session.
+    if (savedState.projectId && savedState.experimentId) {
+      const proj = projectData.projectsRef.current.find((p) => p.id === savedState.projectId);
+      const dbExp = proj?.experiments.find((e) => e.id === savedState.experimentId);
+      if (dbExp) {
+        const dbNodeCount = dbExp.treeNodes?.length ?? 0;
+        const sessionNodeCount = savedState.treeNodes?.length ?? 0;
+        const dbSidebarMsgCount = dbExp.sidebarState?.messages?.length ?? 0;
+        const sessionSidebarMsgCount = savedState.sidebarMessages?.length ?? 0;
+        if (
+          dbNodeCount > sessionNodeCount ||
+          (dbNodeCount === sessionNodeCount && dbSidebarMsgCount > sessionSidebarMsgCount)
+        ) {
+          console.log(
+            `applyRestoredSession: DB has ${dbNodeCount} nodes/${dbSidebarMsgCount} sidebar msgs vs session's ${sessionNodeCount}/${sessionSidebarMsgCount}. Loading from DB instead.`
+          );
+          loadContext(dbExp);
+          // If the DB experiment has no problemType but the session
+          // does, prefer the session's value (the DB row may not have
+          // been updated yet when the projects were fetched).
+          if (!dbExp.problemType && savedState.problemType) {
+            setProblemType(savedState.problemType);
+          }
+          return;
+        }
+      }
+    }
+
+    // Restore core state
+    if (savedState.smiles) setSmiles(savedState.smiles);
+    if (savedState.problemType) setProblemType(savedState.problemType);
+    if (savedState.systemPrompt) setSystemPrompt(savedState.systemPrompt);
+    if (savedState.problemPrompt) setProblemPrompt(savedState.problemPrompt);
+    if (savedState.autoZoom !== undefined) setAutoZoom(savedState.autoZoom);
+
+    // Restore tree nodes and edges, applying relayout to ensure correct positions
+    if (savedState.treeNodes && savedState.treeNodes.length > 0) {
+      const nodesToRestore = savedState.treeNodes;
+      const edgesToRestore = savedState.edges || [];
+
+      // Apply relayout to fix any position issues
+      const [relayoutedNodes, relayoutedEdges] = relayoutTree(nodesToRestore, edgesToRestore);
+
+      setTreeNodes(relayoutedNodes);
+      setEdges(relayoutedEdges);
+    } else if (savedState.edges && savedState.edges.length > 0) {
+      setEdges(savedState.edges);
+    }
+
+    // Restore graph state (offset/zoom will be overridden by auto-zoom if enabled)
+    if (savedState.offset) graphState.setOffset(savedState.offset);
+    if (savedState.zoom) graphState.setZoom(savedState.zoom);
+
+    // Restore metrics
+    if (savedState.metricsHistory)
+      metricsDashboardState.setMetricsHistory(savedState.metricsHistory);
+    if (savedState.visibleMetrics)
+      metricsDashboardState.setVisibleMetrics(savedState.visibleMetrics);
+
+    // Restore property optimization settings
+    if (savedState.propertyType) setPropertyType(savedState.propertyType);
+    if (savedState.customPropertyName) setCustomPropertyName(savedState.customPropertyName);
+    if (savedState.customPropertyDesc) setCustomPropertyDesc(savedState.customPropertyDesc);
+    if (savedState.customPropertyAscending !== undefined)
+      setCustomPropertyAscending(savedState.customPropertyAscending);
+
+    // Restore sidebar state
+    if (savedState.sidebarMessages && savedState.sidebarMessages.length > 0) {
+      sidebarState.setMessages(savedState.sidebarMessages);
+      setSidebarOpen(true);
+    }
+    if (savedState.sidebarVisibleSources) {
+      sidebarState.setVisibleSources(savedState.sidebarVisibleSources);
+    }
+
+    // Trigger auto-zoom fit after restore if autoZoom is enabled
+    // Use multiple requestAnimationFrame to ensure DOM is updated
+    if (savedState.autoZoom && savedState.treeNodes && savedState.treeNodes.length > 0) {
+      setTimeout(() => {
+        // Toggle autoZoom off and on to trigger the fitToView effect in graph.tsx
+        setAutoZoom(false);
+        requestAnimationFrame(() => {
+          setAutoZoom(true);
+        });
+      }, 100);
+    }
+
+    console.log('Session state restored successfully');
   };
 
   const unhighlightNodes = (): void => {
@@ -696,7 +1125,11 @@ const ChemistryTool: React.FC = () => {
       alert('WebSocket not connected');
       return;
     }
-    wsRef.current.send(JSON.stringify({ action: 'stop' }));
+    // Include the sessionId so the server can stop the correct session
+    // (important when multiple experiments are running concurrently).
+    const experimentId = projectSidebar.selectionRef.current.experimentId;
+    const sessionId = experimentId ? computingExperimentsRef.current.get(experimentId) : undefined;
+    wsRef.current.send(JSON.stringify({ action: 'stop', sessionId }));
   };
 
   useEffect(() => {
@@ -746,6 +1179,240 @@ const ChemistryTool: React.FC = () => {
     projectData,
     projectSidebar,
   ]);
+
+  // Function to get current session state for auto-save to MariaDB
+  const getSessionState = useCallback((): SessionState => {
+    const projectId = projectSidebar.selectionRef.current.projectId;
+    const experimentId = projectSidebar.selectionRef.current.experimentId;
+    const project = projectData.projectsRef.current.find((p) => p.id === projectId);
+    const experiment = project?.experiments.find((e) => e.id === experimentId);
+
+    // Get current tree nodes and edges.  Save the full tree without
+    // level filtering.  Previously, the deepest level was excluded during
+    // computation to avoid saving an incomplete frontier.  However,
+    // duplicate-node dedup on resume (the node handler checks
+    // prev.find(n => n.id === data.node.id)) already handles this, and
+    // the filtering created a race condition: the session-save endpoint
+    // wrote filtered data while the experiment-save endpoint wrote full
+    // data to the same DB row.  Whichever settled last determined the
+    // final state, causing intermittent data loss.
+    const nodesToSave = treeNodesRef.current;
+    // Filter out transient 'computing' edges that have no value on restore.
+    const edgesToSave = edgesRef.current.filter((e) => e.status !== 'computing');
+
+    return {
+      // Project/Experiment identification
+      projectId: projectId || undefined,
+      projectName: project?.name,
+      experimentId: experimentId || undefined,
+      experimentName: experiment?.name,
+
+      // Core experiment state
+      smiles,
+      problemType,
+      systemPrompt,
+      problemPrompt,
+      autoZoom,
+      treeNodes: nodesToSave,
+      edges: edgesToSave,
+      offset: graphState.offset,
+      zoom: graphState.zoom,
+      metricsHistory: metricsDashboardState.metricsHistory,
+      visibleMetrics: metricsDashboardState.visibleMetrics,
+      isComputing,
+      serverSessionId: sessionPersistence.serverSessionId,
+
+      // Property optimization
+      propertyType,
+      customPropertyName,
+      customPropertyDesc,
+      customPropertyAscending,
+
+      // Sidebar state
+      sidebarMessages: sidebarStateRef.current.messages,
+      sidebarSourceFilterOpen: sidebarStateRef.current.sourceFilterOpen,
+      sidebarVisibleSources: sidebarStateRef.current.visibleSources,
+    };
+  }, [
+    smiles,
+    problemType,
+    systemPrompt,
+    problemPrompt,
+    autoZoom,
+    graphState,
+    metricsDashboardState,
+    isComputing,
+    sessionPersistence.serverSessionId,
+    propertyType,
+    customPropertyName,
+    customPropertyDesc,
+    customPropertyAscending,
+    projectSidebar,
+    projectData,
+  ]);
+
+  // Keep a ref to getSessionState for use in event handlers
+  const getSessionStateRef = useRef(getSessionState);
+  useEffect(() => {
+    getSessionStateRef.current = getSessionState;
+  }, [getSessionState]);
+
+  // Function to save checkpoint (called when new molecules are generated)
+  const saveCheckpoint = useCallback(() => {
+    // Don't save checkpoint if experiment is complete
+    if (isExperimentCompleteRef.current) {
+      console.log('Skipping checkpoint - experiment is complete');
+      return;
+    }
+    // Update the current session in place (checkpoint: false) so we don't
+    // create a new experiment entry for every batch of molecules.
+    sessionPersistence.saveSession(getSessionStateRef.current(), false);
+  }, [sessionPersistence]);
+
+  // Function to manually trigger a checkpoint (always saves, ignores experiment complete status)
+  const triggerManualCheckpoint = useCallback(() => {
+    console.log('Manual checkpoint triggered');
+    const state = getSessionStateRef.current();
+    // For manual checkpoint, save all current state regardless of experiment status
+    sessionPersistence.saveSession(state, true, {
+      checkpoint: true,
+      name: `Manual Checkpoint ${new Date().toISOString().replace('T', ' ').slice(0, 19)}`,
+    });
+    setCheckpointDropdownOpen(false);
+  }, [sessionPersistence]);
+
+  // Update the saveCheckpoint ref so WebSocket handler can use it
+  useEffect(() => {
+    saveCheckpointRef.current = saveCheckpoint;
+  }, [saveCheckpoint]);
+
+  // Update the saveStateToExperiment ref so WebSocket handler can persist to localStorage
+  useEffect(() => {
+    saveStateToExperimentRef.current = saveStateToExperiment;
+  }, [saveStateToExperiment]);
+
+  // Set up checkpoint on page unload (saves to database via sendBeacon)
+  useAutoSave(sessionPersistence, getSessionState);
+
+  // Also save experiment state to localStorage on page unload so it survives
+  // browser restarts even when the database is unavailable.
+  // This must be synchronous -- async functions may not complete during unload.
+  useEffect(() => {
+    const handleUnloadSaveToLocalStorage = () => {
+      try {
+        const projectId = projectSidebar.selectionRef.current.projectId;
+        const experimentId = projectSidebar.selectionRef.current.experimentId;
+        if (!projectId || !experimentId) return;
+
+        const context = getContextRef.current();
+        const storageKey = 'flask_copilot_projects';
+        const raw = localStorage.getItem(storageKey);
+        if (!raw) return;
+
+        const projects = JSON.parse(raw);
+        const project = projects.find((p: { id: string }) => p.id === projectId);
+        if (!project) return;
+
+        const expIndex = project.experiments.findIndex(
+          (e: { id: string }) => e.id === experimentId
+        );
+        if (expIndex === -1) return;
+
+        project.experiments[expIndex] = { ...context, lastModified: new Date().toISOString() };
+        project.lastModified = new Date().toISOString();
+        localStorage.setItem(storageKey, JSON.stringify(projects));
+      } catch {
+        // Silently ignore -- experiment may not exist yet
+      }
+    };
+    window.addEventListener('beforeunload', handleUnloadSaveToLocalStorage);
+    return () => {
+      window.removeEventListener('beforeunload', handleUnloadSaveToLocalStorage);
+    };
+  }, []);
+
+  // Load session from database on initial mount (runs only once)
+  const sessionLoadAttemptedRef = useRef(false);
+
+  useEffect(() => {
+    // Only attempt to load once
+    if (sessionLoadAttemptedRef.current) return;
+    sessionLoadAttemptedRef.current = true;
+
+    const loadSavedSession = async () => {
+      const savedState = await sessionPersistence.loadSession();
+      sessionLoadCompleteRef.current = true;
+
+      if (savedState) {
+        console.log(
+          'Session loaded from database, storing for restore after WebSocket connects:',
+          savedState
+        );
+
+        // Store the session in ref so it can be applied after WebSocket connects
+        restoredSessionRef.current = savedState;
+
+        // Check WebSocket readyState directly via ref -- the wsConnected state
+        // variable is stale in this closure since both effects fire on mount.
+        if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+          console.log('WebSocket already connected, applying restored session now');
+          applyRestoredSession(savedState);
+          restoredSessionRef.current = null;
+        }
+        // Otherwise, it will be applied in the onopen handler
+      } else {
+        // No saved session.  If the WS already opened (won the race) and
+        // skipped loadStateFromCurrentExperiment because the load was
+        // pending, do it now.
+        if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+          loadStateFromCurrentExperiment();
+        }
+      }
+    };
+
+    loadSavedSession();
+
+    return () => {
+      // Reset guard so StrictMode re-mount can load the session again
+      sessionLoadAttemptedRef.current = false;
+      sessionLoadCompleteRef.current = false;
+      restoredSessionRef.current = null;
+    };
+  }, []); // Empty dependency array - only run once on mount
+
+  // Handle computation resume after WebSocket connects.
+  // Only attempt resume once we have both a live WS connection AND the
+  // session data from the DB (sessionLoaded).  Without the sessionLoaded
+  // guard, the effect may fire before loadSession() resolves, see no
+  // pending resume, and prematurely mark resumeAttempted = true.
+  useEffect(() => {
+    if (!wsConnected || sessionPersistence.resumeAttempted) return;
+
+    // Wait until the session has been loaded from the database so
+    // pendingResume has been populated (or confirmed absent).
+    if (!sessionPersistence.sessionLoaded) return;
+
+    const pendingResume = sessionPersistence.getPendingResume();
+    // Only attempt resume if we have a valid server session ID
+    if (pendingResume && pendingResume.sessionId && pendingResume.sessionId.length > 0) {
+      console.log('Attempting to resume computation with session:', pendingResume.sessionId);
+      sessionPersistence.setResumeAttempted(true);
+
+      // Send resume request to server
+      if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+        wsRef.current.send(
+          JSON.stringify({
+            action: 'resume_session',
+            sessionId: pendingResume.sessionId,
+          })
+        );
+        setIsComputing(true);
+      }
+    } else {
+      // No valid session to resume, mark as attempted to prevent future attempts
+      sessionPersistence.setResumeAttempted(true);
+    }
+  }, [wsConnected, sessionPersistence]);
 
   const saveTree = (): void => {
     const data = {
@@ -961,16 +1628,12 @@ const ChemistryTool: React.FC = () => {
       }
       const msg: WebSocketMessageToServer = {
         action: message,
-        runSettings: {
-          promptDebugging: debugMode,
-          moleculeName: orchestratorSettings.moleculeName || 'brand',
-        },
         ...data,
       };
       wsRef.current.send(JSON.stringify(msg));
       setContextMenu({ node: null, isReaction: false, x: 0, y: 0 });
     },
-    [debugMode, orchestratorSettings]
+    []
   );
 
   const handleReactionCardClick = useCallback(
@@ -1019,14 +1682,10 @@ const ChemistryTool: React.FC = () => {
           action: 'compute-reaction-templates',
           nodeId: nodeId,
           smiles: smiles,
-          runSettings: {
-            promptDebugging: debugMode,
-            moleculeName: orchestratorSettings.moleculeName || 'brand',
-          },
         })
       );
     }
-  }, [selectedReactionNode?.id, selectedReactionNode?.smiles, debugMode, orchestratorSettings]); // Only depend on primitive values
+  }, [selectedReactionNode?.id, selectedReactionNode?.smiles]); // Only depend on primitive values
 
   const handleComputeFlaskAI = useCallback(
     (customPrompt: boolean) => {
@@ -1041,17 +1700,13 @@ const ChemistryTool: React.FC = () => {
             JSON.stringify({
               action: 'compute-reaction-from',
               nodeId: nodeId,
-              runSettings: {
-                promptDebugging: debugMode,
-                moleculeName: orchestratorSettings.moleculeName || 'brand',
-              },
             })
           );
         }
       }
       setIsComputing(true);
     },
-    [selectedReactionNode?.id, debugMode, orchestratorSettings]
+    [selectedReactionNode?.id]
   ); // Only depend on the ID
 
   const stableAlternatives = useMemo(() => {
@@ -1091,10 +1746,6 @@ const ChemistryTool: React.FC = () => {
       nodeId: customQueryModal?.id,
       smiles: customQueryModal?.smiles,
       query: customQueryText,
-      runSettings: {
-        promptDebugging: debugMode,
-        moleculeName: orchestratorSettings.moleculeName || 'brand',
-      },
       ...propertyDetails,
     };
     wsRef.current.send(JSON.stringify(message));
@@ -1111,6 +1762,12 @@ const ChemistryTool: React.FC = () => {
     if (!message.source) {
       message.source = 'Backend';
     }
+
+    // Update the ref synchronously so that getSessionState() (called from
+    // the 'complete' handler in the same event-loop tick) always sees the
+    // latest messages, even before React commits the batched setState.
+    const updatedMessages = [...sidebarStateRef.current.messages, message];
+    sidebarStateRef.current = { ...sidebarStateRef.current, messages: updatedMessages };
 
     sidebarState.setMessages((prev) => [...prev, message]);
     setSidebarOpen(true);
@@ -1134,7 +1791,7 @@ const ChemistryTool: React.FC = () => {
           onSelectionChange={projectSidebar.setSelection}
           onLoadContext={loadContextFromExperiment}
           onSaveContext={saveStateToExperiment}
-          onReset={reset}
+          onReset={resetLocalState}
           isComputing={isComputing}
         />
         <div className="content-wrapper">
@@ -1200,21 +1857,107 @@ const ChemistryTool: React.FC = () => {
             </div>
 
             <div className="flex justify-end gap-2 mb-4">
-              <button
-                onClick={loadContextFromFile}
-                disabled={isComputing}
-                className="btn btn-secondary btn-sm"
-              >
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"
-                  />
-                </svg>
-                Load
-              </button>
+              <div className="dropdown">
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setLoadDropdownOpen(!loadDropdownOpen);
+                  }}
+                  onMouseDown={(e) => e.stopPropagation()}
+                  disabled={isComputing}
+                  className="btn btn-secondary btn-sm"
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"
+                    />
+                  </svg>
+                  Load
+                  <svg
+                    className={`w-3 h-3 transition-transform ${
+                      loadDropdownOpen ? 'rotate-180' : ''
+                    }`}
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M19 9l-7 7-7-7"
+                    />
+                  </svg>
+                </button>
+                {loadDropdownOpen && (
+                  <div
+                    className="dropdown-menu"
+                    onClick={(e) => e.stopPropagation()}
+                    onMouseDown={(e) => e.stopPropagation()}
+                  >
+                    <button
+                      onClick={() => {
+                        loadContextFromFile();
+                        setLoadDropdownOpen(false);
+                      }}
+                      className="dropdown-item"
+                    >
+                      <svg
+                        className="w-4 h-4 mr-2"
+                        fill="none"
+                        stroke="currentColor"
+                        viewBox="0 0 24 24"
+                      >
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth={2}
+                          d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"
+                        />
+                      </svg>
+                      Load from File
+                    </button>
+                    <div className="dropdown-divider"></div>
+                    <button
+                      onClick={() => {
+                        if (
+                          window.confirm(
+                            'Delete all projects and experiments from the database and clear cached data? This cannot be undone.'
+                          )
+                        ) {
+                          // Clear session persistence first so no stale dbSessionId
+                          // can trigger re-creation of deleted experiments.
+                          sessionPersistence.clearSession();
+                          restoredSessionRef.current = null;
+                          projectData.clearAllProjects().then(() => {
+                            projectSidebar.setSelection({ projectId: null, experimentId: null });
+                          });
+                        }
+                        setLoadDropdownOpen(false);
+                      }}
+                      className="dropdown-item text-red-400"
+                    >
+                      <svg
+                        className="w-4 h-4 mr-2"
+                        fill="none"
+                        stroke="currentColor"
+                        viewBox="0 0 24 24"
+                      >
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth={2}
+                          d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
+                        />
+                      </svg>
+                      Clear All Projects
+                    </button>
+                  </div>
+                )}
+              </div>
               <div className="dropdown">
                 <button
                   onClick={(e) => {
@@ -1222,7 +1965,6 @@ const ChemistryTool: React.FC = () => {
                     setSaveDropdownOpen(!saveDropdownOpen);
                   }}
                   onMouseDown={(e) => e.stopPropagation()}
-                  disabled={isComputing || treeNodes.length === 0 || !wsConnected}
                   className="btn btn-secondary btn-sm"
                 >
                   <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1256,10 +1998,51 @@ const ChemistryTool: React.FC = () => {
                     onClick={(e) => e.stopPropagation()}
                     onMouseDown={(e) => e.stopPropagation()}
                   >
-                    <button onClick={saveTree} className="dropdown-item">
+                    <div className="dropdown-item-static">
+                      <label className="flex items-center gap-2 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={autoCheckpointEnabled}
+                          onChange={(e) => setAutoCheckpointEnabled(e.target.checked)}
+                          className="w-4 h-4 rounded border-purple-400/50 bg-white/20 text-purple-600 focus:ring-purple-500 focus:ring-offset-0"
+                        />
+                        <span className="text-sm">Auto-checkpoint on new molecule</span>
+                      </label>
+                    </div>
+                    <div className="dropdown-divider"></div>
+                    <button
+                      onClick={triggerManualCheckpoint}
+                      disabled={treeNodes.length === 0}
+                      className="dropdown-item"
+                    >
+                      <svg
+                        className="w-4 h-4 mr-2"
+                        fill="none"
+                        stroke="currentColor"
+                        viewBox="0 0 24 24"
+                      >
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth={2}
+                          d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4"
+                        />
+                      </svg>
+                      Save Checkpoint Now
+                    </button>
+                    <div className="dropdown-divider"></div>
+                    <button
+                      onClick={saveTree}
+                      disabled={treeNodes.length === 0}
+                      className="dropdown-item"
+                    >
                       Save Tree Only
                     </button>
-                    <button onClick={requestSaveContext} className="dropdown-item dropdown-divider">
+                    <button
+                      onClick={requestSaveContext}
+                      disabled={treeNodes.length === 0 || !wsConnected}
+                      className="dropdown-item"
+                    >
                       Save Full Context
                     </button>
                   </div>
@@ -1435,32 +2218,16 @@ const ChemistryTool: React.FC = () => {
                     className="form-input text-lg"
                   />
                 </div>
-                <div className="flex-0.5">
-                  <div>
-                    <label className="form-label flex items-center gap-2 cursor-pointer">
-                      <input
-                        type="checkbox"
-                        checked={autoZoom}
-                        onChange={(e) => setAutoZoom(e.target.checked)}
-                        className="form-checkbox"
-                      />
-                      Auto-zoom to fit
-                    </label>
-                  </div>
-                  <div>
-                    <label className="form-label flex items-center gap-2 cursor-pointer">
-                      <input
-                        type="checkbox"
-                        checked={debugMode}
-                        onChange={() => setDebugMode(!debugMode)}
-                        disabled={isComputing}
-                        className="form-checkbox"
-                        title="Prompts will pause for review before sending"
-                      />
-                      <Bug className="w-4 h-4" />
-                      AI Debug Mode
-                    </label>
-                  </div>
+                <div>
+                  <label className="form-label flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={autoZoom}
+                      onChange={(e) => setAutoZoom(e.target.checked)}
+                      className="form-checkbox"
+                    />
+                    Auto-zoom to fit
+                  </label>
                 </div>
               </div>
 
@@ -1471,7 +2238,7 @@ const ChemistryTool: React.FC = () => {
                       Problem Type
                       {problemType === 'custom' && (!systemPrompt || !problemPrompt) && (
                         <span className="warning-tooltip">
-                          ⚠️
+                          [!]
                           <div className="warning-tooltip-content">
                             <div className="warning-tooltip-box">
                               Custom problem description not given
@@ -1502,7 +2269,7 @@ const ChemistryTool: React.FC = () => {
                         {propertyType === 'custom' &&
                           (!customPropertyName || !customPropertyDesc) && (
                             <span className="warning-tooltip">
-                              ⚠️
+                              [!]
                               <div className="warning-tooltip-content">
                                 <div className="warning-tooltip-box">
                                   Property name or description not given
@@ -2192,8 +2959,6 @@ const ChemistryTool: React.FC = () => {
         onToolConfirm={handleToolSelectionConfirm}
         initialCustomization={customization}
         onCustomizationSave={setCustomization}
-        initialMoleculeName={orchestratorSettings.moleculeName || 'brand'}
-        onMoleculeNameSave={handleMoleculeNameSave}
         showOptimizationTab={problemType === 'optimization'}
       />
 
