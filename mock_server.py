@@ -40,6 +40,7 @@ sys.path.insert(0, os.path.dirname(__file__))
 from db_backend.database.engine import Base, get_async_engine, get_async_session_factory
 from db_backend.routers import projects as projectsrouter
 from db_backend import session_state_service
+from db_backend.timestamps import next_last_modified
 
 
 # Session tracking for computation resume
@@ -445,7 +446,7 @@ async def save_session_to_db(session: ComputationSession) -> None:
             experiment.tree_nodes = session.sent_nodes
             experiment.edges = session.sent_edges
             experiment.is_running = not session.is_complete
-            experiment.last_modified = datetime.now(tz=None)
+            experiment.last_modified = next_last_modified(experiment.last_modified)
 
             # Also persist SMILES and problem_type so the experiment
             # record is complete even when the frontend never saved.

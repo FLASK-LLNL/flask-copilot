@@ -25,6 +25,7 @@ from sqlalchemy.exc import OperationalError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from db_backend.database import models
+from db_backend.timestamps import next_last_modified
 
 # Max retries for concurrent modification errors (MariaDB error 1020)
 _MAX_RETRIES = 3
@@ -192,7 +193,9 @@ async def save_session(
                         "sidebarSourceFilterOpen": state.sidebarSourceFilterOpen,
                         "sidebarVisibleSources": state.sidebarVisibleSources,
                     }
-                    experiment.last_modified = datetime.utcnow()
+                    experiment.last_modified = next_last_modified(
+                        experiment.last_modified
+                    )
 
                     if request.name:
                         experiment.name = request.name

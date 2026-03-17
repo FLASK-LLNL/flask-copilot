@@ -26,6 +26,7 @@ _MAX_RETRIES = 3
 from db_backend.database.engine import get_db
 from db_backend.auth import get_forwarded_user
 from db_backend.database import models, schemas
+from db_backend.timestamps import next_last_modified
 
 router = APIRouter(prefix="/api/projects", tags=["projects"])
 
@@ -356,7 +357,7 @@ async def update_experiment(
             # save after session restore when the backend already
             # persisted computation results via save_session_to_db).
             experiment.name = exp_data.name
-            experiment.last_modified = datetime.utcnow()
+            experiment.last_modified = next_last_modified(experiment.last_modified)
             experiment.is_running = exp_data.isRunning
             experiment.problem_type = exp_data.problemType
             experiment.problem_name = exp_data.problemName
@@ -512,7 +513,7 @@ async def set_experiment_running(
                 raise HTTPException(status_code=404, detail="Experiment not found")
 
             experiment.is_running = is_running
-            experiment.last_modified = datetime.utcnow()
+            experiment.last_modified = next_last_modified(experiment.last_modified)
 
             await db.commit()
 

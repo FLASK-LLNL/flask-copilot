@@ -9,8 +9,9 @@ from __future__ import annotations
 
 import os
 import ssl
+from dataclasses import dataclass
+from functools import lru_cache
 from pathlib import Path
-from threading import Lock
 from typing import Any
 
 from dotenv import load_dotenv
@@ -31,11 +32,13 @@ load_dotenv(dotenv_path=_env_file)
 
 Base = declarative_base()
 
-# Exported for compatibility with existing imports, but initialized lazily.
-engine: AsyncEngine | None = None
-AsyncSessionLocal: async_sessionmaker[AsyncSession] | None = None
 
-_engine_lock = Lock()
+@dataclass(frozen=True)
+class DatabaseRuntime:
+    """Process-wide database runtime resources."""
+
+    engine: AsyncEngine | None
+    session_factory: async_sessionmaker[AsyncSession] | None
 
 
 def _resolve_database_url() -> tuple[bool, str]:
@@ -112,43 +115,40 @@ def _build_engine_kwargs(
     return kwargs
 
 
+@lru_cache(maxsize=1)
+def _get_database_runtime() -> DatabaseRuntime:
+    """Create and cache database runtime resources lazily."""
+    try:
+        use_sqlite_fallback, async_database_url = _resolve_database_url()
+        connect_args = _build_connect_args(use_sqlite_fallback)
+        engine_kwargs = _build_engine_kwargs(use_sqlite_fallback, connect_args)
+
+        async_engine = create_async_engine(async_database_url, **engine_kwargs)
+        session_factory = async_sessionmaker(
+            async_engine, class_=AsyncSession, expire_on_commit=False
+        )
+        return DatabaseRuntime(
+            engine=async_engine,
+            session_factory=session_factory,
+        )
+    except (OperationalError, Exception) as exc:
+        print(f"Warning: Could not connect to database: {exc}")
+        print("Database features will be disabled.")
+        return DatabaseRuntime(engine=None, session_factory=None)
+
+
 def get_async_engine() -> AsyncEngine | None:
     """Create and cache the async engine lazily.
 
     The async engine is the primary runtime path for API and WebSocket-backed
     persistence.
     """
-    global engine, AsyncSessionLocal
-
-    if engine is not None and AsyncSessionLocal is not None:
-        return engine
-
-    with _engine_lock:
-        if engine is not None and AsyncSessionLocal is not None:
-            return engine
-
-        try:
-            use_sqlite_fallback, async_database_url = _resolve_database_url()
-            connect_args = _build_connect_args(use_sqlite_fallback)
-            engine_kwargs = _build_engine_kwargs(use_sqlite_fallback, connect_args)
-
-            engine = create_async_engine(async_database_url, **engine_kwargs)
-            AsyncSessionLocal = async_sessionmaker(
-                engine, class_=AsyncSession, expire_on_commit=False
-            )
-        except (OperationalError, Exception) as exc:
-            print(f"Warning: Could not connect to database: {exc}")
-            print("Database features will be disabled.")
-            engine = AsyncSessionLocal = None
-
-    return engine
+    return _get_database_runtime().engine
 
 
 def get_async_session_factory() -> async_sessionmaker[AsyncSession] | None:
     """Return the lazily initialized async session factory."""
-    if AsyncSessionLocal is None:
-        get_async_engine()
-    return AsyncSessionLocal
+    return _get_database_runtime().session_factory
 
 
 async def get_db():
