@@ -48,6 +48,20 @@ class CheckServersRequest(BaseModel):
     urls: list[str]
 
 
+class ExecuteCurlRequest(BaseModel):
+    curl_command: str
+
+
+class ExecuteCurlResponse(BaseModel):
+    success: bool
+    status_code: Optional[int] = None
+    headers: Optional[dict] = None
+    body: Optional[str] = None
+    error: Optional[str] = None
+    execution_time_ms: Optional[float] = None
+    timestamp: str
+
+
 parser = argparse.ArgumentParser()
 
 parser.add_argument(
@@ -136,6 +150,23 @@ async def check_mcp_servers_endpoint(data: CheckServersRequest):
             results[url] = {"status": "disconnected", "error": str(e)}
 
     return {"results": results}
+
+
+@app.post("/execute-curl")
+async def execute_curl_endpoint(request: Request, data: ExecuteCurlRequest):
+    """
+    Execute a curl command safely using requests library.
+
+    Security:
+    - No subprocess execution
+    - URL validation (http/https only)
+    - Timeout enforcement (30s)
+    - All executions logged
+    """
+    from lc_conductor.curl_executor import execute_curl_endpoint_handler
+
+    result = await execute_curl_endpoint_handler(request, data.curl_command)
+    return ExecuteCurlResponse(**result)
 
 
 app.get("/registered-mcp-servers")(
@@ -250,6 +281,8 @@ async def websocket_endpoint(websocket: WebSocket):
         # Settings
         "ui-update-orchestrator-settings": action_manager.handle_orchestrator_settings_update,
         "get-username": action_manager.handle_get_username,
+        # LC Conductor / platform actions
+        "allocate-hpc-resources": action_manager.handle_allocate_hpc_resources,
         # Context management
         "save-context": action_manager.handle_save_state,
         "load-context": action_manager.handle_load_state,
@@ -266,7 +299,9 @@ async def websocket_endpoint(websocket: WebSocket):
         while True:
             try:
                 data = await websocket.receive_json()
-                action = data.get("action")
+                # The legacy FLASK UI sends `action`, while lc_conductor UI components
+                # use `type` for client->server messages (e.g. HPC allocation).
+                action = data.get("action") or data.get("type")
 
                 if action == "prompt-breakpoint-response":  # AI debugging
                     prompt_debugger.DEBUG_PROMPT_RESPONSES[websocket].set_result(data)
@@ -274,8 +309,18 @@ async def websocket_endpoint(websocket: WebSocket):
 
                 if action in action_handlers:
 
-                    # Cancel any existing task before starting a new one
-                    await task_manager.cancel_current_task()
+                    # Only cancel running compute tasks for actions that start new work.
+                    # Non-compute actions (e.g. HPC allocation requests) should not
+                    # interrupt the current workflow.
+                    if action in {
+                        "compute",
+                        "optimize-from",
+                        "compute-reaction-from",
+                        "compute-reaction-templates",
+                        "recompute-parent-reaction",
+                        "set-reaction-alternative",
+                    }:
+                        await task_manager.cancel_current_task()
 
                     handler_func = action_handlers[action]
                     await handler_func(data)

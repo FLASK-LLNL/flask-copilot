@@ -1279,6 +1279,7 @@ const ChemistryTool: React.FC = () => {
                 onServerRemoved={refreshToolsList}
                 username={username}
                 httpServerUrl={HTTP_SERVER}
+                websocket={wsRef.current}
               />
 
               {/* WebSocket Status Indicator */}
