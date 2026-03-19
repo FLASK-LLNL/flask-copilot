@@ -1,6 +1,11 @@
 import { TreeNode, Edge, Position } from './types';
 import { BOX_GAP, BOX_WIDTH } from './constants';
 
+export function getLeafNodes(node_list: TreeNode[]): Set<string> {
+  const parent_nodes = new Set(node_list.map((n) => n.parentId));
+  return new Set(node_list.filter((n) => !parent_nodes.has(n.id)).map((n) => n.id));
+}
+
 export function findAllDescendants(nodeId: string, nodes: TreeNode[]): Set<string> {
   const descendants = new Set<string>();
   const findDescendants = (id: string): void => {
@@ -28,6 +33,14 @@ export function isRootNode(nodeId: string, nodes: TreeNode[]): boolean {
 export function estimateTextWidth(text: string): number {
   // Rough estimate: 10 pixels per character
   return text.length * 10;
+}
+
+// Removes dangling 'reactions' from the tree.
+export function clearLeafReactions(node_list: TreeNode[]): TreeNode[] {
+  const leaf_ids = getLeafNodes(node_list);
+  return node_list.map(({ reaction, ...n }) =>
+    leaf_ids.has(n.id) ? n : { ...n, ...(reaction && { reaction: reaction }) }
+  );
 }
 
 // Relayouts the molecule graph for better visibility (assumes tree)
