@@ -60,6 +60,10 @@ class FlaskActionManager(ActionManager):
         if "runSettings" in data:
             self.run_settings = FlaskRunSettings(**data["runSettings"])
 
+    async def log_progress(self, progress: str):
+        logger.info(f"Reasoning: {progress}")
+        await self._send_processing_message(progress, "Reasoning")
+
     async def handle_compute(self, data: dict) -> None:
         self.experiment.reset()
         self.setup_run_settings(data)
@@ -187,6 +191,7 @@ class FlaskActionManager(ActionManager):
             self.task_manager.available_tools or list_server_urls(),
             self.task_manager.websocket,
             self.run_settings,
+            self.log_progress,
             *property_attributes,
             data.get("query", None),
             initial_level,
@@ -236,6 +241,7 @@ class FlaskActionManager(ActionManager):
             self.task_manager.available_tools or list_server_urls(),
             self.task_manager.websocket,
             self.run_settings,
+            self.log_progress,
         )
 
         await self.task_manager.run_task(run_func())
@@ -285,6 +291,7 @@ class FlaskActionManager(ActionManager):
             self.args.config_file,
             self.run_settings,
             self.task_manager.available_tools or list_server_urls(),
+            self.log_progress,
         )
 
         asyncio.create_task(self.task_manager.run_task(run_func()))
@@ -387,6 +394,7 @@ class FlaskActionManager(ActionManager):
             self.args.config_file,
             self.run_settings,
             self.task_manager.available_tools or list_server_urls(),
+            self.log_progress,
         )
 
         asyncio.create_task(self.task_manager.run_task(run_func()))
@@ -445,7 +453,7 @@ class FlaskActionManager(ActionManager):
         async def run_and_report():
             if self.run_settings.prompt_debugging:
                 await debug_prompt(agent, self.websocket)
-            result = await agent.run()
+            result = await agent.run(self.log_progress)
             self.experiment.add_to_context(agent, task, result)
             # Report answer
             await self._send_processing_message(result, source="Agent")
@@ -505,7 +513,7 @@ class FlaskActionManager(ActionManager):
         async def run_and_report():
             if self.run_settings.prompt_debugging:
                 await debug_prompt(agent, self.websocket)
-            result = await agent.run()
+            result = await agent.run(self.log_progress)
             self.experiment.add_to_context(agent, task, result)
             # Report answer
             await self._send_processing_message(result, source="Agent")
