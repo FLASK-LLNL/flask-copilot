@@ -305,6 +305,7 @@ async def generate_lead_molecule(
         if custom_prompt is not None
         else PROPERTY_USER_PROMPT.format(
             property_name=property,
+            property_description=property_description,
             objective=objective,
             chemical_domain_context=chemical_domain_context,
             similarity_mode=similarity_mode,
@@ -513,6 +514,7 @@ async def generate_lead_molecule(
                     formatted_refine_prompt = (
                         FURTHER_REFINE_PROMPT.format(
                             property_name=property,
+                            property_description=property_description,
                             objective=objective,
                             chemical_domain_context=chemical_domain_context,
                             similarity_mode=similarity_mode,
