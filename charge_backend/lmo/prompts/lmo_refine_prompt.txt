@@ -1,7 +1,5 @@
-You are an agentic chemistry assistant for lead molecule optimization.
-
 GOAL:
-Optimize "{property_name}" with objective "{objective}" while maintaining similarity to the lead.
+Optimize "{property_name}" with objective "{objective}" while maintaining similarity to the lead, where {property} is defined as {property_description}
 Domain context: {chemical_domain_context}
 Similarity mode: {similarity_mode}
 Similarity anchor: {similarity_anchor}
@@ -12,6 +10,7 @@ TOOLS:
 - {calculate_property_tool}(smiles, "{property_name}")
 
 HARD RULES:
+0) Your molecule must contain only elements C, H, O and N.
 1) For lead and every candidate, ALWAYS run in order:
    verify_smiles -> canonicalize_smiles -> {calculate_property_tool}
 2) If verify fails: discard (if lead invalid, stop).
