@@ -16,7 +16,6 @@ import os
 import argparse
 import httpx
 from lc_conductor import try_get_public_hostname
-import os
 
 from loguru import logger
 from charge.clients.client import Client
@@ -26,7 +25,6 @@ from charge.clients.agent_factory import AgentFactory
 
 
 from lc_conductor.tool_registration import (
-    get_client_info,
     register_url,
     register_post,
     reload_server_list,
@@ -39,27 +37,11 @@ from lc_conductor import TaskManager
 from backend_manager import FlaskActionManager
 from charge_backend import prompt_debugger
 
-# Pydantic models for new endpoints
 from pydantic import BaseModel
-from typing import Optional
 
 
 class CheckServersRequest(BaseModel):
     urls: list[str]
-
-
-class ExecuteCurlRequest(BaseModel):
-    curl_command: str
-
-
-class ExecuteCurlResponse(BaseModel):
-    success: bool
-    status_code: Optional[int] = None
-    headers: Optional[dict] = None
-    body: Optional[str] = None
-    error: Optional[str] = None
-    execution_time_ms: Optional[float] = None
-    timestamp: str
 
 
 parser = argparse.ArgumentParser()
@@ -150,23 +132,6 @@ async def check_mcp_servers_endpoint(data: CheckServersRequest):
             results[url] = {"status": "disconnected", "error": str(e)}
 
     return {"results": results}
-
-
-@app.post("/execute-curl")
-async def execute_curl_endpoint(request: Request, data: ExecuteCurlRequest):
-    """
-    Execute a curl command safely using requests library.
-
-    Security:
-    - No subprocess execution
-    - URL validation (http/https only)
-    - Timeout enforcement (30s)
-    - All executions logged
-    """
-    from lc_conductor.curl_executor import execute_curl_endpoint_handler
-
-    result = await execute_curl_endpoint_handler(request, data.curl_command)
-    return ExecuteCurlResponse(**result)
 
 
 app.get("/registered-mcp-servers")(
