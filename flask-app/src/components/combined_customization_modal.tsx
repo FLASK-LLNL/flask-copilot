@@ -150,7 +150,7 @@ export const CombinedCustomizationModal: React.FC<CombinedCustomizationModalProp
         </div>
 
         {/* Tab Content */}
-        <div className="modal-body" style={{ minHeight: '400px' }}>
+        <div className="modal-body">
           {activeTab === 'tools' && (
             <ToolSelectionContent
               availableToolsMap={availableToolsMap}
