@@ -20,7 +20,7 @@ import os
 
 from loguru import logger
 from charge.clients.client import Client
-from charge.clients.autogen import AutoGenBackend
+from charge.clients.agentframework import AgentFrameworkBackend
 from charge.experiments.experiment import Experiment
 from charge.clients.agent_factory import AgentFactory
 
@@ -81,7 +81,7 @@ parser.add_argument(
 
 # Add standard CLI arguments
 Client.add_std_parser_arguments(
-    parser, defaults=dict(backend="openai", model="gpt-5.1")
+    parser, defaults=dict(backend="openai", model="gpt-5.4")
 )
 
 args, _ = parser.parse_known_args()
@@ -221,11 +221,21 @@ async def websocket_endpoint(websocket: WebSocket):
     if not backend:
         backend = args.backend
 
-    # set up an AutoGenAgent pool for tasks on this endpoint
+    # set up an AutoGenAgent backend for tasks on this endpoint
+    # AgentFactory.register_backend(
+    #     "autogen",
+    #     AutoGenBackend(
+    #         model=model, backend=backend, api_key=API_KEY, base_url=BASE_URL
+    #     ),
+    # )
     AgentFactory.register_backend(
-        "autogen",
-        AutoGenBackend(
-            model=model, backend=backend, api_key=API_KEY, base_url=BASE_URL
+        "agentframework",
+        AgentFrameworkBackend(
+            model=model,
+            backend=backend,
+            api_key=API_KEY,
+            base_url=BASE_URL,
+            use_responses_api=True,
         ),
     )
 

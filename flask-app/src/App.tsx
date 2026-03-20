@@ -207,6 +207,7 @@ const ChemistryTool: React.FC = () => {
       backend: 'vllm',
       customUrl: 'http://localhost:8000/v1',
       model: 'gpt-oss',
+      reasoningEffort: 'medium',
       apiKey: '',
       backendLabel: 'vLLM',
     };
@@ -291,6 +292,7 @@ const ChemistryTool: React.FC = () => {
         backend: settings.backend,
         customUrl: settings.customUrl,
         model: settings.model,
+        reasoningEffort: settings.reasoningEffort,
         apiKey: settings.apiKey,
       };
       wsRef.current.send(JSON.stringify(message));
@@ -620,6 +622,7 @@ const ChemistryTool: React.FC = () => {
               useCustomUrl: data.orchestratorSettings!.useCustomUrl,
               customUrl: data.orchestratorSettings!.customUrl,
               model: data.orchestratorSettings!.model,
+              reasoningEffort: data.orchestratorSettings!.reasoningEffort,
               // Don't take the use custom model field from the backend
               // Check the model against the list of models in copilot
               // useCustomModel: data.orchestratorSettings.useCustomModel,

@@ -30,7 +30,7 @@ from retrosynthesis.retrosynthesis_task import (
 )
 
 from charge.experiments.experiment import Experiment
-from charge.clients.agent_factory import AgentFactory
+from charge.clients.agent_factory import ReasoningCallbackType
 
 
 RETROSYNTH_UNCONSTRAINED_USER_PROMPT_TEMPLATE = (
@@ -64,7 +64,8 @@ async def ai_based_retrosynthesis(
     experiment: Experiment,
     config_file: str,
     run_settings: FlaskRunSettings,
-    available_tools: Optional[Union[str, list[str]]] = None,
+    available_tools: Optional[Union[str, list[str]]],
+    log_progress: ReasoningCallbackType,
 ):
     """Performs template-free retrosynthesis using the AI orchestrator."""
     clogger = CallbackLogger(websocket, source="ai_based_retrosynthesis")
@@ -126,14 +127,13 @@ async def ai_based_retrosynthesis(
     await highlight_node(current_node, websocket, True)
     if run_settings.prompt_debugging:
         await debug_prompt(runner, websocket)
-    output = await runner.run()
+    output = await runner.run(log_progress)
 
     if os.getenv("CHARGE_DISABLE_OUTPUT_VALIDATION", "0") == "1":
         await clogger.warning(
             "Structure validation disabled for RetrosynthesisTask output schema."
             "Returning text results without validation first before post-processing."
         )
-    await clogger.info(f"Results: {output}")
 
     result = ReactionOutputSchema.model_validate_json(output)
 
@@ -166,7 +166,9 @@ async def ai_based_retrosynthesis(
         reasoning_summary,
         disabled=False,
     )
-    if current_node.reaction is not None:
+    if current_node.reaction is not None and not isinstance(
+        current_node.reaction, dict
+    ):
         if current_node.reaction.alternatives is None:
             current_node.reaction.alternatives = []
         for alt in current_node.reaction.alternatives:
