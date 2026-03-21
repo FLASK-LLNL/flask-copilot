@@ -294,19 +294,30 @@ async def generate_lead_molecule(
         )
 
     # TODO: Use refinement prompt if initial_level != 0 and custom_prompt is None?
+    # Map legacy parameters to the new prompt placeholders
+    objective = "maximize" if condition == "greater" else "minimize"
+    improvement_line = f"Require {property} strictly {direction} than the lead."
+    # Provide basic context/similarity hints for the new prompt
+    chemical_domain_context = "small-molecule property optimization; consider synthesizability and lead-likeness"
+    similarity_mode = f"threshold={molecular_similarity:.2f}"
+    similarity_anchor = "lead"
+
     formatted_user_prompt = (
         custom_prompt
         if custom_prompt is not None
         else PROPERTY_USER_PROMPT.format(
-            smiles=lead_molecule_smiles,
-            property=property,
+            property_name=property,
             property_description=property_description,
+            objective=objective,
+            chemical_domain_context=chemical_domain_context,
+            similarity_mode=similarity_mode,
+            similarity_anchor=similarity_anchor,
             calculate_property_tool=calculate_property_tool,
-            condition=condition,
-            direction=direction,
-            ranking=ranking,
-            number_of_molecules=number_of_molecules,
-            num_top_candidates=num_top_candidates,
+            rounds=depth,
+            top_k=num_top_candidates,
+            improvement_line=improvement_line,
+            lead_smiles=lead_molecule_smiles,
+            candidates_per_round=number_of_molecules,
         )
         + customization_text
     )
@@ -321,6 +332,7 @@ async def generate_lead_molecule(
         user_prompt=formatted_user_prompt + "\n",
         property_tool_name=calculate_property_tool,
         property_name=property,
+        optimize_direction=condition,
         server_urls=available_tools,
     )
     await lmo_task.get_initial_property_value()
@@ -492,18 +504,30 @@ async def generate_lead_molecule(
                         )
                         break
 
+                    # Build refine prompt using the new format
+                    objective = "maximize" if condition == "greater" else "minimize"
+                    improvement_line = (
+                        f"Require {property} strictly {direction} than the lead."
+                    )
+                    chemical_domain_context = "small-molecule property optimization; consider synthesizability and lead-likeness"
+                    similarity_mode = f"threshold={molecular_similarity:.2f}"
+                    similarity_anchor = "lead"
+
                     formatted_refine_prompt = (
                         FURTHER_REFINE_PROMPT.format(
+                            property_name=property,
+                            property_description=property_description,
+                            objective=objective,
+                            chemical_domain_context=chemical_domain_context,
+                            similarity_mode=similarity_mode,
+                            similarity_anchor=similarity_anchor,
+                            calculate_property_tool=calculate_property_tool,
+                            top_k=num_top_candidates,
+                            improvement_line=improvement_line,
+                            lead_smiles=current_best_smiles,
+                            candidates_per_round=number_of_molecules,
                             previous_values=", ".join(map(str, generated_properties)),
                             previous_smiles=", ".join(generated_smiles_list),
-                            property=property,
-                            property_description=property_description,
-                            calculate_property_tool=calculate_property_tool,
-                            condition=condition,
-                            direction=direction,
-                            ranking=ranking,
-                            number_of_molecules=number_of_molecules,
-                            num_top_candidates=num_top_candidates,
                         )
                         + customization_text
                     )
@@ -521,6 +545,7 @@ async def generate_lead_molecule(
                         user_prompt=formatted_refine_prompt + "\n",
                         property_tool_name=calculate_property_tool,
                         property_name=property,
+                        optimize_direction=condition,
                         server_urls=available_tools,
                     )
                     await lmo_task.get_initial_property_value()

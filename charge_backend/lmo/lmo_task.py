@@ -9,15 +9,12 @@ import json
 from loguru import logger
 from charge.utils.mcp_workbench_utils import call_mcp_tool_directly
 
-SYSTEM_PROMPT = (
-    "You are a world-class medicinal chemist with expertise in drug"
-    + " discovery and molecular design. Your task is to propose novel small"
-    + " molecules that are likely to exhibit high binding affinity to a"
-    + " specified biological target, while also being synthetically"
-    + " accessible.  You will be provided with a lead molecule as a starting"
-    + " point for your designs.  You can generate new molecules in a SMILES"
-    + " format and optimize for binding affinity and synthetic accessibility."
-    + "\n\n"
+SYSTEM_PROMPT_TEMPLATE = (
+    "You are a world-class chemist specializing in molecular design and property optimization. "
+    "Your task is to propose novel small molecules that optimize the specified property '"
+    "{property_name}' (direction: '{optimize_direction}') while maintaining synthetic accessibility. "
+    "You will be provided with a lead molecule as a starting point. Generate new molecules in SMILES format "
+    "and use available tools to evaluate them.\n\n"
 )
 
 
@@ -103,15 +100,18 @@ class LMOTask(Task):
             **kwargs: Additional arguments passed to Task
         """
 
-        if user_prompt is None:
-            user_prompt = USER_PROMPT.format(lead_molecule)
-        if system_prompt is None:
-            system_prompt = SYSTEM_PROMPT
-
-        # call mcp server directly
         # Default to density if no property function provided
         if property_tool_name is None:
             property_tool_name = "get_density"
+
+        # Build default prompts if not provided
+        if user_prompt is None:
+            user_prompt = USER_PROMPT.format(lead_molecule)
+        if system_prompt is None:
+            system_prompt = SYSTEM_PROMPT_TEMPLATE.format(
+                property_name=property_name,
+                optimize_direction=optimize_direction,
+            )
 
         super().__init__(
             system_prompt=system_prompt,
@@ -121,15 +121,13 @@ class LMOTask(Task):
             **kwargs,
         )
 
-        print("LMOTask initialized with the provided prompts.")
+        # Initialize state
         self.lead_molecule = lead_molecule
         self.system_prompt = system_prompt
         self.user_prompt = user_prompt
         self.verification_prompt = verification_prompt
         self.refinement_prompt = refinement_prompt
         self.max_synth_score = smiles_utils.get_synthesizability(lead_molecule)
-        # Change this to be the min property value - add a function to get the right value
-        # add a property name as well
         # Store property function and related attributes
         self.property_tool_name = property_tool_name
         self.property_name = property_name
