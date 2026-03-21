@@ -7,7 +7,6 @@ from typing import Optional, List
 from pydantic import BaseModel, field_validator
 import json
 from loguru import logger
-from charge.utils.log_progress import LOG_PROGRESS_SYSTEM_PROMPT
 from charge.utils.mcp_workbench_utils import call_mcp_tool_directly
 
 SYSTEM_PROMPT_TEMPLATE = (
@@ -15,7 +14,7 @@ SYSTEM_PROMPT_TEMPLATE = (
     "Your task is to propose novel small molecules that optimize the specified property '"
     "{property_name}' (direction: '{optimize_direction}') while maintaining synthetic accessibility. "
     "You will be provided with a lead molecule as a starting point. Generate new molecules in SMILES format "
-    "and use available tools to evaluate them." + LOG_PROGRESS_SYSTEM_PROMPT + "\n\n"
+    "and use available tools to evaluate them.\n\n"
 )
 
 
@@ -135,7 +134,7 @@ class LMOTask(Task):
         self.optimize_direction = optimize_direction
         self.set_structured_output_schema(MoleculeOutputSchema)
 
-    async def get_initial_property_value(self) -> bool:
+    async def get_initial_property_value(self) -> None:
         # Calculate the reference property value from the lead molecule
         property_result_msg = await call_mcp_tool_directly(
             tool_name=self.property_tool_name,

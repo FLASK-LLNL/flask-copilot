@@ -1,5 +1,6 @@
 /* eslint-disable react-hooks/exhaustive-deps */
 import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
+import { flushSync } from 'react-dom';
 import {
   Loader2,
   FlaskConical,
@@ -206,6 +207,7 @@ const ChemistryTool: React.FC = () => {
       backend: 'vllm',
       customUrl: 'http://localhost:8000/v1',
       model: 'gpt-oss',
+      reasoningEffort: 'medium',
       apiKey: '',
       backendLabel: 'vLLM',
     };
@@ -290,6 +292,7 @@ const ChemistryTool: React.FC = () => {
         backend: settings.backend,
         customUrl: settings.customUrl,
         model: settings.model,
+        reasoningEffort: settings.reasoningEffort,
         apiKey: settings.apiKey,
       };
       wsRef.current.send(JSON.stringify(message));
@@ -363,8 +366,16 @@ const ChemistryTool: React.FC = () => {
       sidebarState.setMessages(data.sidebarState.messages);
       sidebarState.setVisibleSources(data.sidebarState.visibleSources);
     }
-    data.experimentContext &&
-      sendMessageToServer('load-context', { experimentContext: data.experimentContext });
+
+    // I was getting "websocket not connected" alerts
+    if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+      (data.experimentContext || data.treeNodes) &&
+        sendMessageToServer('load-context', {
+          experimentContext: data.experimentContext,
+          nodes: data.treeNodes,
+          problemType: data.problemType,
+        });
+    }
   };
 
   const saveStateToExperiment = useCallback((): boolean => {
@@ -432,7 +443,7 @@ const ChemistryTool: React.FC = () => {
       }
 
       try {
-        const experiment = await projectManagement.createExperiment(projectId, experimentName);
+        const experiment = projectManagement.createExperiment(projectId, experimentName);
         projectSidebar.setSelection({ projectId, experimentId: experiment.id });
         await new Promise((resolve) => setTimeout(resolve, 100));
       } catch (error) {
@@ -502,113 +513,151 @@ const ChemistryTool: React.FC = () => {
     };
 
     socket.onmessage = (event: MessageEvent) => {
-      if (wsRef.current !== socket) return; // Ignore messages from old sockets
+      flushSync(() => {
+        if (wsRef.current !== socket) return; // Ignore messages from old sockets
 
-      const data: WebSocketMessage = JSON.parse(event.data);
+        const data: WebSocketMessage = JSON.parse(event.data);
 
-      if (data.type === 'node') {
-        setTreeNodes((prev) => [...prev, data.node!]);
-      } else if (data.type === 'stopped') {
-        // Handle explicit stop from backend
-        console.log('Computation stopped by backend');
-        setIsComputing(false);
-        setIsComputingTemplates(false);
-        unhighlightNodes();
-        saveStateToExperiment();
-      } else if (data.type === 'complete') {
-        setIsComputing(false);
-        setIsComputingTemplates(false);
-        unhighlightNodes();
-        saveStateToExperiment();
-      } else if (data.type === 'node_update') {
-        const { id, ...restData } = data.node!;
+        switch (data.type) {
+          case 'node': {
+            setTreeNodes((prev) => [...prev, data.node!]);
+            break;
+          }
+          case 'node_update': {
+            const { id, ...restData } = data.node!;
 
-        if (restData) {
-          setIsComputing(true);
-        } else {
-          setIsComputing(false);
-          setIsComputingTemplates(false);
+            if (restData) {
+              setIsComputing(true);
+            } else {
+              setIsComputing(false);
+              setIsComputingTemplates(false);
+            }
+            setTreeNodes((prev) =>
+              prev.map((n) => (n.id === data.node!.id ? { ...n, ...restData } : n))
+            );
+            break;
+          }
+          case 'node_delete': {
+            setTreeNodes((prev) => {
+              const descendants = findAllDescendants(data.node!.id, prev);
+              return prev.filter((n) => !descendants.has(n.id) && n.id !== data.node!.id);
+            });
+            setEdges((prev) =>
+              prev.filter((e) => e.fromNode !== data.node!.id && e.toNode !== data.node!.id)
+            );
+            break;
+          }
+          case 'edge': {
+            setEdges((prev) => [...prev, data.edge!]);
+            break;
+          }
+          case 'edge_update': {
+            const { id, ...restData } = data.edge!;
+            setEdges((prev) =>
+              prev.map((e) => (e.id === data.edge!.id ? { ...e, ...restData } : e))
+            );
+            break;
+          }
+          case 'subtree_update': {
+            const withNode = data.withNode || false;
+            const { id, ...restData } = data.node!;
+            setTreeNodes((prev) => {
+              const descendants = findAllDescendants(data.node!.id, prev);
+              return prev.map((n) =>
+                descendants.has(n.id) || (withNode && n.id === data.node!.id)
+                  ? { ...n, ...restData }
+                  : n
+              );
+            });
+            break;
+          }
+          case 'subtree_delete': {
+            let descendantsSet: Set<string>;
+            setTreeNodes((prev) => {
+              descendantsSet = findAllDescendants(data.node!.id, prev);
+              return prev.filter((n) => !descendantsSet.has(n.id));
+            });
+            setEdges((prev) =>
+              prev.filter((e) => !descendantsSet!.has(e.fromNode) && !descendantsSet!.has(e.toNode))
+            );
+            break;
+          }
+          case 'stopped': {
+            // Handle explicit stop from backend
+            console.log('Computation stopped by backend');
+            setIsComputing(false);
+            setIsComputingTemplates(false);
+            unhighlightNodes();
+            saveStateToExperiment();
+            break;
+          }
+          case 'complete': {
+            setIsComputing(false);
+            setIsComputingTemplates(false);
+            unhighlightNodes();
+            saveStateToExperiment();
+            break;
+          }
+          case 'response': {
+            addSidebarMessage(data.message!);
+            console.log('Server response:', data.message);
+            break;
+          }
+          case 'available-tools-response': {
+            const newTools = data.tools || [];
+            setAvailableTools(newTools);
+            setAvailableToolsMap(
+              newTools.map((server: Tool, index: number) => ({
+                id: index,
+                tool_server: server,
+              }))
+            );
+            setSelectedTools([]);
+            break;
+          }
+          case 'server-update-orchestrator-settings': {
+            // Handle orchestrator settings updates from server
+            const newSettings: FlaskOrchestratorSettings = {
+              backend: data.orchestratorSettings!.backend,
+              useCustomUrl: data.orchestratorSettings!.useCustomUrl,
+              customUrl: data.orchestratorSettings!.customUrl,
+              model: data.orchestratorSettings!.model,
+              reasoningEffort: data.orchestratorSettings!.reasoningEffort,
+              // Don't take the use custom model field from the backend
+              // Check the model against the list of models in copilot
+              // useCustomModel: data.orchestratorSettings.useCustomModel,
+              apiKey: data.orchestratorSettings!.apiKey,
+              backendLabel: data.orchestratorSettings!.backendLabel,
+            };
+            setOrchestratorSettings(newSettings);
+            console.log('Updating the orchestrator settings ', newSettings);
+            localStorage.setItem('orchestratorSettings', JSON.stringify(newSettings));
+            break;
+          }
+          case 'error': {
+            console.error(data.message);
+            alert('Server error: ' + data.message);
+            break;
+          }
+          case 'save-context-response': {
+            saveFullContext(data.experimentContext!);
+            break;
+          }
+          case 'get-username-response': {
+            setUsername(data.username!);
+            break;
+          }
+          case 'prompt-breakpoint': {
+            console.log('Prompt breakpoint triggered:', data);
+            setPromptBreakpoint({
+              prompt: data.prompt || '',
+              metadata: data.metadata,
+            });
+            setEditedPrompt(data.prompt || '');
+            break;
+          }
         }
-        setTreeNodes((prev) =>
-          prev.map((n) => (n.id === data.node!.id ? { ...n, ...restData } : n))
-        );
-      } else if (data.type === 'node_delete') {
-        setTreeNodes((prev) => {
-          const descendants = findAllDescendants(data.node!.id, prev);
-          return prev.filter((n) => !descendants.has(n.id) && n.id !== data.node!.id);
-        });
-        setEdges((prev) =>
-          prev.filter((e) => e.fromNode !== data.node!.id && e.toNode !== data.node!.id)
-        );
-      } else if (data.type === 'subtree_update') {
-        const withNode = data.withNode || false;
-        const { id, ...restData } = data.node!;
-        setTreeNodes((prev) => {
-          const descendants = findAllDescendants(data.node!.id, prev);
-          return prev.map((n) =>
-            descendants.has(n.id) || (withNode && n.id === data.node!.id)
-              ? { ...n, ...restData }
-              : n
-          );
-        });
-      } else if (data.type === 'edge') {
-        setEdges((prev) => [...prev, data.edge!]);
-      } else if (data.type === 'edge_update') {
-        const { id, ...restData } = data.edge!;
-        setEdges((prev) => prev.map((e) => (e.id === data.edge!.id ? { ...e, ...restData } : e)));
-      } else if (data.type === 'subtree_delete') {
-        let descendantsSet: Set<string>;
-        setTreeNodes((prev) => {
-          descendantsSet = findAllDescendants(data.node!.id, prev);
-          return prev.filter((n) => !descendantsSet.has(n.id));
-        });
-        setEdges((prev) =>
-          prev.filter((e) => !descendantsSet!.has(e.fromNode) && !descendantsSet!.has(e.toNode))
-        );
-      } else if (data.type === 'response') {
-        addSidebarMessage(data.message!);
-        console.log('Server response:', data.message);
-      } else if (data.type === 'available-tools-response') {
-        const newTools = data.tools || [];
-        setAvailableTools(newTools);
-        setAvailableToolsMap(
-          newTools.map((server: Tool, index: number) => ({
-            id: index,
-            tool_server: server,
-          }))
-        );
-        setSelectedTools([]);
-      } else if (data.type === 'server-update-orchestrator-settings') {
-        // Handle orchestrator settings updates from server
-        const newSettings: FlaskOrchestratorSettings = {
-          backend: data.orchestratorSettings!.backend,
-          useCustomUrl: data.orchestratorSettings!.useCustomUrl,
-          customUrl: data.orchestratorSettings!.customUrl,
-          model: data.orchestratorSettings!.model,
-          // Don't take the use custom model field from the backend
-          // Check the model against the list of models in copilot
-          // useCustomModel: data.orchestratorSettings.useCustomModel,
-          apiKey: data.orchestratorSettings!.apiKey,
-          backendLabel: data.orchestratorSettings!.backendLabel,
-        };
-        setOrchestratorSettings(newSettings);
-        console.log('Updating the orchestrator settings ', newSettings);
-        localStorage.setItem('orchestratorSettings', JSON.stringify(newSettings));
-      } else if (data.type === 'error') {
-        console.error(data.message);
-        alert('Server error: ' + data.message);
-      } else if (data.type === 'save-context-response') {
-        saveFullContext(data.experimentContext!);
-      } else if (data.type === 'get-username-response') {
-        setUsername(data.username!);
-      } else if (data.type === 'prompt-breakpoint') {
-        console.log('Prompt breakpoint triggered:', data);
-        setPromptBreakpoint({
-          prompt: data.prompt || '',
-          metadata: data.metadata,
-        });
-        setEditedPrompt(data.prompt || '');
-      }
+      });
     };
 
     socket.onerror = (error: Event) => {
@@ -875,7 +924,7 @@ const ChemistryTool: React.FC = () => {
 
     let experiment = undefined;
     try {
-      experiment = await projectManagement.createExperiment(projectId, experimentName);
+      experiment = projectManagement.createExperiment(projectId, experimentName);
       projectSidebar.setSelection({ projectId, experimentId: experiment.id });
       await new Promise((resolve) => setTimeout(resolve, 100));
     } catch (error) {

@@ -44,7 +44,7 @@ export const Modal: React.FC<ModalProps> = ({
             {closeIcon || <X className="w-6 h-6" />}
           </button>
         </div>
-        <div className="modal-body">{children}</div>
+        <div className="modal-body custom-scrollbar">{children}</div>
         {footer && <div className="modal-footer">{footer}</div>}
       </div>
     </div>

@@ -1,7 +1,7 @@
 import React from 'react';
 import { Plus, Trash2, Edit2, Loader2, Settings, Wrench } from 'lucide-react';
 import { FlaskOrchestratorSettings } from '../types';
-import { OrchestratorSettings, ToolServer } from 'lc-conductor';
+import { OrchestratorSettings, ReasoningEffort, ToolServer } from 'lc-conductor';
 import { HTTP_SERVER } from '../config';
 
 interface SettingsButtonProps {
@@ -19,13 +19,14 @@ export const BACKEND_OPTIONS = [
     value: 'openai',
     label: 'OpenAI',
     defaultUrl: 'https://api.openai.com/v1',
-    models: ['gpt-5.2', 'gpt-5.1', 'gpt-5', 'gpt-5-mini', 'gpt-5-nano'],
+    models: ['gpt-5.4', 'gpt-5.2', 'gpt-5.1', 'gpt-5', 'gpt-5-mini', 'gpt-5-nano'],
   },
   {
     value: 'livai',
     label: 'LivAI',
     defaultUrl: '',
     models: [
+      'gpt-5.4',
       'gpt-5.2',
       'gpt-5.1',
       'gpt-5',
@@ -101,6 +102,7 @@ export const SettingsButton: React.FC<SettingsButtonProps> = ({
       {
         customUrl: string;
         model: string;
+        reasoningEffort: ReasoningEffort;
         useCustomModel: boolean;
       }
     >
@@ -112,7 +114,8 @@ export const SettingsButton: React.FC<SettingsButtonProps> = ({
     backendLabel: 'OpenAI',
     useCustomUrl: false,
     customUrl: '',
-    model: 'gpt-5.1',
+    model: 'gpt-5.4',
+    reasoningEffort: 'medium',
     useCustomModel: false,
     apiKey: '',
     moleculeName: 'brand',
@@ -311,6 +314,7 @@ export const SettingsButton: React.FC<SettingsButtonProps> = ({
       [tempSettings.backend]: {
         customUrl: tempSettings.customUrl || '',
         model: tempSettings.model || '',
+        reasoningEffort: tempSettings.reasoningEffort,
         useCustomModel: tempSettings.useCustomModel || false,
       },
     };
@@ -333,6 +337,7 @@ export const SettingsButton: React.FC<SettingsButtonProps> = ({
       backend: newBackend,
       customUrl: urlToUse,
       model: modelToUse,
+      reasoningEffort: cached?.reasoningEffort || 'medium',
       useCustomModel: useCustomModelToUse,
       backendLabel: newBackendOption!.label,
     });
@@ -360,6 +365,7 @@ export const SettingsButton: React.FC<SettingsButtonProps> = ({
       [tempSettings.backend]: {
         customUrl: newUrl,
         model: tempSettings.model,
+        reasoningEffort: tempSettings.reasoningEffort,
         useCustomModel: tempSettings.useCustomModel || false,
       },
     };
@@ -378,6 +384,7 @@ export const SettingsButton: React.FC<SettingsButtonProps> = ({
       [tempSettings.backend]: {
         customUrl: tempSettings.customUrl || '',
         model: selectedModel,
+        reasoningEffort: tempSettings.reasoningEffort,
         useCustomModel: tempSettings.useCustomModel || false,
       },
     };
@@ -422,6 +429,7 @@ export const SettingsButton: React.FC<SettingsButtonProps> = ({
       [tempSettings.backend]: {
         customUrl: tempSettings.customUrl || '',
         model: modelToUse,
+        reasoningEffort: tempSettings.reasoningEffort,
         useCustomModel: enabled,
       },
     };
@@ -441,6 +449,7 @@ export const SettingsButton: React.FC<SettingsButtonProps> = ({
       [tempSettings.backend]: {
         customUrl: tempSettings.customUrl || '',
         model: newModel,
+        reasoningEffort: tempSettings.reasoningEffort,
         useCustomModel: tempSettings.useCustomModel || false,
       },
     };
@@ -896,6 +905,29 @@ export const SettingsButton: React.FC<SettingsButtonProps> = ({
                         className="form-input"
                       />
                     )}
+                  </div>
+
+                  <div className="form-group">
+                    <label className="form-label">
+                      Reasoning Effort
+                      <span className="helper-text" style={{ marginLeft: '0.5rem' }}>
+                        (passed to backend as `reasoningEffort`)
+                      </span>
+                    </label>
+                    <select
+                      value={tempSettings.reasoningEffort}
+                      onChange={(e) =>
+                        setTempSettings({
+                          ...tempSettings,
+                          reasoningEffort: e.target.value as ReasoningEffort,
+                        })
+                      }
+                      className="form-select"
+                    >
+                      <option value="low">low</option>
+                      <option value="medium">medium</option>
+                      <option value="high">high</option>
+                    </select>
                   </div>
 
                   {/* Use Custom Model Checkbox */}
