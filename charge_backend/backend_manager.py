@@ -1,4 +1,4 @@
-from typing import Any, Literal, Optional, Tuple
+from typing import Any, Callable, Literal, Optional, Tuple
 from fastapi import WebSocket
 import asyncio
 import os
@@ -31,6 +31,7 @@ from retrosynthesis.ai import ai_based_retrosynthesis
 from retrosynthesis.alternatives import set_reaction_alternative
 from charge_backend.prompt_debugger import debug_prompt
 from backend_helper_funcs import Node
+from builtin_tools import BuiltinToolDefinition, resolve_builtin_tools
 
 
 class FlaskActionManager(ActionManager):
@@ -42,10 +43,24 @@ class FlaskActionManager(ActionManager):
         experiment: Experiment,
         args,
         username: str,
+        builtin_tool_definitions: Optional[list[BuiltinToolDefinition]] = None,
     ):
         super().__init__(task_manager, experiment, args, username)
         self.run_settings: FlaskRunSettings = FlaskRunSettings()
         self.websocket = task_manager.websocket
+        self.builtin_tool_definitions = builtin_tool_definitions or []
+        self.task_manager.available_builtin_tool_ids = None
+
+    def _selected_mcp_tools(self) -> list[str]:
+        if self.task_manager.available_tools is None:
+            return list_server_urls()
+        return self.task_manager.available_tools
+
+    def _selected_builtin_tools(self) -> list[Callable[..., Any]]:
+        return resolve_builtin_tools(
+            self.task_manager.available_builtin_tool_ids,
+            self.builtin_tool_definitions,
+        )
 
     def setup_retro_synth_context(self) -> None:
         if self.retro_synth_context is None:
@@ -188,7 +203,8 @@ class FlaskActionManager(ActionManager):
             self.args.json_file,
             self.args.max_retries,
             depth,
-            self.task_manager.available_tools or list_server_urls(),
+            self._selected_mcp_tools(),
+            self._selected_builtin_tools(),
             self.task_manager.websocket,
             self.run_settings,
             self.log_progress,
@@ -209,12 +225,6 @@ class FlaskActionManager(ActionManager):
 
     async def _handle_retrosynthesis(self, data: dict) -> None:
         """Handle retrosynthesis problem type."""
-        available_tools = self.task_manager.available_tools or list_server_urls()
-        await self.task_manager.clogger.info(
-            f"Setting up retrosynthesis task... with available tools: {available_tools}."
-        )
-        await self.task_manager.clogger.info(f"Data: {data}")
-
         run_func = partial(
             template_based_retrosynthesis,
             data["smiles"],
@@ -222,7 +232,6 @@ class FlaskActionManager(ActionManager):
             self.get_retro_synth_context(),
             self.task_manager.websocket,
             self.run_settings,
-            available_tools,
         )
 
         await self.task_manager.run_task(run_func())
@@ -238,7 +247,8 @@ class FlaskActionManager(ActionManager):
             data["systemPrompt"],
             data["userPrompt"],
             self.experiment,
-            self.task_manager.available_tools or list_server_urls(),
+            self._selected_mcp_tools(),
+            self._selected_builtin_tools(),
             self.task_manager.websocket,
             self.run_settings,
             self.log_progress,
@@ -290,7 +300,8 @@ class FlaskActionManager(ActionManager):
             self.experiment,
             self.args.config_file,
             self.run_settings,
-            self.task_manager.available_tools or list_server_urls(),
+            self._selected_mcp_tools(),
+            self._selected_builtin_tools(),
             self.log_progress,
         )
 
@@ -313,7 +324,6 @@ class FlaskActionManager(ActionManager):
             self.retro_synth_context,
             self.task_manager.websocket,
             self.run_settings,
-            self.task_manager.available_tools or list_server_urls(),
         )
 
         asyncio.create_task(self.task_manager.run_task(run_func()))
@@ -393,7 +403,8 @@ class FlaskActionManager(ActionManager):
             self.experiment,
             self.args.config_file,
             self.run_settings,
-            self.task_manager.available_tools or list_server_urls(),
+            self._selected_mcp_tools(),
+            self._selected_builtin_tools(),
             self.log_progress,
         )
 
@@ -441,7 +452,8 @@ class FlaskActionManager(ActionManager):
         task = Task(
             system_prompt=f"You are a helpful chemical assistant who answers in concise but factual responses. Answer the following query about the molecule given by the SMILES string `{smiles}`.",
             user_prompt=data["query"],
-            server_urls=self.task_manager.available_tools or list_server_urls(),
+            server_urls=self._selected_mcp_tools(),
+            builtin_tools=self._selected_builtin_tools(),
         )
 
         # Use the full experiment state
@@ -475,7 +487,8 @@ class FlaskActionManager(ActionManager):
         task = Task(
             system_prompt="",
             user_prompt=data["query"],
-            server_urls=self.task_manager.available_tools or list_server_urls(),
+            server_urls=self._selected_mcp_tools(),
+            builtin_tools=self._selected_builtin_tools(),
         )
 
         # No charge client (likely only AZF was run), add context from tree
@@ -521,6 +534,56 @@ class FlaskActionManager(ActionManager):
 
         asyncio.create_task(self.task_manager.run_task(run_and_report()))
 
+    async def handle_list_tools(self, *args, **kwargs) -> None:
+        tools = []
+        server_list = list_server_urls()
+        for server in server_list:
+            tool_list = await list_server_tools([server])
+            tool_names = [name for name, _ in tool_list]
+            tools.append(
+                ToolList(
+                    server=server,
+                    names=tool_names,
+                    kind="mcp",
+                    identifier=server,
+                )
+            )
+
+        builtin_tools = [
+            tool_definition.to_client_tool()
+            for tool_definition in self.builtin_tool_definitions
+        ]
+
+        await self.websocket.send_json(
+            {
+                "type": "available-tools-response",
+                "tools": [tool.json() for tool in tools] + builtin_tools,
+            }
+        )
+
+    async def handle_select_tools_for_task(self, data: dict) -> None:
+        """Handle select-tools-for-task action."""
+        logger.info("Select tools for task")
+        logger.info(f"Data: {data}")
+
+        selected_mcp_tools: list[str] = []
+        selected_builtin_tool_ids: list[str] = []
+
+        for server in data.get("enabledTools", {}).get("selectedTools", []):
+            tool_server = server.get("tool_server", {})
+            if tool_server.get("kind") == "builtin":
+                identifier = tool_server.get("identifier")
+                if identifier:
+                    selected_builtin_tool_ids.append(identifier)
+                continue
+
+            server_url = tool_server.get("server")
+            if server_url:
+                selected_mcp_tools.append(server_url)
+
+        self.task_manager.available_tools = selected_mcp_tools
+        self.task_manager.available_builtin_tool_ids = selected_builtin_tool_ids
+
     async def handle_get_username(self, _: dict) -> None:
         await self.websocket.send_json(
             {
@@ -530,7 +593,7 @@ class FlaskActionManager(ActionManager):
         )
 
     async def restore_retrosynth_context(self, ctxt: RetrosynthesisContext, data: dict):
-        node_data = data.get("nodes")
+        node_data = data.get("nodes", [])
 
         # Deserialize each node.
         #

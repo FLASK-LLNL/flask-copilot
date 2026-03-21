@@ -160,62 +160,262 @@ class CallbackHandler:
         self.websocket = websocket
         self.name = name
         self.clogger = CallbackLogger(websocket)
+        self.pending_tool_calls: dict[str, dict[str, Any]] = {}
+        self.pending_tool_calls_by_name: dict[str, list[dict[str, Any]]] = {}
+        self._pending_send_tasks: set[asyncio.Task[Any]] = set()
+
+    @staticmethod
+    def _parse_tool_arguments(
+        arguments: Any,
+    ) -> tuple[str, Optional[str], Optional[str]]:
+        if isinstance(arguments, str):
+            arguments_str = arguments
+            try:
+                parsed = json.loads(arguments)
+            except Exception:
+                parsed = None
+        elif arguments is None:
+            arguments_str = ""
+            parsed = None
+        else:
+            parsed = arguments
+            arguments_str = json.dumps(arguments)
+
+        log_msg = None
+        smiles = None
+        if isinstance(parsed, dict):
+            raw_log_msg = parsed.get("log_msg")
+            raw_smiles = parsed.get("smiles") or parsed.get("product_smiles")
+            log_msg = raw_log_msg if isinstance(raw_log_msg, str) else None
+            smiles = raw_smiles if isinstance(raw_smiles, str) else None
+        return arguments_str, log_msg, smiles
+
+    @staticmethod
+    def _merge_arguments_str(existing: str, new: str) -> str:
+        if not existing:
+            return new
+        if not new or new == existing:
+            return existing
+        return existing + new
+
+    @staticmethod
+    def _try_parse_json(value: Any) -> Any:
+        if isinstance(value, str):
+            try:
+                return json.loads(value)
+            except Exception:
+                return None
+        return value
+
+    @classmethod
+    def _format_arguments_str(cls, arguments_str: str) -> str:
+        parsed = cls._try_parse_json(arguments_str)
+        if parsed is None:
+            return arguments_str
+        if isinstance(parsed, dict):
+            lines = []
+            for key, value in parsed.items():
+                if isinstance(value, (dict, list)):
+                    formatted_value = json.dumps(
+                        value, indent=2, sort_keys=True, default=str
+                    )
+                else:
+                    formatted_value = str(value)
+                lines.append(f"{key}: {formatted_value}")
+            return "\n".join(lines)
+        if isinstance(parsed, list):
+            return "\n".join(str(item) for item in parsed)
+        return str(parsed)
+
+    @classmethod
+    def _format_result_text(cls, result: Any) -> tuple[str, str]:
+        parsed = cls._try_parse_json(result)
+        if parsed is not None:
+            return "json", json.dumps(parsed, indent=2, sort_keys=True, default=str)
+
+        if isinstance(result, str):
+            return "", result
+        return "json", json.dumps(result, indent=2, sort_keys=True, default=str)
+
+    async def on_tool_call(
+        self,
+        tool_name: str,
+        arguments: Any = None,
+        *,
+        source: Optional[str] = None,
+        call_id: Optional[str] = None,
+    ) -> None:
+        source_name = source or self.name or "FLASK-Generic"
+        arguments_str, log_msg, smiles = self._parse_tool_arguments(arguments)
+        call_info: dict[str, Any] = {
+            "tool_name": tool_name,
+            "source_name": source_name,
+            "arguments_str": arguments_str,
+            "log_msg": log_msg,
+            "smiles": smiles,
+        }
+        if call_id is not None:
+            existing_call_info = self.pending_tool_calls.get(call_id)
+            if existing_call_info is not None:
+                existing_call_info["tool_name"] = tool_name
+                existing_call_info["source_name"] = source_name
+                existing_call_info["arguments_str"] = self._merge_arguments_str(
+                    existing_call_info.get("arguments_str", ""),
+                    arguments_str,
+                )
+                if log_msg is not None:
+                    existing_call_info["log_msg"] = log_msg
+                if smiles is not None:
+                    existing_call_info["smiles"] = smiles
+            else:
+                self.pending_tool_calls[call_id] = call_info
+        else:
+            self.pending_tool_calls_by_name.setdefault(tool_name, []).append(call_info)
+
+    def _pop_pending_tool_call(
+        self,
+        tool_name: str,
+        call_id: Optional[str] = None,
+    ) -> Optional[dict[str, Any]]:
+        if call_id is not None:
+            return self.pending_tool_calls.pop(call_id, None)
+
+        pending_calls = self.pending_tool_calls_by_name.get(tool_name)
+        if not pending_calls:
+            return None
+
+        call_info = pending_calls.pop(0)
+        if not pending_calls:
+            self.pending_tool_calls_by_name.pop(tool_name, None)
+        return call_info
+
+    async def on_tool_result(
+        self,
+        tool_name: str,
+        result: Any,
+        *,
+        is_error: bool = False,
+        source: Optional[str] = None,
+        call_id: Optional[str] = None,
+    ) -> None:
+        send = self.websocket.send_json
+        call_info = self._pop_pending_tool_call(tool_name, call_id)
+        source_name = (
+            call_info["source_name"]
+            if call_info is not None
+            else source or self.name or "FLASK-Generic"
+        )
+        result_lang, formatted_result_text = self._format_result_text(result)
+        fence_suffix = result_lang if result_lang else ""
+        if call_info is not None and call_info["log_msg"]:
+            message = (
+                f"{call_info['log_msg']}\nArguments:\n```\n"
+                f"{self._format_arguments_str(call_info['arguments_str'])}\n```\n"
+                f"Result:\n```{fence_suffix}\n{formatted_result_text}\n```"
+            )
+        elif call_info is not None:
+            message = (
+                f"[{source_name}] `{tool_name}` called with:\n```\n"
+                f"{self._format_arguments_str(call_info['arguments_str'])}\n```\n"
+                f"Returned:\n```{fence_suffix}\n{formatted_result_text}\n```"
+            )
+        elif is_error:
+            message = (
+                f"[{source_name}] `{tool_name}` errored:\n"
+                f"```{fence_suffix}\n{formatted_result_text}\n```"
+            )
+        else:
+            message = (
+                f"[{source_name}] `{tool_name}` returned:\n"
+                f"```{fence_suffix}\n{formatted_result_text}\n```"
+            )
+
+        payload: dict[str, Any] = {
+            "type": "response",
+            "message": {"source": tool_name, "message": message},
+        }
+        if call_info is not None and call_info["smiles"] is not None:
+            payload["smiles"] = call_info["smiles"]
+        if call_id is not None:
+            payload["toolCallId"] = call_id
+
+        logger.info(message)
+        await send(payload)
 
     async def send(self, assistant_message):
         send = self.websocket.send_json
         source = self.name if self.name else "FLASK-Generic"
-        if assistant_message.type == "UserMessage":
-            message = f"[{source}] User: {assistant_message.content}"
-            logger.info(message)
-            await send({"type": "response", "message": {"message": message}})
-        elif assistant_message.type == "AssistantMessage":
-
-            if assistant_message.thought is not None:
-                _str = f"[{source}] Model thought: {assistant_message.thought}"
-                output = ModelMessage(message=_str, smiles=None)
-                logger.info(_str)
-                await send({"type": "response", "message": output.json()})
-            if isinstance(assistant_message.content, list):
-                for item in assistant_message.content:
-                    if hasattr(item, "name") and hasattr(item, "arguments"):
-                        name = item.name
-                        _str = f"[{source}] Calling {item.name}: with args {item.arguments}"
-                        logger.info(_str)
-                        if "log_msg" in item.arguments:
-                            str_to_dict = json.loads(item.arguments)
-                            if "log_msg" in str_to_dict:
-                                _str = str_to_dict["log_msg"]
-
-                        msg = {
-                            "type": "response",
-                            "message": {"source": name, "message": _str},
-                        }
-                        if "smiles" in item.arguments:
-                            str_to_dict = json.loads(item.arguments)
-                            if "smiles" in str_to_dict:
-                                msg["smiles"] = str_to_dict["smiles"]
-                        await send(msg)
+        try:
+            message_type = getattr(assistant_message, "type", None)
+            if message_type == "UserMessage":
+                message = (
+                    f"[{source}] User: {getattr(assistant_message, 'content', '')}"
+                )
+                logger.info(message)
+                await send({"type": "response", "message": {"message": message}})
+            elif message_type == "AssistantMessage":
+                thought = getattr(assistant_message, "thought", None)
+                if thought is not None:
+                    _str = f"[{source}] Model thought: {thought}"
+                    output = ModelMessage(message=_str, smiles=None)
+                    logger.info(_str)
+                    await send({"type": "response", "message": output.json()})
+                content = getattr(assistant_message, "content", None)
+                if isinstance(content, list):
+                    for item in content:
+                        if hasattr(item, "name") and hasattr(item, "arguments"):
+                            await self.on_tool_call(
+                                item.name,
+                                item.arguments,
+                                source=source,
+                                call_id=getattr(item, "id", None),
+                            )
+                        else:
+                            logger.info(f"[{source}] Model: {item}")
+            elif message_type == "FunctionExecutionResultMessage":
+                content = getattr(assistant_message, "content", None) or []
+                for result in content:
+                    if result.is_error:
+                        await self.on_tool_result(
+                            result.name,
+                            result.content,
+                            is_error=True,
+                            source=source,
+                            call_id=getattr(result, "call_id", None),
+                        )
                     else:
-                        logger.info(f"[{source}] Model: {item}")
-        elif assistant_message.type == "FunctionExecutionResultMessage":
-
-            for result in assistant_message.content:
-                if result.is_error:
-                    await self.clogger.error(
-                        f"[{source}] Function {result.name} errored with output: {result.content}",
-                        source=result.name,
-                    )
-                else:
-                    await self.clogger.info(
-                        f"[{source}] Returning {result.name}: {result.content}",
-                        source=result.name,
-                    )
-        else:
-            message = f"[{source}] Model: {assistant_message.message.content}"
-            await self.clogger.info(message)
+                        await self.on_tool_result(
+                            result.name,
+                            result.content,
+                            source=source,
+                            call_id=getattr(result, "call_id", None),
+                        )
+            else:
+                nested_message = getattr(assistant_message, "message", None)
+                nested_content = getattr(nested_message, "content", assistant_message)
+                message = f"[{source}] Model: {nested_content}"
+                await self.clogger.info(message)
+        except Exception:
+            logger.exception("CallbackHandler failed while sending assistant message")
+            raise
 
     def __call__(self, assistant_message):
-        asyncio.create_task(self.send(assistant_message))
+        task = asyncio.create_task(self.send(assistant_message))
+        self._pending_send_tasks.add(task)
+        task.add_done_callback(self._pending_send_tasks.discard)
+        return task
+
+    async def drain(self) -> None:
+        if not self._pending_send_tasks:
+            return
+        results = await asyncio.gather(
+            *list(self._pending_send_tasks), return_exceptions=True
+        )
+        for result in results:
+            if isinstance(result, Exception):
+                logger.error(
+                    f"CallbackHandler background send task failed: {type(result).__name__}: {result}"
+                )
 
 
 def calculate_positions(nodes: list[Node], y_offset: int = 0):

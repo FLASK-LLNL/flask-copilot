@@ -251,13 +251,10 @@ async def template_based_retrosynthesis(
     context: RetrosynthesisContext,
     websocket: WebSocket,
     run_settings: FlaskRunSettings,
-    available_tools: Optional[Union[str, list[str]]] = None,
 ):
     """Stream positioned nodes and edges"""
     clogger = CallbackLogger(websocket, source="template_based_retrosynthesis")
-    await clogger.info(
-        f"Planning retrosynthesis for: `{start_smiles}` with available tools: {available_tools}."
-    )
+    await clogger.info(f"Planning retrosynthesis for: `{start_smiles}`.")
 
     # Generate root node
     mol_sources = is_purchasable(start_smiles)
@@ -361,13 +358,10 @@ async def compute_templates_for_node(
     context: RetrosynthesisContext,
     websocket: WebSocket,
     run_settings: FlaskRunSettings,
-    available_tools: Optional[Union[str, list[str]]] = None,
 ):
     """Computes all templates for node"""
     clogger = CallbackLogger(websocket, source="compute_templates_for_node")
-    await clogger.info(
-        f"Planning retrosynthesis for node {node.id} with available tools: {available_tools}."
-    )
+    await clogger.info(f"Planning retrosynthesis for node {node.id} with templates.")
     await clogger.info("Running AiZynthFinder...")
     reaction, routes = await run_retro_planner(
         config_file,

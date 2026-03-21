@@ -1,7 +1,8 @@
 import os
+import asyncio
 from fastapi import WebSocket
 from lc_conductor.callback_logger import CallbackLogger
-from typing import Optional, Union
+from typing import Any, Callable, Optional, Union
 
 from backend_helper_funcs import (
     CallbackHandler,
@@ -65,6 +66,7 @@ async def ai_based_retrosynthesis(
     config_file: str,
     run_settings: FlaskRunSettings,
     available_tools: Optional[Union[str, list[str]]],
+    builtin_tools: Optional[list[Callable[..., Any]]],
     log_progress: ReasoningCallbackType,
 ):
     """Performs template-free retrosynthesis using the AI orchestrator."""
@@ -109,7 +111,9 @@ async def ai_based_retrosynthesis(
         )
 
     retro_task = RetrosynthesisTask(
-        user_prompt=user_prompt, server_urls=available_tools
+        user_prompt=user_prompt,
+        server_urls=available_tools,
+        builtin_tools=builtin_tools or [],
     )
     runner.task = retro_task
 
