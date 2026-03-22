@@ -457,15 +457,17 @@ class FlaskActionManager(ActionManager):
         )
 
         # Use the full experiment state
+        callback_handler = CallbackHandler(self.websocket)
         agent = self.experiment.create_agent_with_experiment_state(
             task=task,
-            callback=CallbackHandler(self.websocket),
+            callback=callback_handler,
         )
 
         async def run_and_report():
             if self.run_settings.prompt_debugging:
                 await debug_prompt(agent, self.websocket)
             result = await agent.run(self.log_progress)
+            await callback_handler.drain()
             self.experiment.add_to_context(agent, task, result)
             # Report answer
             await self._send_processing_message(result, source="Agent")
@@ -508,9 +510,10 @@ class FlaskActionManager(ActionManager):
 
         task.system_prompt = f"You are a helpful chemical assistant who answers in concise but factual responses. Given the following reaction (as SMILES strings):\n{reaction_str}\n\nAnswer the following query."
 
+        callback_handler = CallbackHandler(self.websocket)
         agent = self.experiment.create_agent_with_experiment_state(
             task=task,
-            callback=CallbackHandler(self.websocket),
+            callback=callback_handler,
         )
         self.retro_synth_context.node_id_to_charge_client[data["nodeId"]] = agent
 
@@ -527,6 +530,7 @@ class FlaskActionManager(ActionManager):
             if self.run_settings.prompt_debugging:
                 await debug_prompt(agent, self.websocket)
             result = await agent.run(self.log_progress)
+            await callback_handler.drain()
             self.experiment.add_to_context(agent, task, result)
             # Report answer
             await self._send_processing_message(result, source="Agent")

@@ -27,14 +27,16 @@ async def run_custom_problem(
         server_urls=available_tools,
         builtin_tools=builtin_tools or [],
     )
+    callback_handler = CallbackHandler(websocket)
     agent = experiment.create_agent_with_experiment_state(
         task=task,
-        callback=CallbackHandler(websocket),
+        callback=callback_handler,
     )
 
     if run_settings.prompt_debugging:
         await debug_prompt(agent, websocket)
     result = await agent.run(log_progress)
+    await callback_handler.drain()
     experiment.add_to_context(agent, task, result)
     await websocket.send_json(
         {

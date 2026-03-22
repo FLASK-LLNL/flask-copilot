@@ -87,12 +87,15 @@ async def ai_based_retrosynthesis(
         runner = context.node_id_to_charge_client[node_id]
     else:
         # New context
+        callback_handler = CallbackHandler(websocket)
         runner = experiment.create_agent_with_experiment_state(
             task=None,
             agent_name=f"retrosynth_{node_id}",
-            callback=CallbackHandler(websocket),
+            callback=callback_handler,
         )
         context.node_id_to_charge_client[node_id] = runner
+
+    callback_handler = getattr(runner, "callback", None)
 
     if constraint:
         user_prompt = RETROSYNTH_CONSTRAINED_USER_PROMPT_TEMPLATE.format(
@@ -132,6 +135,8 @@ async def ai_based_retrosynthesis(
     if run_settings.prompt_debugging:
         await debug_prompt(runner, websocket)
     output = await runner.run(log_progress)
+    if isinstance(callback_handler, CallbackHandler):
+        await callback_handler.drain()
 
     if os.getenv("CHARGE_DISABLE_OUTPUT_VALIDATION", "0") == "1":
         await clogger.warning(
@@ -149,6 +154,7 @@ async def ai_based_retrosynthesis(
     await clogger.info(
         f"Retrosynthesis reasoning summary for {current_node.smiles}:\n{reasoning_summary}",
     )
+    await asyncio.sleep(0)
 
     # Add reaction alternative
     ai_alternative = ReactionAlternative(
@@ -205,6 +211,7 @@ async def ai_based_retrosynthesis(
     # Update node with discovered reaction
     context.node_id_to_reasoning_summary[node_id] = reasoning_summary
     await context.update_node(current_node, websocket)
+    await asyncio.sleep(0)
 
     context.recalculate_nodes_per_level()
 
@@ -230,6 +237,7 @@ async def ai_based_retrosynthesis(
         purchasable.append(len(mol_sources) > 0)
         # Add and stream node directly
         await context.add_node(node, current_node, websocket)
+        await asyncio.sleep(0)
 
     for node, purch in zip(new_nodes, purchasable):
         if purch:  # Skip purchasable nodes unless explicitly asked for

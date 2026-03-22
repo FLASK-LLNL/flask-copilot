@@ -1,3 +1,4 @@
+import asyncio
 from fastapi import WebSocket
 from charge_backend.retrosynthesis import aizynth_tools as azf
 from lc_conductor.callback_logger import CallbackLogger
@@ -22,6 +23,20 @@ from retrosynthesis.mapping import build_mapped_reaction_dict_or_none
 
 if TYPE_CHECKING:
     import aizynthfinder.reactiontree
+
+
+def _create_retro_planner_sync(config_file: str) -> azf.RetroPlanner:
+    return azf.RetroPlanner(configfile=config_file)
+
+
+def _run_retro_planner_sync(
+    planner: azf.RetroPlanner, smiles: str
+) -> tuple[list[azf.ReactionPath], list]:
+    _, _, routes = planner.plan(smiles)
+    trees = []
+    if planner.finder is not None:
+        trees = planner.finder.routes.reaction_trees
+    return routes, trees
 
 
 async def generate_nodes_for_molecular_graph(
@@ -195,18 +210,21 @@ async def run_retro_planner(
     if azf.RetroPlanner.finder is None:
         report_init = True
         await clogger.info("Initializing AiZynthFinder")
-    planner = azf.RetroPlanner(configfile=config_file)
+    planner = await asyncio.to_thread(_create_retro_planner_sync, config_file)
     if report_init:
-        await clogger.info("AiZynthFinder initialization complete")
+        await clogger.info(
+            "AiZynthFinder initialization complete. Planning synthesis routes..."
+        )
+        await asyncio.sleep(0)
 
-    _, _, routes = planner.plan(smiles)
+    routes, trees = await asyncio.to_thread(_run_retro_planner_sync, planner, smiles)
+
     if len(routes) == 0:  # No routes found
         return None, []
 
     assert planner.finder is not None
     await clogger.info(f"Found {len(routes)} routes for {smiles}.")
 
-    trees = planner.finder.routes.reaction_trees
     rpaths = [azf.ReactionPath(route) for route in routes]
 
     # All other routes become reaction alternatives

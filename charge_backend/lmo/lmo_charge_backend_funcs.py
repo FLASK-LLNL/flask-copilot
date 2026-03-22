@@ -369,6 +369,7 @@ async def generate_lead_molecule(
                 if run_settings.prompt_debugging:
                     await debug_prompt_task(lmo_task, websocket)
                 await experiment.run_async(log_progress, callback=callback)
+                await callback.drain()
                 finished_tasks = experiment.get_finished_tasks()
                 _, results = finished_tasks[-1]
 

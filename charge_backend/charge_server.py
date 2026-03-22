@@ -310,7 +310,7 @@ async def websocket_endpoint(websocket: WebSocket):
     except httpx.ConnectError as e:
         logger.error(f"Connection error: {e}")
     except Exception as e:
-        logger.error(f"Error in WebSocket connection: {e}")
+        logger.exception(f"Error in WebSocket connection: {e}")
     finally:
         await task_manager.close()
 
