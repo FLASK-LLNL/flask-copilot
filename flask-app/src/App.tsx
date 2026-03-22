@@ -152,6 +152,7 @@ const ChemistryTool: React.FC = () => {
   const treeNodesRef = useRef(treeNodes);
   const edgesRef = useRef(edges);
   const sidebarStateRef = useRef(sidebarState);
+  const hasInitializedToolSelectionRef = useRef(false);
 
   const [selectedTools, setSelectedTools] = useState<number[]>([]);
   const [availableToolsMap, setAvailableToolsMap] = useState<SelectableTool[]>([]);
@@ -171,11 +172,17 @@ const ChemistryTool: React.FC = () => {
     }
   }, [treeNodes, selectedReactionNode]);
 
-  // Auto-select all tools when they first become available
+  // Auto-select all tools only on the first non-empty tool list load.
   useEffect(() => {
-    if (availableToolsMap.length > 0 && selectedTools.length === 0) {
+    if (availableToolsMap.length === 0) {
+      hasInitializedToolSelectionRef.current = false;
+      return;
+    }
+
+    if (!hasInitializedToolSelectionRef.current && selectedTools.length === 0) {
       const allToolIds = availableToolsMap.map((tool) => tool.id);
       setSelectedTools(allToolIds);
+      hasInitializedToolSelectionRef.current = true;
       console.log('Auto-selected all tools:', allToolIds);
     }
   }, [availableToolsMap, selectedTools.length]);
@@ -1405,7 +1412,7 @@ const ChemistryTool: React.FC = () => {
                       {wsConnected && availableTools.length > 0 && (
                         <div className="mt-3 pt-2 border-t border-secondary">
                           <div className="text-tertiary text-xs font-semibold mb-1.5">
-                            Available Tool Servers ({availableTools.length})
+                            Available Tools ({availableTools.length})
                           </div>
                           <div className="custom-scrollbar max-h-60 overflow-y-auto pr-1">
                             {availableTools.map((tool, idx) => (
@@ -1413,8 +1420,13 @@ const ChemistryTool: React.FC = () => {
                                 key={idx}
                                 className="text-xs bg-secondary rounded px-2 py-1 mb-1"
                               >
-                                <div className="text-secondary font-medium">
-                                  {tool.server || ('server' as string)}
+                                <div className="flex items-center justify-between gap-2">
+                                  <div className="text-secondary font-medium">
+                                    {tool.server || ('server' as string)}
+                                  </div>
+                                  <div className="text-[10px] uppercase tracking-wide text-tertiary">
+                                    {tool.kind === 'builtin' ? 'Built-in' : 'MCP'}
+                                  </div>
                                 </div>
                                 {tool.names && (
                                   <div className="text-tertiary mt-0.5 text-[10px] leading-tight">
@@ -1427,9 +1439,7 @@ const ChemistryTool: React.FC = () => {
                         </div>
                       )}
                       {wsConnected && availableTools.length === 0 && (
-                        <div className="mt-2 text-tertiary text-xs italic">
-                          No MCP tool servers detected!
-                        </div>
+                        <div className="mt-2 text-tertiary text-xs italic">No tools detected.</div>
                       )}
                     </div>
                     {!wsConnected && !wsReconnecting && (

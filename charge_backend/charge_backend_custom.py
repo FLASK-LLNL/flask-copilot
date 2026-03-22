@@ -7,7 +7,7 @@ from charge.tasks.task import Task
 from backend_helper_funcs import Node, CallbackHandler, FlaskRunSettings
 from moleculedb.molecule_naming import smiles_to_html
 from charge_backend.prompt_debugger import debug_prompt
-from typing import Callable, Optional
+from typing import Any, Callable, Optional
 
 
 async def run_custom_problem(
@@ -16,6 +16,7 @@ async def run_custom_problem(
     user_prompt: str,
     experiment: Experiment,
     available_tools: list[str],
+    builtin_tools: Optional[list[Callable[..., Any]]],
     websocket: WebSocket,
     run_settings: FlaskRunSettings,
     log_progress: ReasoningCallbackType,
@@ -24,15 +25,18 @@ async def run_custom_problem(
         system_prompt=system_prompt,
         user_prompt=user_prompt + "\n\nInitial SMILES string: " + start_smiles,
         server_urls=available_tools,
+        builtin_tools=builtin_tools or [],
     )
+    callback_handler = CallbackHandler(websocket)
     agent = experiment.create_agent_with_experiment_state(
         task=task,
-        callback=CallbackHandler(websocket),
+        callback=callback_handler,
     )
 
     if run_settings.prompt_debugging:
         await debug_prompt(agent, websocket)
     result = await agent.run(log_progress)
+    await callback_handler.drain()
     experiment.add_to_context(agent, task, result)
     await websocket.send_json(
         {

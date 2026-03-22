@@ -15,7 +15,7 @@ from charge_backend.lmo.lmo_task import (
     LMOTask as LeadMoleculeOptimization,
     MoleculeOutputSchema,
 )
-from typing import Optional
+from typing import Any, Callable, Optional
 from backend_helper_funcs import (
     Node,
     Edge,
@@ -55,6 +55,7 @@ async def generate_lead_molecule(
     max_retries: int,
     depth: int,
     available_tools: list[str],
+    builtin_tools: Optional[list[Callable[..., Any]]],
     websocket: WebSocket,
     run_settings: FlaskRunSettings,
     log_progress: ReasoningCallbackType,
@@ -322,6 +323,7 @@ async def generate_lead_molecule(
         property_tool_name=calculate_property_tool,
         property_name=property,
         server_urls=available_tools,
+        builtin_tools=builtin_tools or [],
     )
     await lmo_task.get_initial_property_value()
 
@@ -367,6 +369,7 @@ async def generate_lead_molecule(
                 if run_settings.prompt_debugging:
                     await debug_prompt_task(lmo_task, websocket)
                 await experiment.run_async(log_progress, callback=callback)
+                await callback.drain()
                 finished_tasks = experiment.get_finished_tasks()
                 _, results = finished_tasks[-1]
 
@@ -522,6 +525,7 @@ async def generate_lead_molecule(
                         property_tool_name=calculate_property_tool,
                         property_name=property,
                         server_urls=available_tools,
+                        builtin_tools=builtin_tools or [],
                     )
                     await lmo_task.get_initial_property_value()
 
