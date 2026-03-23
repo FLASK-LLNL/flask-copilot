@@ -601,6 +601,7 @@ const ChemistryTool: React.FC = () => {
             setIsComputing(false);
             setIsComputingTemplates(false);
             unhighlightNodes();
+            setTreeNodes(clearLeafReactions);
             saveStateToExperiment();
             break;
           }
@@ -608,6 +609,7 @@ const ChemistryTool: React.FC = () => {
             setIsComputing(false);
             setIsComputingTemplates(false);
             unhighlightNodes();
+            setTreeNodes(clearLeafReactions);
             saveStateToExperiment();
             break;
           }
