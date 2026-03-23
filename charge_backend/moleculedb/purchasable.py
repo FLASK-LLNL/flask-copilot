@@ -2,6 +2,7 @@ import functools
 import sqlite3
 import os
 import pandas as pd
+from typing import Annotated
 
 try:
     from rdkit import Chem
@@ -97,14 +98,16 @@ MOLDB_CONNECTION = None
 
 
 @functools.cache
-def is_purchasable(smiles: str) -> list[str]:
+def is_purchasable(
+    smiles: Annotated[str, "A SMILES string of the molecule to check"],
+) -> list[str]:
     """
     Checks whether a molecule is purchasable and returns a list of sources
     that provide it.
 
-    :param conn: A connection to a moleculedb database
-    :param inchi: The InChI of the molecule to query
-    :return: A list of strings representing the purchase sources
+    :param smiles: A SMILES string of the molecule to check.
+    :return: A list of strings representing the purchase sources. If not
+             purchasable, returns an empty list.
     """
     result: list[str] = []
     if Chem is None:

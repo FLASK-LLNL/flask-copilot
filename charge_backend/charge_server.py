@@ -37,6 +37,7 @@ from lc_conductor.tool_registration import (
 
 from lc_conductor import TaskManager
 from backend_manager import FlaskActionManager
+from builtin_tools import list_builtin_tool_definitions
 from charge_backend import prompt_debugger
 
 # Pydantic models for new endpoints
@@ -244,7 +245,13 @@ async def websocket_endpoint(websocket: WebSocket):
 
     task_manager = TaskManager(websocket)
 
-    action_manager = FlaskActionManager(task_manager, experiment, args, username)
+    action_manager = FlaskActionManager(
+        task_manager,
+        experiment,
+        args,
+        username,
+        builtin_tool_definitions=list_builtin_tool_definitions(),
+    )
     await action_manager.report_orchestrator_config()
 
     action_handlers = {
@@ -303,7 +310,7 @@ async def websocket_endpoint(websocket: WebSocket):
     except httpx.ConnectError as e:
         logger.error(f"Connection error: {e}")
     except Exception as e:
-        logger.error(f"Error in WebSocket connection: {e}")
+        logger.exception(f"Error in WebSocket connection: {e}")
     finally:
         await task_manager.close()
 

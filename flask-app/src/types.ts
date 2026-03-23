@@ -59,6 +59,8 @@ export interface Edge {
 }
 
 export interface Tool {
+  kind?: 'mcp' | 'builtin';
+  identifier?: string;
   server?: string;
   names?: string[];
   description?: string;

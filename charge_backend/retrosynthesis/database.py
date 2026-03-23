@@ -1,7 +1,7 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, asdict
 from fastapi import WebSocket
 import os
-from typing import Any, Callable, Literal
+from typing import Annotated, Any, Callable, Literal
 
 from charge_backend.retrosynthesis.context import RetrosynthesisContext
 from lc_conductor.callback_logger import CallbackLogger
@@ -67,6 +67,87 @@ def _smiles_to_inchi(smiles: str) -> str | None:
         return None
     inchi = Chem.MolToInchi(mol)
     return str(inchi)
+
+
+# This function is intended to be a built-in tool for the AI orchestrator
+def query_reaction_database(
+    product_smiles: Annotated[
+        str,
+        "A reaction product as a SMILES string to "
+        "look up. Known reactions that result in this "
+        "molecule will be returned.",
+    ],
+    top_k: Annotated[int, "The maximum number of entries to return"],
+) -> list[dict[str, Any]]:
+    """
+    Looks up a reaction based on the given product and returns a list of
+    dictionaries for each reaction found. If an error has occurred, returns
+    a single entry with an "error" key.
+    """
+    # Load state
+    global REACTIONDB_HANDLE
+    global db_entry_to_reaction
+    if REACTIONDB_HANDLE is None:
+        if os.path.exists(REACTIONDB_PATH):
+            REACTIONDB_HANDLE = ReactionDatabaseReader(REACTIONDB_PATH)
+        else:
+            return [dict(error="Cannot load database")]
+    if db_entry_to_reaction is None:
+        if not os.path.exists(REACTIONDB_PARSER_PATH):
+            return [dict(error="Cannot load database")]
+        mod = import_from_path("parse_entry", REACTIONDB_PARSER_PATH)
+        if mod is None:
+            return [dict(error="Cannot load database")]
+        db_entry_to_reaction = mod.db_entry_to_reaction
+        if db_entry_to_reaction is None:
+            return [dict(error="Cannot load database")]
+
+    product_inchi = _smiles_to_inchi(product_smiles)
+    if product_inchi is None:
+        return [
+            dict(error="Cannot convert SMILES to InChI; the molecule may be invalid")
+        ]
+
+    entries = REACTIONDB_HANDLE.get(product_inchi)
+    if not entries:
+        return []
+
+    # Process database entries
+    processed = [db_entry_to_reaction(product_inchi, entry) for entry in entries]
+    # Sort entries by ones having a description coming first
+    processed_entries = [e for e in processed if e.text] + [
+        e for e in processed if not e.text
+    ]
+
+    # Optionally filter reactions where the product appears as a reactant
+    processed_entries = [
+        e
+        for e in processed_entries
+        if not any(
+            c["inchi"] == product_inchi and c["role"] != "Product"
+            for c in e.components
+            if "role" in c and "inchi" in c
+        )
+    ]
+
+    # Sort so entries where product appears first come first
+    processed_entries.sort(
+        key=lambda e: not next(
+            (
+                c["inchi"] == product_inchi
+                for c in e.components
+                if "role" in c and "inchi" in c
+            ),
+            False,
+        )
+    )
+
+    # Trim to top k values
+    if len(processed_entries) > top_k:
+        processed_entries = processed_entries[:top_k]
+
+    # Convert to dictionaries and return
+    return [asdict(e) for e in processed_entries]
 
 
 async def find_exact_reactions(
