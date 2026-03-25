@@ -66,7 +66,7 @@ import {
 import { CombinedCustomizationModal } from './components/combined_customization_modal';
 import { Modal } from './components/modal';
 
-import { findAllDescendants, isRootNode, relayoutTree } from './tree_utils';
+import { clearLeafReactions, findAllDescendants, isRootNode, relayoutTree } from './tree_utils';
 import { copyToClipboard } from './utils';
 
 import './animations.css';
@@ -360,7 +360,10 @@ const ChemistryTool: React.FC = () => {
     data.customPropertyAscending !== undefined &&
       setCustomPropertyAscending(data.customPropertyAscending);
     data.customization && setCustomization(data.customization);
-    data.treeNodes && setTreeNodes(data.treeNodes);
+    if (data.treeNodes) {
+      data.treeNodes = clearLeafReactions(data.treeNodes!);
+      setTreeNodes(data.treeNodes);
+    }
     data.edges && setEdges(data.edges);
     data.metricsHistory && metricsDashboardState.setMetricsHistory(data.metricsHistory);
     data.visibleMetrics && metricsDashboardState.setVisibleMetrics(data.visibleMetrics);
@@ -375,13 +378,16 @@ const ChemistryTool: React.FC = () => {
     }
 
     // I was getting "websocket not connected" alerts
-    if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+    if (
       (data.experimentContext || data.treeNodes) &&
-        sendMessageToServer('load-context', {
-          experimentContext: data.experimentContext,
-          nodes: data.treeNodes,
-          problemType: data.problemType,
-        });
+      wsRef.current &&
+      wsRef.current.readyState === WebSocket.OPEN
+    ) {
+      sendMessageToServer('load-context', {
+        ...(data.experimentContext && { experimentContext: data.experimentContext! }),
+        ...(data.treeNodes && { nodes: data.treeNodes! }),
+        problemType: data.problemType,
+      });
     }
   };
 
@@ -595,6 +601,7 @@ const ChemistryTool: React.FC = () => {
             setIsComputing(false);
             setIsComputingTemplates(false);
             unhighlightNodes();
+            setTreeNodes(clearLeafReactions);
             saveStateToExperiment();
             break;
           }
@@ -602,6 +609,7 @@ const ChemistryTool: React.FC = () => {
             setIsComputing(false);
             setIsComputingTemplates(false);
             unhighlightNodes();
+            setTreeNodes(clearLeafReactions);
             saveStateToExperiment();
             break;
           }
