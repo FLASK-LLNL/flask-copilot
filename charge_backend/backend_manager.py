@@ -620,7 +620,10 @@ class FlaskActionManager(ActionManager):
                 reaction_dict = n["reaction"]
 
                 # Deserialize each reaction alternative (optional)
-                if "alternatives" in reaction_dict:
+                if (
+                    "alternatives" in reaction_dict
+                    and reaction_dict["alternatives"] is not None
+                ):
                     reaction_alternatives = reaction_dict["alternatives"]
 
                     # Deserialize all the pathways (not optional)
