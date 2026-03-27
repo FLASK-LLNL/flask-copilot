@@ -616,7 +616,7 @@ class FlaskActionManager(ActionManager):
             del n["yield"]
 
             # Deserialize the reaction (optional)
-            if "reaction" in n:
+            if "reaction" in n and n["reaction"] is not None:
                 reaction_dict = n["reaction"]
 
                 # Deserialize each reaction alternative (optional)
