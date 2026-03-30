@@ -132,13 +132,15 @@ def query_reaction_database(
 
     # Sort so entries where product appears first come first
     processed_entries.sort(
-        key=lambda e: not next(
-            (
-                c["inchi"] == product_inchi
-                for c in e.components
-                if "role" in c and "inchi" in c
-            ),
-            False,
+        key=lambda e: (
+            not next(
+                (
+                    c["inchi"] == product_inchi
+                    for c in e.components
+                    if "role" in c and "inchi" in c
+                ),
+                False,
+            )
         )
     )
 
@@ -219,18 +221,19 @@ async def find_exact_reactions(
 
     # Sort so entries where product appears first come first
     processed_entries.sort(
-        key=lambda e: not next(
-            (
-                c["inchi"] == product_inchi
-                for c in e.components
-                if "role" in c and "inchi" in c
-            ),
-            False,
+        key=lambda e: (
+            not next(
+                (
+                    c["inchi"] == product_inchi
+                    for c in e.components
+                    if "role" in c and "inchi" in c
+                ),
+                False,
+            )
         )
     )
 
     for i, processed in enumerate(processed_entries):
-
         # Create pathway with reagents
         reactant_smiles: list[str] = []
         reactant_labels: list[str] = []
@@ -305,6 +308,6 @@ async def find_exact_reactions(
                     parentId=product.id,
                     purchasable=(len(mol_sources) > 0),
                 )
-                await context.add_node(node, product, websocket)
+                await context.add_node(node, websocket)
 
     return result

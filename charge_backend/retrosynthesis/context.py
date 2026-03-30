@@ -6,9 +6,17 @@ from collections import defaultdict
 from dataclasses import dataclass, field
 from charge.clients.agent_factory import Agent
 from fastapi import WebSocket
-from typing import Optional
+from typing import Optional, Any
+from uuid import uuid4
 
-from backend_helper_funcs import Node, Edge, calculate_positions
+from backend_helper_funcs import (
+    Node,
+    Edge,
+    PathwayStep,
+    Reaction,
+    ReactionAlternative,
+    calculate_positions,
+)
 
 
 @dataclass
@@ -105,8 +113,8 @@ class RetrosynthesisContext:
     async def add_node(
         self,
         node: Node,
-        parent: Optional[Node] = None,
         websocket: Optional[WebSocket] = None,
+        edge: Optional[Edge] = None,
     ):
         """
         Add a new node to the context and molecule graph.
@@ -114,6 +122,7 @@ class RetrosynthesisContext:
         :param node: The new node to add
         :param parent: If not None, generates an edge from ``parent`` to ``node``.
         :param websocket: If not None, notifies websocket of addition.
+        :param edge: If not None, use this edge instead of generating one.
         """
         if node.id in self.node_ids:
             raise FileExistsError(f"Node with ID {node.id} already exists in context")
@@ -127,9 +136,13 @@ class RetrosynthesisContext:
         if websocket is not None:
             await websocket.send_json({"type": "node", "node": node.json()})
 
-        if parent is not None:
-            self.parents[node.id] = parent.id
-            edge = Edge(f"edge_{parent.id}_{node.id}", parent.id, node.id, "complete")
+        if node.parentId is not None:
+            assert (
+                node.parentId in self.node_ids
+            )  # Parents must be added before children
+            self.parents[node.id] = node.parentId
+            if edge is None:
+                edge = Edge(f"edge_{uuid4()}", node.parentId, node.id, "complete")
             self.edges[edge.id] = edge
             if websocket is not None:
                 await websocket.send_json({"type": "edge", "edge": edge.json()})
@@ -172,6 +185,69 @@ class RetrosynthesisContext:
             await websocket.send_json({"type": "node_delete", "nodeId": node_id})
 
         self.recalculate_nodes_per_level()
+
+    async def load_state(self, data: dict[str, Any]) -> None:
+        self.reset()  # Start from a clean slate
+
+        # Sort the node list so parents are guaranteed to be added
+        # first. If a parent is missing, the child's assertion (if
+        # __debug__) will trigger.
+        node_data = data.get("nodes", [])
+        node_data.sort(
+            key=lambda x: (
+                x["parentId"] if "parentId" in x and x["parentId"] is not None else ""
+            )
+        )
+
+        # We explicitly restore edges now because of the UUID. The
+        # worldview is node-centric, so any edge that doesn't match a
+        # node will just be ignored.
+        edge_data = data.get("edges", [])
+
+        # Deserialize each node (manually, for now).
+        for n in node_data:
+            n["yield_"] = n["yield"]
+            del n["yield"]
+
+            # Deserialize the reaction (optional)
+            if "reaction" in n and n["reaction"] is not None:
+                reaction_dict = n["reaction"]
+
+                # Deserialize each reaction alternative (optional)
+                if (
+                    "alternatives" in reaction_dict
+                    and reaction_dict["alternatives"] is not None
+                ):
+                    reaction_alternatives = reaction_dict["alternatives"]
+
+                    # Deserialize all the pathways (not optional)
+                    for alternative_dict in reaction_alternatives:
+                        alternative_dict["pathway"] = [
+                            PathwayStep(**pws) for pws in alternative_dict["pathway"]
+                        ]
+
+                    reaction_dict["alternatives"] = [
+                        ReactionAlternative(**ra) for ra in reaction_alternatives
+                    ]
+
+                n["reaction"] = Reaction(**reaction_dict)
+
+            # Find a matching edge, if one is needed.
+            edge = (
+                next(
+                    filter(
+                        lambda e: (
+                            e["fromNode"] == n["parentId"] and e["toNode"] == n["id"]
+                        ),
+                        edge_data,
+                    ),
+                    None,
+                )
+                if "parentId" in n and n["parentId"] is not None
+                else None
+            )
+
+            await self.add_node(Node(**n), edge)
 
     def new_node_id(self) -> str:
         """

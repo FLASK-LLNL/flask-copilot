@@ -545,9 +545,7 @@ const ChemistryTool: React.FC = () => {
               setIsComputing(false);
               setIsComputingTemplates(false);
             }
-            setTreeNodes((prev) =>
-              prev.map((n) => (n.id === data.node!.id ? { ...n, ...restData } : n))
-            );
+            setTreeNodes((prev) => prev.map((n) => (n.id === id ? { ...n, ...restData } : n)));
             break;
           }
           case 'node_delete': {
@@ -566,20 +564,16 @@ const ChemistryTool: React.FC = () => {
           }
           case 'edge_update': {
             const { id, ...restData } = data.edge!;
-            setEdges((prev) =>
-              prev.map((e) => (e.id === data.edge!.id ? { ...e, ...restData } : e))
-            );
+            setEdges((prev) => prev.map((e) => (e.id === id ? { ...e, ...restData } : e)));
             break;
           }
           case 'subtree_update': {
             const withNode = data.withNode || false;
             const { id, ...restData } = data.node!;
             setTreeNodes((prev) => {
-              const descendants = findAllDescendants(data.node!.id, prev);
+              const descendants = findAllDescendants(id, prev);
               return prev.map((n) =>
-                descendants.has(n.id) || (withNode && n.id === data.node!.id)
-                  ? { ...n, ...restData }
-                  : n
+                descendants.has(n.id) || (withNode && n.id === id) ? { ...n, ...restData } : n
               );
             });
             break;
