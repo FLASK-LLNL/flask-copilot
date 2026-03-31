@@ -6,6 +6,7 @@ import sys
 import os
 from pathlib import Path
 import json
+from uuid import uuid4
 from charge.clients.agent_factory import ReasoningCallbackType
 from charge.experiments.experiment import Experiment
 from charge.utils.mcp_workbench_utils import call_mcp_tool_directly
@@ -197,8 +198,9 @@ async def generate_lead_molecule(
 
         await websocket.send_json({"type": "node", "node": node.json()})
 
+    initial_edge_uuid = uuid4()
     edge_data = Edge(
-        id=f"edge_{node_id}_{node_id + 1}",
+        id=f"edge_{initial_edge_uuid}",
         fromNode=f"node_{node_id}",
         toNode=f"node_{node_id + 1}",
         status="computing",
@@ -352,7 +354,7 @@ async def generate_lead_molecule(
                 "type": "response",
                 "message": {
                     "source": "Logger (Info)",
-                    "message": f"Iteration {i+1}/{depth}",
+                    "message": f"Iteration {i + 1}/{depth}",
                 },
             }
         )
@@ -585,7 +587,7 @@ async def generate_lead_molecule(
     )
 
     edge_data = Edge(
-        id=f"edge_{initial_node_id}_{initial_node_id + 1}",
+        id=f"edge_{initial_edge_uuid}",
         fromNode=f"node_{initial_node_id}",
         toNode=f"node_{initial_node_id + 1}",
         status="complete",

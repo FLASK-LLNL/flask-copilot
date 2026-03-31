@@ -236,7 +236,7 @@ async def ai_based_retrosynthesis(
         new_nodes.append(node)
         purchasable.append(len(mol_sources) > 0)
         # Add and stream node directly
-        await context.add_node(node, current_node, websocket)
+        await context.add_node(node, websocket)
         await asyncio.sleep(0)
 
     for node, purch in zip(new_nodes, purchasable):

@@ -106,7 +106,7 @@ async def set_reaction_alternative(
                     purchasable=(len(mol_sources) > 0),
                 )
                 step_nodes[i].append(child_node)
-                await context.add_node(child_node, parent_node, websocket)
+                await context.add_node(child_node, websocket)
 
                 children_by_parent[parent_node.id].append(smiles)
 
@@ -123,7 +123,7 @@ async def set_reaction_alternative(
             except IndexError as e:
                 await clogger.error(
                     f"Index error when setting reaction alternative: parent index {parent} "
-                    f"out of range for step {i-1}. Error: {e}"
+                    f"out of range for step {i - 1}. Error: {e}"
                 )
 
         # After expanding this step, attach mappedReaction objects for each parent

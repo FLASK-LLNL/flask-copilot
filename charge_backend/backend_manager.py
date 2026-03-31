@@ -596,56 +596,10 @@ class FlaskActionManager(ActionManager):
             }
         )
 
-    async def restore_retrosynth_context(self, ctxt: RetrosynthesisContext, data: dict):
-        node_data = data.get("nodes", [])
-
-        # Deserialize each node.
-        #
-        # Nodes are complex objects, and there doesn't seem to be a
-        # built-in way to deserialize dict->(object of some dataclass)
-        # automatically. The simplistic dict-expansion approach just
-        # writes dicts to subobjects even if they're annotated as some
-        # complex type. There seem to be robust library solutions that
-        # properly handle subobjects ("dacite" comes up in many search
-        # results), but I'm hesitant to pull in more dependencies for
-        # a one-off task. So we "brute-force" it here, but it would be
-        # good to keep an eye for other such situations and pursue
-        # better solutions accordingly.
-        for n in node_data:
-            n["yield_"] = n["yield"]
-            del n["yield"]
-
-            # Deserialize the reaction (optional)
-            if "reaction" in n and n["reaction"] is not None:
-                reaction_dict = n["reaction"]
-
-                # Deserialize each reaction alternative (optional)
-                if (
-                    "alternatives" in reaction_dict
-                    and reaction_dict["alternatives"] is not None
-                ):
-                    reaction_alternatives = reaction_dict["alternatives"]
-
-                    # Deserialize all the pathways (not optional)
-                    for alternative_dict in reaction_alternatives:
-                        alternative_dict["pathway"] = [
-                            PathwayStep(**pws) for pws in alternative_dict["pathway"]
-                        ]
-
-                    reaction_dict["alternatives"] = [
-                        ReactionAlternative(**ra) for ra in reaction_alternatives
-                    ]
-
-                n["reaction"] = Reaction(**reaction_dict)
-
-            await ctxt.add_node(Node(**n))
-
     async def handle_load_state(self, data: dict, *args, **kwargs) -> None:
         await super().handle_load_state(data, *args, **kwargs)
 
         problem_type = data.get("problemType")
         if problem_type == "retrosynthesis":
             if not self.retro_synth_context:
-                await self.restore_retrosynth_context(
-                    self.get_retro_synth_context(), data
-                )
+                await self.get_retro_synth_context().load_state(data)

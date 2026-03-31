@@ -113,7 +113,7 @@ async def generate_nodes_for_molecular_graph(
                     node_id=node_id_str,
                     smiles=smiles,
                 )
-        await retro_synth_context.add_node(node, parent, websocket)
+        await retro_synth_context.add_node(node, websocket)
 
         for child_id in current_node.children:
             child_node = reaction_path_dict[child_id]
@@ -175,7 +175,7 @@ def make_reaction_alternative(
 
     return ReactionAlternative(
         f"reaction_{rpath.root.node_id}_{id}",
-        f"Reaction {id+1} ({prevalence} occurences)",
+        f"Reaction {id + 1} ({prevalence} occurences)",
         "template",
         "active" if id == 0 and not all_inactive else "available",
         pathway,
@@ -299,7 +299,7 @@ async def template_based_retrosynthesis(
         y=100,
     )
     context.reset()  # Clear context
-    await context.add_node(root, parent=None, websocket=websocket)
+    await context.add_node(root, websocket=websocket)
 
     await clogger.info("Searching for exact matches...")
     reaction = await find_exact_reactions(
