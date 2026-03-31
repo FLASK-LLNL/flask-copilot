@@ -26,7 +26,6 @@ RUN . $HOME/.nvm/nvm.sh && npm run build
 # Switch back to the flask-app to build copilot
 WORKDIR /app/flask-app
 RUN . $HOME/.nvm/nvm.sh && \
-    npm install -g npm@latest && \
     npm install && \
     rm -rf node_modules/.vite dist .vite
 RUN . $HOME/.nvm/nvm.sh && npm run build
