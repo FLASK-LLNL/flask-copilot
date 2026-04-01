@@ -386,6 +386,7 @@ const ChemistryTool: React.FC = () => {
       sendMessageToServer('load-context', {
         ...(data.experimentContext && { experimentContext: data.experimentContext! }),
         ...(data.treeNodes && { nodes: data.treeNodes! }),
+        ...(data.edges && { edges: data.edges }),
         problemType: data.problemType,
       });
     }
