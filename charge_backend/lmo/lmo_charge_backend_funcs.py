@@ -138,26 +138,34 @@ async def generate_lead_molecule(
     node_id = initial_node_id
 
     # Fix how the available tools interacts with the calculate property tool field
-    property_result_msg = await call_mcp_tool_directly(
-        tool_name=calculate_property_tool,
-        arguments={
-            "smiles": lead_molecule_smiles,
-            "property": property,
-        },
-        urls=tool_runtime.mcp_server_urls,
-    )
     try:
-        property_name, property_result = json.loads(property_result_msg.content)
-    except json.decoder.JSONDecodeError as err:
-        msg = f"{calculate_property_tool} returned a bare string, not a json message: {property_result_msg}"
-        await clogger.error(msg)
-        raise ValueError(msg)
+        property_result_msg = await call_mcp_tool_directly(
+            tool_name=calculate_property_tool,
+            arguments={
+                "smiles": lead_molecule_smiles,
+                "property": property,
+            },
+            urls=tool_runtime.mcp_server_urls,
+        )
+
+        try:
+            property_name, property_result = json.loads(property_result_msg.content)
+        except json.decoder.JSONDecodeError as err:
+            msg = f"{calculate_property_tool} returned a bare string, not a json message: {property_result_msg}"
+            await clogger.error(msg)
+            raise ValueError(msg)
+
+    except ValueError:
+        # No such tool
+        property_result = None
 
     lead_molecule_data = post_process_lmo_smiles(
         smiles=lead_molecule_smiles,
         parent_id=parent_id - 1,
         node_id=node_id,
-        tool_properties={property: property_result},
+        tool_properties=(
+            {property: property_result} if property_result is not None else {}
+        ),
     )
 
     # Start the db with the lead molecule

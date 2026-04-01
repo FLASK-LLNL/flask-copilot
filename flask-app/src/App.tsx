@@ -63,7 +63,6 @@ import {
   BACKEND_OPTIONS,
   handleLocalMcpProxyRequest,
 } from 'lc-conductor';
-import type { ToolServer } from 'lc-conductor';
 
 import { CombinedCustomizationModal } from './components/combined_customization_modal';
 import { Modal } from './components/modal';
@@ -75,44 +74,6 @@ import './animations.css';
 import { MetricsDashboard, useMetricsDashboardState } from './components/metrics';
 import { useProjectData } from './hooks/useProjectData';
 import { ReactionAlternativesSidebar } from './components/reaction_alternatives';
-const normalizeToolServers = (settings?: Partial<FlaskOrchestratorSettings>): ToolServer[] => {
-  const nextServers: ToolServer[] = [];
-  const seen = new Set<string>();
-
-  const addServer = (server: ToolServer, fallbackScope: ToolServer['scope']) => {
-    const scope = server.scope === 'local' ? 'local' : fallbackScope || 'backend';
-    const key = `${scope}:${server.url}`;
-    if (!server.url || seen.has(key)) {
-      return;
-    }
-    seen.add(key);
-    nextServers.push({ ...server, scope });
-  };
-
-  (settings?.toolServers || []).forEach((server) => addServer(server, server.scope || 'backend'));
-
-  return nextServers;
-};
-
-const normalizeOrchestratorSettings = (
-  settings?: Partial<FlaskOrchestratorSettings>
-): FlaskOrchestratorSettings => {
-  const backend = settings?.backend || 'vllm';
-  const backendOption = BACKEND_OPTIONS.find((option) => option.value === backend);
-
-  return {
-    backend,
-    customUrl: settings?.customUrl || backendOption?.defaultUrl || 'http://localhost:8000/v1',
-    model: settings?.model || backendOption?.models[0] || 'gpt-oss',
-    reasoningEffort: settings?.reasoningEffort || 'medium',
-    apiKey: settings?.apiKey || '',
-    backendLabel: settings?.backendLabel || backendOption?.label || backend,
-    useCustomUrl: settings?.useCustomUrl || false,
-    useCustomModel: settings?.useCustomModel,
-    toolServers: normalizeToolServers(settings),
-    moleculeName: settings?.moleculeName,
-  };
-};
 
 const ChemistryTool: React.FC = () => {
   const [smiles, setSmiles] = useState<string>('');
@@ -245,16 +206,40 @@ const ChemistryTool: React.FC = () => {
     const saved = localStorage.getItem('orchestratorSettings');
     if (saved) {
       try {
-        return normalizeOrchestratorSettings(JSON.parse(saved));
+        const parsed = JSON.parse(saved);
+        return {
+          backend: parsed.backend || 'vllm',
+          useCustomUrl: parsed.useCustomUrl || false,
+          customUrl: parsed.customUrl || 'http://localhost:8000/v1',
+          model: parsed.model || 'gpt-oss',
+          reasoningEffort: parsed.reasoningEffort || 'medium',
+          apiKey: parsed.apiKey || '',
+          backendLabel: parsed.backendLabel || 'vLLM',
+          useCustomModel: parsed.useCustomModel,
+          toolServers: Array.isArray(parsed.toolServers) ? parsed.toolServers : [],
+          moleculeName: parsed.moleculeName,
+        };
       } catch (e) {
         console.error('Error parsing settings:', e);
       }
     }
-    return normalizeOrchestratorSettings();
+    return {
+      backend: 'vllm',
+      useCustomUrl: false,
+      customUrl: 'http://localhost:8000/v1',
+      model: 'gpt-oss',
+      reasoningEffort: 'medium',
+      apiKey: '',
+      backendLabel: 'vLLM',
+      toolServers: [],
+    };
   };
   const [orchestratorSettings, setOrchestratorSettings] =
     useState<FlaskOrchestratorSettings>(getInitialSettings());
   const orchestratorSettingsRef = useRef(orchestratorSettings);
+  const hasSavedOrchestratorSettingsRef = useRef<boolean>(
+    localStorage.getItem('orchestratorSettings') !== null
+  );
 
   useEffect(() => {
     orchestratorSettingsRef.current = orchestratorSettings;
@@ -279,7 +264,8 @@ const ChemistryTool: React.FC = () => {
         JSON.stringify({
           action: 'ui-update-orchestrator-settings',
           backend: settings.backend,
-          customUrl: settings.customUrl,
+          useCustomUrl: settings.useCustomUrl,
+          customUrl: settings.useCustomUrl ? settings.customUrl : '',
           model: settings.model,
           reasoningEffort: settings.reasoningEffort,
           apiKey: settings.apiKey,
@@ -333,6 +319,7 @@ const ChemistryTool: React.FC = () => {
     };
     setOrchestratorSettings(updatedSettings);
     orchestratorSettingsRef.current = updatedSettings;
+    hasSavedOrchestratorSettingsRef.current = true;
     localStorage.setItem('orchestratorSettings', JSON.stringify(updatedSettings));
 
     // Note: The molecule name is sent to backend as part of runSettings
@@ -349,15 +336,14 @@ const ChemistryTool: React.FC = () => {
     }
     console.log(`Updated Settings Saved`);
 
-    const normalizedSettings = normalizeOrchestratorSettings(settings);
-
     // Update local state immediately
-    setOrchestratorSettings(normalizedSettings);
-    orchestratorSettingsRef.current = normalizedSettings;
-    localStorage.setItem('orchestratorSettings', JSON.stringify(normalizedSettings));
+    setOrchestratorSettings(settings);
+    orchestratorSettingsRef.current = settings;
+    hasSavedOrchestratorSettingsRef.current = true;
+    localStorage.setItem('orchestratorSettings', JSON.stringify(settings));
 
     if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
-      sendOrchestratorSettingsToBackend(normalizedSettings);
+      sendOrchestratorSettingsToBackend(settings);
       // Refresh tools list after updating settings
       console.log('🔄 Refreshing tools list after settings update');
       refreshToolsList();
@@ -586,7 +572,9 @@ const ChemistryTool: React.FC = () => {
 
       loadStateFromCurrentExperiment();
 
-      sendOrchestratorSettingsToBackend(orchestratorSettingsRef.current);
+      if (hasSavedOrchestratorSettingsRef.current) {
+        sendOrchestratorSettingsToBackend(orchestratorSettingsRef.current);
+      }
       socket.send(JSON.stringify({ action: 'list-tools' }));
       socket.send(JSON.stringify({ action: 'get-username' }));
     };
@@ -695,13 +683,28 @@ const ChemistryTool: React.FC = () => {
             break;
           }
           case 'server-update-orchestrator-settings': {
-            // Handle orchestrator settings updates from server
-            const newSettings = normalizeOrchestratorSettings({
-              ...orchestratorSettingsRef.current,
-              ...data.orchestratorSettings,
-            });
+            if (hasSavedOrchestratorSettingsRef.current) {
+              console.log(
+                'Ignoring server orchestrator settings because local settings are already loaded',
+                data.orchestratorSettings
+              );
+              break;
+            }
+
+            const newSettings: FlaskOrchestratorSettings = {
+              backend: data.orchestratorSettings!.backend,
+              useCustomUrl: data.orchestratorSettings!.useCustomUrl,
+              customUrl: data.orchestratorSettings!.customUrl,
+              model: data.orchestratorSettings!.model,
+              reasoningEffort: data.orchestratorSettings!.reasoningEffort,
+              apiKey: data.orchestratorSettings!.apiKey,
+              backendLabel: data.orchestratorSettings!.backendLabel,
+              toolServers: data.orchestratorSettings!.toolServers || [],
+              moleculeName: data.orchestratorSettings!.moleculeName,
+            };
             setOrchestratorSettings(newSettings);
             orchestratorSettingsRef.current = newSettings;
+            hasSavedOrchestratorSettingsRef.current = true;
             console.log('Updating the orchestrator settings ', newSettings);
             localStorage.setItem('orchestratorSettings', JSON.stringify(newSettings));
             break;

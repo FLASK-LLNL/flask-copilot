@@ -3,7 +3,7 @@ from charge.tasks.task import Task
 from flask_tools.chemistry import smiles_utils
 from flask_tools.lmo.molecular_property_utils import get_density
 import charge.utils.helper_funcs
-from typing import Optional, List
+from typing import Optional, List, Tuple
 from pydantic import BaseModel, field_validator
 import json
 from loguru import logger
@@ -53,7 +53,7 @@ class MoleculeOutputSchema(BaseModel):
                 raise ValueError(f"Invalid SMILES string: {smiles}")
         return smiles_list
 
-    def as_list(self) -> List[str]:
+    def as_list(self) -> List[Tuple[str, float]]:
         return list(zip(self.smiles_list, self.property_list))
 
     def as_dict(self) -> dict:
@@ -136,21 +136,24 @@ class LMOTask(Task):
 
     async def get_initial_property_value(self) -> None:
         # Calculate the reference property value from the lead molecule
-        property_result_msg = await call_mcp_tool_directly(
-            tool_name=self.property_tool_name,
-            arguments={
-                "smiles": self.lead_molecule,
-                "property": self.property_name,
-            },
-            urls=self.server_urls or [],
-            paths=self.server_files or [],
-        )
         try:
-            property_name, property_result = json.loads(property_result_msg.content)
-        except json.decoder.JSONDecodeError as err:
-            msg = f"{self.property_tool_name} returned a bare string, not a json message: {property_result_msg}"
-            await logger.error(msg)
-            raise ValueError(msg)
+            property_result_msg = await call_mcp_tool_directly(
+                tool_name=self.property_tool_name,
+                arguments={
+                    "smiles": self.lead_molecule,
+                    "property": self.property_name,
+                },
+                urls=self.server_urls or [],
+                paths=self.server_files or [],
+            )
+            try:
+                property_name, property_result = json.loads(property_result_msg.content)
+            except json.decoder.JSONDecodeError as err:
+                msg = f"{self.property_tool_name} returned a bare string, not a json message: {property_result_msg}"
+                await logger.error(msg)
+                raise ValueError(msg)
+        except ValueError:
+            property_result = 0.0
 
         self.reference_property_value = property_result
 

@@ -203,6 +203,19 @@ async def _cancel_task_if_running(
         executor.shutdown(wait=False, cancel_futures=True)
 
 
+def _log_background_action_failure(task: asyncio.Task) -> None:
+    try:
+        exc = task.exception()
+    except asyncio.CancelledError:
+        logger.info("Background websocket action was cancelled")
+        return
+
+    if exc is None:
+        return
+
+    logger.exception(f"Background websocket action failed: {exc}")
+
+
 @app.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket):
     logger.info(f"Request for websocket received. Headers: {str(websocket.headers)}")
@@ -296,19 +309,18 @@ async def websocket_endpoint(websocket: WebSocket):
                     continue
 
                 if action in action_handlers:
-
-                    # Cancel any existing task before starting a new one
-                    await task_manager.cancel_current_task()
-
                     handler_func = action_handlers[action]
-                    await handler_func(data)
+                    if action == "list-tools":
+                        task = asyncio.create_task(handler_func(data))
+                        task.add_done_callback(_log_background_action_failure)
+                    else:
+                        await handler_func(data)
                 else:
                     logger.warning(
                         f"Unknown action received: {action} with data {data}"
                     )
             except ValueError as e:
                 logger.error(f"Error in internal loop connection: {e}")
-                await task_manager.cancel_current_task()
 
     except WebSocketDisconnect:
         logger.info("WebSocket disconnected")
