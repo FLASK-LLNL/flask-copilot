@@ -61,6 +61,7 @@ import {
   useSidebarState,
   MarkdownText,
   BACKEND_OPTIONS,
+  MCPConnectivityResult,
 } from 'lc-conductor';
 
 import { CombinedCustomizationModal } from './components/combined_customization_modal';
@@ -73,6 +74,7 @@ import './animations.css';
 import { MetricsDashboard, useMetricsDashboardState } from './components/metrics';
 import { useProjectData } from './hooks/useProjectData';
 import { ReactionAlternativesSidebar } from './components/reaction_alternatives';
+import { callLocalMcpTool, listLocalMcpTools, normalizeMcpUrl } from './mcp/local_mcp_client';
 
 const ChemistryTool: React.FC = () => {
   const [smiles, setSmiles] = useState<string>('');
@@ -217,10 +219,17 @@ const ChemistryTool: React.FC = () => {
       reasoningEffort: 'medium',
       apiKey: '',
       backendLabel: 'vLLM',
+      toolServers: [],
+      localToolServers: [],
     };
   };
   const [orchestratorSettings, setOrchestratorSettings] =
     useState<FlaskOrchestratorSettings>(getInitialSettings());
+  const orchestratorSettingsRef = useRef(orchestratorSettings);
+
+  useEffect(() => {
+    orchestratorSettingsRef.current = orchestratorSettings;
+  }, [orchestratorSettings]);
 
   // Add this helper function near the top of the ChemistryTool component
   const getDisplayUrl = (): string => {
@@ -230,6 +239,47 @@ const ChemistryTool: React.FC = () => {
     const backendOption = BACKEND_OPTIONS.find((opt) => opt.value === orchestratorSettings.backend);
     return backendOption?.defaultUrl || 'Not configured';
   };
+
+  const sendOrchestratorSettingsToBackend = useCallback(
+    (settings: FlaskOrchestratorSettings): void => {
+      if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) {
+        return;
+      }
+
+      wsRef.current.send(
+        JSON.stringify({
+          action: 'ui-update-orchestrator-settings',
+          backend: settings.backend,
+          customUrl: settings.customUrl,
+          model: settings.model,
+          reasoningEffort: settings.reasoningEffort,
+          apiKey: settings.apiKey,
+          localToolServers: settings.localToolServers || [],
+        })
+      );
+    },
+    []
+  );
+
+  const checkLocalMcpServerConnectivity = useCallback(
+    async (url: string): Promise<MCPConnectivityResult> => {
+      try {
+        const normalizedUrl = normalizeMcpUrl(url);
+        const tools = await listLocalMcpTools(normalizedUrl);
+        return {
+          status: 'connected',
+          url: normalizedUrl,
+          tools,
+        };
+      } catch (error: any) {
+        return {
+          status: 'disconnected',
+          error: error?.message || 'Connection failed',
+        };
+      }
+    },
+    []
+  );
 
   // Callback function to send selected tools to backend
   const handleToolSelectionConfirm = async (
@@ -273,6 +323,7 @@ const ChemistryTool: React.FC = () => {
       runSettings: { moleculeName: moleculeName },
     };
     setOrchestratorSettings(updatedSettings);
+    orchestratorSettingsRef.current = updatedSettings;
     localStorage.setItem('orchestratorSettings', JSON.stringify(updatedSettings));
 
     // Note: The molecule name is sent to backend as part of runSettings
@@ -291,24 +342,74 @@ const ChemistryTool: React.FC = () => {
 
     // Update local state immediately
     setOrchestratorSettings(settings);
+    orchestratorSettingsRef.current = settings;
     localStorage.setItem('orchestratorSettings', JSON.stringify(settings));
 
     if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
-      const message = {
-        action: 'ui-update-orchestrator-settings',
-        backend: settings.backend,
-        customUrl: settings.customUrl,
-        model: settings.model,
-        reasoningEffort: settings.reasoningEffort,
-        apiKey: settings.apiKey,
-      };
-      wsRef.current.send(JSON.stringify(message));
-
+      sendOrchestratorSettingsToBackend(settings);
       // Refresh tools list after updating settings
       console.log('🔄 Refreshing tools list after settings update');
       refreshToolsList();
     }
   };
+
+  const handleLocalMcpRequest = useCallback(async (data: WebSocketMessage): Promise<void> => {
+    const requestId = data.requestId;
+    if (!requestId || !wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) {
+      return;
+    }
+
+    try {
+      if (data.requestKind === 'list-tools') {
+        const servers = data.servers || [];
+        const results = await Promise.all(
+          servers.map(async (serverUrl) => ({
+            serverUrl,
+            tools: await listLocalMcpTools(serverUrl),
+          }))
+        );
+
+        wsRef.current.send(
+          JSON.stringify({
+            action: 'local-mcp-response',
+            requestId,
+            ok: true,
+            result: { servers: results },
+          })
+        );
+        return;
+      }
+
+      if (data.requestKind === 'call-tool') {
+        if (!data.serverUrl || !data.toolName) {
+          throw new Error('Missing local MCP tool invocation metadata');
+        }
+
+        const result = await callLocalMcpTool(data.serverUrl, data.toolName, data.arguments || {});
+
+        wsRef.current.send(
+          JSON.stringify({
+            action: 'local-mcp-response',
+            requestId,
+            ok: true,
+            result,
+          })
+        );
+        return;
+      }
+
+      throw new Error(`Unknown local MCP request kind: ${data.requestKind}`);
+    } catch (error: any) {
+      wsRef.current.send(
+        JSON.stringify({
+          action: 'local-mcp-response',
+          requestId,
+          ok: false,
+          error: error?.message || 'Local MCP request failed',
+        })
+      );
+    }
+  }, []);
 
   useEffect(() => {
     const handleClickOutside = (): void => {
@@ -522,6 +623,7 @@ const ChemistryTool: React.FC = () => {
 
       loadStateFromCurrentExperiment();
 
+      sendOrchestratorSettingsToBackend(orchestratorSettingsRef.current);
       socket.send(JSON.stringify({ action: 'list-tools' }));
       socket.send(JSON.stringify({ action: 'get-username' }));
     };
@@ -625,6 +727,10 @@ const ChemistryTool: React.FC = () => {
             setSelectedTools([]);
             break;
           }
+          case 'local-mcp-request': {
+            void handleLocalMcpRequest(data);
+            break;
+          }
           case 'server-update-orchestrator-settings': {
             // Handle orchestrator settings updates from server
             const newSettings: FlaskOrchestratorSettings = {
@@ -638,8 +744,20 @@ const ChemistryTool: React.FC = () => {
               // useCustomModel: data.orchestratorSettings.useCustomModel,
               apiKey: data.orchestratorSettings!.apiKey,
               backendLabel: data.orchestratorSettings!.backendLabel,
+              toolServers:
+                data.orchestratorSettings!.toolServers ||
+                orchestratorSettingsRef.current.toolServers ||
+                [],
+              localToolServers:
+                data.orchestratorSettings!.localToolServers ||
+                orchestratorSettingsRef.current.localToolServers ||
+                [],
+              moleculeName:
+                data.orchestratorSettings!.moleculeName ||
+                orchestratorSettingsRef.current.moleculeName,
             };
             setOrchestratorSettings(newSettings);
+            orchestratorSettingsRef.current = newSettings;
             console.log('Updating the orchestrator settings ', newSettings);
             localStorage.setItem('orchestratorSettings', JSON.stringify(newSettings));
             break;
@@ -1330,6 +1448,7 @@ const ChemistryTool: React.FC = () => {
                 onServerRemoved={refreshToolsList}
                 username={username}
                 httpServerUrl={HTTP_SERVER}
+                checkLocalMCPServerConnectivity={checkLocalMcpServerConnectivity}
               />
 
               {/* WebSocket Status Indicator */}

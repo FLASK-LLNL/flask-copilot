@@ -1,4 +1,4 @@
-from typing import Any, Callable, Literal, Optional, Tuple
+from typing import Any, Literal, Optional, Tuple
 from fastapi import WebSocket
 import asyncio
 import os
@@ -32,6 +32,11 @@ from retrosynthesis.alternatives import set_reaction_alternative
 from charge_backend.prompt_debugger import debug_prompt
 from backend_helper_funcs import Node
 from builtin_tools import BuiltinToolDefinition, resolve_builtin_tools
+from local_mcp_proxy import (
+    LocalMCPToolDefinition,
+    build_local_mcp_function_tools,
+    list_local_mcp_tools,
+)
 
 
 class FlaskActionManager(ActionManager):
@@ -56,11 +61,16 @@ class FlaskActionManager(ActionManager):
             return list_server_urls()
         return self.task_manager.available_tools
 
-    def _selected_builtin_tools(self) -> list[Callable[..., Any]]:
-        return resolve_builtin_tools(
+    def _selected_builtin_tools(self) -> list[Any]:
+        builtin_tools = resolve_builtin_tools(
             self.task_manager.available_builtin_tool_ids,
             self.builtin_tool_definitions,
         )
+        local_tools = build_local_mcp_function_tools(
+            self.websocket,
+            getattr(self.task_manager, "selected_local_mcp_tools", {}),
+        )
+        return [*builtin_tools, *local_tools]
 
     def setup_retro_synth_context(self) -> None:
         if self.retro_synth_context is None:
@@ -439,6 +449,15 @@ class FlaskActionManager(ActionManager):
     async def handle_orchestrator_settings_update(self, data: dict) -> None:
         if "moleculeName" in data:
             self.run_settings.molecule_name_format = data["moleculeName"]
+        self.task_manager.local_tool_servers = [
+            (
+                server["url"]
+                if isinstance(server, dict) and server.get("url")
+                else str(server)
+            )
+            for server in data.get("localToolServers", [])
+        ]
+        self.task_manager.selected_local_mcp_tools = {}
         await ActionManager.handle_orchestrator_settings_update(self, data)
 
     async def handle_custom_query_molecule(self, data: dict) -> None:
@@ -550,6 +569,29 @@ class FlaskActionManager(ActionManager):
                     names=tool_names,
                     kind="mcp",
                     identifier=server,
+                    executionScope="backend",
+                )
+            )
+
+        try:
+            local_tool_map = await list_local_mcp_tools(
+                self.websocket,
+                getattr(self.task_manager, "local_tool_servers", []),
+            )
+        except Exception as exc:
+            logger.warning(f"Failed to enumerate local MCP tools: {exc}")
+            local_tool_map = {}
+        for server, local_tools in local_tool_map.items():
+            tool_names = [tool.name for tool in local_tools]
+            tools.append(
+                ToolList(
+                    server=server,
+                    names=tool_names,
+                    description="Local MCP server proxied through the browser session.",
+                    kind="mcp",
+                    identifier=server,
+                    executionScope="local",
+                    tools=[tool.json() for tool in local_tools],
                 )
             )
 
@@ -572,6 +614,7 @@ class FlaskActionManager(ActionManager):
 
         selected_mcp_tools: list[str] = []
         selected_builtin_tool_ids: list[str] = []
+        selected_local_mcp_tools: dict[str, list[LocalMCPToolDefinition]] = {}
 
         for server in data.get("enabledTools", {}).get("selectedTools", []):
             tool_server = server.get("tool_server", {})
@@ -583,10 +626,18 @@ class FlaskActionManager(ActionManager):
 
             server_url = tool_server.get("server")
             if server_url:
-                selected_mcp_tools.append(server_url)
+                if tool_server.get("executionScope") == "local":
+                    selected_local_mcp_tools[server_url] = [
+                        LocalMCPToolDefinition.from_json(tool)
+                        for tool in tool_server.get("tools", [])
+                        if isinstance(tool, dict) and tool.get("name")
+                    ]
+                else:
+                    selected_mcp_tools.append(server_url)
 
         self.task_manager.available_tools = selected_mcp_tools
         self.task_manager.available_builtin_tool_ids = selected_builtin_tool_ids
+        self.task_manager.selected_local_mcp_tools = selected_local_mcp_tools
 
     async def handle_get_username(self, _: dict) -> None:
         await self.websocket.send_json(

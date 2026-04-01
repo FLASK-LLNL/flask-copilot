@@ -39,6 +39,7 @@ from lc_conductor import TaskManager
 from backend_manager import FlaskActionManager
 from builtin_tools import list_builtin_tool_definitions
 from charge_backend import prompt_debugger
+from local_mcp_proxy import resolve_local_mcp_response
 
 # Pydantic models for new endpoints
 from pydantic import BaseModel
@@ -287,6 +288,11 @@ async def websocket_endpoint(websocket: WebSocket):
 
                 if action == "prompt-breakpoint-response":  # AI debugging
                     prompt_debugger.DEBUG_PROMPT_RESPONSES[websocket].set_result(data)
+                    continue
+
+                if action == "local-mcp-response":
+                    if not resolve_local_mcp_response(websocket, data):
+                        logger.warning(f"Received unmatched local MCP response: {data}")
                     continue
 
                 if action in action_handlers:

@@ -24,6 +24,7 @@ class BuiltinToolDefinition:
             "server": self.label,
             "names": [self.function.__name__],
             "description": self.description,
+            "executionScope": "backend",
         }
 
 

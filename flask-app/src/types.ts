@@ -64,6 +64,14 @@ export interface Tool {
   server?: string;
   names?: string[];
   description?: string;
+  executionScope?: 'backend' | 'local';
+  tools?: MCPToolDefinition[];
+}
+
+export interface MCPToolDefinition {
+  name: string;
+  description?: string;
+  inputSchema?: Record<string, any>;
 }
 
 export interface SelectableTool {
@@ -109,6 +117,7 @@ export interface ConstraintOption {
 
 export interface WebSocketMessageToServer {
   action?: string;
+  requestId?: string;
   smiles?: string;
   problemType?: string;
   nodeId?: string;
@@ -140,6 +149,11 @@ export interface WebSocketMessageToServer {
   prompt?: string;
   metadata?: any;
 
+  // Local MCP proxy responses
+  ok?: boolean;
+  result?: any;
+  error?: string;
+
   // Graph stuff
   nodes?: TreeNode[];
 }
@@ -163,6 +177,14 @@ export interface WebSocketMessage {
   // Prompt debugging
   prompt?: string;
   metadata?: any;
+
+  // Local MCP proxy requests
+  requestId?: string;
+  requestKind?: 'list-tools' | 'call-tool';
+  servers?: string[];
+  serverUrl?: string;
+  toolName?: string;
+  arguments?: Record<string, any>;
 }
 
 export interface MetricDefinition {

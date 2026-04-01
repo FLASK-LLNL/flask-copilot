@@ -12,7 +12,12 @@ export const ToolSelectionContent: React.FC<ToolSelectionContentProps> = ({
   selectedTools,
   onSelectionChange,
 }) => {
-  const mcpTools = availableToolsMap.filter((tool) => tool.tool_server.kind !== 'builtin');
+  const backendMcpTools = availableToolsMap.filter(
+    (tool) => tool.tool_server.kind !== 'builtin' && tool.tool_server.executionScope !== 'local'
+  );
+  const localMcpTools = availableToolsMap.filter(
+    (tool) => tool.tool_server.kind !== 'builtin' && tool.tool_server.executionScope === 'local'
+  );
   const builtinTools = availableToolsMap.filter((tool) => tool.tool_server.kind === 'builtin');
 
   const toggleToolSelection = (toolId: number): void => {
@@ -63,6 +68,17 @@ export const ToolSelectionContent: React.FC<ToolSelectionContentProps> = ({
               />
               <div className="flex-1">
                 <span className="tool-list-item-label">{item.tool_server.server}</span>
+                {item.tool_server.executionScope === 'local' && (
+                  <div className="text-xs text-secondary mt-0.5">
+                    Local MCP via browser websocket proxy
+                  </div>
+                )}
+                {item.tool_server.executionScope === 'backend' &&
+                  item.tool_server.kind !== 'builtin' && (
+                    <div className="text-xs text-secondary mt-0.5">
+                      Backend connects to this MCP endpoint directly
+                    </div>
+                  )}
                 {item.tool_server.names && item.tool_server.names.length > 0 && (
                   <div className="text-xs text-tertiary mt-0.5">
                     {item.tool_server.names.join(', ')}
@@ -120,11 +136,18 @@ export const ToolSelectionContent: React.FC<ToolSelectionContentProps> = ({
             'This backend has not registered any direct Python tools.'
           )}
           {renderToolSection(
-            'MCP Tool Servers',
-            'External tool servers connected through MCP.',
-            mcpTools,
-            'No MCP tool servers available',
-            'Connect MCP servers in settings to enable external tools.'
+            'Backend MCP Tool Servers',
+            'External MCP servers the backend can reach directly.',
+            backendMcpTools,
+            'No backend MCP tool servers available',
+            'Connect backend-accessible MCP servers in settings to enable them.'
+          )}
+          {renderToolSection(
+            'Local MCP Tool Servers',
+            'MCP servers reached from this browser and proxied to the orchestrator over the websocket.',
+            localMcpTools,
+            'No local MCP tool servers available',
+            'Add local MCP servers in settings to expose browser-reachable endpoints such as 127.0.0.1.'
           )}
         </div>
       )}
