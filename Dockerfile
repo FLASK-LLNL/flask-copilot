@@ -17,7 +17,6 @@ COPY externals /app/externals
 # Build the components for the LC Conductor
 WORKDIR /app/externals/lc_conductor/lcc_ui_components
 RUN . $HOME/.nvm/nvm.sh && \
-    npm install -g npm@latest && \
     npm install
     # && \
     # rm -rf node_modules/.vite dist .vite
