@@ -2,7 +2,7 @@ import os
 import asyncio
 from fastapi import WebSocket
 from lc_conductor.callback_logger import CallbackLogger
-from typing import Any, Callable, Optional, Union
+from typing import Optional
 
 from backend_helper_funcs import (
     CallbackHandler,
@@ -32,6 +32,7 @@ from retrosynthesis.retrosynthesis_task import (
 
 from charge.experiments.experiment import Experiment
 from charge.clients.agent_factory import ReasoningCallbackType
+from lc_conductor import ToolRuntime
 
 
 RETROSYNTH_UNCONSTRAINED_USER_PROMPT_TEMPLATE = (
@@ -65,8 +66,7 @@ async def ai_based_retrosynthesis(
     experiment: Experiment,
     config_file: str,
     run_settings: FlaskRunSettings,
-    available_tools: Optional[Union[str, list[str]]],
-    builtin_tools: Optional[list[Callable[..., Any]]],
+    tool_runtime: ToolRuntime,
     log_progress: ReasoningCallbackType,
 ):
     """Performs template-free retrosynthesis using the AI orchestrator."""
@@ -78,7 +78,7 @@ async def ai_based_retrosynthesis(
         return
 
     await clogger.info(
-        f"Finding synthesis pathway to {current_node.smiles}... with available tools: {available_tools}.",
+        f"Finding synthesis pathway to {current_node.smiles}... with available tools: {tool_runtime.tool_summary()}.",
         smiles=current_node.smiles,
     )
 
@@ -115,8 +115,7 @@ async def ai_based_retrosynthesis(
 
     retro_task = RetrosynthesisTask(
         user_prompt=user_prompt,
-        server_urls=available_tools,
-        builtin_tools=builtin_tools or [],
+        **tool_runtime.task_kwargs(),
     )
     runner.task = retro_task
 
@@ -127,7 +126,7 @@ async def ai_based_retrosynthesis(
         )
 
     await clogger.info(
-        f"Finding synthesis routes for {current_node.smiles} using available tools: {available_tools}."
+        f"Finding synthesis routes for {current_node.smiles} using available tools: {tool_runtime.tool_summary()}."
     )
 
     # Run task

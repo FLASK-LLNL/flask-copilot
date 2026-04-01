@@ -36,10 +36,10 @@ from lc_conductor.tool_registration import (
 )
 
 from lc_conductor import TaskManager
+from lc_conductor.local_mcp_proxy import resolve_local_mcp_response
 from backend_manager import FlaskActionManager
 from builtin_tools import list_builtin_tool_definitions
 from charge_backend import prompt_debugger
-from local_mcp_proxy import resolve_local_mcp_response
 
 # Pydantic models for new endpoints
 from pydantic import BaseModel

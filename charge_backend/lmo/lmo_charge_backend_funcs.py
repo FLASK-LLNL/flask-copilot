@@ -16,7 +16,7 @@ from charge_backend.lmo.lmo_task import (
     LMOTask as LeadMoleculeOptimization,
     MoleculeOutputSchema,
 )
-from typing import Any, Callable, Optional
+from typing import Optional
 from backend_helper_funcs import (
     Node,
     Edge,
@@ -27,6 +27,7 @@ from backend_helper_funcs import (
     FlaskRunSettings,
 )
 from moleculedb.molecule_naming import smiles_to_html, MolNameFormat
+from lc_conductor import ToolRuntime
 
 # TODO: Convert this to a dataclass
 MOLECULE_HOVER_TEMPLATE = (
@@ -55,8 +56,7 @@ async def generate_lead_molecule(
     mol_file_path: str,
     max_retries: int,
     depth: int,
-    available_tools: list[str],
-    builtin_tools: Optional[list[Callable[..., Any]]],
+    tool_runtime: ToolRuntime,
     websocket: WebSocket,
     run_settings: FlaskRunSettings,
     log_progress: ReasoningCallbackType,
@@ -82,7 +82,7 @@ async def generate_lead_molecule(
         experiment (Experiment): The experiment instance to run tasks.
         mol_file_path (str): Path to the file where molecules are stored.
         max_retries (int): Maximum number of retries for calling AI in molecule generation.
-        available_tools (list[str]): List of available tools for molecule generation.
+        tool_runtime (ToolRuntime): Unified runtime for MCP and callable tools.
         depth (int): Depth of the generation tree.
         websocket (WebSocket): WebSocket connection for streaming updates.
         property (str): Property to optimize.
@@ -120,13 +120,13 @@ async def generate_lead_molecule(
             f"  - Diversity penalty: {diversity_penalty}\n"
             f"  - Exploration rate: {exploration_rate}\n"
             f"  - Additional constraints: {constraints_str}\n"
-            f"  - Available tools: {available_tools}",
+            f"  - Available tools: {tool_runtime.tool_summary()}",
             smiles=lead_molecule_smiles,
             source="generate_lead_molecule",
         )
     else:
         await clogger.info(
-            f"Starting optimization with default strategy for lead molecule: {lead_molecule_smiles} using available tools: {available_tools}",
+            f"Starting optimization with default strategy for lead molecule: {lead_molecule_smiles} using available tools: {tool_runtime.tool_summary()}",
             smiles=lead_molecule_smiles,
             source="generate_lead_molecule",
         )
@@ -144,7 +144,7 @@ async def generate_lead_molecule(
             "smiles": lead_molecule_smiles,
             "property": property,
         },
-        urls=available_tools,
+        urls=tool_runtime.mcp_server_urls,
     )
     try:
         property_name, property_result = json.loads(property_result_msg.content)
@@ -336,8 +336,7 @@ async def generate_lead_molecule(
         property_tool_name=calculate_property_tool,
         property_name=property,
         optimize_direction=condition,
-        server_urls=available_tools,
-        builtin_tools=builtin_tools or [],
+        **tool_runtime.task_kwargs(),
     )
     await lmo_task.get_initial_property_value()
 
@@ -551,8 +550,7 @@ async def generate_lead_molecule(
                         property_tool_name=calculate_property_tool,
                         property_name=property,
                         optimize_direction=condition,
-                        server_urls=available_tools,
-                        builtin_tools=builtin_tools or [],
+                        **tool_runtime.task_kwargs(),
                     )
                     await lmo_task.get_initial_property_value()
 
