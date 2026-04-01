@@ -2,8 +2,10 @@ from loguru import logger
 from fastapi import WebSocket
 import asyncio
 import json
+from pydantic.dataclasses import dataclass
+from pydantic import Field
 from typing import Any, Dict, Optional, Literal, Tuple
-from dataclasses import dataclass, asdict
+from dataclasses import asdict
 
 from flask_tools.chemistry import smiles_utils
 from flask_tools.lmo.molecular_property_utils import get_density
@@ -105,13 +107,7 @@ class ModelMessage:
 
 @dataclass
 class FlaskRunSettings(RunSettings):
-    molecule_name_format: MolNameFormat
-
-    def __init__(
-        self, moleculeName: MolNameFormat = "brand", promptDebugging: bool = False
-    ):
-        super().__init__(promptDebugging)
-        self.molecule_name_format = moleculeName
+    molecule_name_format: MolNameFormat = Field(alias="moleculeName", default="brand")
 
 
 @dataclass(frozen=True)

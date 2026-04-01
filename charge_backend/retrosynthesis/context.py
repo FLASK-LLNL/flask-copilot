@@ -120,7 +120,6 @@ class RetrosynthesisContext:
         Add a new node to the context and molecule graph.
 
         :param node: The new node to add
-        :param parent: If not None, generates an edge from ``parent`` to ``node``.
         :param websocket: If not None, notifies websocket of addition.
         :param edge: If not None, use this edge instead of generating one.
         """
@@ -187,6 +186,20 @@ class RetrosynthesisContext:
         self.recalculate_nodes_per_level()
 
     async def load_state(self, data: dict[str, Any]) -> None:
+        """
+        Restore a context from a dictionary serialization.
+        Existing state is clobbered.
+
+        The dictionary must contain "nodes" for any meaningful action.
+
+        It may also contain "edges". If "edges" is NOT included, new
+        edges will be generated. These will be "private" backend edges
+        that aren't reported to the frontend. This is only a problem
+        if they're ever "edge-update"-ed. Edges that don't match any
+        node are (silently) ignored.
+
+        :param dict: Dictionary with serialized nodes and, optionally, edges.
+        """
         self.reset()  # Start from a clean slate
 
         # Sort the node list so parents are guaranteed to be added
@@ -202,52 +215,30 @@ class RetrosynthesisContext:
         # We explicitly restore edges now because of the UUID. The
         # worldview is node-centric, so any edge that doesn't match a
         # node will just be ignored.
-        edge_data = data.get("edges", [])
+        edges = [Edge(**e) for e in data.get("edges", [])]
 
-        # Deserialize each node (manually, for now).
+        # Deserialize each node. The "yield_"/"yield" fiasco needs to
+        # be handled manually, but otherwise, this is pretty
+        # automatic -- thanks, pydantic.
         for n in node_data:
             n["yield_"] = n["yield"]
             del n["yield"]
-
-            # Deserialize the reaction (optional)
-            if "reaction" in n and n["reaction"] is not None:
-                reaction_dict = n["reaction"]
-
-                # Deserialize each reaction alternative (optional)
-                if (
-                    "alternatives" in reaction_dict
-                    and reaction_dict["alternatives"] is not None
-                ):
-                    reaction_alternatives = reaction_dict["alternatives"]
-
-                    # Deserialize all the pathways (not optional)
-                    for alternative_dict in reaction_alternatives:
-                        alternative_dict["pathway"] = [
-                            PathwayStep(**pws) for pws in alternative_dict["pathway"]
-                        ]
-
-                    reaction_dict["alternatives"] = [
-                        ReactionAlternative(**ra) for ra in reaction_alternatives
-                    ]
-
-                n["reaction"] = Reaction(**reaction_dict)
+            node = Node(**n)
 
             # Find a matching edge, if one is needed.
             edge = (
                 next(
                     filter(
-                        lambda e: (
-                            e["fromNode"] == n["parentId"] and e["toNode"] == n["id"]
-                        ),
-                        edge_data,
+                        lambda e: e.fromNode == node.parentId and e.toNode == node.id,
+                        edges,
                     ),
                     None,
                 )
-                if "parentId" in n and n["parentId"] is not None
+                if node.parentId is not None
                 else None
             )
 
-            await self.add_node(Node(**n), edge)
+            await self.add_node(node, edge=edge)
 
     def new_node_id(self) -> str:
         """
