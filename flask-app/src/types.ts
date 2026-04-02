@@ -66,6 +66,7 @@ export interface Tool {
   description?: string;
   executionScope?: 'backend' | 'local';
   tools?: MCPToolDefinition[];
+  allowedToolNames?: string[];
 }
 
 export interface MCPToolDefinition {
@@ -77,6 +78,8 @@ export interface MCPToolDefinition {
 export interface SelectableTool {
   id: number;
   tool_server: Tool;
+  tool_name?: string;
+  tool_description?: string;
 }
 
 export interface ToolMap {
