@@ -1,5 +1,7 @@
 import os
 import asyncio
+import random
+from pathlib import Path
 from fastapi import WebSocket
 from lc_conductor.callback_logger import CallbackLogger
 from typing import Any, Callable, Optional, Union
@@ -28,6 +30,7 @@ from retrosynthesis.mapping import build_mapped_reaction_dict_or_none
 from retrosynthesis.retrosynthesis_task import (
     TemplateFreeRetrosynthesisTask as RetrosynthesisTask,
     TemplateFreeReactionOutputSchema as ReactionOutputSchema,
+    RSAAggregationTask,
 )
 
 from charge.experiments.experiment import Experiment
@@ -130,13 +133,161 @@ async def ai_based_retrosynthesis(
         f"Finding synthesis routes for {current_node.smiles} using available tools: {available_tools}."
     )
 
-    # Run task
+    # Run task (with optional RSA mode)
     await highlight_node(current_node, websocket, True)
     if run_settings.prompt_debugging:
         await debug_prompt(runner, websocket)
-    output = await runner.run(log_progress)
-    if isinstance(callback_handler, CallbackHandler):
-        await callback_handler.drain()
+
+    # Check if RSA mode is enabled
+    if run_settings.use_rsa:
+        try:
+            # RSA Mode: Recursive Self-Aggregation
+            rsa_n = run_settings.rsa_n if hasattr(run_settings, 'rsa_n') else 8
+            rsa_k = run_settings.rsa_k if hasattr(run_settings, 'rsa_k') else 4
+            rsa_t = run_settings.rsa_t if hasattr(run_settings, 'rsa_t') else 3
+            rsa_mode = run_settings.rsa_mode if hasattr(run_settings, 'rsa_mode') else "standalone"
+
+            await clogger.info(
+                f"Running RSA mode: {rsa_mode} with N={rsa_n}, K={rsa_k}, T={rsa_t}"
+            )
+
+            # Step 1: Generate N initial proposals
+            await clogger.info(f"RSA Step 1/{rsa_t}: Generating {rsa_n} initial proposals")
+            proposals = []
+            for i in range(rsa_n):
+                await clogger.info(f"Generating proposal {i+1}/{rsa_n}")
+                try:
+                    # Create a fresh task for each proposal
+                    proposal_task = RetrosynthesisTask(
+                        user_prompt=user_prompt,
+                        server_urls=available_tools,
+                        builtin_tools=builtin_tools or [],
+                    )
+                    runner.task = proposal_task
+
+                    if os.getenv("CHARGE_DISABLE_OUTPUT_VALIDATION", "0") == "1":
+                        proposal_task.structured_output_schema = None
+
+                    # Run proposal
+                    proposal_output = await runner.run(log_progress)
+                    if isinstance(callback_handler, CallbackHandler):
+                        await callback_handler.drain()
+
+                    # Validate and store
+                    proposal_result = ReactionOutputSchema.model_validate_json(proposal_output)
+                    proposals.append({
+                        "output": proposal_output,
+                        "result": proposal_result,
+                        "index": i
+                    })
+                    await clogger.info(f"Proposal {i+1} completed successfully")
+                except Exception as e:
+                    await clogger.warning(f"Proposal {i+1} failed: {str(e)}")
+                    continue
+
+            if not proposals:
+                raise ValueError("All RSA proposals failed, falling back to standard mode")
+
+            await clogger.info(f"Generated {len(proposals)} valid proposals")
+
+            # Steps 2..T: Recursive aggregation
+            current_proposals = proposals
+            for step in range(2, rsa_t + 1):
+                await clogger.info(
+                    f"RSA Step {step}/{rsa_t}: Aggregating {len(current_proposals)} proposals into {rsa_k}-subsets"
+                )
+
+                if len(current_proposals) < rsa_k:
+                    await clogger.warning(
+                        f"Not enough proposals ({len(current_proposals)}) for K={rsa_k}, using all available"
+                    )
+                    rsa_k = len(current_proposals)
+
+                # Generate new proposals by aggregating K-subsets
+                next_proposals = []
+                num_aggregations = max(rsa_n, len(current_proposals))
+
+                for i in range(num_aggregations):
+                    await clogger.info(f"Aggregation {i+1}/{num_aggregations}")
+                    try:
+                        # Select K random proposals
+                        if len(current_proposals) <= rsa_k:
+                            subset = current_proposals
+                        else:
+                            subset = random.sample(current_proposals, rsa_k)
+
+                        # Format candidates text
+                        candidates_text = ""
+                        for idx, prop in enumerate(subset, 1):
+                            prop_result = prop["result"]
+                            candidates_text += f"\n---- Candidate {idx} ----\n"
+                            candidates_text += f"Reasoning: {prop_result.reasoning_summary}\n"
+                            candidates_text += f"Reactants: {', '.join(prop_result.reactants_smiles_list)}\n"
+                            candidates_text += f"Products: {', '.join(prop_result.products_smiles_list)}\n"
+
+                        # Create aggregation task
+                        agg_task = RSAAggregationTask(
+                            original_user_prompt=user_prompt,
+                            candidates_text=candidates_text,
+                            step=step,
+                            total_steps=rsa_t,
+                            mode=rsa_mode,
+                            server_urls=available_tools,
+                            builtin_tools=builtin_tools or [],
+                        )
+                        runner.task = agg_task
+
+                        if os.getenv("CHARGE_DISABLE_OUTPUT_VALIDATION", "0") == "1":
+                            agg_task.structured_output_schema = None
+
+                        # Run aggregation
+                        agg_output = await runner.run(log_progress)
+                        if isinstance(callback_handler, CallbackHandler):
+                            await callback_handler.drain()
+
+                        # Validate and store
+                        agg_result = ReactionOutputSchema.model_validate_json(agg_output)
+                        next_proposals.append({
+                            "output": agg_output,
+                            "result": agg_result,
+                            "index": i,
+                            "step": step
+                        })
+                        await clogger.info(f"Aggregation {i+1} completed successfully")
+                    except Exception as e:
+                        await clogger.warning(f"Aggregation {i+1} failed: {str(e)}")
+                        continue
+
+                if not next_proposals:
+                    await clogger.warning(
+                        f"All aggregations at step {step} failed, using previous step results"
+                    )
+                    break
+
+                current_proposals = next_proposals
+                await clogger.info(f"Step {step} produced {len(current_proposals)} aggregated proposals")
+
+            # Select final output (use first/best from final step)
+            if current_proposals:
+                final_proposal = current_proposals[0]
+                output = final_proposal["output"]
+                await clogger.info("RSA mode completed successfully")
+            else:
+                raise ValueError("RSA aggregation produced no valid results")
+
+        except Exception as e:
+            # Fallback to standard mode if RSA fails
+            await clogger.error(f"RSA mode failed: {str(e)}, falling back to standard retrosynthesis")
+            # Reset task to original
+            runner.task = retro_task
+            output = await runner.run(log_progress)
+            if isinstance(callback_handler, CallbackHandler):
+                await callback_handler.drain()
+    else:
+        # Standard mode (no RSA)
+        output = await runner.run(log_progress)
+        if isinstance(callback_handler, CallbackHandler):
+            await callback_handler.drain()
 
     if os.getenv("CHARGE_DISABLE_OUTPUT_VALIDATION", "0") == "1":
         await clogger.warning(
