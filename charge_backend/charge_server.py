@@ -165,12 +165,21 @@ if os.path.exists(ASSETS_PATH):
         with open(os.path.join(DIST_PATH, "index.html"), "r") as fp:
             html = fp.read()
 
+        # Use dynamic WebSocket URL based on request host
+        ws_server = os.getenv("WS_SERVER")
+        if not ws_server:
+            # Auto-detect from request host and protocol
+            host = request.headers.get("host", f"localhost:{args.port}")
+            # Use wss:// for HTTPS, ws:// for HTTP
+            scheme = "wss" if request.url.scheme == "https" else "ws"
+            ws_server = f"{scheme}://{host}/ws"
+
         html = html.replace(
             "<!-- APP CONFIG -->",
             f"""
            <script>
            window.APP_CONFIG = {{
-               WS_SERVER: '{os.getenv("WS_SERVER", "ws://localhost:8001/ws")}',
+               WS_SERVER: '{ws_server}',
                VERSION: '{os.getenv("SERVER_VERSION", "")}'
            }};
            </script>""",
