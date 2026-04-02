@@ -175,6 +175,26 @@ async def ai_based_retrosynthesis(
                     if db_results and not any("error" in r for r in db_results):
                         await clogger.info(f"Found {len(db_results)} similar reactions in database")
 
+                        # Log summary of database results to UI
+                        summary_lines = [f"**Database Query Results ({len(db_results)} reactions found):**"]
+                        for idx, reaction in enumerate(db_results[:5], 1):  # Show first 5 in UI
+                            name = reaction.get('name', f'Reaction {idx}')
+                            summary_lines.append(f"  {idx}. {name}")
+                            if 'components' in reaction and reaction['components']:
+                                # Extract reactants and products
+                                reactants = [c.get('name', c.get('smiles', '?')) for c in reaction['components']
+                                           if c.get('role') in ['Reactant', 'Reagent']]
+                                products = [c.get('name', c.get('smiles', '?')) for c in reaction['components']
+                                          if c.get('role') == 'Product']
+                                if reactants:
+                                    summary_lines.append(f"     Reactants: {', '.join(reactants[:3])}")
+                                if products:
+                                    summary_lines.append(f"     Products: {', '.join(products[:2])}")
+                        if len(db_results) > 5:
+                            summary_lines.append(f"  ... and {len(db_results) - 5} more reactions")
+                        summary_lines.append("These reactions will be injected into all proposal prompts.")
+                        await clogger.info("\n".join(summary_lines))
+
                         # Format database results with clear context
                         rag_context = "\n\n--- REACTION DATABASE RESULTS ---\n"
                         rag_context += f"These are similar reactions retrieved by comparing structural similarity to the target product ({current_node.smiles}):\n\n"
