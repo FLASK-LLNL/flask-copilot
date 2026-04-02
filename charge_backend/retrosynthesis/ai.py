@@ -209,7 +209,7 @@ async def ai_based_retrosynthesis(
                     # Create a fresh task for each proposal
                     # TODO: Add temperature=0.8 for models that support it (Claude, etc.)
                     proposal_task = RetrosynthesisTask(
-                        user_prompt=user_prompt,
+                        user_prompt=user_prompt_with_rag,
                         server_urls=available_tools,
                         builtin_tools=builtin_tools or [],
                     )
@@ -222,7 +222,7 @@ async def ai_based_retrosynthesis(
                     proposer_log = {
                         "proposal_index": i + 1,
                         "system_prompt": proposal_task.get_system_prompt(),
-                        "user_prompt": user_prompt,
+                        "user_prompt": user_prompt_with_rag,
                         "mode": rsa_mode,
                     }
                     with open(f"{rsa_log_dir}/proposer_{i+1:02d}_prompt.json", "w") as f:
