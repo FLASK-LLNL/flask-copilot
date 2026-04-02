@@ -1492,8 +1492,12 @@ const ChemistryTool: React.FC = () => {
                                   <div className="text-secondary font-medium">
                                     {tool.server || ('server' as string)}
                                   </div>
-                                  <div className="text-[10px] uppercase tracking-wide text-tertiary">
-                                    {tool.kind === 'builtin' ? 'Built-in' : 'MCP'}
+                                  <div className="text-[10px] tracking-wide text-tertiary whitespace-pre-line text-right leading-tight">
+                                    {tool.kind === 'builtin'
+                                      ? 'Built-in'
+                                      : tool.executionScope === 'local'
+                                        ? 'MCP\nlocal'
+                                        : 'MCP'}
                                   </div>
                                 </div>
                                 {tool.names && (
