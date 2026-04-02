@@ -470,48 +470,60 @@ async def ai_based_retrosynthesis(
         await context.add_node(node, websocket)
         await asyncio.sleep(0)
 
-    for node, purch in zip(new_nodes, purchasable):
-        if purch:  # Skip purchasable nodes unless explicitly asked for
-            continue
-
-        # Highlight node because we are looking for templates
-        await highlight_node(node, websocket, True)
-
-        # Find paths for the leaf nodes
-        reaction, routes = await run_retro_planner(
-            config_file, node.smiles, clogger, run_settings
+    # Template-based expansion of reactants (optional)
+    if not os.path.exists(config_file):
+        await clogger.info(
+            f"Template-based retrosynthesis config not found at {config_file}. "
+            "Skipping template expansion. AI-based retrosynthesis completed successfully."
         )
-        if reaction is None:
-            await clogger.warning(f"No routes found for {node.smiles}. Skipping...")
-            continue
-        node.reaction = reaction
+    else:
+        for node, purch in zip(new_nodes, purchasable):
+            if purch:  # Skip purchasable nodes unless explicitly asked for
+                continue
 
-        # Use child nodes and edges of the first route
-        await generate_nodes_for_molecular_graph(
-            routes[0].nodes,
-            context,
-            websocket,
-            start_level=level,
-            include_root_node=False,
-            root_node_id=node.id,
-        )
+            # Highlight node because we are looking for templates
+            await highlight_node(node, websocket, True)
 
-        # Attach mapped reaction for immediate reactants -> product.
-        # This is needed so hover-highlighting works for the first template step
-        # discovered after an AI-generated step.
-        if node.reaction is not None:
-            child_smiles = [
-                n.smiles
-                for nid, n in context.node_ids.items()
-                if context.parents.get(nid) == node.id
-            ]
-            node.reaction.mappedReaction = build_mapped_reaction_dict_or_none(
-                reactants=child_smiles,
-                products=[node.smiles],
-                log_msg="Failed to build rdkitjs mapped reaction for template node_id={node_id} smiles={smiles}",
-                node_id=node.id,
-                smiles=node.smiles,
-            )
-        await context.update_node(node, websocket)  # Also disables highlight
+            # Find paths for the leaf nodes
+            try:
+                reaction, routes = await run_retro_planner(
+                    config_file, node.smiles, clogger, run_settings
+                )
+                if reaction is None:
+                    await clogger.warning(f"No routes found for {node.smiles}. Skipping...")
+                    continue
+                node.reaction = reaction
+
+                # Use child nodes and edges of the first route
+                await generate_nodes_for_molecular_graph(
+                    routes[0].nodes,
+                    context,
+                    websocket,
+                    start_level=level,
+                    include_root_node=False,
+                    root_node_id=node.id,
+                )
+            except Exception as e:
+                await clogger.warning(
+                    f"Template-based expansion failed for {node.smiles}: {str(e)}. Continuing..."
+                )
+
+            # Attach mapped reaction for immediate reactants -> product.
+            # This is needed so hover-highlighting works for the first template step
+            # discovered after an AI-generated step.
+            if node.reaction is not None:
+                child_smiles = [
+                    n.smiles
+                    for nid, n in context.node_ids.items()
+                    if context.parents.get(nid) == node.id
+                ]
+                node.reaction.mappedReaction = build_mapped_reaction_dict_or_none(
+                    reactants=child_smiles,
+                    products=[node.smiles],
+                    log_msg="Failed to build rdkitjs mapped reaction for template node_id={node_id} smiles={smiles}",
+                    node_id=node.id,
+                    smiles=node.smiles,
+                )
+            await context.update_node(node, websocket)  # Also disables highlight
 
     await websocket.send_json({"type": "complete"})
