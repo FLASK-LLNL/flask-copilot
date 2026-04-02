@@ -161,7 +161,10 @@ async def ai_based_retrosynthesis(
             await clogger.info(f"RSA execution logs will be saved to: {rsa_log_dir}")
 
             # For RAG mode: Query database once and inject into prompts
+            # For standalone mode: Remove database query tool
             user_prompt_with_rag = user_prompt
+            builtin_tools_filtered = builtin_tools or []
+
             if rsa_mode == "rag":
                 await clogger.info("RAG mode: Querying reaction database once...")
                 try:
@@ -200,6 +203,21 @@ async def ai_based_retrosynthesis(
                     await clogger.warning(f"Database query failed: {str(e)}")
                     user_prompt_with_rag = user_prompt + "\n\nDatabase query failed. Proceed using chemistry knowledge only.\n"
 
+                # Filter out query_reaction_database from builtin tools (already queried once)
+                builtin_tools_filtered = [
+                    tool for tool in builtin_tools_filtered
+                    if getattr(tool, '__name__', '') != 'query_reaction_database'
+                ]
+                await clogger.info("RAG mode: Removed query_reaction_database from tools (already queried)")
+
+            elif rsa_mode == "standalone":
+                # Standalone mode: Remove database query tool entirely (no retrieval)
+                builtin_tools_filtered = [
+                    tool for tool in builtin_tools_filtered
+                    if getattr(tool, '__name__', '') != 'query_reaction_database'
+                ]
+                await clogger.info("Standalone mode: Removed query_reaction_database from tools (no retrieval)")
+
             # Step 1: Generate N initial proposals
             await clogger.info(f"RSA Step 1/{rsa_t}: Generating {rsa_n} initial proposals")
             proposals = []
@@ -211,7 +229,7 @@ async def ai_based_retrosynthesis(
                     proposal_task = RetrosynthesisTask(
                         user_prompt=user_prompt_with_rag,
                         server_urls=available_tools,
-                        builtin_tools=builtin_tools or [],
+                        builtin_tools=builtin_tools_filtered,
                     )
                     runner.task = proposal_task
 
@@ -307,7 +325,7 @@ async def ai_based_retrosynthesis(
                             total_steps=rsa_t,
                             mode=rsa_mode,
                             server_urls=available_tools,
-                            builtin_tools=builtin_tools or [],
+                            builtin_tools=builtin_tools_filtered,
                         )
                         runner.task = agg_task
 
