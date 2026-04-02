@@ -265,6 +265,13 @@ const ChemistryTool: React.FC = () => {
   const [editedPrompt, setEditedPrompt] = useState<string>('');
   const [debugModalMinimized, setDebugModalMinimized] = useState<boolean>(false);
 
+  // RSA settings
+  const [useRsa, setUseRsa] = useState<boolean>(false);
+  const [rsaMode, setRsaMode] = useState<'standalone' | 'rag'>('standalone');
+  const [rsaN, setRsaN] = useState<number>(8);
+  const [rsaK, setRsaK] = useState<number>(4);
+  const [rsaT, setRsaT] = useState<number>(3);
+
   // Function to refresh tools list from backend
   const refreshToolsList = useCallback(() => {
     if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
@@ -677,6 +684,11 @@ const ChemistryTool: React.FC = () => {
       runSettings: {
         promptDebugging: debugMode,
         moleculeName: orchestratorSettings.moleculeName || 'brand',
+        useRsa,
+        rsaMode,
+        rsaN,
+        rsaK,
+        rsaT,
       },
       customization,
     };
@@ -1348,6 +1360,11 @@ const ChemistryTool: React.FC = () => {
       runSettings: {
         promptDebugging: debugMode,
         moleculeName: orchestratorSettings.moleculeName || 'brand',
+        useRsa,
+        rsaMode,
+        rsaN,
+        rsaK,
+        rsaT,
       },
       ...propertyDetails,
     };
@@ -1722,6 +1739,89 @@ const ChemistryTool: React.FC = () => {
                       AI Debug Mode
                     </label>
                   </div>
+
+                  {/* RSA Settings - Only for Retrosynthesis */}
+                  {problemType === 'retrosynthesis' && (
+                    <div className="border-l pl-4">
+                      <div className="mb-2">
+                        <label className="form-label flex items-center gap-2 cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={useRsa}
+                            onChange={() => setUseRsa(!useRsa)}
+                            disabled={isComputing}
+                            className="form-checkbox"
+                            title="Enable Recursive Self-Aggregation for retrosynthesis"
+                          />
+                          <Wrench className="w-4 h-4" />
+                          Enable RSA Mode
+                        </label>
+                      </div>
+
+                      {useRsa && (
+                        <div className="ml-6 space-y-2">
+                          <div>
+                            <label className="form-label text-sm">Mode</label>
+                            <select
+                              value={rsaMode}
+                              onChange={(e) => setRsaMode(e.target.value as 'standalone' | 'rag')}
+                              disabled={isComputing}
+                              className="form-select text-sm"
+                            >
+                              <option value="standalone">Standalone (Chemistry-first)</option>
+                              <option value="rag">RAG (Database-informed)</option>
+                            </select>
+                          </div>
+
+                          <div className="grid grid-cols-3 gap-2">
+                            <div>
+                              <label className="form-label text-xs">N (Proposals)</label>
+                              <input
+                                type="number"
+                                value={rsaN}
+                                onChange={(e) => setRsaN(parseInt(e.target.value) || 8)}
+                                disabled={isComputing}
+                                min="1"
+                                max="20"
+                                className="form-input text-sm w-full"
+                                title="Number of initial proposals to generate"
+                              />
+                            </div>
+                            <div>
+                              <label className="form-label text-xs">K (Subset)</label>
+                              <input
+                                type="number"
+                                value={rsaK}
+                                onChange={(e) => setRsaK(parseInt(e.target.value) || 4)}
+                                disabled={isComputing}
+                                min="1"
+                                max={rsaN}
+                                className="form-input text-sm w-full"
+                                title="Subset size for aggregation"
+                              />
+                            </div>
+                            <div>
+                              <label className="form-label text-xs">T (Steps)</label>
+                              <input
+                                type="number"
+                                value={rsaT}
+                                onChange={(e) => setRsaT(parseInt(e.target.value) || 3)}
+                                disabled={isComputing}
+                                min="1"
+                                max="10"
+                                className="form-input text-sm w-full"
+                                title="Total number of aggregation steps"
+                              />
+                            </div>
+                          </div>
+
+                          <div className="text-xs text-gray-500">
+                            Estimated runtime: ~{rsaN * rsaT} inferences
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
               </div>
 
