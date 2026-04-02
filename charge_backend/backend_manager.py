@@ -226,14 +226,73 @@ class FlaskActionManager(ActionManager):
 
     async def _handle_retrosynthesis(self, data: dict) -> None:
         """Handle retrosynthesis problem type."""
-        run_func = partial(
-            template_based_retrosynthesis,
-            data["smiles"],
-            self.args.config_file,
-            self.get_retro_synth_context(),
-            self.task_manager.websocket,
-            self.run_settings,
-        )
+        # Check if AI-based retrosynthesis is requested (RSA or standard AI)
+        # AI-based is the default; template-based only runs if config exists and AI not requested
+        use_ai_based = self.run_settings.use_rsa or not os.path.exists(self.args.config_file)
+
+        if use_ai_based:
+            # Use AI-based retrosynthesis (supports both standard and RSA modes)
+            # Create root node like template_based_retrosynthesis does
+            from backend_helper_funcs import Node
+            from charge_backend.moleculedb.molecule_naming import smiles_to_html
+            from charge_backend.moleculedb.purchasable import is_purchasable
+
+            context = self.get_retro_synth_context()
+            context.reset()  # Clear context
+
+            start_smiles = data["smiles"]
+            mol_sources = is_purchasable(start_smiles)
+            if mol_sources:
+                purchasable_str = f"Yes (via {', '.join(mol_sources)})"
+            else:
+                purchasable_str = "No"
+
+            root = Node(
+                id="node_0",
+                smiles=start_smiles,
+                label=smiles_to_html(start_smiles, self.run_settings.molecule_name_format),
+                hoverInfo=f"""# Root molecule
+**SMILES:** {start_smiles}
+
+**Purchasable**? {purchasable_str}""",
+                level=0,
+                parentId=None,
+                cost=None,
+                bandgap=None,
+                yield_=None,
+                purchasable=(len(mol_sources) > 0),
+                highlight="yellow",
+                x=100,
+                y=100,
+            )
+
+            await context.add_node(root, websocket=self.task_manager.websocket)
+            root_node_id = root.id
+
+            run_func = partial(
+                ai_based_retrosynthesis,
+                root_node_id,
+                context,
+                data.get("query", None),
+                None,  # Unconstrained
+                self.task_manager.websocket,
+                self.experiment,
+                self.args.config_file,
+                self.run_settings,
+                self._selected_mcp_tools(),
+                self._selected_builtin_tools(),
+                self.log_progress,
+            )
+        else:
+            # Use template-based retrosynthesis
+            run_func = partial(
+                template_based_retrosynthesis,
+                data["smiles"],
+                self.args.config_file,
+                self.get_retro_synth_context(),
+                self.task_manager.websocket,
+                self.run_settings,
+            )
 
         await self.task_manager.run_task(run_func())
 
