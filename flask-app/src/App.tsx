@@ -1230,13 +1230,18 @@ const ChemistryTool: React.FC = () => {
         runSettings: {
           promptDebugging: debugMode,
           moleculeName: orchestratorSettings.moleculeName || 'brand',
+          useRsa,
+          rsaMode,
+          rsaN,
+          rsaK,
+          rsaT,
         },
         ...data,
       };
       wsRef.current.send(JSON.stringify(msg));
       setContextMenu({ node: null, isReaction: false, x: 0, y: 0 });
     },
-    [debugMode, orchestratorSettings]
+    [debugMode, orchestratorSettings, useRsa, rsaMode, rsaN, rsaK, rsaT]
   );
 
   const handleReactionCardClick = useCallback(
@@ -1310,6 +1315,11 @@ const ChemistryTool: React.FC = () => {
               runSettings: {
                 promptDebugging: debugMode,
                 moleculeName: orchestratorSettings.moleculeName || 'brand',
+                useRsa,
+                rsaMode,
+                rsaN,
+                rsaK,
+                rsaT,
               },
             })
           );
@@ -1317,8 +1327,8 @@ const ChemistryTool: React.FC = () => {
       }
       setIsComputing(true);
     },
-    [selectedReactionNode?.id, debugMode, orchestratorSettings]
-  ); // Only depend on the ID
+    [selectedReactionNode?.id, debugMode, orchestratorSettings, useRsa, rsaMode, rsaN, rsaK, rsaT]
+  );
 
   const stableAlternatives = useMemo(() => {
     return selectedReactionNode?.reaction?.alternatives || [];
