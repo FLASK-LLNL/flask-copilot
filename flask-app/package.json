@@ -3,6 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.29.0",
     "@rdkit/rdkit": "^2025.3.4-1.0.0",
     "@tailwindcss/cli": "^4.1.14",
     "@tailwindcss/vite": "^4.1.16",

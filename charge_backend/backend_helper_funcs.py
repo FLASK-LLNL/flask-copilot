@@ -107,6 +107,7 @@ class ModelMessage:
 
 @dataclass
 class FlaskRunSettings(RunSettings):
+    prompt_debugging: bool = Field(alias="promptDebugging", default=False)
     molecule_name_format: MolNameFormat = Field(alias="moleculeName", default="brand")
 
 

@@ -61,6 +61,7 @@ import {
   useSidebarState,
   MarkdownText,
   BACKEND_OPTIONS,
+  handleLocalMcpProxyRequest,
 } from 'lc-conductor';
 
 import { CombinedCustomizationModal } from './components/combined_customization_modal';
@@ -73,6 +74,139 @@ import './animations.css';
 import { MetricsDashboard, useMetricsDashboardState } from './components/metrics';
 import { useProjectData } from './hooks/useProjectData';
 import { ReactionAlternativesSidebar } from './components/reaction_alternatives';
+
+const expandSelectableTools = (tools: Tool[]): SelectableTool[] => {
+  let nextId = 0;
+
+  return tools.flatMap((tool) => {
+    if (tool.kind === 'builtin') {
+      return [
+        {
+          id: nextId++,
+          tool_server: tool,
+          tool_name: tool.names?.[0] || tool.identifier || tool.server,
+          tool_description: tool.description,
+        },
+      ];
+    }
+
+    const definedTools =
+      tool.tools && tool.tools.length > 0
+        ? tool.tools
+        : (tool.names || []).map((name) => ({ name, description: tool.description }));
+
+    return definedTools.map((definedTool) => ({
+      id: nextId++,
+      tool_server: tool,
+      tool_name: definedTool.name,
+      tool_description: definedTool.description || tool.description,
+    }));
+  });
+};
+
+const buildSelectedToolPayload = (selectedItemsData: SelectableTool[]): SelectableTool[] => {
+  const groupedDescriptors = new Map<string, SelectableTool>();
+
+  for (const item of selectedItemsData) {
+    if (item.tool_server.kind === 'builtin') {
+      groupedDescriptors.set(`builtin:${item.tool_server.identifier || item.id}`, item);
+      continue;
+    }
+
+    const key = `${item.tool_server.executionScope || 'backend'}:${
+      item.tool_server.server || item.tool_server.identifier || item.id
+    }`;
+    const existing = groupedDescriptors.get(key);
+
+    if (!existing) {
+      groupedDescriptors.set(key, {
+        id: item.id,
+        tool_name: item.tool_name,
+        tool_description: item.tool_description,
+        tool_server: {
+          ...item.tool_server,
+          names: item.tool_name ? [item.tool_name] : [],
+          tools: (item.tool_server.tools || []).filter((tool) => tool.name === item.tool_name),
+          allowedToolNames: item.tool_name ? [item.tool_name] : [],
+        },
+      });
+      continue;
+    }
+
+    const nextAllowedToolNames = Array.from(
+      new Set([
+        ...(existing.tool_server.allowedToolNames || []),
+        ...(item.tool_name ? [item.tool_name] : []),
+      ])
+    );
+
+    const nextTools = Array.from(
+      new Map(
+        [...(existing.tool_server.tools || []), ...(item.tool_server.tools || [])].map((tool) => [
+          tool.name,
+          tool,
+        ])
+      ).values()
+    ).filter((tool) => nextAllowedToolNames.includes(tool.name));
+
+    groupedDescriptors.set(key, {
+      ...existing,
+      tool_server: {
+        ...existing.tool_server,
+        names: nextAllowedToolNames,
+        tools: nextTools,
+        allowedToolNames: nextAllowedToolNames,
+      },
+    });
+  }
+
+  return Array.from(groupedDescriptors.values());
+};
+
+const selectableToolName = (tool: SelectableTool): string =>
+  (
+    tool.tool_name ||
+    tool.tool_server.names?.[0] ||
+    tool.tool_server.identifier ||
+    tool.tool_server.server ||
+    ''
+  ).trim();
+
+const getDuplicateToolNameConflicts = (
+  tools: SelectableTool[]
+): Array<{ name: string; count: number }> => {
+  const nameCounts = new Map<string, number>();
+
+  tools.forEach((tool) => {
+    const name = selectableToolName(tool);
+    if (!name) {
+      return;
+    }
+    nameCounts.set(name, (nameCounts.get(name) || 0) + 1);
+  });
+
+  return Array.from(nameCounts.entries())
+    .filter(([, count]) => count > 1)
+    .map(([name, count]) => ({ name, count }))
+    .sort((left, right) => left.name.localeCompare(right.name));
+};
+
+const getDefaultSelectedTools = (tools: SelectableTool[]): SelectableTool[] => {
+  const nameCounts = new Map<string, number>();
+
+  tools.forEach((tool) => {
+    const name = selectableToolName(tool);
+    if (!name) {
+      return;
+    }
+    nameCounts.set(name, (nameCounts.get(name) || 0) + 1);
+  });
+
+  return tools.filter((tool) => {
+    const name = selectableToolName(tool);
+    return !!name && nameCounts.get(name) === 1;
+  });
+};
 
 const ChemistryTool: React.FC = () => {
   const [smiles, setSmiles] = useState<string>('');
@@ -103,6 +237,7 @@ const ChemistryTool: React.FC = () => {
   const [saveDropdownOpen, setSaveDropdownOpen] = useState<boolean>(false);
   const [wsError, setWsError] = useState<string>('');
   const [wsReconnecting, setWsReconnecting] = useState<boolean>(false);
+  const [hasReviewedToolConflicts, setHasReviewedToolConflicts] = useState<boolean>(false);
   const rdkitModule = loadRDKit();
   const [sidebarOpen, setSidebarOpen] = useState<boolean>(false);
   const [copiedField, setCopiedField] = useState<string | null>(null);
@@ -156,6 +291,10 @@ const ChemistryTool: React.FC = () => {
 
   const [selectedTools, setSelectedTools] = useState<number[]>([]);
   const [availableToolsMap, setAvailableToolsMap] = useState<SelectableTool[]>([]);
+  const duplicateToolNameConflicts = useMemo(
+    () => getDuplicateToolNameConflicts(availableToolsMap),
+    [availableToolsMap]
+  );
 
   // Reaction alternatives sidebar state
   const [reactionSidebarOpen, setReactionSidebarOpen] = useState<boolean>(false);
@@ -172,7 +311,7 @@ const ChemistryTool: React.FC = () => {
     }
   }, [treeNodes, selectedReactionNode]);
 
-  // Auto-select all tools only on the first non-empty tool list load.
+  // Auto-select only uniquely named tools on the first non-empty tool list load.
   useEffect(() => {
     if (availableToolsMap.length === 0) {
       hasInitializedToolSelectionRef.current = false;
@@ -180,10 +319,12 @@ const ChemistryTool: React.FC = () => {
     }
 
     if (!hasInitializedToolSelectionRef.current && selectedTools.length === 0) {
-      const allToolIds = availableToolsMap.map((tool) => tool.id);
-      setSelectedTools(allToolIds);
+      const defaultSelectedTools = getDefaultSelectedTools(availableToolsMap);
+      const defaultSelectedIds = defaultSelectedTools.map((tool) => tool.id);
+      setSelectedTools(defaultSelectedIds);
       hasInitializedToolSelectionRef.current = true;
-      console.log('Auto-selected all tools:', allToolIds);
+      void handleToolSelectionConfirm(defaultSelectedIds, defaultSelectedTools);
+      console.log('Auto-selected uniquely named tools:', defaultSelectedIds);
     }
   }, [availableToolsMap, selectedTools.length]);
 
@@ -205,22 +346,44 @@ const ChemistryTool: React.FC = () => {
     const saved = localStorage.getItem('orchestratorSettings');
     if (saved) {
       try {
-        return JSON.parse(saved);
+        const parsed = JSON.parse(saved);
+        return {
+          backend: parsed.backend || 'vllm',
+          useCustomUrl: parsed.useCustomUrl || false,
+          customUrl: parsed.customUrl || 'http://localhost:8000/v1',
+          model: parsed.model || 'gpt-oss',
+          reasoningEffort: parsed.reasoningEffort || 'medium',
+          apiKey: parsed.apiKey || '',
+          backendLabel: parsed.backendLabel || 'vLLM',
+          useCustomModel: parsed.useCustomModel,
+          toolServers: Array.isArray(parsed.toolServers) ? parsed.toolServers : [],
+          moleculeName: parsed.moleculeName,
+        };
       } catch (e) {
         console.error('Error parsing settings:', e);
       }
     }
     return {
       backend: 'vllm',
+      useCustomUrl: false,
       customUrl: 'http://localhost:8000/v1',
       model: 'gpt-oss',
       reasoningEffort: 'medium',
       apiKey: '',
       backendLabel: 'vLLM',
+      toolServers: [],
     };
   };
   const [orchestratorSettings, setOrchestratorSettings] =
     useState<FlaskOrchestratorSettings>(getInitialSettings());
+  const orchestratorSettingsRef = useRef(orchestratorSettings);
+  const hasSavedOrchestratorSettingsRef = useRef<boolean>(
+    localStorage.getItem('orchestratorSettings') !== null
+  );
+
+  useEffect(() => {
+    orchestratorSettingsRef.current = orchestratorSettings;
+  }, [orchestratorSettings]);
 
   // Add this helper function near the top of the ChemistryTool component
   const getDisplayUrl = (): string => {
@@ -230,6 +393,28 @@ const ChemistryTool: React.FC = () => {
     const backendOption = BACKEND_OPTIONS.find((opt) => opt.value === orchestratorSettings.backend);
     return backendOption?.defaultUrl || 'Not configured';
   };
+
+  const sendOrchestratorSettingsToBackend = useCallback(
+    (settings: FlaskOrchestratorSettings): void => {
+      if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) {
+        return;
+      }
+
+      wsRef.current.send(
+        JSON.stringify({
+          action: 'ui-update-orchestrator-settings',
+          backend: settings.backend,
+          useCustomUrl: settings.useCustomUrl,
+          customUrl: settings.useCustomUrl ? settings.customUrl : '',
+          model: settings.model,
+          reasoningEffort: settings.reasoningEffort,
+          apiKey: settings.apiKey,
+          toolServers: settings.toolServers || [],
+        })
+      );
+    },
+    []
+  );
 
   // Callback function to send selected tools to backend
   const handleToolSelectionConfirm = async (
@@ -243,11 +428,12 @@ const ChemistryTool: React.FC = () => {
     console.log(`Set Task Tool Selection`);
 
     if (wsRef.current && wsRef.current.readyState == WebSocket.OPEN) {
+      const groupedSelectedTools = buildSelectedToolPayload(selectedItemsData);
       const message: WebSocketMessageToServer = {
         action: 'select-tools-for-task',
         enabledTools: {
           selectedIds: selectedIds,
-          selectedTools: selectedItemsData,
+          selectedTools: groupedSelectedTools,
         },
       };
 
@@ -273,6 +459,8 @@ const ChemistryTool: React.FC = () => {
       runSettings: { moleculeName: moleculeName },
     };
     setOrchestratorSettings(updatedSettings);
+    orchestratorSettingsRef.current = updatedSettings;
+    hasSavedOrchestratorSettingsRef.current = true;
     localStorage.setItem('orchestratorSettings', JSON.stringify(updatedSettings));
 
     // Note: The molecule name is sent to backend as part of runSettings
@@ -291,24 +479,27 @@ const ChemistryTool: React.FC = () => {
 
     // Update local state immediately
     setOrchestratorSettings(settings);
+    orchestratorSettingsRef.current = settings;
+    hasSavedOrchestratorSettingsRef.current = true;
     localStorage.setItem('orchestratorSettings', JSON.stringify(settings));
 
     if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
-      const message = {
-        action: 'ui-update-orchestrator-settings',
-        backend: settings.backend,
-        customUrl: settings.customUrl,
-        model: settings.model,
-        reasoningEffort: settings.reasoningEffort,
-        apiKey: settings.apiKey,
-      };
-      wsRef.current.send(JSON.stringify(message));
-
+      sendOrchestratorSettingsToBackend(settings);
       // Refresh tools list after updating settings
       console.log('🔄 Refreshing tools list after settings update');
       refreshToolsList();
     }
   };
+
+  const handleLocalMcpRequest = useCallback(async (data: WebSocketMessage): Promise<void> => {
+    if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) {
+      return;
+    }
+
+    await handleLocalMcpProxyRequest(data, (response) => {
+      wsRef.current?.send(JSON.stringify(response));
+    });
+  }, []);
 
   useEffect(() => {
     const handleClickOutside = (): void => {
@@ -522,6 +713,9 @@ const ChemistryTool: React.FC = () => {
 
       loadStateFromCurrentExperiment();
 
+      if (hasSavedOrchestratorSettingsRef.current) {
+        sendOrchestratorSettingsToBackend(orchestratorSettingsRef.current);
+      }
       socket.send(JSON.stringify({ action: 'list-tools' }));
       socket.send(JSON.stringify({ action: 'get-username' }));
     };
@@ -616,30 +810,39 @@ const ChemistryTool: React.FC = () => {
           case 'available-tools-response': {
             const newTools = data.tools || [];
             setAvailableTools(newTools);
-            setAvailableToolsMap(
-              newTools.map((server: Tool, index: number) => ({
-                id: index,
-                tool_server: server,
-              }))
-            );
+            hasInitializedToolSelectionRef.current = false;
+            setHasReviewedToolConflicts(false);
+            setAvailableToolsMap(expandSelectableTools(newTools));
             setSelectedTools([]);
             break;
           }
+          case 'local-mcp-request': {
+            void handleLocalMcpRequest(data);
+            break;
+          }
           case 'server-update-orchestrator-settings': {
-            // Handle orchestrator settings updates from server
+            if (hasSavedOrchestratorSettingsRef.current) {
+              console.log(
+                'Ignoring server orchestrator settings because local settings are already loaded',
+                data.orchestratorSettings
+              );
+              break;
+            }
+
             const newSettings: FlaskOrchestratorSettings = {
               backend: data.orchestratorSettings!.backend,
               useCustomUrl: data.orchestratorSettings!.useCustomUrl,
               customUrl: data.orchestratorSettings!.customUrl,
               model: data.orchestratorSettings!.model,
               reasoningEffort: data.orchestratorSettings!.reasoningEffort,
-              // Don't take the use custom model field from the backend
-              // Check the model against the list of models in copilot
-              // useCustomModel: data.orchestratorSettings.useCustomModel,
               apiKey: data.orchestratorSettings!.apiKey,
               backendLabel: data.orchestratorSettings!.backendLabel,
+              toolServers: data.orchestratorSettings!.toolServers || [],
+              moleculeName: data.orchestratorSettings!.moleculeName,
             };
             setOrchestratorSettings(newSettings);
+            orchestratorSettingsRef.current = newSettings;
+            hasSavedOrchestratorSettingsRef.current = true;
             console.log('Updating the orchestrator settings ', newSettings);
             localStorage.setItem('orchestratorSettings', JSON.stringify(newSettings));
             break;
@@ -1427,8 +1630,12 @@ const ChemistryTool: React.FC = () => {
                                   <div className="text-secondary font-medium">
                                     {tool.server || ('server' as string)}
                                   </div>
-                                  <div className="text-[10px] uppercase tracking-wide text-tertiary">
-                                    {tool.kind === 'builtin' ? 'Built-in' : 'MCP'}
+                                  <div className="text-[10px] tracking-wide text-tertiary whitespace-pre-line text-right leading-tight">
+                                    {tool.kind === 'builtin'
+                                      ? 'Built-in'
+                                      : tool.executionScope === 'local'
+                                        ? 'MCP\nlocal'
+                                        : 'MCP'}
                                   </div>
                                 </div>
                                 {tool.names && (
@@ -1599,12 +1806,29 @@ const ChemistryTool: React.FC = () => {
                     </button>
                   )}
                   <button
-                    onClick={() => setShowCustomizationModal(true)}
+                    onClick={() => {
+                      setHasReviewedToolConflicts(true);
+                      setShowCustomizationModal(true);
+                    }}
                     disabled={isComputing}
                     className="btn btn-tertiary mt-5"
                   >
                     <Sliders className="w-4 h-4" />
                     Customize
+                    {duplicateToolNameConflicts.length > 0 && !hasReviewedToolConflicts && (
+                      <span className="warning-tooltip">
+                        ⚠️
+                        <div className="warning-tooltip-content">
+                          <div
+                            className="warning-tooltip-box"
+                            style={{ width: '20rem', whiteSpace: 'normal' }}
+                          >
+                            Some available tools share the same name. Open Customize to choose which
+                            version to expose; duplicates are not all enabled by default.
+                          </div>
+                        </div>
+                      </span>
+                    )}
                     {(selectedTools.length > 0 ||
                       (problemType === 'optimization' && customization.enableConstraints)) && (
                       <span className="ml-1 px-2 py-0.5 text-xs rounded-full bg-blue-500/20 text-blue-400 flex items-center gap-1">
