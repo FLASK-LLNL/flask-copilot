@@ -1,0 +1,2 @@
+[console_scripts]
+flask-copilot-install = charge_backend.install:main
