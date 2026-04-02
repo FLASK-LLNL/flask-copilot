@@ -1,3 +1,4 @@
+import os
 import asyncio
 from fastapi import WebSocket
 from charge_backend.retrosynthesis import aizynth_tools as azf
@@ -205,6 +206,14 @@ async def run_retro_planner(
     :return: A 2-tuple of (Reaction object, list of routes) if routes found, or
              ``(None, [])`` if nothing was discovered.
     """
+    # Check if config file exists
+    if not os.path.exists(config_file):
+        await clogger.info(
+            f"Template-based retrosynthesis config not found at {config_file}. "
+            "Template search unavailable."
+        )
+        return None, []
+
     await clogger.info(f"Running RetroPlanner for SMILES: {smiles}")
     report_init = False
     if azf.RetroPlanner.finder is None:
