@@ -50,6 +50,7 @@ class FlaskActionManager(ActionManager):
         self.websocket = task_manager.websocket
         self.builtin_tool_definitions = builtin_tool_definitions or []
         self.task_manager.available_builtin_tool_ids = None
+        self.retro_synth_context = None
 
     def _selected_mcp_tools(self) -> list[str]:
         if self.task_manager.available_tools is None:
