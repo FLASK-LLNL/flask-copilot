@@ -3,6 +3,7 @@ from typing import List, Optional
 from pydantic import BaseModel, field_validator
 from flask_tools.chemistry.smarts_reactions_utils import verify_reaction_SMARTS
 from flask_tools.chemistry.smiles_utils import verify_smiles
+from pathlib import Path
 
 
 class ReactionOutputSchema(BaseModel):
@@ -179,4 +180,78 @@ class TemplateFreeRetrosynthesisTask(Task):
             + f"\n{self.system_prompt}"
             + f"\n{self.user_prompt}"
             + f"\n{TEMPLATE_FREE_SYSTEM_PROMPT}"
+        )
+
+
+class RSAAggregationTask(Task):
+    """
+    Task for RSA (Recursive Self-Aggregation) that aggregates multiple candidate
+    retrosynthesis solutions into a single improved solution.
+    """
+
+    def __init__(
+        self,
+        original_user_prompt: str,
+        candidates_text: str,
+        step: int,
+        total_steps: int,
+        mode: str = "standalone",
+        system_prompt: Optional[str] = None,
+        **kwargs,
+    ):
+        """
+        Initialize RSA Aggregation Task.
+
+        Args:
+            original_user_prompt: The original retrosynthesis prompt
+            candidates_text: Formatted text containing candidate solutions
+            step: Current aggregation step (2..T)
+            total_steps: Total number of RSA steps (T)
+            mode: "standalone" or "rag"
+            system_prompt: Optional override for system prompt
+            **kwargs: Additional arguments passed to Task
+        """
+        # Determine prompt file paths
+        prompts_dir = Path(__file__).parent / "prompts"
+        system_file = prompts_dir / f"rsa_{mode}_system.txt"
+        aggregation_file = prompts_dir / f"rsa_{mode}_aggregation.txt"
+
+        # Load system prompt
+        if system_prompt is None:
+            if system_file.exists():
+                system_prompt = system_file.read_text()
+            else:
+                raise FileNotFoundError(
+                    f"RSA system prompt not found: {system_file}"
+                )
+
+        # Load and format aggregation template
+        if aggregation_file.exists():
+            aggregation_template = aggregation_file.read_text()
+            user_prompt = aggregation_template.format(
+                original_prompt=original_user_prompt,
+                candidates=candidates_text,
+                step=step,
+                total_steps=total_steps,
+            )
+        else:
+            raise FileNotFoundError(
+                f"RSA aggregation template not found: {aggregation_file}"
+            )
+
+        super().__init__(
+            system_prompt=system_prompt,
+            user_prompt=user_prompt,
+            **kwargs,
+        )
+        self.system_prompt = system_prompt
+        self.user_prompt = user_prompt
+        self.original_user_prompt = original_user_prompt
+        self.step = step
+        self.total_steps = total_steps
+        self.mode = mode
+        self.set_structured_output_schema(TemplateFreeReactionOutputSchema)
+
+        print(
+            f"RSAAggregationTask initialized (mode={mode}, step={step}/{total_steps})"
         )
