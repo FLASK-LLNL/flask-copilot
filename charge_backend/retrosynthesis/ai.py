@@ -158,11 +158,12 @@ async def ai_based_retrosynthesis(
             for i in range(rsa_n):
                 await clogger.info(f"Generating proposal {i+1}/{rsa_n}")
                 try:
-                    # Create a fresh task for each proposal
+                    # Create a fresh task for each proposal with higher temperature for diversity
                     proposal_task = RetrosynthesisTask(
                         user_prompt=user_prompt,
                         server_urls=available_tools,
                         builtin_tools=builtin_tools or [],
+                        temperature=0.8,  # Higher temperature for diverse proposals
                     )
                     runner.task = proposal_task
 
