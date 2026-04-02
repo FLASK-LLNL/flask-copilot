@@ -161,6 +161,46 @@ async def ai_based_retrosynthesis(
             os.makedirs(rsa_log_dir, exist_ok=True)
             await clogger.info(f"RSA execution logs will be saved to: {rsa_log_dir}")
 
+            # For RAG mode: Query database once and inject into prompts
+            user_prompt_with_rag = user_prompt
+            if rsa_mode == "rag":
+                await clogger.info("RAG mode: Querying reaction database once...")
+                try:
+                    from retrosynthesis.database import query_reaction_database
+                    db_results = query_reaction_database(current_node.smiles, top_k=10)
+
+                    if db_results and not any("error" in r for r in db_results):
+                        await clogger.info(f"Found {len(db_results)} similar reactions in database")
+
+                        # Format database results with clear context
+                        rag_context = "\n\n--- REACTION DATABASE RESULTS ---\n"
+                        rag_context += f"These are similar reactions retrieved by comparing structural similarity to the target product ({current_node.smiles}):\n\n"
+
+                        for idx, reaction in enumerate(db_results[:10], 1):
+                            rag_context += f"Reaction {idx}:\n"
+                            if "reactants" in reaction:
+                                rag_context += f"  Reactants: {reaction.get('reactants', 'N/A')}\n"
+                            if "products" in reaction:
+                                rag_context += f"  Products: {reaction.get('products', 'N/A')}\n"
+                            if "text" in reaction and reaction.get("text"):
+                                rag_context += f"  Description: {reaction['text']}\n"
+                            rag_context += "\n"
+
+                        rag_context += "Use these reactions as supporting evidence for your retrosynthesis proposal.\n"
+                        rag_context += "--- END DATABASE RESULTS ---\n"
+
+                        user_prompt_with_rag = user_prompt + rag_context
+
+                        # Save database results to log
+                        with open(f"{rsa_log_dir}/database_query_results.json", "w") as f:
+                            json.dump(db_results, f, indent=2)
+                    else:
+                        await clogger.info("No reactions found in database")
+                        user_prompt_with_rag = user_prompt + "\n\nNo similar reactions found in the database for this target molecule.\n"
+                except Exception as e:
+                    await clogger.warning(f"Database query failed: {str(e)}")
+                    user_prompt_with_rag = user_prompt + "\n\nDatabase query failed. Proceed using chemistry knowledge only.\n"
+
             # Step 1: Generate N initial proposals
             await clogger.info(f"RSA Step 1/{rsa_t}: Generating {rsa_n} initial proposals")
             proposals = []
