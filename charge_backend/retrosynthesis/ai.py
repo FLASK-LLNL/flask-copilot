@@ -271,6 +271,17 @@ async def ai_based_retrosynthesis(
                     candidates_text += f"Products: {', '.join(prop_result.products_smiles_list)}\n"
                 return candidates_text
 
+            # Runner factory for parallel execution
+            proposal_counter = [0]  # Mutable counter for unique agent names
+            def create_runner():
+                """Create independent runner for parallel proposals"""
+                proposal_counter[0] += 1
+                return experiment.create_agent_with_experiment_state(
+                    task=None,
+                    agent_name=f"retrosynth_{node_id}_proposal_{proposal_counter[0]}",
+                    callback=callback_handler if isinstance(callback_handler, CallbackHandler) else None,
+                )
+
             # Run generic RSA loop
             output, final_result = await run_rsa_loop(
                 n=rsa_n,
@@ -285,6 +296,8 @@ async def ai_based_retrosynthesis(
                 log_dir=rsa_log_dir,
                 output_schema=ReactionOutputSchema,
                 callback_handler=callback_handler if isinstance(callback_handler, CallbackHandler) else None,
+                parallel=True,
+                runner_factory=create_runner,
             )
 
             await clogger.info(f"RSA mode completed successfully. Logs saved to: {rsa_log_dir}")
