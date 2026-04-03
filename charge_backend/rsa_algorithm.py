@@ -167,12 +167,97 @@ async def run_rsa_loop(
 
     await clogger.info(f"Generated {len(proposals)} valid proposals")
 
+    # Helper function to run a single aggregation
+    async def run_single_aggregation(agg_index: int, step: int, current_proposals: list, agg_runner: Any):
+        """Run a single aggregation and return result or None if failed"""
+        try:
+            await clogger.info(f"Aggregation {agg_index+1}/{num_aggregations} (Step {step})")
+
+            # Adjust K if needed
+            current_k = k
+            if len(current_proposals) < k:
+                current_k = len(current_proposals)
+
+            # Select K random proposals
+            if len(current_proposals) <= current_k:
+                subset = current_proposals
+            else:
+                subset = random.sample(current_proposals, current_k)
+
+            # Format candidates using task-specific formatter
+            candidates_text = format_candidates(subset)
+            subset_indices = [prop["index"] + 1 for prop in subset]
+
+            # Create aggregation task
+            agg_task = create_aggregation_task(
+                candidates_text,
+                subset,
+                step,
+                t
+            )
+            agg_runner.task = agg_task
+
+            if os.getenv("CHARGE_DISABLE_OUTPUT_VALIDATION", "0") == "1":
+                agg_task.structured_output_schema = None
+
+            # Save aggregation prompt
+            aggregator_log = {
+                "step": step,
+                "aggregation_index": agg_index + 1,
+                "k_subset_indices": subset_indices,
+                "system_prompt": agg_task.get_system_prompt(),
+                "user_prompt": agg_task.get_user_prompt(),
+                "candidates_text": candidates_text,
+            }
+            with open(f"{log_dir}/aggregator_step{step}_{agg_index+1:02d}_prompt.json", "w") as f:
+                json.dump(aggregator_log, f, indent=2)
+
+            # Run aggregation
+            agg_output = await agg_runner.run(log_progress)
+            if callback_handler:
+                await callback_handler.drain()
+
+            # Validate output
+            agg_result = output_schema.model_validate_json(agg_output)
+
+            # Check if aggregation contains actual chemical information
+            if not hasattr(agg_result, 'reactants_smiles_list') or len(agg_result.reactants_smiles_list) == 0:
+                await clogger.warning(f"Aggregation {agg_index+1} has empty reactants (model refused or failed), skipping")
+                return None
+
+            # Save aggregation output
+            aggregator_output_log = {
+                "step": step,
+                "aggregation_index": agg_index + 1,
+                "k_subset_indices": subset_indices,
+                "result": agg_result.model_dump(),
+                "full_output": json.loads(agg_output)
+            }
+            with open(f"{log_dir}/aggregator_step{step}_{agg_index+1:02d}_output.json", "w") as f:
+                json.dump(aggregator_output_log, f, indent=2)
+
+            await clogger.info(f"Aggregation {agg_index+1} completed successfully")
+
+            return {
+                "output": agg_output,
+                "result": agg_result,
+                "index": agg_index,
+                "step": step
+            }
+
+        except Exception as e:
+            await clogger.warning(f"Aggregation {agg_index+1} failed: {str(e)}")
+            return None
+
     # Stages 2-T: Recursive aggregation
+    # BARRIER: Wait for all Stage 1 proposals to complete before starting Stage 2
     current_proposals = proposals
+    await clogger.info(f"Stage 1 complete. Generated {len(proposals)} valid proposals.")
 
     for step in range(2, t + 1):
         await clogger.info(
-            f"RSA Step {step}/{t}: Aggregating {len(current_proposals)} proposals into {k}-subsets"
+            f"RSA Step {step}/{t}: Aggregating {len(current_proposals)} proposals into {k}-subsets" +
+            (" (parallel mode)" if parallel else " (sequential mode)")
         )
 
         # Adjust K if needed
@@ -184,87 +269,47 @@ async def run_rsa_loop(
             current_k = len(current_proposals)
 
         # Generate aggregations
-        next_proposals = []
         num_aggregations = max(n, len(current_proposals))
 
-        for i in range(num_aggregations):
-            await clogger.info(f"Aggregation {i+1}/{num_aggregations}")
-            try:
-                # Select K random proposals
-                if len(current_proposals) <= current_k:
-                    subset = current_proposals
-                else:
-                    subset = random.sample(current_proposals, current_k)
+        if parallel and runner_factory:
+            # Parallel mode: run all aggregations in this stage concurrently
+            agg_tasks = []
+            for i in range(num_aggregations):
+                # Create independent runner for each aggregation
+                agg_runner = runner_factory()
+                task = run_single_aggregation(i, step, current_proposals, agg_runner)
+                agg_tasks.append(task)
 
-                # Format candidates using task-specific formatter
-                candidates_text = format_candidates(subset)
-                subset_indices = [prop["index"] + 1 for prop in subset]
+            # Run all aggregations in parallel and wait for all to complete
+            # BARRIER: asyncio.gather waits for all aggregations in this stage
+            agg_results = await asyncio.gather(*agg_tasks, return_exceptions=True)
 
-                # Create aggregation task
-                agg_task = create_aggregation_task(
-                    candidates_text,
-                    subset,
-                    step,
-                    t
-                )
-                runner.task = agg_task
+            # Filter valid aggregations and handle exceptions
+            next_proposals = []
+            for i, result in enumerate(agg_results):
+                if isinstance(result, Exception):
+                    await clogger.warning(f"Aggregation {i+1} failed with exception: {str(result)}")
+                elif result is not None:
+                    next_proposals.append(result)
 
-                if os.getenv("CHARGE_DISABLE_OUTPUT_VALIDATION", "0") == "1":
-                    agg_task.structured_output_schema = None
+        else:
+            # Sequential mode: run aggregations one by one
+            if parallel and not runner_factory:
+                await clogger.warning("Parallel mode requested but no runner_factory provided, falling back to sequential")
 
-                # Save aggregation prompt
-                aggregator_log = {
-                    "step": step,
-                    "aggregation_index": i + 1,
-                    "k_subset_indices": subset_indices,
-                    "system_prompt": agg_task.get_system_prompt(),
-                    "user_prompt": agg_task.get_user_prompt(),
-                    "candidates_text": candidates_text,
-                }
-                with open(f"{log_dir}/aggregator_step{step}_{i+1:02d}_prompt.json", "w") as f:
-                    json.dump(aggregator_log, f, indent=2)
-
-                # Run aggregation
-                agg_output = await runner.run(log_progress)
-                if callback_handler:
-                    await callback_handler.drain()
-
-                # Validate output
-                agg_result = output_schema.model_validate_json(agg_output)
-
-                # Check if aggregation contains actual chemical information
-                if not hasattr(agg_result, 'reactants_smiles_list') or len(agg_result.reactants_smiles_list) == 0:
-                    await clogger.warning(f"Aggregation {i+1} has empty reactants (model refused or failed), skipping")
-                    continue
-
-                # Save aggregation output
-                aggregator_output_log = {
-                    "step": step,
-                    "aggregation_index": i + 1,
-                    "k_subset_indices": subset_indices,
-                    "result": agg_result.model_dump(),
-                    "full_output": json.loads(agg_output)
-                }
-                with open(f"{log_dir}/aggregator_step{step}_{i+1:02d}_output.json", "w") as f:
-                    json.dump(aggregator_output_log, f, indent=2)
-
-                next_proposals.append({
-                    "output": agg_output,
-                    "result": agg_result,
-                    "index": i,
-                    "step": step
-                })
-                await clogger.info(f"Aggregation {i+1} completed successfully")
-
-            except Exception as e:
-                await clogger.warning(f"Aggregation {i+1} failed: {str(e)}")
-                continue
+            next_proposals = []
+            for i in range(num_aggregations):
+                result = await run_single_aggregation(i, step, current_proposals, runner)
+                if result is not None:
+                    next_proposals.append(result)
 
         if not next_proposals:
             await clogger.warning(f"No successful aggregations in step {step}, using previous proposals")
             break
 
+        # BARRIER: All aggregations in current stage complete before moving to next stage
         current_proposals = next_proposals
+        await clogger.info(f"Stage {step} complete. Generated {len(current_proposals)} valid aggregations.")
 
     # Select final proposal (first one from final stage)
     if not current_proposals:
