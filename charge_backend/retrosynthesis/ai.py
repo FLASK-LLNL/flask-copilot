@@ -166,7 +166,8 @@ async def ai_based_retrosynthesis(
             # For RAG mode: Query database once and inject into prompts
             # For standalone mode: Remove database query tool
             user_prompt_with_rag = user_prompt
-            builtin_tools_filtered = builtin_tools or []
+            available_tools = tool_runtime.mcp_server_urls
+            builtin_tools_filtered = tool_runtime.direct_tools
 
             if rsa_mode == "rag":
                 await clogger.info("RAG mode: Querying reaction database once...")

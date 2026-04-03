@@ -265,6 +265,9 @@ const ChemistryTool: React.FC = () => {
   const [editedPrompt, setEditedPrompt] = useState<string>('');
   const [debugModalMinimized, setDebugModalMinimized] = useState<boolean>(false);
 
+  // Retrosynthesis approach
+  const [useAiBased, setUseAiBased] = useState<boolean>(true);
+
   // RSA settings
   const [useRsa, setUseRsa] = useState<boolean>(false);
   const [rsaMode, setRsaMode] = useState<'standalone' | 'rag'>('standalone');
@@ -684,6 +687,7 @@ const ChemistryTool: React.FC = () => {
       runSettings: {
         promptDebugging: debugMode,
         moleculeName: orchestratorSettings.moleculeName || 'brand',
+        useAiBased,
         useRsa,
         rsaMode,
         rsaN,
@@ -1241,7 +1245,7 @@ const ChemistryTool: React.FC = () => {
       wsRef.current.send(JSON.stringify(msg));
       setContextMenu({ node: null, isReaction: false, x: 0, y: 0 });
     },
-    [debugMode, orchestratorSettings, useRsa, rsaMode, rsaN, rsaK, rsaT]
+    [debugMode, orchestratorSettings, useAiBased, useRsa, rsaMode, rsaN, rsaK, rsaT]
   );
 
   const handleReactionCardClick = useCallback(
@@ -1370,6 +1374,7 @@ const ChemistryTool: React.FC = () => {
       runSettings: {
         promptDebugging: debugMode,
         moleculeName: orchestratorSettings.moleculeName || 'brand',
+        useAiBased,
         useRsa,
         rsaMode,
         rsaN,
@@ -1750,26 +1755,42 @@ const ChemistryTool: React.FC = () => {
                     </label>
                   </div>
 
-                  {/* RSA Settings - Only for Retrosynthesis */}
+                  {/* Retrosynthesis Settings */}
                   {problemType === 'retrosynthesis' && (
                     <div className="border-l pl-4">
                       <div className="mb-2">
                         <label className="form-label flex items-center gap-2 cursor-pointer">
                           <input
                             type="checkbox"
-                            checked={useRsa}
-                            onChange={() => setUseRsa(!useRsa)}
+                            checked={useAiBased}
+                            onChange={() => setUseAiBased(!useAiBased)}
                             disabled={isComputing}
                             className="form-checkbox"
-                            title="Enable Recursive Self-Aggregation for retrosynthesis"
+                            title="Use AI-based retrosynthesis (vs template-based)"
                           />
-                          <Wrench className="w-4 h-4" />
-                          Enable RSA Mode
+                          Use AI-based Approach
                         </label>
                       </div>
 
-                      {useRsa && (
-                        <div className="ml-6 space-y-2">
+                      {useAiBased && (
+                        <div className="ml-6 mb-2">
+                          <label className="form-label flex items-center gap-2 cursor-pointer">
+                            <input
+                              type="checkbox"
+                              checked={useRsa}
+                              onChange={() => setUseRsa(!useRsa)}
+                              disabled={isComputing}
+                              className="form-checkbox"
+                              title="Enable Recursive Self-Aggregation for retrosynthesis"
+                            />
+                            <Wrench className="w-4 h-4" />
+                            Enable RSA Mode
+                          </label>
+                        </div>
+                      )}
+
+                      {useAiBased && useRsa && (
+                        <div className="ml-12 space-y-2">
                           <div>
                             <label className="form-label text-sm">Mode</label>
                             <select
