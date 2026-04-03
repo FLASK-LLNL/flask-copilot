@@ -145,6 +145,8 @@ async def ai_based_retrosynthesis(
     if run_settings.use_rsa:
         try:
             # RSA Mode: Recursive Self-Aggregation
+            from rsa_algorithm import run_rsa_loop
+
             rsa_n = run_settings.rsa_n if hasattr(run_settings, 'rsa_n') else 8
             rsa_k = run_settings.rsa_k if hasattr(run_settings, 'rsa_k') else 4
             rsa_t = run_settings.rsa_t if hasattr(run_settings, 'rsa_t') else 3
@@ -239,199 +241,53 @@ async def ai_based_retrosynthesis(
                 ]
                 await clogger.info("Standalone mode: Removed query_reaction_database from tools (no retrieval)")
 
-            # Step 1: Generate N initial proposals
-            await clogger.info(f"RSA Step 1/{rsa_t}: Generating {rsa_n} initial proposals")
-            proposals = []
-            for i in range(rsa_n):
-                await clogger.info(f"Generating proposal {i+1}/{rsa_n}")
-                try:
-                    # Create a fresh task for each proposal
-                    # TODO: Add temperature=0.8 for models that support it (Claude, etc.)
-                    proposal_task = RetrosynthesisTask(
-                        user_prompt=user_prompt_with_rag,
-                        server_urls=available_tools,
-                        builtin_tools=builtin_tools_filtered,
-                    )
-                    runner.task = proposal_task
-
-                    if os.getenv("CHARGE_DISABLE_OUTPUT_VALIDATION", "0") == "1":
-                        proposal_task.structured_output_schema = None
-
-                    # Save proposer prompt for examination
-                    proposer_log = {
-                        "proposal_index": i + 1,
-                        "system_prompt": proposal_task.get_system_prompt(),
-                        "user_prompt": user_prompt_with_rag,
-                        "mode": rsa_mode,
-                    }
-                    with open(f"{rsa_log_dir}/proposer_{i+1:02d}_prompt.json", "w") as f:
-                        json.dump(proposer_log, f, indent=2)
-
-                    # Run proposal
-                    proposal_output = await runner.run(log_progress)
-                    if isinstance(callback_handler, CallbackHandler):
-                        await callback_handler.drain()
-
-                    # Validate and store
-                    proposal_result = ReactionOutputSchema.model_validate_json(proposal_output)
-
-                    # Save proposer output for examination
-                    proposer_output_log = {
-                        "proposal_index": i + 1,
-                        "reasoning_summary": proposal_result.reasoning_summary,
-                        "reactants_smiles": proposal_result.reactants_smiles_list,
-                        "products_smiles": proposal_result.products_smiles_list,
-                        "full_output": json.loads(proposal_output)
-                    }
-                    with open(f"{rsa_log_dir}/proposer_{i+1:02d}_output.json", "w") as f:
-                        json.dump(proposer_output_log, f, indent=2)
-
-                    proposals.append({
-                        "output": proposal_output,
-                        "result": proposal_result,
-                        "index": i
-                    })
-                    await clogger.info(f"Proposal {i+1} completed successfully")
-                except Exception as e:
-                    await clogger.warning(f"Proposal {i+1} failed: {str(e)}")
-                    continue
-
-            if not proposals:
-                raise ValueError("All RSA proposals failed, falling back to standard mode")
-
-            await clogger.info(f"Generated {len(proposals)} valid proposals")
-
-            # Steps 2..T: Recursive aggregation
-            current_proposals = proposals
-            for step in range(2, rsa_t + 1):
-                await clogger.info(
-                    f"RSA Step {step}/{rsa_t}: Aggregating {len(current_proposals)} proposals into {rsa_k}-subsets"
+            # Define task factories for retrosynthesis
+            def create_proposal_task():
+                return RetrosynthesisTask(
+                    user_prompt=user_prompt_with_rag,
+                    server_urls=available_tools,
+                    builtin_tools=builtin_tools_filtered,
                 )
 
-                if len(current_proposals) < rsa_k:
-                    await clogger.warning(
-                        f"Not enough proposals ({len(current_proposals)}) for K={rsa_k}, using all available"
-                    )
-                    rsa_k = len(current_proposals)
+            def create_aggregation_task(candidates_text, subset, step, total_steps):
+                return RSAAggregationTask(
+                    original_user_prompt=user_prompt,
+                    candidates_text=candidates_text,
+                    step=step,
+                    total_steps=total_steps,
+                    mode=rsa_mode,
+                    server_urls=available_tools,
+                    builtin_tools=builtin_tools_filtered,
+                )
 
-                # Generate new proposals by aggregating K-subsets
-                next_proposals = []
-                num_aggregations = max(rsa_n, len(current_proposals))
+            def format_candidates(subset):
+                """Format retrosynthesis proposals for aggregation"""
+                candidates_text = ""
+                for idx, prop in enumerate(subset, 1):
+                    prop_result = prop["result"]
+                    candidates_text += f"\n---- Candidate {idx} ----\n"
+                    candidates_text += f"Reasoning: {prop_result.reasoning_summary}\n"
+                    candidates_text += f"Reactants: {', '.join(prop_result.reactants_smiles_list)}\n"
+                    candidates_text += f"Products: {', '.join(prop_result.products_smiles_list)}\n"
+                return candidates_text
 
-                for i in range(num_aggregations):
-                    await clogger.info(f"Aggregation {i+1}/{num_aggregations}")
-                    try:
-                        # Select K random proposals
-                        if len(current_proposals) <= rsa_k:
-                            subset = current_proposals
-                        else:
-                            subset = random.sample(current_proposals, rsa_k)
+            # Run generic RSA loop
+            output, final_result = await run_rsa_loop(
+                n=rsa_n,
+                k=rsa_k,
+                t=rsa_t,
+                create_proposal_task=create_proposal_task,
+                create_aggregation_task=create_aggregation_task,
+                format_candidates=format_candidates,
+                runner=runner,
+                log_progress=log_progress,
+                clogger=clogger,
+                log_dir=rsa_log_dir,
+                output_schema=ReactionOutputSchema,
+                callback_handler=callback_handler if isinstance(callback_handler, CallbackHandler) else None,
+            )
 
-                        # Format candidates text
-                        candidates_text = ""
-                        subset_indices = []
-                        for idx, prop in enumerate(subset, 1):
-                            prop_result = prop["result"]
-                            subset_indices.append(prop["index"] + 1)  # Convert to 1-indexed
-                            candidates_text += f"\n---- Candidate {idx} ----\n"
-                            candidates_text += f"Reasoning: {prop_result.reasoning_summary}\n"
-                            candidates_text += f"Reactants: {', '.join(prop_result.reactants_smiles_list)}\n"
-                            candidates_text += f"Products: {', '.join(prop_result.products_smiles_list)}\n"
-
-                        # Create aggregation task
-                        agg_task = RSAAggregationTask(
-                            original_user_prompt=user_prompt,
-                            candidates_text=candidates_text,
-                            step=step,
-                            total_steps=rsa_t,
-                            mode=rsa_mode,
-                            server_urls=available_tools,
-                            builtin_tools=builtin_tools_filtered,
-                        )
-                        runner.task = agg_task
-
-                        if os.getenv("CHARGE_DISABLE_OUTPUT_VALIDATION", "0") == "1":
-                            agg_task.structured_output_schema = None
-
-                        # Save aggregator prompt for examination
-                        aggregator_log = {
-                            "step": step,
-                            "aggregation_index": i + 1,
-                            "k_subset_indices": subset_indices,  # Which proposals were selected
-                            "system_prompt": agg_task.get_system_prompt(),
-                            "user_prompt": agg_task.get_user_prompt(),
-                            "original_user_prompt": user_prompt,
-                            "candidates_text": candidates_text,
-                            "mode": rsa_mode,
-                        }
-                        with open(f"{rsa_log_dir}/aggregator_step{step}_{i+1:02d}_prompt.json", "w") as f:
-                            json.dump(aggregator_log, f, indent=2)
-
-                        # Run aggregation
-                        agg_output = await runner.run(log_progress)
-                        if isinstance(callback_handler, CallbackHandler):
-                            await callback_handler.drain()
-
-                        # Validate and store
-                        agg_result = ReactionOutputSchema.model_validate_json(agg_output)
-
-                        # Save aggregator output for examination
-                        aggregator_output_log = {
-                            "step": step,
-                            "aggregation_index": i + 1,
-                            "k_subset_indices": subset_indices,
-                            "reasoning_summary": agg_result.reasoning_summary,
-                            "reactants_smiles": agg_result.reactants_smiles_list,
-                            "products_smiles": agg_result.products_smiles_list,
-                            "full_output": json.loads(agg_output)
-                        }
-                        with open(f"{rsa_log_dir}/aggregator_step{step}_{i+1:02d}_output.json", "w") as f:
-                            json.dump(aggregator_output_log, f, indent=2)
-
-                        next_proposals.append({
-                            "output": agg_output,
-                            "result": agg_result,
-                            "index": i,
-                            "step": step
-                        })
-                        await clogger.info(f"Aggregation {i+1} completed successfully")
-                    except Exception as e:
-                        await clogger.warning(f"Aggregation {i+1} failed: {str(e)}")
-                        continue
-
-                if not next_proposals:
-                    await clogger.warning(
-                        f"All aggregations at step {step} failed, using previous step results"
-                    )
-                    break
-
-                current_proposals = next_proposals
-                await clogger.info(f"Step {step} produced {len(current_proposals)} aggregated proposals")
-
-            # Select final output (use first/best from final step)
-            if current_proposals:
-                final_proposal = current_proposals[0]
-                output = final_proposal["output"]
-
-                # Save final output for examination
-                final_result = json.loads(output)
-                final_output_log = {
-                    "final_step": rsa_t,
-                    "mode": rsa_mode,
-                    "n_proposals": rsa_n,
-                    "k_subset_size": rsa_k,
-                    "t_stages": rsa_t,
-                    "final_reasoning": final_result.get("reasoning_summary", ""),
-                    "final_reactants_smiles": final_result.get("reactants_smiles_list", []),
-                    "final_products_smiles": final_result.get("products_smiles_list", []),
-                    "full_output": final_result
-                }
-                with open(f"{rsa_log_dir}/FINAL_OUTPUT.json", "w") as f:
-                    json.dump(final_output_log, f, indent=2)
-
-                await clogger.info(f"RSA mode completed successfully. Logs saved to: {rsa_log_dir}")
-            else:
-                raise ValueError("RSA aggregation produced no valid results")
+            await clogger.info(f"RSA mode completed successfully. Logs saved to: {rsa_log_dir}")
 
         except Exception as e:
             # Fallback to standard mode if RSA fails
