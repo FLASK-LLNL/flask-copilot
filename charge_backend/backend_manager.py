@@ -226,9 +226,10 @@ class FlaskActionManager(ActionManager):
 
     async def _handle_retrosynthesis(self, data: dict) -> None:
         """Handle retrosynthesis problem type."""
-        # Check if AI-based retrosynthesis is requested (RSA or standard AI)
-        # AI-based is the default; template-based only runs if config exists and AI not requested
-        use_ai_based = self.run_settings.use_rsa or not os.path.exists(self.args.config_file)
+        # Check if AI-based retrosynthesis is requested
+        # use_ai_based flag controls AI vs template approach
+        # If no config exists, fall back to AI-based
+        use_ai_based = self.run_settings.use_ai_based or not os.path.exists(self.args.config_file)
 
         if use_ai_based:
             # Use AI-based retrosynthesis (supports both standard and RSA modes)
