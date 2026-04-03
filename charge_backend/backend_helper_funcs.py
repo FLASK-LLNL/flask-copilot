@@ -108,6 +108,7 @@ class ModelMessage:
 @dataclass
 class FlaskRunSettings(RunSettings):
     molecule_name_format: MolNameFormat = Field(alias="moleculeName", default="brand")
+    # Inherit use_ai_based from RunSettings (defined in LC-Conductor)
 
 
 @dataclass(frozen=True)
