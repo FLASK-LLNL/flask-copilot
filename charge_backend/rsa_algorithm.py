@@ -14,6 +14,7 @@ RSA Algorithm:
 import random
 import json
 import os
+import asyncio
 from typing import Any, Callable, Optional
 from pathlib import Path
 
@@ -31,6 +32,8 @@ async def run_rsa_loop(
     log_dir: str,
     output_schema: Any,
     callback_handler: Optional[Any] = None,
+    parallel: bool = True,
+    runner_factory: Optional[Callable[[], Any]] = None,
 ) -> tuple[str, Any]:
     """
     Execute the generic N-K-T RSA algorithm.
@@ -50,6 +53,9 @@ async def run_rsa_loop(
         log_dir: Directory to save execution logs
         output_schema: Pydantic schema for validating outputs
         callback_handler: Optional callback handler to drain after each task
+        parallel: If True, generate initial proposals in parallel (default: True)
+        runner_factory: Factory to create independent runner instances for parallel execution
+                       If None and parallel=True, uses the provided runner (not truly parallel)
 
     Returns:
         tuple: (final_output_json, final_result_object)
@@ -65,16 +71,15 @@ async def run_rsa_loop(
         await clogger.warning(f"K ({k}) > N ({n}), adjusting K to N")
         k = n
 
-    # Stage 1: Generate N initial proposals
-    await clogger.info(f"RSA Step 1/{t}: Generating {n} initial proposals")
-    proposals = []
-
-    for i in range(n):
-        await clogger.info(f"Generating proposal {i+1}/{n}")
+    # Helper function to run a single proposal
+    async def run_single_proposal(proposal_index: int, proposal_runner: Any):
+        """Run a single proposal and return result or None if failed"""
         try:
+            await clogger.info(f"Generating proposal {proposal_index+1}/{n}")
+
             # Create proposal task
             proposal_task = create_proposal_task()
-            runner.task = proposal_task
+            proposal_runner.task = proposal_task
 
             # Disable validation if requested
             if os.getenv("CHARGE_DISABLE_OUTPUT_VALIDATION", "0") == "1":
@@ -82,40 +87,80 @@ async def run_rsa_loop(
 
             # Save proposal prompt
             proposer_log = {
-                "proposal_index": i + 1,
+                "proposal_index": proposal_index + 1,
                 "system_prompt": proposal_task.get_system_prompt(),
                 "user_prompt": proposal_task.get_user_prompt(),
             }
-            with open(f"{log_dir}/proposer_{i+1:02d}_prompt.json", "w") as f:
+            with open(f"{log_dir}/proposer_{proposal_index+1:02d}_prompt.json", "w") as f:
                 json.dump(proposer_log, f, indent=2)
 
             # Run proposal
-            proposal_output = await runner.run(log_progress)
+            proposal_output = await proposal_runner.run(log_progress)
             if callback_handler:
                 await callback_handler.drain()
 
             # Validate output
             proposal_result = output_schema.model_validate_json(proposal_output)
 
+            # Check if proposal contains actual chemical information
+            if not hasattr(proposal_result, 'reactants_smiles_list') or len(proposal_result.reactants_smiles_list) == 0:
+                await clogger.warning(f"Proposal {proposal_index+1} has empty reactants (model refused or failed), skipping")
+                return None
+
             # Save proposal output
             proposer_output_log = {
-                "proposal_index": i + 1,
+                "proposal_index": proposal_index + 1,
                 "result": proposal_result.model_dump(),
                 "full_output": json.loads(proposal_output)
             }
-            with open(f"{log_dir}/proposer_{i+1:02d}_output.json", "w") as f:
+            with open(f"{log_dir}/proposer_{proposal_index+1:02d}_output.json", "w") as f:
                 json.dump(proposer_output_log, f, indent=2)
 
-            proposals.append({
+            await clogger.info(f"Proposal {proposal_index+1} completed successfully")
+
+            return {
                 "output": proposal_output,
                 "result": proposal_result,
-                "index": i
-            })
-            await clogger.info(f"Proposal {i+1} completed successfully")
+                "index": proposal_index
+            }
 
         except Exception as e:
-            await clogger.warning(f"Proposal {i+1} failed: {str(e)}")
-            continue
+            await clogger.warning(f"Proposal {proposal_index+1} failed: {str(e)}")
+            return None
+
+    # Stage 1: Generate N initial proposals
+    await clogger.info(f"RSA Step 1/{t}: Generating {n} initial proposals" +
+                      (" (parallel mode)" if parallel else " (sequential mode)"))
+
+    if parallel and runner_factory:
+        # Parallel mode: generate all proposals concurrently
+        proposal_tasks = []
+        for i in range(n):
+            # Create independent runner for each proposal
+            proposal_runner = runner_factory()
+            task = run_single_proposal(i, proposal_runner)
+            proposal_tasks.append(task)
+
+        # Run all proposals in parallel
+        proposal_results = await asyncio.gather(*proposal_tasks, return_exceptions=True)
+
+        # Filter valid proposals and handle exceptions
+        proposals = []
+        for i, result in enumerate(proposal_results):
+            if isinstance(result, Exception):
+                await clogger.warning(f"Proposal {i+1} failed with exception: {str(result)}")
+            elif result is not None:
+                proposals.append(result)
+    else:
+        # Sequential mode: generate proposals one by one
+        if parallel and not runner_factory:
+            await clogger.warning("Parallel mode requested but no runner_factory provided, falling back to sequential")
+
+        proposals = []
+        for i in range(n):
+            result = await run_single_proposal(i, runner)
+            if result is not None:
+                proposals.append(result)
 
     if not proposals:
         raise ValueError("All RSA proposals failed")
@@ -186,6 +231,11 @@ async def run_rsa_loop(
 
                 # Validate output
                 agg_result = output_schema.model_validate_json(agg_output)
+
+                # Check if aggregation contains actual chemical information
+                if not hasattr(agg_result, 'reactants_smiles_list') or len(agg_result.reactants_smiles_list) == 0:
+                    await clogger.warning(f"Aggregation {i+1} has empty reactants (model refused or failed), skipping")
+                    continue
 
                 # Save aggregation output
                 aggregator_output_log = {
