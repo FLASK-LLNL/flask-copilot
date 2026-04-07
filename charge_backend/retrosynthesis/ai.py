@@ -36,7 +36,8 @@ from lc_conductor import ToolRuntime
 
 
 RETROSYNTH_UNCONSTRAINED_USER_PROMPT_TEMPLATE = (
-    "Provide a retrosynthetic pathway for the target molecule {target_molecule}. "
+    "Provide a retrosynthetic pathway for the target molecule `{target_molecule}`. "
+    + "If there are `*`, the `*` indicate the boundaries of the polymer repeat unit."
     + "The pathway should be provided as a tuple of reactants as SMILES and the product as SMILES. "
     + "Perform only single step retrosynthesis. Make sure the SMILES strings are valid. "
     + "Use tools to verify the SMILES strings and diagnose any issues that arise."
@@ -47,7 +48,8 @@ RETROSYNTH_UNCONSTRAINED_USER_PROMPT_TEMPLATE = (
 )
 
 RETROSYNTH_CONSTRAINED_USER_PROMPT_TEMPLATE = (
-    "Provide a retrosynthetic pathway for the target molecule {target_molecule}. "
+    "Provide a retrosynthetic pathway for the target molecule `{target_molecule}`. "
+    + "If there are `*`, the `*` indicate the boundaries of the polymer repeat unit."
     + "The pathway should be provided as a tuple of reactants as SMILES and the product as SMILES. "
     + "Perform only single step retrosynthesis. Make sure the SMILES strings are valid. "
     + "Use tools to verify the SMILES strings and diagnose any issues that arise. "
