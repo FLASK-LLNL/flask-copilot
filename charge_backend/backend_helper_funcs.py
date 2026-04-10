@@ -60,8 +60,8 @@ class Node:
     hoverInfo: str
     level: int
     parentId: Optional[str] = None
-    x: Optional[int] = None
-    y: Optional[int] = None
+    x: Optional[float] = None
+    y: Optional[float] = None
     highlight: Optional[str] = "normal"
     # Properties
     cost: Optional[float] = None
