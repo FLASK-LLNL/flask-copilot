@@ -215,8 +215,20 @@ class FlaskActionManager(ActionManager):
         """Handle retrosynthesis problem type."""
         # Check if AI-based retrosynthesis is requested
         # use_ai_based flag controls AI vs template approach
-        # If no config exists, fall back to AI-based
-        use_ai_based = self.run_settings.use_ai_based or not os.path.exists(self.args.config_file)
+        use_ai_based = self.run_settings.use_ai_based
+
+        # If user wants template-based but config doesn't exist, show error
+        if not use_ai_based and not os.path.exists(self.args.config_file):
+            error_msg = f"Template-based retrosynthesis requires AiZynthFinder config file at {self.args.config_file}. File not found. Please either:\n\n1. Enable 'Use AI-based' checkbox in the UI, OR\n2. Provide a valid AiZynthFinder config file with trained models"
+            await self.websocket.send_json({
+                "action": "message",
+                "type": "error",
+                "message": error_msg,
+                "source": "backend_manager"
+            })
+            await self.websocket.send_json({"type": "complete"})
+            logger.error(error_msg)
+            return
 
         if use_ai_based:
             # Use AI-based retrosynthesis (supports both standard and RSA modes)
