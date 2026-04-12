@@ -171,6 +171,7 @@ async def ai_based_retrosynthesis(
             user_prompt_with_rag = user_prompt
             available_tools = tool_runtime.mcp_server_urls
             builtin_tools_filtered = tool_runtime.direct_tools
+            db_results_to_save = None  # Store DB results to save later after log_dir is created
 
             if rsa_mode == "rag":
                 await clogger.info("RAG mode: Querying reaction database once...")
@@ -220,9 +221,8 @@ async def ai_based_retrosynthesis(
 
                         user_prompt_with_rag = user_prompt + rag_context
 
-                        # Save database results to log
-                        with open(f"{rsa_log_dir}/database_query_results.json", "w") as f:
-                            json.dump(db_results, f, indent=2)
+                        # Store DB results to save later (after rsa_log_dir is created)
+                        db_results_to_save = db_results
                     else:
                         await clogger.info("No reactions found in database")
                         user_prompt_with_rag = user_prompt + "\n\nNo similar reactions found in the database for this target molecule.\n"
@@ -287,6 +287,15 @@ async def ai_based_retrosynthesis(
             # Get the auto-generated log directory for later reference
             rsa_log_dir = rsa_config.log_dir
             await clogger.info(f"RSA execution logs will be saved to: {rsa_log_dir}")
+
+            # Save database results if RAG mode was used
+            if db_results_to_save:
+                try:
+                    with open(f"{rsa_log_dir}/database_query_results.json", "w") as f:
+                        json.dump(db_results_to_save, f, indent=2)
+                    await clogger.info(f"Database query results saved to {rsa_log_dir}/database_query_results.json")
+                except Exception as e:
+                    await clogger.warning(f"Failed to save database results: {str(e)}")
 
             # Setup callbacks
             rsa_callbacks = RSACallbacks(
