@@ -1,5 +1,9 @@
 import os
 import asyncio
+import random
+import json
+import datetime
+from pathlib import Path
 from fastapi import WebSocket
 from lc_conductor.callback_logger import CallbackLogger
 from typing import Optional
@@ -28,6 +32,7 @@ from retrosynthesis.mapping import build_mapped_reaction_dict_or_none
 from retrosynthesis.retrosynthesis_task import (
     TemplateFreeRetrosynthesisTask as RetrosynthesisTask,
     TemplateFreeReactionOutputSchema as ReactionOutputSchema,
+    RSAAggregationTask,
 )
 
 from charge.experiments.experiment import Experiment
@@ -131,13 +136,227 @@ async def ai_based_retrosynthesis(
         f"Finding synthesis routes for {current_node.smiles} using available tools: {tool_runtime.tool_summary()}."
     )
 
-    # Run task
+    # Run task (with optional RSA mode)
     await highlight_node(current_node, websocket, True)
     if run_settings.prompt_debugging:
         await debug_prompt(runner, websocket)
-    output = await runner.run(log_progress)
-    if isinstance(callback_handler, CallbackHandler):
-        await callback_handler.drain()
+
+    # Check if RSA mode is enabled
+    if run_settings.use_rsa:
+        try:
+            # RSA Mode: Recursive Self-Aggregation
+            from charge.algorithms import run_rsa_loop, RSAConfig, RSAPrompts, RSACallbacks, RSATaskFactories
+
+            rsa_n = run_settings.rsa_n if hasattr(run_settings, 'rsa_n') else 8
+            rsa_k = run_settings.rsa_k if hasattr(run_settings, 'rsa_k') else 4
+            rsa_t = run_settings.rsa_t if hasattr(run_settings, 'rsa_t') else 3
+            rsa_mode = run_settings.rsa_mode if hasattr(run_settings, 'rsa_mode') else "standalone"
+
+            await clogger.info(
+                f"Running RSA mode: {rsa_mode} with N={rsa_n}, K={rsa_k}, T={rsa_t}"
+            )
+
+            # Load chemistry-specific prompts for retrosynthesis
+            prompts_dir = Path(__file__).parent / "prompts"
+            system_prompt_file = prompts_dir / f"rsa_{rsa_mode}_system.txt"
+            aggregation_file = prompts_dir / f"rsa_{rsa_mode}_aggregation.txt"
+
+            retro_prompts = RSAPrompts(
+                proposal_system_prompt=system_prompt_file.read_text() if system_prompt_file.exists() else None,
+                aggregation_template=aggregation_file.read_text() if aggregation_file.exists() else None,
+            )
+
+            # For RAG mode: Query database once and inject into prompts
+            # For standalone mode: Remove database query tool
+            user_prompt_with_rag = user_prompt
+            available_tools = tool_runtime.mcp_server_urls
+            builtin_tools_filtered = tool_runtime.direct_tools
+            db_results_to_save = None  # Store DB results to save later after log_dir is created
+
+            if rsa_mode == "rag":
+                await clogger.info("RAG mode: Querying reaction database once...")
+                try:
+                    from retrosynthesis.database import query_reaction_database
+                    db_results = query_reaction_database(current_node.smiles, top_k=10)
+
+                    if db_results and not any("error" in r for r in db_results):
+                        await clogger.info(f"Found {len(db_results)} similar reactions in database")
+
+                        # Log summary of database results to UI
+                        summary_lines = [f"**Database Query Results ({len(db_results)} reactions found):**"]
+                        for idx, reaction in enumerate(db_results[:5], 1):  # Show first 5 in UI
+                            name = reaction.get('name', f'Reaction {idx}')
+                            summary_lines.append(f"  {idx}. {name}")
+                            if 'components' in reaction and reaction['components']:
+                                # Extract reactants and products
+                                reactants = [c.get('name', c.get('smiles', '?')) for c in reaction['components']
+                                           if c.get('role') in ['Reactant', 'Reagent']]
+                                products = [c.get('name', c.get('smiles', '?')) for c in reaction['components']
+                                          if c.get('role') == 'Product']
+                                if reactants:
+                                    summary_lines.append(f"     Reactants: {', '.join(reactants[:3])}")
+                                if products:
+                                    summary_lines.append(f"     Products: {', '.join(products[:2])}")
+                        if len(db_results) > 5:
+                            summary_lines.append(f"  ... and {len(db_results) - 5} more reactions")
+                        summary_lines.append("These reactions will be injected into all proposal prompts.")
+                        await clogger.info("\n".join(summary_lines))
+
+                        # Format database results with clear context
+                        rag_context = "\n\n--- REACTION DATABASE RESULTS ---\n"
+                        rag_context += f"These are similar reactions retrieved by comparing structural similarity to the target product ({current_node.smiles}):\n\n"
+
+                        for idx, reaction in enumerate(db_results[:10], 1):
+                            rag_context += f"Reaction {idx}:\n"
+                            if "reactants" in reaction:
+                                rag_context += f"  Reactants: {reaction.get('reactants', 'N/A')}\n"
+                            if "products" in reaction:
+                                rag_context += f"  Products: {reaction.get('products', 'N/A')}\n"
+                            if "text" in reaction and reaction.get("text"):
+                                rag_context += f"  Description: {reaction['text']}\n"
+                            rag_context += "\n"
+
+                        rag_context += "Use these reactions as supporting evidence for your retrosynthesis proposal.\n"
+                        rag_context += "--- END DATABASE RESULTS ---\n"
+
+                        user_prompt_with_rag = user_prompt + rag_context
+
+                        # Store DB results to save later (after rsa_log_dir is created)
+                        db_results_to_save = db_results
+                    else:
+                        await clogger.info("No reactions found in database")
+                        user_prompt_with_rag = user_prompt + "\n\nNo similar reactions found in the database for this target molecule.\n"
+                except Exception as e:
+                    await clogger.warning(f"Database query failed: {str(e)}")
+                    user_prompt_with_rag = user_prompt + "\n\nDatabase query failed. Proceed using chemistry knowledge only.\n"
+
+                # Filter out query_reaction_database from builtin tools (already queried once)
+                builtin_tools_filtered = [
+                    tool for tool in builtin_tools_filtered
+                    if getattr(tool, '__name__', '') != 'query_reaction_database'
+                ]
+                await clogger.info("RAG mode: Removed query_reaction_database from tools (already queried)")
+
+            elif rsa_mode == "standalone":
+                # Standalone mode: Remove database query tool entirely (no retrieval)
+                builtin_tools_filtered = [
+                    tool for tool in builtin_tools_filtered
+                    if getattr(tool, '__name__', '') != 'query_reaction_database'
+                ]
+                await clogger.info("Standalone mode: Removed query_reaction_database from tools (no retrieval)")
+
+            # Define task factories for retrosynthesis
+            def create_proposal_task():
+                return RetrosynthesisTask(
+                    user_prompt=user_prompt_with_rag,
+                    server_urls=available_tools,
+                    builtin_tools=builtin_tools_filtered,
+                )
+
+            def create_aggregation_task(candidates_text, subset, step, total_steps):
+                return RSAAggregationTask(
+                    original_user_prompt=user_prompt,
+                    candidates_text=candidates_text,
+                    step=step,
+                    total_steps=total_steps,
+                    mode=rsa_mode,
+                    server_urls=available_tools,
+                    builtin_tools=builtin_tools_filtered,
+                )
+
+            def format_candidates(subset):
+                """Format retrosynthesis proposals for aggregation"""
+                candidates_text = ""
+                for idx, prop in enumerate(subset, 1):
+                    prop_result = prop["result"]
+                    candidates_text += f"\n---- Candidate {idx} ----\n"
+                    candidates_text += f"Reasoning: {prop_result.reasoning_summary}\n"
+                    candidates_text += f"Reactants: {', '.join(prop_result.reactants_smiles_list)}\n"
+                    candidates_text += f"Products: {', '.join(prop_result.products_smiles_list)}\n"
+                return candidates_text
+
+            # Configure RSA
+            rsa_config = RSAConfig(
+                n=rsa_n,
+                k=rsa_k,
+                t=rsa_t,
+                parallel=True,
+                log_dir=None,  # Will auto-generate timestamp-based directory
+            )
+
+            # Get the auto-generated log directory for later reference
+            rsa_log_dir = rsa_config.log_dir
+            await clogger.info(f"RSA execution logs will be saved to: {rsa_log_dir}")
+
+            # Save database results if RAG mode was used
+            if db_results_to_save:
+                try:
+                    with open(f"{rsa_log_dir}/database_query_results.json", "w") as f:
+                        json.dump(db_results_to_save, f, indent=2)
+                    await clogger.info(f"Database query results saved to {rsa_log_dir}/database_query_results.json")
+                except Exception as e:
+                    await clogger.warning(f"Failed to save database results: {str(e)}")
+
+            # Setup callbacks
+            rsa_callbacks = RSACallbacks(
+                log_progress=log_progress,
+                logger_info=clogger.info,
+                logger_warning=clogger.warning,
+                logger_error=clogger.error,
+            )
+
+            # Validation function for retrosynthesis
+            def validate_retro_proposal(result):
+                """Validate retrosynthesis has non-empty reactants."""
+                return (hasattr(result, 'reactants_smiles_list') and
+                        len(result.reactants_smiles_list) > 0)
+
+            # Create task factories with chemistry-specific prompts
+            rsa_factories = RSATaskFactories(
+                create_proposal_task=create_proposal_task,
+                create_aggregation_task=create_aggregation_task,
+                format_candidates=format_candidates,
+                output_schema=ReactionOutputSchema,
+                validate_proposal=validate_retro_proposal,
+                prompts=retro_prompts,  # Use chemistry-specific prompts
+            )
+
+            # Runner factory for parallel execution
+            proposal_counter = [0]  # Mutable counter for unique agent names
+            def create_runner():
+                """Create independent runner for parallel proposals"""
+                proposal_counter[0] += 1
+                return experiment.create_agent_with_experiment_state(
+                    task=None,
+                    agent_name=f"retrosynth_{node_id}_proposal_{proposal_counter[0]}",
+                    callback=callback_handler if isinstance(callback_handler, CallbackHandler) else None,
+                )
+
+            # Run generic RSA loop
+            output, final_result = await run_rsa_loop(
+                config=rsa_config,
+                factories=rsa_factories,
+                callbacks=rsa_callbacks,
+                runner=runner,
+                runner_factory=create_runner,
+                callback_handler=callback_handler if isinstance(callback_handler, CallbackHandler) else None,
+            )
+
+            await clogger.info(f"RSA mode completed successfully. Logs saved to: {rsa_log_dir}")
+
+        except Exception as e:
+            # Fallback to standard mode if RSA fails
+            await clogger.error(f"RSA mode failed: {str(e)}, falling back to standard retrosynthesis")
+            # Reset task to original
+            runner.task = retro_task
+            output = await runner.run(log_progress)
+            if isinstance(callback_handler, CallbackHandler):
+                await callback_handler.drain()
+    else:
+        # Standard mode (no RSA)
+        output = await runner.run(log_progress)
+        if isinstance(callback_handler, CallbackHandler):
+            await callback_handler.drain()
 
     if os.getenv("CHARGE_DISABLE_OUTPUT_VALIDATION", "0") == "1":
         await clogger.warning(
@@ -240,48 +459,60 @@ async def ai_based_retrosynthesis(
         await context.add_node(node, websocket)
         await asyncio.sleep(0)
 
-    for node, purch in zip(new_nodes, purchasable):
-        if purch:  # Skip purchasable nodes unless explicitly asked for
-            continue
-
-        # Highlight node because we are looking for templates
-        await highlight_node(node, websocket, True)
-
-        # Find paths for the leaf nodes
-        reaction, routes = await run_retro_planner(
-            config_file, node.smiles, clogger, run_settings
+    # Template-based expansion of reactants (optional)
+    if not os.path.exists(config_file):
+        await clogger.info(
+            f"Template-based retrosynthesis config not found at {config_file}. "
+            "Skipping template expansion. AI-based retrosynthesis completed successfully."
         )
-        if reaction is None:
-            await clogger.warning(f"No routes found for {node.smiles}. Skipping...")
-            continue
-        node.reaction = reaction
+    else:
+        for node, purch in zip(new_nodes, purchasable):
+            if purch:  # Skip purchasable nodes unless explicitly asked for
+                continue
 
-        # Use child nodes and edges of the first route
-        await generate_nodes_for_molecular_graph(
-            routes[0].nodes,
-            context,
-            websocket,
-            start_level=level,
-            include_root_node=False,
-            root_node_id=node.id,
-        )
+            # Highlight node because we are looking for templates
+            await highlight_node(node, websocket, True)
 
-        # Attach mapped reaction for immediate reactants -> product.
-        # This is needed so hover-highlighting works for the first template step
-        # discovered after an AI-generated step.
-        if node.reaction is not None:
-            child_smiles = [
-                n.smiles
-                for nid, n in context.node_ids.items()
-                if context.parents.get(nid) == node.id
-            ]
-            node.reaction.mappedReaction = build_mapped_reaction_dict_or_none(
-                reactants=child_smiles,
-                products=[node.smiles],
-                log_msg="Failed to build rdkitjs mapped reaction for template node_id={node_id} smiles={smiles}",
-                node_id=node.id,
-                smiles=node.smiles,
-            )
-        await context.update_node(node, websocket)  # Also disables highlight
+            # Find paths for the leaf nodes
+            try:
+                reaction, routes = await run_retro_planner(
+                    config_file, node.smiles, clogger, run_settings
+                )
+                if reaction is None:
+                    await clogger.warning(f"No routes found for {node.smiles}. Skipping...")
+                    continue
+                node.reaction = reaction
+
+                # Use child nodes and edges of the first route
+                await generate_nodes_for_molecular_graph(
+                    routes[0].nodes,
+                    context,
+                    websocket,
+                    start_level=level,
+                    include_root_node=False,
+                    root_node_id=node.id,
+                )
+            except Exception as e:
+                await clogger.warning(
+                    f"Template-based expansion failed for {node.smiles}: {str(e)}. Continuing..."
+                )
+
+            # Attach mapped reaction for immediate reactants -> product.
+            # This is needed so hover-highlighting works for the first template step
+            # discovered after an AI-generated step.
+            if node.reaction is not None:
+                child_smiles = [
+                    n.smiles
+                    for nid, n in context.node_ids.items()
+                    if context.parents.get(nid) == node.id
+                ]
+                node.reaction.mappedReaction = build_mapped_reaction_dict_or_none(
+                    reactants=child_smiles,
+                    products=[node.smiles],
+                    log_msg="Failed to build rdkitjs mapped reaction for template node_id={node_id} smiles={smiles}",
+                    node_id=node.id,
+                    smiles=node.smiles,
+                )
+            await context.update_node(node, websocket)  # Also disables highlight
 
     await websocket.send_json({"type": "complete"})
