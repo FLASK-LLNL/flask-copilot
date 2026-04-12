@@ -108,7 +108,14 @@ class ModelMessage:
 @dataclass
 class FlaskRunSettings(RunSettings):
     molecule_name_format: MolNameFormat = Field(alias="moleculeName", default="brand")
-    # Inherit use_ai_based from RunSettings (defined in LC-Conductor)
+    # AI-based retrosynthesis flag
+    use_ai_based: bool = Field(alias="useAiBased", default=True)
+    # RSA settings
+    use_rsa: bool = Field(alias="useRsa", default=False)
+    rsa_n: int = Field(alias="rsaN", default=8)
+    rsa_k: int = Field(alias="rsaK", default=4)
+    rsa_t: int = Field(alias="rsaT", default=3)
+    rsa_mode: str = Field(alias="rsaMode", default="standalone")
 
 
 @dataclass(frozen=True)
