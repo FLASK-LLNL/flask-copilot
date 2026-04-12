@@ -145,7 +145,7 @@ async def ai_based_retrosynthesis(
     if run_settings.use_rsa:
         try:
             # RSA Mode: Recursive Self-Aggregation
-            from rsa_algorithm import run_rsa_loop
+            from charge.algorithms import run_rsa_loop, RSAConfig, RSACallbacks, RSATaskFactories
 
             rsa_n = run_settings.rsa_n if hasattr(run_settings, 'rsa_n') else 8
             rsa_k = run_settings.rsa_k if hasattr(run_settings, 'rsa_k') else 4
@@ -155,13 +155,6 @@ async def ai_based_retrosynthesis(
             await clogger.info(
                 f"Running RSA mode: {rsa_mode} with N={rsa_n}, K={rsa_k}, T={rsa_t}"
             )
-
-            # Create directory for RSA execution logs
-            import datetime
-            timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-            rsa_log_dir = f"/tmp/rsa_execution_{timestamp}"
-            os.makedirs(rsa_log_dir, exist_ok=True)
-            await clogger.info(f"RSA execution logs will be saved to: {rsa_log_dir}")
 
             # For RAG mode: Query database once and inject into prompts
             # For standalone mode: Remove database query tool
@@ -272,6 +265,38 @@ async def ai_based_retrosynthesis(
                     candidates_text += f"Products: {', '.join(prop_result.products_smiles_list)}\n"
                 return candidates_text
 
+            # Configure RSA
+            rsa_config = RSAConfig(
+                n=rsa_n,
+                k=rsa_k,
+                t=rsa_t,
+                parallel=True,
+                log_dir=None,  # Will auto-generate timestamp-based directory
+            )
+
+            # Setup callbacks
+            rsa_callbacks = RSACallbacks(
+                log_progress=log_progress,
+                logger_info=clogger.info,
+                logger_warning=clogger.warning,
+                logger_error=clogger.error,
+            )
+
+            # Validation function for retrosynthesis
+            def validate_retro_proposal(result):
+                """Validate retrosynthesis has non-empty reactants."""
+                return (hasattr(result, 'reactants_smiles_list') and
+                        len(result.reactants_smiles_list) > 0)
+
+            # Create task factories
+            rsa_factories = RSATaskFactories(
+                create_proposal_task=create_proposal_task,
+                create_aggregation_task=create_aggregation_task,
+                format_candidates=format_candidates,
+                output_schema=ReactionOutputSchema,
+                validate_proposal=validate_retro_proposal,
+            )
+
             # Runner factory for parallel execution
             proposal_counter = [0]  # Mutable counter for unique agent names
             def create_runner():
@@ -285,20 +310,12 @@ async def ai_based_retrosynthesis(
 
             # Run generic RSA loop
             output, final_result = await run_rsa_loop(
-                n=rsa_n,
-                k=rsa_k,
-                t=rsa_t,
-                create_proposal_task=create_proposal_task,
-                create_aggregation_task=create_aggregation_task,
-                format_candidates=format_candidates,
+                config=rsa_config,
+                factories=rsa_factories,
+                callbacks=rsa_callbacks,
                 runner=runner,
-                log_progress=log_progress,
-                clogger=clogger,
-                log_dir=rsa_log_dir,
-                output_schema=ReactionOutputSchema,
-                callback_handler=callback_handler if isinstance(callback_handler, CallbackHandler) else None,
-                parallel=True,
                 runner_factory=create_runner,
+                callback_handler=callback_handler if isinstance(callback_handler, CallbackHandler) else None,
             )
 
             await clogger.info(f"RSA mode completed successfully. Logs saved to: {rsa_log_dir}")
