@@ -127,7 +127,9 @@ async def registered_servers_endpoint(request: Request):
 
 manual_mcp_servers_env = os.getenv("FLASK_MCP_SERVERS", "")
 if manual_mcp_servers_env:
-    manual_mcp_servers = manual_mcp_servers_env.split(",")
+    manual_mcp_servers = [
+        url.strip() for url in manual_mcp_servers_env.split(",") if url.strip()
+    ]
     count = 0
     for url in manual_mcp_servers:
         status = register_url(args.tool_server_cache, url, f"m{count}")
