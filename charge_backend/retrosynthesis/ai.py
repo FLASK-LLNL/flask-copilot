@@ -284,6 +284,10 @@ async def ai_based_retrosynthesis(
                 log_dir=None,  # Will auto-generate timestamp-based directory
             )
 
+            # Get the auto-generated log directory for later reference
+            rsa_log_dir = rsa_config.log_dir
+            await clogger.info(f"RSA execution logs will be saved to: {rsa_log_dir}")
+
             # Setup callbacks
             rsa_callbacks = RSACallbacks(
                 log_progress=log_progress,
