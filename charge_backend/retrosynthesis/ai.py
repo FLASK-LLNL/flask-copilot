@@ -145,7 +145,7 @@ async def ai_based_retrosynthesis(
     if run_settings.use_rsa:
         try:
             # RSA Mode: Recursive Self-Aggregation
-            from charge.algorithms import run_rsa_loop, RSAConfig, RSACallbacks, RSATaskFactories
+            from charge.algorithms import run_rsa_loop, RSAConfig, RSAPrompts, RSACallbacks, RSATaskFactories
 
             rsa_n = run_settings.rsa_n if hasattr(run_settings, 'rsa_n') else 8
             rsa_k = run_settings.rsa_k if hasattr(run_settings, 'rsa_k') else 4
@@ -154,6 +154,16 @@ async def ai_based_retrosynthesis(
 
             await clogger.info(
                 f"Running RSA mode: {rsa_mode} with N={rsa_n}, K={rsa_k}, T={rsa_t}"
+            )
+
+            # Load chemistry-specific prompts for retrosynthesis
+            prompts_dir = Path(__file__).parent / "prompts"
+            system_prompt_file = prompts_dir / f"rsa_{rsa_mode}_system.txt"
+            aggregation_file = prompts_dir / f"rsa_{rsa_mode}_aggregation.txt"
+
+            retro_prompts = RSAPrompts(
+                proposal_system_prompt=system_prompt_file.read_text() if system_prompt_file.exists() else None,
+                aggregation_template=aggregation_file.read_text() if aggregation_file.exists() else None,
             )
 
             # For RAG mode: Query database once and inject into prompts
@@ -288,13 +298,14 @@ async def ai_based_retrosynthesis(
                 return (hasattr(result, 'reactants_smiles_list') and
                         len(result.reactants_smiles_list) > 0)
 
-            # Create task factories
+            # Create task factories with chemistry-specific prompts
             rsa_factories = RSATaskFactories(
                 create_proposal_task=create_proposal_task,
                 create_aggregation_task=create_aggregation_task,
                 format_candidates=format_candidates,
                 output_schema=ReactionOutputSchema,
                 validate_proposal=validate_retro_proposal,
+                prompts=retro_prompts,  # Use chemistry-specific prompts
             )
 
             # Runner factory for parallel execution
