@@ -134,12 +134,17 @@ export const ProjectSidebar: React.FC<ProjectSidebarProps> = ({
   }, [isResizing, onToggle]);
 
   // Update experiment running status when isComputing changes
+  const prevIsComputingRef = React.useRef(isComputing);
   React.useEffect(() => {
-    if (selection.projectId && selection.experimentId) {
-      setExperimentRunning(selection.projectId, selection.experimentId, isComputing);
+    // Only fire when isComputing actually changes, not on selection changes
+    if (prevIsComputingRef.current !== isComputing) {
+      prevIsComputingRef.current = isComputing;
+      if (selection.projectId && selection.experimentId) {
+        setExperimentRunning(selection.projectId, selection.experimentId, isComputing);
+      }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isComputing, selection.projectId, selection.experimentId]);
+  }, [isComputing]);
 
   React.useEffect(() => {
     const handleClickOutside = (event: MouseEvent): void => {
@@ -182,8 +187,13 @@ export const ProjectSidebar: React.FC<ProjectSidebarProps> = ({
       return;
     }
 
-    // Save before selecting away
-    if (onSaveContext()) onReset();
+    // Save before selecting away — tolerate errors so the switch always proceeds.
+    try {
+      if (onSaveContext()) onReset();
+    } catch (e) {
+      console.warn('Failed to save context before project switch, resetting anyway:', e);
+      onReset();
+    }
 
     // Auto-select the last experiment if the project has any
     const lastExperiment =
@@ -209,8 +219,13 @@ export const ProjectSidebar: React.FC<ProjectSidebarProps> = ({
       return;
     }
 
-    // Save before selecting away
-    if (onSaveContext()) onReset();
+    // Save before selecting away — tolerate errors so the switch always proceeds.
+    try {
+      if (onSaveContext()) onReset();
+    } catch (e) {
+      console.warn('Failed to save context before experiment switch, resetting anyway:', e);
+      onReset();
+    }
 
     const newSelection: ProjectSelection = {
       projectId: project.id,
@@ -231,9 +246,13 @@ export const ProjectSidebar: React.FC<ProjectSidebarProps> = ({
 
     const newProjectName = `Project ${timestamp}`;
 
-    // Save before selecting away
-    if (onSaveContext()) {
-      // Reset UI state
+    // Save before selecting away — tolerate errors so creation always proceeds.
+    try {
+      if (onSaveContext()) {
+        onReset();
+      }
+    } catch (e) {
+      console.warn('Failed to save context before project creation, resetting anyway:', e);
       onReset();
     }
 
@@ -260,9 +279,13 @@ export const ProjectSidebar: React.FC<ProjectSidebarProps> = ({
       newExperimentName = `Experiment ${i}`;
     }
 
-    // Save before selecting away
-    if (onSaveContext()) {
-      // Reset UI state
+    // Save before selecting away — tolerate errors so creation always proceeds.
+    try {
+      if (onSaveContext()) {
+        onReset();
+      }
+    } catch (e) {
+      console.warn('Failed to save context before experiment creation, resetting anyway:', e);
       onReset();
     }
 
@@ -280,6 +303,11 @@ export const ProjectSidebar: React.FC<ProjectSidebarProps> = ({
   };
 
   const handleEditProject = (project: Project) => {
+    console.log('handleEditProject called with:', project);
+    if (!project || !project.id) {
+      console.error('Invalid project passed to handleEditProject');
+      return;
+    }
     setEditingProject(project.id);
     setEditProjectName(project.name);
   };
@@ -416,8 +444,8 @@ export const ProjectSidebar: React.FC<ProjectSidebarProps> = ({
             <div className="alert alert-warning mt-2">
               <p className="text-warning text-xs">
                 {!selection.projectId
-                  ? '⚠️ No project selected. A new project will be created when you run.'
-                  : '⚠️ No experiment selected. A new experiment will be created when you run.'}
+                  ? 'Warning: No project selected. A new project will be created when you run.'
+                  : 'Warning: No experiment selected. A new experiment will be created when you run.'}
               </p>
             </div>
           )}
@@ -482,7 +510,6 @@ export const ProjectSidebar: React.FC<ProjectSidebarProps> = ({
                     ) : (
                       <>
                         <button
-                          disabled={isComputing}
                           onClick={() => handleProjectClick(project)}
                           className={`project-button ${
                             selection.projectId === project.id ? 'project-button-active' : ''
@@ -571,7 +598,6 @@ export const ProjectSidebar: React.FC<ProjectSidebarProps> = ({
                           ) : (
                             <>
                               <button
-                                disabled={isComputing}
                                 onClick={() => handleExperimentClick(project, experiment)}
                                 className={`experiment-button ${
                                   selection.experimentId === experiment.id
@@ -624,7 +650,6 @@ export const ProjectSidebar: React.FC<ProjectSidebarProps> = ({
                       {/* Create New Experiment (at bottom) */}
                       {creatingExperimentFor !== project.id ? (
                         <button
-                          disabled={isComputing}
                           onClick={() => handleCreateExperiment(project.id)}
                           className="experiment-button group w-full"
                         >
@@ -796,10 +821,22 @@ export const ProjectSidebar: React.FC<ProjectSidebarProps> = ({
 export const useProjectSidebar = () => {
   const SELECTION_STORAGE_KEY = 'flask_copilot_last_selection';
 
+  // Initialize selection from localStorage so it survives browser restarts
   const [isOpen, setIsOpen] = useState(true);
-  const [selection, setSelectionState] = useState<ProjectSelection>({
-    projectId: null,
-    experimentId: null,
+  const [selection, setSelectionState] = useState<ProjectSelection>(() => {
+    try {
+      const stored = localStorage.getItem(SELECTION_STORAGE_KEY);
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        if (parsed && (parsed.projectId || parsed.experimentId)) {
+          console.log('Restored sidebar selection from localStorage:', parsed);
+          return parsed as ProjectSelection;
+        }
+      }
+    } catch (e) {
+      console.error('Error reading sidebar selection from localStorage:', e);
+    }
+    return { projectId: null, experimentId: null };
   });
 
   // Save selection to localStorage whenever it changes
