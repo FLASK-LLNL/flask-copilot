@@ -323,4 +323,10 @@ if __name__ == "__main__":
     if host is None:
         _, host = try_get_public_hostname()
 
-    uvicorn.run(app, host=host, port=args.port)
+    uvicorn.run(
+        app,
+        host=host,
+        port=args.port,
+        ws_ping_timeout=60.0,  # Increase websocket ping timeout to 60 seconds
+        timeout_keep_alive=75,  # Keep connections alive for 75 seconds
+    )
