@@ -145,6 +145,7 @@ class LMOTask(Task):
                 },
                 urls=self.server_urls or [],
                 paths=self.server_files or [],
+                bearer_token=self.bearer_token,
             )
             try:
                 property_name, property_result = json.loads(property_result_msg.content)
@@ -190,6 +191,7 @@ class LMOTask(Task):
             },
             urls=self.server_urls,
             paths=self.server_files,
+            bearer_token=self.bearer_token,
         )
 
         try:

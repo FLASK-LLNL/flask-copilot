@@ -146,6 +146,7 @@ async def generate_lead_molecule(
                 "property": property,
             },
             urls=tool_runtime.mcp_server_urls,
+            bearer_token=tool_runtime.bearer_token,
         )
 
         try:

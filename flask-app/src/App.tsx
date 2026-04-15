@@ -821,11 +821,36 @@ const ChemistryTool: React.FC = () => {
             break;
           }
           case 'server-update-orchestrator-settings': {
+            // If we have saved settings, check if we should still update customUrl
             if (hasSavedOrchestratorSettingsRef.current) {
-              console.log(
-                'Ignoring server orchestrator settings because local settings are already loaded',
-                data.orchestratorSettings
-              );
+              const currentUrl = orchestratorSettingsRef.current.customUrl;
+              const serverUrl = data.orchestratorSettings!.customUrl;
+
+              // Override saved customUrl if it's a default value and server provides a real URL
+              const isDefaultUrl =
+                currentUrl === 'http://localhost:8000/v1' || currentUrl === 'http://localhost:8000';
+              const hasRealServerUrl =
+                serverUrl &&
+                !['http://localhost:8000/v1', 'http://localhost:8000'].includes(serverUrl);
+
+              if (isDefaultUrl && hasRealServerUrl) {
+                console.log(
+                  `Updating customUrl from default ${currentUrl} to server value ${serverUrl}`
+                );
+                const updatedSettings = {
+                  ...orchestratorSettingsRef.current,
+                  customUrl: serverUrl,
+                  useCustomUrl: data.orchestratorSettings!.useCustomUrl,
+                };
+                setOrchestratorSettings(updatedSettings);
+                orchestratorSettingsRef.current = updatedSettings;
+                localStorage.setItem('orchestratorSettings', JSON.stringify(updatedSettings));
+              } else {
+                console.log(
+                  'Ignoring server orchestrator settings because local settings are already loaded',
+                  data.orchestratorSettings
+                );
+              }
               break;
             }
 
