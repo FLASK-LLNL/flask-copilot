@@ -143,6 +143,10 @@ vite.config.ts.timestamp-*
 .venv/
 venv/
 __pycache__/
+*.egg-info/
+*.egg
+dist/
+build/
 
 # Visual Studio Code
 .vscode/

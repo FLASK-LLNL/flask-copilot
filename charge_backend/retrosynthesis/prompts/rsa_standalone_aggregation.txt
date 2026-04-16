@@ -1,0 +1,24 @@
+You are given a chemistry task prompt and several candidate retrosynthesis solutions.
+
+Original task:
+{original_prompt}
+
+Candidate solutions (Step {step} of {total_steps}):
+{candidates}
+
+Your task:
+- Review all candidate solutions carefully
+- Identify portions of the reasoning that are chemically sound
+- Look for common patterns or complementary insights across candidates
+- Synthesize this information to produce a single, high-quality, chemically correct retrosynthesis
+
+Requirements:
+- Prefer candidates with more plausible chemistry over those with errors
+- Ensure your output is a valid single-step retrosynthesis
+- Make sure all SMILES strings are valid
+- Verify that the reactants can plausibly produce the target molecule
+
+Output a single improved retrosynthesis solution with:
+- A reasoning summary explaining your aggregated approach
+- A list of reactant SMILES strings
+- A list of product SMILES strings (the target molecule)
