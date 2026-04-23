@@ -33,7 +33,7 @@ from retrosynthesis.database import find_exact_reactions
 from retrosynthesis.retrosynthesis_task import (
     TemplateFreeRetrosynthesisTask as RetrosynthesisTask,
     TemplateFreeReactionOutputSchema as ReactionOutputSchema,
-    RSAAggregationTask,
+    # RSAAggregationTask removed - using ChARGe's generic defaults now
 )
 
 from charge.experiments.experiment import Experiment
@@ -162,9 +162,18 @@ async def ai_based_retrosynthesis(
             system_prompt_file = prompts_dir / f"rsa_{rsa_mode}_system.txt"
             aggregation_file = prompts_dir / f"rsa_{rsa_mode}_aggregation.txt"
 
+            # Load prompts
+            proposal_system = system_prompt_file.read_text() if system_prompt_file.exists() else None
+            aggregation_tmpl = aggregation_file.read_text() if aggregation_file.exists() else None
+
+            # Debug logging
+            await clogger.info(f"Loading prompts for mode={rsa_mode}")
+            await clogger.info(f"  System prompt file: {system_prompt_file.exists()=}, length={len(proposal_system) if proposal_system else 0}")
+            await clogger.info(f"  Aggregation template file: {aggregation_file.exists()=}, length={len(aggregation_tmpl) if aggregation_tmpl else 0}")
+
             retro_prompts = RSAPrompts(
-                proposal_system_prompt=system_prompt_file.read_text() if system_prompt_file.exists() else None,
-                aggregation_template=aggregation_file.read_text() if aggregation_file.exists() else None,
+                proposal_system_prompt=proposal_system,
+                aggregation_template=aggregation_tmpl,
             )
 
             # For RAG mode: Query database once and inject into prompts
@@ -246,25 +255,7 @@ async def ai_based_retrosynthesis(
                 ]
                 await clogger.info("Standalone mode: Removed query_reaction_database from tools (no retrieval)")
 
-            # Define task factories for retrosynthesis
-            def create_proposal_task():
-                return RetrosynthesisTask(
-                    user_prompt=user_prompt_with_rag,
-                    server_urls=available_tools,
-                    builtin_tools=builtin_tools_filtered,
-                )
-
-            def create_aggregation_task(candidates_text, subset, step, total_steps):
-                return RSAAggregationTask(
-                    original_user_prompt=user_prompt,
-                    candidates_text=candidates_text,
-                    step=step,
-                    total_steps=total_steps,
-                    mode=rsa_mode,
-                    server_urls=available_tools,
-                    builtin_tools=builtin_tools_filtered,
-                )
-
+            # Domain-specific candidate formatter (chemistry-specific)
             def format_candidates(subset):
                 """Format retrosynthesis proposals for aggregation"""
                 candidates_text = ""
@@ -306,20 +297,21 @@ async def ai_based_retrosynthesis(
                 logger_error=clogger.error,
             )
 
-            # Validation function for retrosynthesis
+            # Domain-specific validator (chemistry-specific)
             def validate_retro_proposal(result):
                 """Validate retrosynthesis has non-empty reactants."""
                 return (hasattr(result, 'reactants_smiles_list') and
                         len(result.reactants_smiles_list) > 0)
 
-            # Create task factories with chemistry-specific prompts
+            # Create task factories - ChARGe will use its generic task creation with our domain customization
             rsa_factories = RSATaskFactories(
-                create_proposal_task=create_proposal_task,
-                create_aggregation_task=create_aggregation_task,
-                format_candidates=format_candidates,
-                output_schema=ReactionOutputSchema,
-                validate_proposal=validate_retro_proposal,
-                prompts=retro_prompts,  # Use chemistry-specific prompts
+                user_prompt=user_prompt_with_rag,  # Includes RAG context if mode="rag"
+                output_schema=ReactionOutputSchema,  # Chemistry-specific schema
+                prompts=retro_prompts,  # Chemistry-specific prompts (mode-specific: standalone or rag)
+                format_candidates=format_candidates,  # Chemistry-specific formatter
+                validate_proposal=validate_retro_proposal,  # Chemistry-specific validator
+                server_urls=available_tools,  # Tool configuration
+                builtin_tools=builtin_tools_filtered,  # Filtered tools based on mode
             )
 
             # Runner factory for parallel execution
