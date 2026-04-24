@@ -157,23 +157,27 @@ async def ai_based_retrosynthesis(
                 f"Running RSA mode: {rsa_mode} with N={rsa_n}, K={rsa_k}, T={rsa_t}"
             )
 
-            # Load chemistry-specific prompts for retrosynthesis
+            # Load chemistry-specific prompts for retrosynthesis (3-part structure)
             prompts_dir = Path(__file__).parent / "prompts"
             system_prompt_file = prompts_dir / f"rsa_{rsa_mode}_system.txt"
+            proposal_file = prompts_dir / f"rsa_{rsa_mode}_proposal.txt"
             aggregation_file = prompts_dir / f"rsa_{rsa_mode}_aggregation.txt"
 
             # Load prompts
-            proposal_system = system_prompt_file.read_text() if system_prompt_file.exists() else None
-            aggregation_tmpl = aggregation_file.read_text() if aggregation_file.exists() else None
+            system_prompt = system_prompt_file.read_text() if system_prompt_file.exists() else None
+            proposal_prompt = proposal_file.read_text() if proposal_file.exists() else None
+            aggregation_prompt = aggregation_file.read_text() if aggregation_file.exists() else None
 
             # Debug logging
             await clogger.info(f"Loading prompts for mode={rsa_mode}")
-            await clogger.info(f"  System prompt file: {system_prompt_file.exists()=}, length={len(proposal_system) if proposal_system else 0}")
-            await clogger.info(f"  Aggregation template file: {aggregation_file.exists()=}, length={len(aggregation_tmpl) if aggregation_tmpl else 0}")
+            await clogger.info(f"  System prompt: {system_prompt_file.exists()=}, length={len(system_prompt) if system_prompt else 0}")
+            await clogger.info(f"  Proposal prompt: {proposal_file.exists()=}, length={len(proposal_prompt) if proposal_prompt else 0}")
+            await clogger.info(f"  Aggregation prompt: {aggregation_file.exists()=}, length={len(aggregation_prompt) if aggregation_prompt else 0}")
 
             retro_prompts = RSAPrompts(
-                proposal_system_prompt=proposal_system,
-                aggregation_template=aggregation_tmpl,
+                system_prompt=system_prompt,
+                proposal_prompt=proposal_prompt,
+                aggregation_prompt=aggregation_prompt,
             )
 
             # For RAG mode: Query database once and inject into prompts
