@@ -30,7 +30,6 @@ from lc_conductor.tool_registration import (
     register_url,
     register_post,
     reload_server_list,
-    check_mcp_servers_endpoint,
     validate_mcp_server_endpoint,
     delete_mcp_server_endpoint,
     get_registered_servers,
@@ -45,6 +44,10 @@ from charge_backend import prompt_debugger
 # Pydantic models for new endpoints
 from pydantic import BaseModel
 from typing import Optional
+
+
+class CheckServersRequest(BaseModel):
+    urls: list[str]
 
 
 parser = argparse.ArgumentParser()
@@ -79,7 +82,9 @@ parser.add_argument(
 )
 
 # Add standard CLI arguments
-Client.add_std_parser_arguments(parser, defaults=dict(backend="livai", model="gpt-5.4"))
+Client.add_std_parser_arguments(
+    parser, defaults=dict(backend="openai", model="gpt-5.4")
+)
 
 args, _ = parser.parse_known_args()
 
@@ -113,23 +118,35 @@ app.post("/delete-mcp-server")(
 )
 
 
-app.post("/check-mcp-servers")(check_mcp_servers_endpoint)
-
-
-@app.get("/registered-mcp-servers")
-async def registered_servers_endpoint(request: Request):
+@app.post("/check-mcp-servers")
+async def check_mcp_servers_endpoint(data: CheckServersRequest):
     """
-    Get list of all registered MCP servers and their status.
-    Passes request object to enable bearer token extraction.
-    """
-    return await get_registered_servers(args.tool_server_cache, request)
+    Check connectivity status of multiple MCP server URLs.
+    Returns status and tools for each URL.
 
+    Uses existing workbench utilities for validation.
+    """
+    from lc_conductor.tool_registration import _check_mcp_connectivity
+
+    results = {}
+
+    for url in data.urls:
+        try:
+            tools = await _check_mcp_connectivity(url, timeout=5.0)
+            results[url] = {"status": "connected", "tools": tools}
+        except Exception as e:
+            results[url] = {"status": "disconnected", "error": str(e)}
+
+    return {"results": results}
+
+
+app.get("/registered-mcp-servers")(
+    partial(get_registered_servers, args.tool_server_cache)
+)
 
 manual_mcp_servers_env = os.getenv("FLASK_MCP_SERVERS", "")
 if manual_mcp_servers_env:
-    manual_mcp_servers = [
-        url.strip() for url in manual_mcp_servers_env.split(",") if url.strip()
-    ]
+    manual_mcp_servers = manual_mcp_servers_env.split(",")
     count = 0
     for url in manual_mcp_servers:
         status = register_url(args.tool_server_cache, url, f"m{count}")
@@ -149,21 +166,12 @@ if os.path.exists(ASSETS_PATH):
         with open(os.path.join(DIST_PATH, "index.html"), "r") as fp:
             html = fp.read()
 
-        # Use dynamic WebSocket URL based on request host
-        ws_server = os.getenv("WS_SERVER")
-        if not ws_server:
-            # Auto-detect from request host and protocol
-            host = request.headers.get("host", f"localhost:{args.port}")
-            # Use wss:// for HTTPS, ws:// for HTTP
-            scheme = "wss" if request.url.scheme == "https" else "ws"
-            ws_server = f"{scheme}://{host}/ws"
-
         html = html.replace(
             "<!-- APP CONFIG -->",
             f"""
            <script>
            window.APP_CONFIG = {{
-               WS_SERVER: '{ws_server}',
+               WS_SERVER: '{os.getenv("WS_SERVER", "ws://localhost:8001/ws")}',
                VERSION: '{os.getenv("SERVER_VERSION", "")}'
            }};
            </script>""",
@@ -332,10 +340,4 @@ if __name__ == "__main__":
     if host is None:
         _, host = try_get_public_hostname()
 
-    uvicorn.run(
-        app,
-        host=host,
-        port=args.port,
-        ws_ping_timeout=60.0,  # Increase websocket ping timeout to 60 seconds
-        timeout_keep_alive=75,  # Keep connections alive for 75 seconds
-    )
+    uvicorn.run(app, host=host, port=args.port)
