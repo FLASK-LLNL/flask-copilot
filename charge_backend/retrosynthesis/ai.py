@@ -24,6 +24,7 @@ from retrosynthesis.template import (
 )
 from charge_backend.moleculedb.purchasable import is_purchasable
 from retrosynthesis.mapping import build_mapped_reaction_dict_or_none
+from retrosynthesis.database import find_exact_reactions
 
 from retrosynthesis.retrosynthesis_task import (
     TemplateFreeRetrosynthesisTask as RetrosynthesisTask,
@@ -269,19 +270,71 @@ async def ai_based_retrosynthesis(
         # Attach mapped reaction for immediate reactants -> product.
         # This is needed so hover-highlighting works for the first template step
         # discovered after an AI-generated step.
-        if node.reaction is not None:
-            child_smiles = [
-                n.smiles
-                for nid, n in context.node_ids.items()
-                if context.parents.get(nid) == node.id
-            ]
-            node.reaction.mappedReaction = build_mapped_reaction_dict_or_none(
-                reactants=child_smiles,
-                products=[node.smiles],
-                log_msg="Failed to build rdkitjs mapped reaction for template node_id={node_id} smiles={smiles}",
-                node_id=node.id,
-                smiles=node.smiles,
-            )
+        attach_mapped_reaction(node, context)
         await context.update_node(node, websocket)  # Also disables highlight
 
     await websocket.send_json({"type": "complete"})
+
+
+def attach_mapped_reaction(node: Node, context: RetrosynthesisContext) -> None:
+    """Attach mapped reaction to the reaction object."""
+    reaction = node.reaction
+    if reaction is not None:
+        child_smiles = [
+            n.smiles
+            for nid, n in context.node_ids.items()
+            if context.parents.get(nid) == node.id
+        ]
+        reaction.mappedReaction = build_mapped_reaction_dict_or_none(
+            reactants=child_smiles,
+            products=[node.smiles],
+            log_msg="Failed to build rdkitjs mapped reaction for template node_id={node_id} smiles={smiles}",
+            node_id=node.id,
+            smiles=node.smiles,
+        )
+
+
+async def db_then_ai_retrosynthesis(
+    node_id: str,
+    context: RetrosynthesisContext,
+    query: Optional[str],
+    constraint: Optional[str],
+    websocket: WebSocket,
+    experiment: Experiment,
+    config_file: str,
+    run_settings: FlaskRunSettings,
+    tool_runtime: ToolRuntime,
+    log_progress: ReasoningCallbackType,
+):
+    """Searches the reaction database first; falls back to AI-based retrosynthesis if no exact match is found."""
+    node = context.node_ids.get(node_id)
+    clogger = CallbackLogger(websocket, source="db_then_ai_retrosynthesis")
+    if node is None:
+        await clogger.error(f"Node ID {node_id} not found")
+        await websocket.send_json({"type": "complete"})
+        return
+
+    await clogger.info("Searching for exact matches...")
+    reaction = await find_exact_reactions(
+        node, context, clogger, websocket, run_settings
+    )
+    if reaction is not None:
+        node.reaction = reaction
+        attach_mapped_reaction(node, context)
+        await context.update_node(node, websocket)
+        await websocket.send_json({"type": "complete"})
+        return
+
+    await clogger.info("No exact matches found. Computing with AI orchestrator...")
+    await ai_based_retrosynthesis(
+        node_id,
+        context,
+        query,
+        constraint,
+        websocket,
+        experiment,
+        config_file,
+        run_settings,
+        tool_runtime,
+        log_progress,
+    )

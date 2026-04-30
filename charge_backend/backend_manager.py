@@ -22,7 +22,7 @@ from retrosynthesis.template import (
     template_based_retrosynthesis,
     compute_templates_for_node,
 )
-from retrosynthesis.ai import ai_based_retrosynthesis
+from retrosynthesis.ai import ai_based_retrosynthesis, db_then_ai_retrosynthesis
 from retrosynthesis.alternatives import set_reaction_alternative
 from charge_backend.prompt_debugger import debug_prompt
 from backend_helper_funcs import Node
@@ -265,11 +265,11 @@ class FlaskActionManager(ActionManager):
                 "node": {
                     "id": data["nodeId"],
                     "reaction": Reaction(
-                        "ai_reaction_0",
+                        "searching_0",
                         (
-                            "Recomputing with AI orchestrator"
+                            "Recomputing: searching database..."
                             if has_children
-                            else "Computing with AI orchestrator"
+                            else "Searching database..."
                         ),
                         highlight="red",
                         label="Recomputing" if has_children else "Computing",
@@ -279,7 +279,7 @@ class FlaskActionManager(ActionManager):
         )
 
         run_func = partial(
-            ai_based_retrosynthesis,
+            db_then_ai_retrosynthesis,
             data["nodeId"],
             self.retro_synth_context,
             data.get("query", None),
