@@ -273,7 +273,7 @@ async def find_exact_reactions(
             pathway=pathway,
             hoverInfo=generate_hover_info(processed),
         )
-        alternatives.append(alt)
+        result.alternatives.append(alt)
 
         if i == 0:
             alt.status = "active"
