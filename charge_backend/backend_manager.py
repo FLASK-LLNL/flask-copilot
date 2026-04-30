@@ -358,6 +358,7 @@ class FlaskActionManager(ActionManager):
                 f"Cannot find parent reaction for node {data['nodeId']}", source="Agent"
             )
             await self.websocket.send_json({"type": "complete"})
+            return
 
         parent_nodeid = self.retro_synth_context.parents[data["nodeId"]]
         parent_node = self.retro_synth_context.node_ids[parent_nodeid]
