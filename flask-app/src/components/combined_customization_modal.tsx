@@ -1,9 +1,10 @@
 import React, { useState } from 'react';
-import { X, Wrench, Network, FlaskConical } from 'lucide-react';
+import { X, Wrench, Network, FlaskConical, TestTubeDiagonal } from 'lucide-react';
 import { OptimizationCustomization, SelectableTool } from '../types';
 import { ToolSelectionContent } from './tool_selection_content';
 import { OptimizationCustomizationContent } from './optimization_customization_content';
 import { MoleculePropertiesContent } from './molecule_properties';
+import { RetrosynthesisCustomizationContent } from './retrosynthesis_customization_content';
 
 interface CombinedCustomizationModalProps {
   isOpen: boolean;
@@ -26,11 +27,27 @@ interface CombinedCustomizationModalProps {
   initialMoleculeName?: string;
   onMoleculeNameSave?: (moleculeName: string) => void;
 
+  // Retrosynthesis settings props
+  useAiBased?: boolean;
+  onUseAiBasedChange?: (value: boolean) => void;
+  useRsa?: boolean;
+  onUseRsaChange?: (value: boolean) => void;
+  rsaMode?: 'standalone' | 'rag';
+  onRsaModeChange?: (mode: 'standalone' | 'rag') => void;
+  rsaN?: number;
+  onRsaNChange?: (value: number) => void;
+  rsaK?: number;
+  onRsaKChange?: (value: number) => void;
+  rsaT?: number;
+  onRsaTChange?: (value: number) => void;
+
   // Show optimization tab only for optimization problem type
   showOptimizationTab?: boolean;
+  // Show retrosynthesis tab only for retrosynthesis problem type
+  showRetrosynthesisTab?: boolean;
 }
 
-type TabType = 'tools' | 'optimization' | 'molecule';
+type TabType = 'tools' | 'optimization' | 'molecule' | 'retrosynthesis';
 
 export const CombinedCustomizationModal: React.FC<CombinedCustomizationModalProps> = ({
   isOpen,
@@ -43,7 +60,20 @@ export const CombinedCustomizationModal: React.FC<CombinedCustomizationModalProp
   onCustomizationSave,
   initialMoleculeName = 'brand',
   onMoleculeNameSave,
+  useAiBased = true,
+  onUseAiBasedChange,
+  useRsa = false,
+  onUseRsaChange,
+  rsaMode = 'standalone',
+  onRsaModeChange,
+  rsaN = 8,
+  onRsaNChange,
+  rsaK = 4,
+  onRsaKChange,
+  rsaT = 3,
+  onRsaTChange,
   showOptimizationTab = true,
+  showRetrosynthesisTab = false,
 }) => {
   const [activeTab, setActiveTab] = useState<TabType>('tools');
   const [pendingCustomization, setPendingCustomization] =
@@ -117,6 +147,25 @@ export const CombinedCustomizationModal: React.FC<CombinedCustomizationModalProp
             )}
           </button>
 
+          {showRetrosynthesisTab && (
+            <button
+              onClick={() => setActiveTab('retrosynthesis')}
+              className={`flex items-center gap-2 px-6 py-3 font-medium transition-colors border-b-2 ${
+                activeTab === 'retrosynthesis'
+                  ? 'border-primary text-primary'
+                  : 'border-transparent text-secondary hover:text-primary'
+              }`}
+            >
+              <TestTubeDiagonal className="w-4 h-4" />
+              Retrosynthesis
+              {useRsa && (
+                <span className="ml-1 px-2 py-0.5 text-xs rounded-full bg-primary/20 text-primary">
+                  RSA
+                </span>
+              )}
+            </button>
+          )}
+
           {showOptimizationTab && (
             <button
               onClick={() => setActiveTab('optimization')}
@@ -158,6 +207,30 @@ export const CombinedCustomizationModal: React.FC<CombinedCustomizationModalProp
               onSelectionChange={onToolSelectionChange}
             />
           )}
+
+          {activeTab === 'retrosynthesis' &&
+            showRetrosynthesisTab &&
+            onUseAiBasedChange &&
+            onUseRsaChange &&
+            onRsaModeChange &&
+            onRsaNChange &&
+            onRsaKChange &&
+            onRsaTChange && (
+              <RetrosynthesisCustomizationContent
+                useAiBased={useAiBased}
+                onUseAiBasedChange={onUseAiBasedChange}
+                useRsa={useRsa}
+                onUseRsaChange={onUseRsaChange}
+                rsaMode={rsaMode}
+                onRsaModeChange={onRsaModeChange}
+                rsaN={rsaN}
+                onRsaNChange={onRsaNChange}
+                rsaK={rsaK}
+                onRsaKChange={onRsaKChange}
+                rsaT={rsaT}
+                onRsaTChange={onRsaTChange}
+              />
+            )}
 
           {activeTab === 'optimization' && showOptimizationTab && (
             <OptimizationCustomizationContent

@@ -1781,105 +1781,6 @@ const ChemistryTool: React.FC = () => {
                       AI Debug Mode
                     </label>
                   </div>
-
-                  {/* Retrosynthesis Settings */}
-                  {problemType === 'retrosynthesis' && (
-                    <div className="border-l pl-4">
-                      <div className="mb-2">
-                        <label className="form-label flex items-center gap-2 cursor-pointer">
-                          <input
-                            type="checkbox"
-                            checked={useAiBased}
-                            onChange={() => setUseAiBased(!useAiBased)}
-                            disabled={isComputing}
-                            className="form-checkbox"
-                            title="Use AI-based retrosynthesis (vs template-based)"
-                          />
-                          Use AI-based Approach
-                        </label>
-                      </div>
-
-                      {useAiBased && (
-                        <div className="ml-6 mb-2">
-                          <label className="form-label flex items-center gap-2 cursor-pointer">
-                            <input
-                              type="checkbox"
-                              checked={useRsa}
-                              onChange={() => setUseRsa(!useRsa)}
-                              disabled={isComputing}
-                              className="form-checkbox"
-                              title="Enable Recursive Self-Aggregation for retrosynthesis"
-                            />
-                            <Wrench className="w-4 h-4" />
-                            Enable RSA Mode
-                          </label>
-                        </div>
-                      )}
-
-                      {useAiBased && useRsa && (
-                        <div className="ml-12 space-y-2">
-                          <div>
-                            <label className="form-label text-sm">Mode</label>
-                            <select
-                              value={rsaMode}
-                              onChange={(e) => setRsaMode(e.target.value as 'standalone' | 'rag')}
-                              disabled={isComputing}
-                              className="form-select text-sm"
-                            >
-                              <option value="standalone">Standalone (Chemistry-first)</option>
-                              <option value="rag">RAG (Database-informed)</option>
-                            </select>
-                          </div>
-
-                          <div className="grid grid-cols-3 gap-2">
-                            <div>
-                              <label className="form-label text-xs">N (Proposals)</label>
-                              <input
-                                type="number"
-                                value={rsaN}
-                                onChange={(e) => setRsaN(parseInt(e.target.value) || 8)}
-                                disabled={isComputing}
-                                min="1"
-                                max="20"
-                                className="form-input text-sm w-full"
-                                title="Number of initial proposals to generate"
-                              />
-                            </div>
-                            <div>
-                              <label className="form-label text-xs">K (Subset)</label>
-                              <input
-                                type="number"
-                                value={rsaK}
-                                onChange={(e) => setRsaK(parseInt(e.target.value) || 4)}
-                                disabled={isComputing}
-                                min="1"
-                                max={rsaN}
-                                className="form-input text-sm w-full"
-                                title="Subset size for aggregation"
-                              />
-                            </div>
-                            <div>
-                              <label className="form-label text-xs">T (Steps)</label>
-                              <input
-                                type="number"
-                                value={rsaT}
-                                onChange={(e) => setRsaT(parseInt(e.target.value) || 3)}
-                                disabled={isComputing}
-                                min="1"
-                                max="10"
-                                className="form-input text-sm w-full"
-                                title="Total number of aggregation steps"
-                              />
-                            </div>
-                          </div>
-
-                          <div className="text-xs text-gray-500">
-                            Estimated runtime: ~{rsaN * rsaT} inferences
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  )}
                 </div>
               </div>
 
@@ -2631,6 +2532,19 @@ const ChemistryTool: React.FC = () => {
         initialMoleculeName={orchestratorSettings.moleculeName || 'brand'}
         onMoleculeNameSave={handleMoleculeNameSave}
         showOptimizationTab={problemType === 'optimization'}
+        showRetrosynthesisTab={problemType === 'retrosynthesis'}
+        useAiBased={useAiBased}
+        onUseAiBasedChange={setUseAiBased}
+        useRsa={useRsa}
+        onUseRsaChange={setUseRsa}
+        rsaMode={rsaMode}
+        onRsaModeChange={setRsaMode}
+        rsaN={rsaN}
+        onRsaNChange={setRsaN}
+        rsaK={rsaK}
+        onRsaKChange={setRsaK}
+        rsaT={rsaT}
+        onRsaTChange={setRsaT}
       />
 
       {/* Prompt Debugging Modal */}
