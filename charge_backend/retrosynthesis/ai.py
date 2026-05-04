@@ -385,6 +385,7 @@ async def ai_based_retrosynthesis(
                 validate_proposal=validate_retro_proposal,  # Chemistry-specific validator
                 server_urls=available_tools,  # Tool configuration
                 builtin_tools=builtin_tools_filtered,  # Filtered tools based on mode
+                bearer_token=tool_runtime.bearer_token,  # Authentication bearer token (if set)
             )
 
             # Runner factory for parallel execution
