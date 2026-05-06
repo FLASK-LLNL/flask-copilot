@@ -27,6 +27,7 @@
   "scripts": {
     "start": "npm run dev",
     "dev": "vite",
+    "prebuild": "cd ../externals/lc_conductor/lcc_ui_components && npm run build",
     "build": "vite build",
     "preview": "vite preview"
   },
