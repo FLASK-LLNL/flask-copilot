@@ -71,6 +71,7 @@ import { clearLeafReactions, findAllDescendants, isRootNode, relayoutTree } from
 import { copyToClipboard } from './utils';
 
 import './animations.css';
+import 'lc-conductor/styles';
 import { MetricsDashboard, useMetricsDashboardState } from './components/metrics';
 import { useProjectData } from './hooks/useProjectData';
 import { ReactionAlternativesSidebar } from './components/reaction_alternatives';
