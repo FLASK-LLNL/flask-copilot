@@ -4,6 +4,16 @@
    DESIGN SYSTEM - FLASK Copilot
    ======================================== */
 
+/* CSS Variables for LC Conductor Components */
+:root {
+  --lcc-text-primary: #e9d5ff;
+  --lcc-text-secondary: #ddd6fe;
+  --lcc-text-white: #ffffff;
+  --lcc-bg-primary: #8b5cf6;
+  --lcc-bg-primary-hover: #7c3aed;
+  --lcc-bg-primary-active: #6d28d9;
+}
+
 /* Custom scrollbars - applies to all scrollable elements */
 .custom-scrollbar::-webkit-scrollbar,
 .max-h-60::-webkit-scrollbar,
