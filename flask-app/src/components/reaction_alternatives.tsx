@@ -31,7 +31,7 @@ interface ReactionAlternativesSidebarProps {
   alternatives: ReactionAlternative[];
   onSelectAlternative: (alt: ReactionAlternative) => void;
   onComputeTemplates: () => void;
-  onComputeFlaskAI: (customPrompt: boolean) => void;
+  onComputeFlaskAI: (customPrompt: boolean, aiOnly: boolean) => void;
   wsConnected: boolean;
   isComputing: boolean;
   isComputingTemplates: boolean;
@@ -467,7 +467,7 @@ export const ReactionAlternativesSidebar: React.FC<ReactionAlternativesSidebarPr
               <button
                 disabled={!wsConnected || isComputing || isComputingTemplates}
                 onClick={() => {
-                  onComputeFlaskAI(false);
+                  onComputeFlaskAI(false, true);
                   onClose();
                 }}
                 className="btn btn-primary flex-1 flex-col items-center"
@@ -484,7 +484,7 @@ export const ReactionAlternativesSidebar: React.FC<ReactionAlternativesSidebarPr
               <button
                 disabled={!wsConnected || isComputing || isComputingTemplates}
                 onClick={() => {
-                  onComputeFlaskAI(true);
+                  onComputeFlaskAI(true, true);
                   onClose();
                 }}
                 className="btn btn-secondary px-3"
