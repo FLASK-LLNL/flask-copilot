@@ -279,7 +279,7 @@ class FlaskActionManager(ActionManager):
         )
 
         run_func = partial(
-            db_then_ai_retrosynthesis,
+            ai_based_retrosynthesis if data.get("aiOnly", True) else db_then_ai_retrosynthesis,
             data["nodeId"],
             self.retro_synth_context,
             data.get("query", None),
