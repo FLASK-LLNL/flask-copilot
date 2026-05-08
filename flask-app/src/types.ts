@@ -147,6 +147,7 @@ export interface WebSocketMessageToServer {
 
   // Retrosynthesis
   alternativeId?: string;
+  aiOnly?: boolean;
 
   // Prompt debugging
   prompt?: string;

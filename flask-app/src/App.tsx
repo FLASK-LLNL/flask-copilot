@@ -1309,7 +1309,7 @@ const ChemistryTool: React.FC = () => {
   }, [selectedReactionNode?.id, selectedReactionNode?.smiles, debugMode, orchestratorSettings]); // Only depend on primitive values
 
   const handleComputeFlaskAI = useCallback(
-    (customPrompt: boolean) => {
+    (customPrompt: boolean, aiOnly: boolean) => {
       const nodeId = selectedReactionNode?.id;
       if (!nodeId) return;
 
@@ -1321,6 +1321,7 @@ const ChemistryTool: React.FC = () => {
             JSON.stringify({
               action: 'compute-reaction-from',
               nodeId: nodeId,
+              aiOnly: aiOnly,
               runSettings: {
                 promptDebugging: debugMode,
                 moleculeName: orchestratorSettings.moleculeName || 'brand',
