@@ -92,6 +92,12 @@ export type MoleculeNameFormat = 'brand' | 'iupac' | 'formula' | 'smiles';
 export interface FlaskRunSettings {
   moleculeName: MoleculeNameFormat;
   promptDebugging: boolean;
+  useAiBased?: boolean;
+  useRsa?: boolean;
+  rsaMode?: 'standalone' | 'rag';
+  rsaN?: number;
+  rsaK?: number;
+  rsaT?: number;
 }
 
 import type { OrchestratorSettings, SidebarMessage, SidebarState } from 'lc-conductor';

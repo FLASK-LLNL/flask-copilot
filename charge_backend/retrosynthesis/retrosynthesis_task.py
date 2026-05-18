@@ -3,6 +3,7 @@ from typing import List, Optional
 from pydantic import BaseModel, field_validator
 from flask_tools.chemistry.smarts_reactions_utils import verify_reaction_SMARTS
 from flask_tools.chemistry.smiles_utils import verify_smiles
+from pathlib import Path
 
 
 class ReactionOutputSchema(BaseModel):
