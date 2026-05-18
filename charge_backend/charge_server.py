@@ -30,6 +30,7 @@ from lc_conductor.tool_registration import (
     register_url,
     register_post,
     reload_server_list,
+    check_mcp_servers_endpoint,
     validate_mcp_server_endpoint,
     delete_mcp_server_endpoint,
     get_registered_servers,
