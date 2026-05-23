@@ -5,7 +5,7 @@ from typing import Annotated, Any, Callable, Literal
 
 from charge_backend.retrosynthesis.context import RetrosynthesisContext
 from lc_conductor.callback_logger import CallbackLogger
-from backend_helper_funcs import (
+from charge_backend.backend_helper_funcs import (
     Node,
     Reaction,
     ReactionAlternative,

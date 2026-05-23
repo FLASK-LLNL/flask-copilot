@@ -7,25 +7,29 @@ from lc_conductor import BuiltinToolDefinition, ToolRuntime
 from loguru import logger
 from charge.experiments.experiment import Experiment
 from charge.tasks.task import Task
-from backend_helper_funcs import (
+from charge_backend.backend_helper_funcs import (
     CallbackHandler,
     PathwayStep,
     Reaction,
     ReactionAlternative,
     FlaskRunSettings,
 )
-from retrosynthesis.context import RetrosynthesisContext
-from lmo.lmo_charge_backend_funcs import generate_lead_molecule
-from charge_backend_custom import run_custom_problem
+from charge_backend.retrosynthesis.context import RetrosynthesisContext
+from charge_backend.lmo.lmo_charge_backend_funcs import generate_lead_molecule
+from charge_backend.charge_backend_custom import run_custom_problem
 from functools import partial
-from retrosynthesis.template import (
+from charge_backend.retrosynthesis.template import (
     template_based_retrosynthesis,
     compute_templates_for_node,
 )
-from retrosynthesis.ai import ai_based_retrosynthesis, db_then_ai_retrosynthesis
-from retrosynthesis.alternatives import set_reaction_alternative
+from charge_backend.retrosynthesis.ai import (
+    ai_based_retrosynthesis,
+    db_then_ai_retrosynthesis,
+)
+from charge_backend.retrosynthesis.alternatives import set_reaction_alternative
 from charge_backend.prompt_debugger import debug_prompt
-from backend_helper_funcs import Node
+from charge_backend.backend_helper_funcs import Node
+from charge_backend.attachments import image_refs, validate_image_attachments
 
 
 class FlaskActionManager(ActionManager):
@@ -184,6 +188,7 @@ class FlaskActionManager(ActionManager):
         num_top_candidates = customization.get("numTopCandidates", 3)
         depth = customization.get("depth", 3)
         tool_runtime = self.selected_tool_runtime()
+        attachments = validate_image_attachments(data)
 
         run_func = partial(
             generate_lead_molecule,
@@ -208,6 +213,7 @@ class FlaskActionManager(ActionManager):
             additional_constraints,
             number_of_molecules,
             num_top_candidates,
+            attachments,
         )
         await self.task_manager.run_task(run_func())
 
@@ -229,6 +235,13 @@ class FlaskActionManager(ActionManager):
         await self.task_manager.clogger.info("Setting up custom task...")
         logger.info(f"Data: {data}")
         tool_runtime = self.selected_tool_runtime()
+        attachments = validate_image_attachments(data)
+        if attachments:
+            await self._send_processing_message(
+                "Processing custom prompt with attached images",
+                source="User",
+                images=image_refs(attachments),
+            )
 
         run_func = partial(
             run_custom_problem,
@@ -240,6 +253,7 @@ class FlaskActionManager(ActionManager):
             self.task_manager.websocket,
             self.run_settings,
             self.log_progress,
+            attachments,
         )
 
         await self.task_manager.run_task(run_func())
@@ -247,12 +261,19 @@ class FlaskActionManager(ActionManager):
     async def handle_compute_reaction_from(self, data: dict) -> None:
         """Handle compute-reaction-from action."""
         self.setup_run_settings(data)
+        attachments = validate_image_attachments(data)
         if self.retro_synth_context is None:
             raise ValueError("Retrosynthesis context not initialized")
 
         logger.info("Synthesize tree leaf action received")
         logger.info(f"Data: {data}")
         node = self.retro_synth_context.node_ids[data["nodeId"]]
+        if attachments:
+            await self._send_processing_message(
+                f"Processing retrosynthesis prompt: {data.get('query', '')}",
+                source="User",
+                images=image_refs(attachments),
+            )
 
         has_children = any(
             v == data["nodeId"] for v in self.retro_synth_context.parents.values()
@@ -279,7 +300,11 @@ class FlaskActionManager(ActionManager):
         )
 
         run_func = partial(
-            ai_based_retrosynthesis if data.get("aiOnly", False) else db_then_ai_retrosynthesis,
+            (
+                ai_based_retrosynthesis
+                if data.get("aiOnly", False)
+                else db_then_ai_retrosynthesis
+            ),
             data["nodeId"],
             self.retro_synth_context,
             data.get("query", None),
@@ -290,6 +315,7 @@ class FlaskActionManager(ActionManager):
             self.run_settings,
             self.selected_tool_runtime(),
             self.log_progress,
+            attachments,
         )
 
         asyncio.create_task(self.task_manager.run_task(run_func()))
@@ -318,10 +344,13 @@ class FlaskActionManager(ActionManager):
     async def handle_optimize_from(self, data: dict) -> None:
         """Handle optimize-from action."""
         self.setup_run_settings(data)
+        attachments = validate_image_attachments(data)
         prompt = data.get("query")
         if prompt:
             await self._send_processing_message(
-                f"Processing optimization query: {prompt} for node {data['nodeId']}"
+                f"Processing optimization query: {prompt} for node {data['nodeId']}",
+                source="User",
+                images=image_refs(attachments) if attachments else None,
             )
         else:
             await self._send_processing_message(
@@ -349,6 +378,7 @@ class FlaskActionManager(ActionManager):
     async def handle_recompute_reaction(self, data: dict) -> None:
         """Handle recompute-reaction action."""
         self.setup_run_settings(data)
+        attachments = validate_image_attachments(data)
         if self.retro_synth_context is None:
             raise ValueError("Retrosynthesis context not initialized")
 
@@ -393,6 +423,7 @@ class FlaskActionManager(ActionManager):
             self.run_settings,
             self.selected_tool_runtime(),
             self.log_progress,
+            attachments,
         )
 
         asyncio.create_task(self.task_manager.run_task(run_func()))
@@ -431,8 +462,11 @@ class FlaskActionManager(ActionManager):
     async def handle_custom_query_molecule(self, data: dict) -> None:
         """Handle a query on the given molecule."""
         self.setup_run_settings(data)
+        attachments = validate_image_attachments(data)
         await self._send_processing_message(
-            f"Processing molecule query: {data['query']} for node {data['nodeId']}"
+            f"Processing molecule query: {data['query']} for node {data['nodeId']}",
+            source="User",
+            images=image_refs(attachments) if attachments else None,
         )
         smiles = data["smiles"]
         tool_runtime = self.selected_tool_runtime()
@@ -440,6 +474,7 @@ class FlaskActionManager(ActionManager):
         task = Task(
             system_prompt=f"You are a helpful chemical assistant who answers in concise but factual responses. Answer the following query about the molecule given by the SMILES string `{smiles}`.",
             user_prompt=data["query"],
+            attachments=attachments,
             **tool_runtime.task_kwargs(),
         )
 
@@ -466,9 +501,12 @@ class FlaskActionManager(ActionManager):
         """Handle a query on the reaction (from nodeId to its reactants)."""
         self.setup_run_settings(data)
         assert self.retro_synth_context is not None
+        attachments = validate_image_attachments(data)
 
         await self._send_processing_message(
-            f"Processing reaction query: {data['query']} for node {data['nodeId']}"
+            f"Processing reaction query: {data['query']} for node {data['nodeId']}",
+            source="User",
+            images=image_refs(attachments) if attachments else None,
         )
 
         node = self.retro_synth_context.node_ids[data["nodeId"]]
@@ -477,6 +515,7 @@ class FlaskActionManager(ActionManager):
         task = Task(
             system_prompt="",
             user_prompt=data["query"],
+            attachments=attachments,
             **tool_runtime.task_kwargs(),
         )
 

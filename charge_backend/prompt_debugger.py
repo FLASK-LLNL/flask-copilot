@@ -9,6 +9,7 @@ from charge.clients.agent_factory import Agent
 from charge.tasks.task import Task
 from fastapi import WebSocket
 from typing import Any
+from charge_backend.attachments import image_refs, validate_image_attachments
 
 
 @dataclass
@@ -20,10 +21,16 @@ class PromptMetadata:
 class PromptMessage:
     prompt: str
     metadata: PromptMetadata | None
+    images: dict[str, dict[str, Any]] | None = None
+    attachments: list[dict[str, Any]] | None = None
 
     def json(self):
         result = asdict(self)
         result["type"] = "prompt-breakpoint"
+        if result.get("images") is None:
+            del result["images"]
+        if result.get("attachments") is None:
+            del result["attachments"]
         return result
 
 
@@ -50,7 +57,11 @@ async def debug_prompt_task(task: Task, websocket: WebSocket):
     DEBUG_PROMPT_RESPONSES[websocket] = asyncio.Future()
 
     user_prompt = task.user_prompt or ""
-    message = PromptMessage(user_prompt, None)
+    attachments = getattr(task, "attachments", []) or []
+    images = image_refs(
+        [attachment for attachment in attachments if isinstance(attachment, dict)]
+    )
+    message = PromptMessage(user_prompt, None, images or None, attachments or None)
     await websocket.send_json(message.json())
 
     # Wait for response
@@ -61,6 +72,22 @@ async def debug_prompt_task(task: Task, websocket: WebSocket):
     # Continue with new prompt
     if json.get("prompt"):
         task.user_prompt = json["prompt"]
+    if "attachments" in json:
+        task.attachments = validate_image_attachments(json)
+        await websocket.send_json(
+            {
+                "type": "response",
+                "message": {
+                    "source": "User",
+                    "message": (
+                        "Prompt breakpoint approved with attached images"
+                        if task.attachments
+                        else "Prompt breakpoint approved without attached images"
+                    ),
+                    "images": image_refs(task.attachments) if task.attachments else {},
+                },
+            }
+        )
 
 
 async def debug_prompt(runner: Agent, websocket: WebSocket):

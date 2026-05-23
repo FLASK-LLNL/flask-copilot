@@ -2,13 +2,13 @@ from fastapi import WebSocket
 from lc_conductor.callback_logger import CallbackLogger
 from collections import defaultdict
 
-from backend_helper_funcs import (
+from charge_backend.backend_helper_funcs import (
     Node,
     Reaction,
 )
-from retrosynthesis.context import RetrosynthesisContext
+from charge_backend.retrosynthesis.context import RetrosynthesisContext
 from charge_backend.moleculedb.purchasable import is_purchasable
-from retrosynthesis.mapping import build_mapped_reaction_dict_or_none
+from charge_backend.retrosynthesis.mapping import build_mapped_reaction_dict_or_none
 
 
 async def set_reaction_alternative(

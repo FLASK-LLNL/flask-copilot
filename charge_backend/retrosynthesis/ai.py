@@ -4,7 +4,7 @@ from fastapi import WebSocket
 from lc_conductor.callback_logger import CallbackLogger
 from typing import Optional
 
-from backend_helper_funcs import (
+from charge_backend.backend_helper_funcs import (
     CallbackHandler,
     highlight_node,
     Node,
@@ -14,19 +14,19 @@ from backend_helper_funcs import (
     FlaskRunSettings,
 )
 from charge_backend.prompt_debugger import debug_prompt
-from retrosynthesis.context import RetrosynthesisContext
+from charge_backend.retrosynthesis.context import RetrosynthesisContext
 from charge_backend.moleculedb.molecule_naming import (
     smiles_to_html,
 )
-from retrosynthesis.template import (
+from charge_backend.retrosynthesis.template import (
     generate_nodes_for_molecular_graph,
     run_retro_planner,
 )
 from charge_backend.moleculedb.purchasable import is_purchasable
-from retrosynthesis.mapping import build_mapped_reaction_dict_or_none
-from retrosynthesis.database import find_exact_reactions
+from charge_backend.retrosynthesis.mapping import build_mapped_reaction_dict_or_none
+from charge_backend.retrosynthesis.database import find_exact_reactions
 
-from retrosynthesis.retrosynthesis_task import (
+from charge_backend.retrosynthesis.retrosynthesis_task import (
     TemplateFreeRetrosynthesisTask as RetrosynthesisTask,
     TemplateFreeReactionOutputSchema as ReactionOutputSchema,
 )
@@ -71,6 +71,7 @@ async def ai_based_retrosynthesis(
     run_settings: FlaskRunSettings,
     tool_runtime: ToolRuntime,
     log_progress: ReasoningCallbackType,
+    attachments: Optional[list[dict[str, object]]] = None,
 ):
     """Performs template-free retrosynthesis using the AI orchestrator."""
     clogger = CallbackLogger(websocket, source="ai_based_retrosynthesis")
@@ -118,6 +119,7 @@ async def ai_based_retrosynthesis(
 
     retro_task = RetrosynthesisTask(
         user_prompt=user_prompt,
+        attachments=attachments or [],
         **tool_runtime.task_kwargs(),
     )
     runner.task = retro_task
@@ -139,6 +141,7 @@ async def ai_based_retrosynthesis(
     output = await runner.run(log_progress)
     if isinstance(callback_handler, CallbackHandler):
         await callback_handler.drain()
+    experiment.add_to_context(runner, retro_task, output)
 
     if os.getenv("CHARGE_DISABLE_OUTPUT_VALIDATION", "0") == "1":
         await clogger.warning(
@@ -305,6 +308,7 @@ async def db_then_ai_retrosynthesis(
     run_settings: FlaskRunSettings,
     tool_runtime: ToolRuntime,
     log_progress: ReasoningCallbackType,
+    attachments: Optional[list[dict[str, object]]] = None,
 ):
     """Searches the reaction database first; falls back to AI-based retrosynthesis if no exact match is found."""
     node = context.node_ids.get(node_id)
@@ -337,4 +341,5 @@ async def db_then_ai_retrosynthesis(
         run_settings,
         tool_runtime,
         log_progress,
+        attachments,
     )

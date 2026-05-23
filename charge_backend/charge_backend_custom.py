@@ -1,11 +1,12 @@
 from fastapi import WebSocket
 import re
+from typing import Optional
 
 from charge.clients.agent_factory import ReasoningCallbackType
 from charge.experiments.experiment import Experiment
 from charge.tasks.task import Task
-from backend_helper_funcs import Node, CallbackHandler, FlaskRunSettings
-from moleculedb.molecule_naming import smiles_to_html
+from charge_backend.backend_helper_funcs import Node, CallbackHandler, FlaskRunSettings
+from charge_backend.moleculedb.molecule_naming import smiles_to_html
 from charge_backend.prompt_debugger import debug_prompt
 from lc_conductor import ToolRuntime
 
@@ -19,10 +20,12 @@ async def run_custom_problem(
     websocket: WebSocket,
     run_settings: FlaskRunSettings,
     log_progress: ReasoningCallbackType,
+    attachments: Optional[list[dict[str, object]]] = None,
 ):
     task = Task(
         system_prompt=system_prompt,
         user_prompt=user_prompt + "\n\nInitial SMILES string: " + start_smiles,
+        attachments=attachments or [],
         **tool_runtime.task_kwargs(),
     )
     callback_handler = CallbackHandler(websocket)
