@@ -80,6 +80,7 @@ export interface SelectableTool {
   tool_server: Tool;
   tool_name?: string;
   tool_description?: string;
+  disabledReason?: string;
 }
 
 export interface ToolMap {
@@ -104,6 +105,19 @@ import type {
 
 export interface FlaskOrchestratorSettings extends OrchestratorSettings {
   moleculeName?: MoleculeNameFormat;
+}
+
+export interface PdfReferenceMetadata {
+  id: string;
+  documentId?: string;
+  name: string;
+  mimeType: string;
+  sizeBytes: number;
+  title?: string;
+  pageCount?: number;
+  createdAt?: string;
+  status: 'available' | 'missing' | 'uploading' | 'error';
+  error?: string;
 }
 
 // Optimization customization options
@@ -134,6 +148,8 @@ export interface WebSocketMessageToServer {
   // Browser -> server: full transient upload payloads for the current agent turn.
   // Persisted copies come back later through experimentContext, not SidebarMessage.images.
   attachments?: AgentAttachment[];
+  pdfReference?: AgentAttachment | null;
+  silent?: boolean;
   experimentContext?: any;
   enabledTools?: ToolMap;
 
@@ -181,6 +197,7 @@ export interface WebSocketMessage {
   tools?: Tool[];
   experimentContext?: any;
   orchestratorSettings?: FlaskOrchestratorSettings;
+  reference?: PdfReferenceMetadata | null;
 
   withNode?: boolean;
   username?: string;
@@ -327,6 +344,7 @@ export interface Experiment {
   graphState?: MoleculeGraphState;
   autoZoom?: boolean;
   sidebarState?: SidebarState;
+  pdfReference?: PdfReferenceMetadata | null;
 
   // Experiment state
   experimentContext?: any;

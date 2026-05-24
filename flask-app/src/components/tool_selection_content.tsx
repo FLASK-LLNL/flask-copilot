@@ -107,6 +107,9 @@ export const ToolSelectionContent: React.FC<ToolSelectionContentProps> = ({
   const maxSelectableCount = React.useMemo(() => {
     const uniqueNames = new Set<string>();
     availableToolsMap.forEach((item) => {
+      if (item.disabledReason) {
+        return;
+      }
       const name = selectableToolName(item);
       if (name) {
         uniqueNames.add(name);
@@ -122,7 +125,7 @@ export const ToolSelectionContent: React.FC<ToolSelectionContentProps> = ({
 
       nextSelectedIds.forEach((toolId) => {
         const item = availableToolById.get(toolId);
-        if (!item) {
+        if (!item || item.disabledReason) {
           return;
         }
 
@@ -141,12 +144,16 @@ export const ToolSelectionContent: React.FC<ToolSelectionContentProps> = ({
   );
 
   const toggleToolSelection = (toolId: number): void => {
+    const item = availableToolById.get(toolId);
+    if (item?.disabledReason) {
+      return;
+    }
+
     if (selectedToolIds.has(toolId)) {
       onSelectionChange(selectedTools.filter((id: number) => id !== toolId));
       return;
     }
 
-    const item = availableToolById.get(toolId);
     const name = item ? selectableToolName(item) : '';
     const baseSelection = selectedTools.filter((id) => {
       const selectedItem = availableToolById.get(id);
@@ -156,10 +163,13 @@ export const ToolSelectionContent: React.FC<ToolSelectionContentProps> = ({
   };
 
   const setServerSelection = (items: SelectableTool[], selected: boolean): void => {
-    const itemIds = items.map((item) => item.id);
+    const enabledItems = items.filter((item) => !item.disabledReason);
+    const itemIds = enabledItems.map((item) => item.id);
 
     if (selected) {
-      const itemNames = new Set(items.map((item) => selectableToolName(item)).filter(Boolean));
+      const itemNames = new Set(
+        enabledItems.map((item) => selectableToolName(item)).filter(Boolean)
+      );
       const baseSelection = selectedTools.filter((id) => {
         const selectedItem = availableToolById.get(id);
         return !selectedItem || !itemNames.has(selectableToolName(selectedItem));
@@ -172,7 +182,9 @@ export const ToolSelectionContent: React.FC<ToolSelectionContentProps> = ({
   };
 
   const handleSelectAll = (): void => {
-    applyExclusiveSelection(availableToolsMap.map((tool) => tool.id));
+    applyExclusiveSelection(
+      availableToolsMap.filter((tool) => !tool.disabledReason).map((tool) => tool.id)
+    );
   };
 
   const handleClearAll = (): void => {
@@ -201,10 +213,15 @@ export const ToolSelectionContent: React.FC<ToolSelectionContentProps> = ({
         </div>
         <div className="tool-list space-y-2 custom-scrollbar">
           {builtinTools.map((item) => (
-            <label key={item.id} className="tool-list-item">
+            <label
+              key={item.id}
+              className="tool-list-item"
+              style={item.disabledReason ? { opacity: 0.6 } : undefined}
+            >
               <input
                 type="checkbox"
                 checked={selectedToolIds.has(item.id)}
+                disabled={!!item.disabledReason}
                 onChange={() => toggleToolSelection(item.id)}
                 className="form-checkbox"
               />
@@ -217,6 +234,9 @@ export const ToolSelectionContent: React.FC<ToolSelectionContentProps> = ({
                 )}
                 {item.tool_description && (
                   <div className="text-xs text-secondary mt-1">{item.tool_description}</div>
+                )}
+                {item.disabledReason && (
+                  <div className="text-xs text-tertiary mt-1">{item.disabledReason}</div>
                 )}
               </div>
             </label>
@@ -250,7 +270,10 @@ export const ToolSelectionContent: React.FC<ToolSelectionContentProps> = ({
         </div>
         <div className="space-y-3">
           {groups.map((group) => {
-            const selectedCount = group.items.filter((item) => selectedToolIds.has(item.id)).length;
+            const enabledCount = group.items.filter((item) => !item.disabledReason).length;
+            const selectedCount = group.items.filter(
+              (item) => !item.disabledReason && selectedToolIds.has(item.id)
+            ).length;
             const scopeBadge = group.executionScope === 'local' ? 'MCP local' : 'MCP';
             const scopeDescription =
               group.executionScope === 'local'
@@ -267,14 +290,14 @@ export const ToolSelectionContent: React.FC<ToolSelectionContentProps> = ({
                   <div className="text-right">
                     <div className="text-[10px] tracking-wide text-tertiary">{scopeBadge}</div>
                     <div className="text-xs text-secondary mt-1">
-                      {selectedCount} / {group.items.length} selected
+                      {selectedCount} / {enabledCount} selected
                     </div>
                   </div>
                 </div>
                 <div className="flex gap-2">
                   <button
                     onClick={() => setServerSelection(group.items, true)}
-                    disabled={selectedCount === group.items.length}
+                    disabled={enabledCount === 0 || selectedCount === enabledCount}
                     className="btn btn-tertiary btn-sm"
                   >
                     Select Server
@@ -289,10 +312,15 @@ export const ToolSelectionContent: React.FC<ToolSelectionContentProps> = ({
                 </div>
                 <div className="space-y-2">
                   {group.items.map((item) => (
-                    <label key={item.id} className="tool-list-item">
+                    <label
+                      key={item.id}
+                      className="tool-list-item"
+                      style={item.disabledReason ? { opacity: 0.6 } : undefined}
+                    >
                       <input
                         type="checkbox"
                         checked={selectedToolIds.has(item.id)}
+                        disabled={!!item.disabledReason}
                         onChange={() => toggleToolSelection(item.id)}
                         className="form-checkbox"
                       />
@@ -302,6 +330,9 @@ export const ToolSelectionContent: React.FC<ToolSelectionContentProps> = ({
                         </div>
                         {item.tool_description && (
                           <div className="text-xs text-secondary mt-1">{item.tool_description}</div>
+                        )}
+                        {item.disabledReason && (
+                          <div className="text-xs text-tertiary mt-1">{item.disabledReason}</div>
                         )}
                       </div>
                     </label>

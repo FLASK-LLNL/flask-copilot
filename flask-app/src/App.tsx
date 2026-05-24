@@ -43,6 +43,7 @@ import {
   Experiment,
   FlaskOrchestratorSettings,
   OptimizationCustomization,
+  PdfReferenceMetadata,
   ReactionAlternative,
 } from './types';
 
@@ -175,6 +176,10 @@ const selectableToolName = (tool: SelectableTool): string =>
     ''
   ).trim();
 
+const isConsultWithDocumentTool = (tool: SelectableTool): boolean =>
+  selectableToolName(tool) === 'consult_with_document' ||
+  tool.tool_server.identifier === 'consult_with_document';
+
 const getDuplicateToolNameConflicts = (
   tools: SelectableTool[]
 ): Array<{ name: string; count: number }> => {
@@ -198,6 +203,9 @@ const getDefaultSelectedTools = (tools: SelectableTool[]): SelectableTool[] => {
   const nameCounts = new Map<string, number>();
 
   tools.forEach((tool) => {
+    if (tool.disabledReason) {
+      return;
+    }
     const name = selectableToolName(tool);
     if (!name) {
       return;
@@ -207,15 +215,28 @@ const getDefaultSelectedTools = (tools: SelectableTool[]): SelectableTool[] => {
 
   return tools.filter((tool) => {
     const name = selectableToolName(tool);
-    return !!name && nameCounts.get(name) === 1;
+    return !tool.disabledReason && !!name && nameCounts.get(name) === 1;
   });
 };
 
 const extractAttachmentsFromExperimentContext = (experimentContext: any): AgentAttachment[] => {
   const attachmentsById = new Map<string, AgentAttachment>();
+  const storedAttachments = experimentContext?.attachmentsById;
+  if (storedAttachments && typeof storedAttachments === 'object') {
+    Object.values(storedAttachments).forEach((attachment) => {
+      if (
+        attachment &&
+        typeof (attachment as AgentAttachment).id === 'string' &&
+        typeof (attachment as AgentAttachment).dataUrl === 'string'
+      ) {
+        attachmentsById.set((attachment as AgentAttachment).id, attachment as AgentAttachment);
+      }
+    });
+  }
+
   const items = experimentContext?.items;
   if (!Array.isArray(items)) {
-    return [];
+    return Array.from(attachmentsById.values());
   }
 
   items.forEach((item) => {
@@ -237,6 +258,70 @@ const extractAttachmentsFromExperimentContext = (experimentContext: any): AgentA
   return Array.from(attachmentsById.values());
 };
 
+const withPersistedImageAttachments = (
+  experimentContext: any,
+  attachmentRegistry: Record<string, AgentAttachment>
+): any => {
+  const nextContext = experimentContext ? JSON.parse(JSON.stringify(experimentContext)) : {};
+  const attachmentsById = { ...(experimentContext?.attachmentsById || {}) };
+
+  extractAttachmentsFromExperimentContext(experimentContext).forEach((attachment) => {
+    if (attachment.mimeType?.startsWith('image/') && attachment.dataUrl) {
+      attachmentsById[attachment.id] = attachment;
+    }
+  });
+
+  Object.values(attachmentRegistry).forEach((attachment) => {
+    if (
+      attachment &&
+      attachment.id &&
+      attachment.mimeType?.startsWith('image/') &&
+      attachment.dataUrl
+    ) {
+      attachmentsById[attachment.id] = attachment;
+    }
+  });
+
+  const items = nextContext?.items;
+  if (Array.isArray(items)) {
+    items.forEach((item) => {
+      const taskAttachments = item?.task?.attachments;
+      if (!Array.isArray(taskAttachments)) {
+        return;
+      }
+      item.task.attachments = taskAttachments.map((attachment) => {
+        if (
+          attachment &&
+          typeof attachment === 'object' &&
+          typeof attachment.dataUrl === 'string'
+        ) {
+          const { dataUrl, ...attachmentRef } = attachment;
+          return attachmentRef;
+        }
+        return attachment;
+      });
+    });
+  }
+
+  if (Object.keys(attachmentsById).length > 0) {
+    nextContext.attachmentsById = attachmentsById;
+  }
+  return {
+    ...nextContext,
+  };
+};
+
+const persistedPdfReference = (
+  reference: PdfReferenceMetadata | null
+): PdfReferenceMetadata | null => {
+  if (!reference) return null;
+  return {
+    ...reference,
+    status: 'missing',
+    error: undefined,
+  };
+};
+
 const ChemistryTool: React.FC = () => {
   const [smiles, setSmiles] = useState<string>('');
   const [problemType, setProblemType] = useState<string>('retrosynthesis');
@@ -244,6 +329,7 @@ const ChemistryTool: React.FC = () => {
   const [systemPrompt, setSystemPrompt] = useState<string>(DEFAULT_CUSTOM_SYSTEM_PROMPT);
   const [problemPrompt, setProblemPrompt] = useState<string>('');
   const [customPromptAttachments, setCustomPromptAttachments] = useState<AgentAttachment[]>([]);
+  const [pdfReference, setPdfReference] = useState<PdfReferenceMetadata | null>(null);
   const [editPromptsModal, setEditPromptsModal] = useState<boolean>(false);
   const [editPropertyModal, setEditPropertyModal] = useState<boolean>(false);
   const [showCustomizationModal, setShowCustomizationModal] = useState<boolean>(false);
@@ -356,12 +442,30 @@ const ChemistryTool: React.FC = () => {
   const edgesRef = useRef(edges);
   const sidebarStateRef = useRef(sidebarState);
   const hasInitializedToolSelectionRef = useRef(false);
+  const previousPdfReferenceAvailableRef = useRef(false);
+  const previousConsultToolIdRef = useRef<number | null>(null);
 
   const [selectedTools, setSelectedTools] = useState<number[]>([]);
   const [availableToolsMap, setAvailableToolsMap] = useState<SelectableTool[]>([]);
+  const isPdfReferenceAvailable = pdfReference?.status === 'available' && wsConnected;
+  const selectableToolsMap = useMemo(
+    () =>
+      availableToolsMap.map((tool) => {
+        if (!isConsultWithDocumentTool(tool) || isPdfReferenceAvailable) {
+          return { ...tool, disabledReason: undefined };
+        }
+        return {
+          ...tool,
+          disabledReason: wsConnected
+            ? 'Upload a PDF reference in Customize > References to enable this tool.'
+            : 'Reconnect the websocket and upload a PDF reference to enable this tool.',
+        };
+      }),
+    [availableToolsMap, isPdfReferenceAvailable, wsConnected]
+  );
   const duplicateToolNameConflicts = useMemo(
-    () => getDuplicateToolNameConflicts(availableToolsMap),
-    [availableToolsMap]
+    () => getDuplicateToolNameConflicts(selectableToolsMap.filter((tool) => !tool.disabledReason)),
+    [selectableToolsMap]
   );
 
   // Reaction alternatives sidebar state
@@ -381,20 +485,20 @@ const ChemistryTool: React.FC = () => {
 
   // Auto-select only uniquely named tools on the first non-empty tool list load.
   useEffect(() => {
-    if (availableToolsMap.length === 0) {
+    if (selectableToolsMap.length === 0) {
       hasInitializedToolSelectionRef.current = false;
       return;
     }
 
     if (!hasInitializedToolSelectionRef.current && selectedTools.length === 0) {
-      const defaultSelectedTools = getDefaultSelectedTools(availableToolsMap);
+      const defaultSelectedTools = getDefaultSelectedTools(selectableToolsMap);
       const defaultSelectedIds = defaultSelectedTools.map((tool) => tool.id);
       setSelectedTools(defaultSelectedIds);
       hasInitializedToolSelectionRef.current = true;
       void handleToolSelectionConfirm(defaultSelectedIds, defaultSelectedTools);
       console.log('Auto-selected uniquely named tools:', defaultSelectedIds);
     }
-  }, [availableToolsMap, selectedTools.length]);
+  }, [selectableToolsMap, selectedTools.length]);
 
   // Update refs whenever state changes
   useEffect(() => {
@@ -496,11 +600,15 @@ const ChemistryTool: React.FC = () => {
     console.log(`Set Task Tool Selection`);
 
     if (wsRef.current && wsRef.current.readyState == WebSocket.OPEN) {
-      const groupedSelectedTools = buildSelectedToolPayload(selectedItemsData);
+      const enabledSelectedItems = selectedItemsData.filter((item) => !item.disabledReason);
+      const enabledSelectedIds = selectedIds.filter((id) =>
+        enabledSelectedItems.some((item) => item.id === id)
+      );
+      const groupedSelectedTools = buildSelectedToolPayload(enabledSelectedItems);
       const message: WebSocketMessageToServer = {
         action: 'select-tools-for-task',
         enabledTools: {
-          selectedIds: selectedIds,
+          selectedIds: enabledSelectedIds,
           selectedTools: groupedSelectedTools,
         },
       };
@@ -512,6 +620,64 @@ const ChemistryTool: React.FC = () => {
     // Optional: Add any additional processing or API calls here
     // await fetch(HTTP_SERVER + '/api/save-selection', { method: 'POST', body: JSON.stringify(payload) });
   };
+
+  useEffect(() => {
+    const disabledToolIds = new Set(
+      selectableToolsMap.filter((tool) => tool.disabledReason).map((tool) => tool.id)
+    );
+    const nextSelectedIds = selectedTools.filter((id) => !disabledToolIds.has(id));
+    if (nextSelectedIds.length === selectedTools.length) {
+      return;
+    }
+
+    setSelectedTools(nextSelectedIds);
+    if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+      const selectedItems = selectableToolsMap.filter((tool) => nextSelectedIds.includes(tool.id));
+      void handleToolSelectionConfirm(nextSelectedIds, selectedItems);
+    }
+  }, [selectableToolsMap, selectedTools]);
+
+  useEffect(() => {
+    const consultTool = availableToolsMap.find(isConsultWithDocumentTool);
+    const consultToolId = consultTool?.id ?? null;
+    const becameAvailable = isPdfReferenceAvailable && !previousPdfReferenceAvailableRef.current;
+    const consultToolAppearedWhileAvailable =
+      isPdfReferenceAvailable &&
+      consultToolId !== null &&
+      previousConsultToolIdRef.current !== consultToolId;
+
+    previousPdfReferenceAvailableRef.current = isPdfReferenceAvailable;
+    previousConsultToolIdRef.current = consultToolId;
+
+    if (!consultTool) {
+      return;
+    }
+
+    if (!isPdfReferenceAvailable) {
+      if (!selectedTools.includes(consultTool.id)) {
+        return;
+      }
+      const nextSelectedIds = selectedTools.filter((id) => id !== consultTool.id);
+      setSelectedTools(nextSelectedIds);
+      if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+        const selectedItems = availableToolsMap.filter((tool) => nextSelectedIds.includes(tool.id));
+        void handleToolSelectionConfirm(nextSelectedIds, selectedItems);
+      }
+      return;
+    }
+
+    if (
+      (becameAvailable || consultToolAppearedWhileAvailable) &&
+      !selectedTools.includes(consultTool.id)
+    ) {
+      const nextSelectedIds = [...selectedTools, consultTool.id];
+      const selectedItems = availableToolsMap.filter((tool) => nextSelectedIds.includes(tool.id));
+      setSelectedTools(nextSelectedIds);
+      if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+        void handleToolSelectionConfirm(nextSelectedIds, selectedItems);
+      }
+    }
+  }, [availableToolsMap, isPdfReferenceAvailable, selectedTools]);
 
   // Callback function to handle molecule name preference changes
   const handleMoleculeNameSave = async (moleculeName: string): Promise<void> => {
@@ -631,6 +797,12 @@ const ChemistryTool: React.FC = () => {
       graphState.setOffset(data.graphState.offset);
     }
     data.autoZoom !== undefined && setAutoZoom(data.autoZoom);
+    setPdfReference(data.pdfReference ? { ...data.pdfReference, status: 'missing' } : null);
+    if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+      wsRef.current.send(
+        JSON.stringify({ action: 'configure-pdf-reference', pdfReference: null, silent: true })
+      );
+    }
     if (data.experimentContext !== undefined) {
       setExperimentContext(data.experimentContext);
       hydrateAttachmentRegistry(data.experimentContext);
@@ -899,6 +1071,23 @@ const ChemistryTool: React.FC = () => {
             setSelectedTools([]);
             break;
           }
+          case 'pdf-reference-response': {
+            const nextReference = data.reference || null;
+            setPdfReference(nextReference);
+            const projectId = projectSidebar.selectionRef.current.projectId;
+            const experimentId = projectSidebar.selectionRef.current.experimentId;
+            if (projectId && experimentId) {
+              try {
+                projectManagement.updateExperiment(projectId, {
+                  ...getContext(),
+                  pdfReference: persistedPdfReference(nextReference),
+                });
+              } catch (error) {
+                console.error('Unable to persist PDF reference metadata:', error);
+              }
+            }
+            break;
+          }
           case 'local-mcp-request': {
             void handleLocalMcpRequest(data);
             break;
@@ -961,7 +1150,10 @@ const ChemistryTool: React.FC = () => {
             break;
           }
           case 'save-context-response': {
-            const nextExperimentContext = data.experimentContext;
+            const nextExperimentContext = withPersistedImageAttachments(
+              data.experimentContext,
+              attachmentRegistryRef.current
+            );
             setExperimentContext(nextExperimentContext);
             hydrateAttachmentRegistry(nextExperimentContext);
 
@@ -1120,6 +1312,7 @@ const ChemistryTool: React.FC = () => {
             graphState,
             autoZoom,
             sidebarState: sidebarStateRef.current,
+            pdfReference: persistedPdfReference(pdfReference),
             experimentContext,
           };
         }
@@ -1132,6 +1325,7 @@ const ChemistryTool: React.FC = () => {
     graphState,
     metricsDashboardState,
     autoZoom,
+    pdfReference,
     experimentContext,
     systemPrompt,
     problemPrompt,
@@ -1191,6 +1385,7 @@ const ChemistryTool: React.FC = () => {
       graphState,
       metricsDashboardState,
       sidebarState,
+      pdfReference: persistedPdfReference(pdfReference),
       experimentContext,
     };
     const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
@@ -1378,6 +1573,29 @@ const ChemistryTool: React.FC = () => {
       setContextMenu({ node: null, isReaction: false, x: 0, y: 0 });
     },
     [debugMode, orchestratorSettings]
+  );
+
+  const handleReferenceDocumentSave = useCallback(
+    (reference: AgentAttachment | null | undefined): void => {
+      if (reference === undefined) {
+        return;
+      }
+      if (reference === null) {
+        setPdfReference(null);
+        sendMessageToServer('configure-pdf-reference', { pdfReference: null });
+        return;
+      }
+      setPdfReference({
+        id: reference.id,
+        name: reference.name,
+        mimeType: reference.mimeType,
+        sizeBytes: reference.sizeBytes,
+        createdAt: reference.createdAt,
+        status: 'uploading',
+      });
+      sendMessageToServer('configure-pdf-reference', { pdfReference: reference });
+    },
+    [sendMessageToServer]
   );
 
   const handleReactionCardClick = useCallback(
@@ -2648,7 +2866,7 @@ const ChemistryTool: React.FC = () => {
       <CombinedCustomizationModal
         isOpen={showCustomizationModal}
         onClose={() => setShowCustomizationModal(false)}
-        availableToolsMap={availableToolsMap}
+        availableToolsMap={selectableToolsMap}
         selectedTools={selectedTools}
         onToolSelectionChange={setSelectedTools}
         onToolConfirm={handleToolSelectionConfirm}
@@ -2656,6 +2874,9 @@ const ChemistryTool: React.FC = () => {
         onCustomizationSave={setCustomization}
         initialMoleculeName={orchestratorSettings.moleculeName || 'brand'}
         onMoleculeNameSave={handleMoleculeNameSave}
+        referenceDocument={pdfReference}
+        referenceUploadDisabled={!wsConnected}
+        onReferenceDocumentSave={handleReferenceDocumentSave}
         showOptimizationTab={problemType === 'optimization'}
       />
 
