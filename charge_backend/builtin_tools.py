@@ -11,20 +11,21 @@ from lc_conductor import (
 )
 
 
-def _document_consult_tool(registry: PdfDocumentRegistry):
+def _document_consult_tool(registry: PdfDocumentRegistry, username: str):
     async def consult_with_document(
         question: str,
         document_id: str | None = None,
         max_tool_calls: int = 14,
     ) -> str:
         """Consult the active uploaded PDF reference with a private subagent."""
-        return await registry.consult(question, document_id, max_tool_calls)
+        return await registry.consult(username, question, document_id, max_tool_calls)
 
     return consult_with_document
 
 
 def list_builtin_tool_definitions(
     pdf_registry: PdfDocumentRegistry | None = None,
+    username: str = "nobody",
 ) -> list[BuiltinToolDefinition]:
     definitions = [
         BuiltinToolDefinition(
@@ -53,7 +54,7 @@ def list_builtin_tool_definitions(
         ),
     ]
     if pdf_registry is not None:
-        consult_with_document = _document_consult_tool(pdf_registry)
+        consult_with_document = _document_consult_tool(pdf_registry, username)
         definitions.append(
             BuiltinToolDefinition(
                 identifier="consult_with_document",

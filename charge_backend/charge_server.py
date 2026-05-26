@@ -47,7 +47,6 @@ from charge_backend import prompt_debugger
 from pydantic import BaseModel
 from typing import Optional
 
-
 parser = argparse.ArgumentParser()
 
 parser.add_argument(
@@ -250,7 +249,7 @@ async def websocket_endpoint(websocket: WebSocket):
         args,
         username,
         pdf_registry=pdf_registry,
-        builtin_tool_definitions=list_builtin_tool_definitions(pdf_registry),
+        builtin_tool_definitions=list_builtin_tool_definitions(pdf_registry, username),
     )
     await action_manager.report_orchestrator_config()
 
