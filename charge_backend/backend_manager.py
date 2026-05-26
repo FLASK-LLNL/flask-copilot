@@ -103,7 +103,7 @@ class FlaskActionManager(ActionManager):
         )
 
     def _with_document_reference_context(self, system_prompt: str) -> str:
-        return f"{system_prompt}{self._document_reference_context(self.username)}"
+        return f"{system_prompt}{self._document_reference_context()}"
 
     async def handle_load_state(self, data, *args, **kwargs) -> None:
         self.pdf_registry.clear(self.username)
