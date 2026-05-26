@@ -3,7 +3,11 @@ from fastapi import WebSocket
 import asyncio
 import os
 from lc_conductor import ActionManager, TaskManager, CallbackLogger
-from lc_conductor import BuiltinToolDefinition, ToolRuntime
+from lc_conductor import (
+    BuiltinToolDefinition,
+    ToolRuntime,
+    resolve_builtin_tool_descriptors,
+)
 from loguru import logger
 from charge.experiments.experiment import Experiment
 from charge.tasks.task import Task
@@ -30,6 +34,7 @@ from charge_backend.retrosynthesis.alternatives import set_reaction_alternative
 from charge_backend.prompt_debugger import debug_prompt
 from charge_backend.backend_helper_funcs import Node
 from charge_backend.attachments import image_refs, validate_image_attachments
+from charge_backend.pdf import PdfDocumentRegistry
 
 
 class FlaskActionManager(ActionManager):
@@ -41,6 +46,7 @@ class FlaskActionManager(ActionManager):
         experiment: Experiment,
         args,
         username: str,
+        pdf_registry: Optional[PdfDocumentRegistry] = None,
         builtin_tool_definitions: Optional[list[BuiltinToolDefinition]] = None,
     ):
         super().__init__(
@@ -53,6 +59,7 @@ class FlaskActionManager(ActionManager):
         self.run_settings: FlaskRunSettings = FlaskRunSettings()
         self.websocket = task_manager.websocket
         self.retro_synth_context: Optional[RetrosynthesisContext] = None
+        self.pdf_registry = pdf_registry or PdfDocumentRegistry()
 
     def setup_retro_synth_context(self) -> None:
         if self.retro_synth_context is None:
@@ -66,6 +73,95 @@ class FlaskActionManager(ActionManager):
     def setup_run_settings(self, data: dict[str, Any]):
         if "runSettings" in data:
             self.run_settings = FlaskRunSettings(**data["runSettings"])
+
+    def selected_tool_runtime(self) -> ToolRuntime:
+        runtime = super().selected_tool_runtime()
+        if not self.pdf_registry.has_active_document(self.username):
+            return runtime
+        if any(tool.identifier == "consult_with_document" for tool in runtime.tools):
+            return runtime
+        return ToolRuntime(
+            bearer_token=runtime.bearer_token,
+            tools=[
+                *runtime.tools,
+                *resolve_builtin_tool_descriptors(
+                    ["consult_with_document"],
+                    self.builtin_tool_definitions,
+                ),
+            ],
+        )
+
+    def _document_reference_context(self) -> str:
+        metadata = self.pdf_registry.active_metadata(self.username)
+        if metadata is None:
+            return ""
+        return (
+            "\n\nAn uploaded PDF reference is available through the "
+            "`consult_with_document` tool. Use it when the user asks about the "
+            f"reference document `{metadata.title}` ({metadata.name}); cite page "
+            "numbers from the tool output."
+        )
+
+    def _with_document_reference_context(self, system_prompt: str) -> str:
+        return f"{system_prompt}{self._document_reference_context()}"
+
+    async def handle_load_state(self, data, *args, **kwargs) -> None:
+        self.pdf_registry.clear(self.username)
+        await super().handle_load_state(data, *args, **kwargs)
+
+    async def handle_configure_pdf_reference(self, data: dict[str, Any]) -> None:
+        reference = data.get("pdfReference")
+        if reference is None:
+            self.pdf_registry.clear(self.username)
+            if data.get("silent"):
+                return
+            await self.websocket.send_json(
+                {
+                    "type": "pdf-reference-response",
+                    "reference": None,
+                }
+            )
+            return
+
+        try:
+            metadata = await asyncio.to_thread(
+                self.pdf_registry.set_from_attachment,
+                self.username,
+                reference,
+            )
+        except ValueError as exc:
+            await self.websocket.send_json(
+                {
+                    "type": "pdf-reference-response",
+                    "reference": {
+                        "id": (
+                            str(reference.get("id") or "pdf_reference")
+                            if isinstance(reference, dict)
+                            else "pdf_reference"
+                        ),
+                        "name": (
+                            str(reference.get("name") or "Reference PDF")
+                            if isinstance(reference, dict)
+                            else "Reference PDF"
+                        ),
+                        "mimeType": "application/pdf",
+                        "sizeBytes": (
+                            int(reference.get("sizeBytes") or 0)
+                            if isinstance(reference, dict)
+                            else 0
+                        ),
+                        "status": "error",
+                        "error": str(exc),
+                    },
+                }
+            )
+            return
+        await self.websocket.send_json(
+            {
+                "type": "pdf-reference-response",
+                "reference": metadata.json(),
+            }
+        )
 
     async def log_progress(self, progress: str):
         logger.info(f"Reasoning: {progress}")
@@ -246,7 +342,7 @@ class FlaskActionManager(ActionManager):
         run_func = partial(
             run_custom_problem,
             data["smiles"],
-            data["systemPrompt"],
+            self._with_document_reference_context(data["systemPrompt"]),
             data["userPrompt"],
             self.experiment,
             tool_runtime,
@@ -472,7 +568,9 @@ class FlaskActionManager(ActionManager):
         tool_runtime = self.selected_tool_runtime()
 
         task = Task(
-            system_prompt=f"You are a helpful chemical assistant who answers in concise but factual responses. Answer the following query about the molecule given by the SMILES string `{smiles}`.",
+            system_prompt=self._with_document_reference_context(
+                f"You are a helpful chemical assistant who answers in concise but factual responses. Answer the following query about the molecule given by the SMILES string `{smiles}`."
+            ),
             user_prompt=data["query"],
             attachments=attachments,
             **tool_runtime.task_kwargs(),
@@ -513,7 +611,7 @@ class FlaskActionManager(ActionManager):
         tool_runtime = self.selected_tool_runtime()
 
         task = Task(
-            system_prompt="",
+            system_prompt=self._with_document_reference_context(""),
             user_prompt=data["query"],
             attachments=attachments,
             **tool_runtime.task_kwargs(),

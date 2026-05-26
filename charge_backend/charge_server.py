@@ -40,12 +40,12 @@ from lc_conductor import TaskManager
 from lc_conductor.local_mcp_proxy import resolve_local_mcp_response
 from charge_backend.backend_manager import FlaskActionManager
 from charge_backend.builtin_tools import list_builtin_tool_definitions
+from charge_backend.pdf import PdfDocumentRegistry
 from charge_backend import prompt_debugger
 
 # Pydantic models for new endpoints
 from pydantic import BaseModel
 from typing import Optional
-
 
 parser = argparse.ArgumentParser()
 
@@ -241,13 +241,15 @@ async def websocket_endpoint(websocket: WebSocket):
     experiment = Experiment(task=None)
 
     task_manager = TaskManager(websocket)
+    pdf_registry = PdfDocumentRegistry()
 
     action_manager = FlaskActionManager(
         task_manager,
         experiment,
         args,
         username,
-        builtin_tool_definitions=list_builtin_tool_definitions(),
+        pdf_registry=pdf_registry,
+        builtin_tool_definitions=list_builtin_tool_definitions(pdf_registry, username),
     )
     await action_manager.report_orchestrator_config()
 
@@ -261,6 +263,7 @@ async def websocket_endpoint(websocket: WebSocket):
         # Tools
         "list-tools": action_manager.handle_list_tools,
         "select-tools-for-task": action_manager.handle_select_tools_for_task,
+        "configure-pdf-reference": action_manager.handle_configure_pdf_reference,
         # Settings
         "ui-update-orchestrator-settings": action_manager.handle_orchestrator_settings_update,
         "get-username": action_manager.handle_get_username,
@@ -313,6 +316,7 @@ async def websocket_endpoint(websocket: WebSocket):
     except Exception as e:
         logger.exception(f"Error in WebSocket connection: {e}")
     finally:
+        pdf_registry.cleanup()
         await task_manager.close()
 
 
