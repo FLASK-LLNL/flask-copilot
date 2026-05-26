@@ -56,6 +56,7 @@ import {
 
 import {
   SidebarMessage,
+  AttachmentUpload,
   SettingsButton,
   ReasoningSidebar,
   useSidebarState,
@@ -63,6 +64,7 @@ import {
   BACKEND_OPTIONS,
   handleLocalMcpProxyRequest,
 } from 'lc-conductor';
+import type { AgentAttachment } from 'lc-conductor';
 
 import { CombinedCustomizationModal } from './components/combined_customization_modal';
 import { Modal } from './components/modal';
@@ -209,12 +211,39 @@ const getDefaultSelectedTools = (tools: SelectableTool[]): SelectableTool[] => {
   });
 };
 
+const extractAttachmentsFromExperimentContext = (experimentContext: any): AgentAttachment[] => {
+  const attachmentsById = new Map<string, AgentAttachment>();
+  const items = experimentContext?.items;
+  if (!Array.isArray(items)) {
+    return [];
+  }
+
+  items.forEach((item) => {
+    const taskAttachments = item?.task?.attachments;
+    if (!Array.isArray(taskAttachments)) {
+      return;
+    }
+    taskAttachments.forEach((attachment) => {
+      if (
+        attachment &&
+        typeof attachment.id === 'string' &&
+        typeof attachment.dataUrl === 'string'
+      ) {
+        attachmentsById.set(attachment.id, attachment as AgentAttachment);
+      }
+    });
+  });
+
+  return Array.from(attachmentsById.values());
+};
+
 const ChemistryTool: React.FC = () => {
   const [smiles, setSmiles] = useState<string>('');
   const [problemType, setProblemType] = useState<string>('retrosynthesis');
   const [propertyType, setPropertyType] = useState<string>('density');
   const [systemPrompt, setSystemPrompt] = useState<string>(DEFAULT_CUSTOM_SYSTEM_PROMPT);
   const [problemPrompt, setProblemPrompt] = useState<string>('');
+  const [customPromptAttachments, setCustomPromptAttachments] = useState<AgentAttachment[]>([]);
   const [editPromptsModal, setEditPromptsModal] = useState<boolean>(false);
   const [editPropertyModal, setEditPropertyModal] = useState<boolean>(false);
   const [showCustomizationModal, setShowCustomizationModal] = useState<boolean>(false);
@@ -234,6 +263,9 @@ const ChemistryTool: React.FC = () => {
   const [customQueryModal, setCustomQueryModal] = useState<TreeNode | null>(null);
   const [customQueryText, setCustomQueryText] = useState<string>('');
   const [customQueryType, setCustomQueryType] = useState<string | null>(null);
+  const [customQueryAttachments, setCustomQueryAttachments] = useState<AgentAttachment[]>([]);
+  const [experimentContext, setExperimentContext] = useState<any>(undefined);
+  const [attachmentRegistry, setAttachmentRegistry] = useState<Record<string, AgentAttachment>>({});
   const [wsConnected, setWsConnected] = useState<boolean>(false);
   const [saveDropdownOpen, setSaveDropdownOpen] = useState<boolean>(false);
   const [wsError, setWsError] = useState<string>('');
@@ -247,6 +279,8 @@ const ChemistryTool: React.FC = () => {
   const [username, setUsername] = useState<string>('<LOCAL USER>');
 
   const wsRef = useRef<WebSocket | null>(null);
+  const saveContextModeRef = useRef<'download' | 'sync' | null>(null);
+  const pendingAttachmentContextSyncRef = useRef(false);
 
   // Customization state
   const [customization, setCustomization] = useState<OptimizationCustomization>({
@@ -262,8 +296,12 @@ const ChemistryTool: React.FC = () => {
   const [promptBreakpoint, setPromptBreakpoint] = useState<{
     prompt: string;
     metadata?: any;
+    images?: Record<string, any>;
   } | null>(null);
   const [editedPrompt, setEditedPrompt] = useState<string>('');
+  const [promptBreakpointAttachments, setPromptBreakpointAttachments] = useState<AgentAttachment[]>(
+    []
+  );
   const [debugModalMinimized, setDebugModalMinimized] = useState<boolean>(false);
 
   // Function to refresh tools list from backend
@@ -284,6 +322,35 @@ const ChemistryTool: React.FC = () => {
   const projectSidebar = useProjectSidebar();
   const projectData = useProjectData();
   const projectManagement = useProjectManagement(projectData);
+  const attachmentRegistryRef = useRef<Record<string, AgentAttachment>>({});
+
+  const registerAttachments = useCallback((attachments: AgentAttachment[]): void => {
+    if (attachments.length === 0) return;
+    const next = { ...attachmentRegistryRef.current };
+    attachments.forEach((attachment) => {
+      next[attachment.id] = attachment;
+    });
+    attachmentRegistryRef.current = next;
+    setAttachmentRegistry((prev) => {
+      const nextState = { ...prev };
+      attachments.forEach((attachment) => {
+        nextState[attachment.id] = attachment;
+      });
+      return nextState;
+    });
+  }, []);
+
+  const hydrateAttachmentRegistry = useCallback(
+    (context: any): void => {
+      registerAttachments(extractAttachmentsFromExperimentContext(context));
+    },
+    [registerAttachments]
+  );
+
+  const resolveImageDataUrl = useCallback(
+    (imageId: string): string | undefined => attachmentRegistry[imageId]?.dataUrl,
+    [attachmentRegistry]
+  );
 
   const treeNodesRef = useRef(treeNodes);
   const edgesRef = useRef(edges);
@@ -564,6 +631,10 @@ const ChemistryTool: React.FC = () => {
       graphState.setOffset(data.graphState.offset);
     }
     data.autoZoom !== undefined && setAutoZoom(data.autoZoom);
+    if (data.experimentContext !== undefined) {
+      setExperimentContext(data.experimentContext);
+      hydrateAttachmentRegistry(data.experimentContext);
+    }
     if (data.sidebarState) {
       sidebarState.setMessages(data.sidebarState.messages);
       sidebarState.setVisibleSources(data.sidebarState.visibleSources);
@@ -680,7 +751,14 @@ const ChemistryTool: React.FC = () => {
         moleculeName: orchestratorSettings.moleculeName || 'brand',
       },
       customization,
+      ...(problemType === 'custom' && customPromptAttachments.length > 0
+        ? { attachments: customPromptAttachments }
+        : {}),
     };
+    if (problemType === 'custom' && customPromptAttachments.length > 0) {
+      registerAttachments(customPromptAttachments);
+      pendingAttachmentContextSyncRef.current = true;
+    }
 
     wsRef.current?.send(JSON.stringify(message));
   };
@@ -801,6 +879,10 @@ const ChemistryTool: React.FC = () => {
             unhighlightNodes();
             setTreeNodes(clearLeafReactions);
             saveStateToExperiment();
+            if (pendingAttachmentContextSyncRef.current) {
+              pendingAttachmentContextSyncRef.current = false;
+              requestExperimentContextSync();
+            }
             break;
           }
           case 'response': {
@@ -879,7 +961,25 @@ const ChemistryTool: React.FC = () => {
             break;
           }
           case 'save-context-response': {
-            saveFullContext(data.experimentContext!);
+            const nextExperimentContext = data.experimentContext;
+            setExperimentContext(nextExperimentContext);
+            hydrateAttachmentRegistry(nextExperimentContext);
+
+            const mode = saveContextModeRef.current || 'download';
+            saveContextModeRef.current = null;
+            if (mode === 'sync') {
+              const projectId = projectSidebar.selectionRef.current.projectId;
+              const experimentId = projectSidebar.selectionRef.current.experimentId;
+              if (projectId && experimentId) {
+                projectManagement.updateExperiment(projectId, {
+                  ...getContext(),
+                  experimentContext: nextExperimentContext,
+                });
+              }
+              break;
+            }
+
+            saveFullContext(nextExperimentContext);
             break;
           }
           case 'get-username-response': {
@@ -891,7 +991,18 @@ const ChemistryTool: React.FC = () => {
             setPromptBreakpoint({
               prompt: data.prompt || '',
               metadata: data.metadata,
+              images: data.images,
             });
+            if (data.attachments && data.attachments.length > 0) {
+              registerAttachments(data.attachments);
+              setPromptBreakpointAttachments(data.attachments);
+            } else {
+              setPromptBreakpointAttachments(
+                Object.keys(data.images || {})
+                  .map((imageId) => attachmentRegistryRef.current[imageId])
+                  .filter((attachment): attachment is AgentAttachment => !!attachment)
+              );
+            }
             setEditedPrompt(data.prompt || '');
             break;
           }
@@ -951,6 +1062,10 @@ const ChemistryTool: React.FC = () => {
     graphState.setZoom(1);
     setContextMenu({ node: null, isReaction: false, x: 0, y: 0 });
     setCustomQueryModal(null);
+    setCustomQueryAttachments([]);
+    setExperimentContext(undefined);
+    attachmentRegistryRef.current = {};
+    setAttachmentRegistry({});
     metricsDashboardState.setMetricsHistory([]);
     sidebarState.setMessages([]);
     setSaveDropdownOpen(false);
@@ -1005,6 +1120,7 @@ const ChemistryTool: React.FC = () => {
             graphState,
             autoZoom,
             sidebarState: sidebarStateRef.current,
+            experimentContext,
           };
         }
       }
@@ -1016,6 +1132,7 @@ const ChemistryTool: React.FC = () => {
     graphState,
     metricsDashboardState,
     autoZoom,
+    experimentContext,
     systemPrompt,
     problemPrompt,
     propertyType,
@@ -1048,10 +1165,16 @@ const ChemistryTool: React.FC = () => {
 
   const requestSaveContext = (): void => {
     // We need to request the up-to-date Project object from the server before saving
+    saveContextModeRef.current = 'download';
     sendMessageToServer('save-context');
   };
 
-  const saveFullContext = (experimentContext: string): void => {
+  const requestExperimentContextSync = (): void => {
+    saveContextModeRef.current = 'sync';
+    sendMessageToServer('save-context');
+  };
+
+  const saveFullContext = (experimentContext: any): void => {
     const data = {
       lastModified: new Date().toISOString(),
       smiles,
@@ -1223,15 +1346,19 @@ const ChemistryTool: React.FC = () => {
       JSON.stringify({
         action: 'prompt-breakpoint-response',
         prompt: editedPrompt,
+        attachments: promptBreakpointAttachments,
         metadata: promptBreakpoint?.metadata,
       })
     );
+    registerAttachments(promptBreakpointAttachments);
+    pendingAttachmentContextSyncRef.current = true;
 
     setPromptBreakpoint(null);
     setEditedPrompt('');
+    setPromptBreakpointAttachments([]);
     setDebugModalMinimized(false);
     setIsComputing(true); // Resume computation
-  }, [editedPrompt, promptBreakpoint]);
+  }, [editedPrompt, promptBreakpoint, promptBreakpointAttachments, registerAttachments]);
 
   const sendMessageToServer = useCallback(
     (message: string, data?: Omit<WebSocketMessageToServer, 'action'>): void => {
@@ -1342,8 +1469,16 @@ const ChemistryTool: React.FC = () => {
   const handleCustomQuery = (node: TreeNode, queryType: string | null): void => {
     setCustomQueryModal(node);
     setCustomQueryText('');
+    setCustomQueryAttachments([]);
     setCustomQueryType(queryType);
     setContextMenu({ node: null, isReaction: false, x: 0, y: 0 });
+  };
+
+  const closeCustomQueryModal = (): void => {
+    setCustomQueryModal(null);
+    setCustomQueryText('');
+    setCustomQueryAttachments([]);
+    setCustomQueryType(null);
   };
 
   const submitCustomQuery = (): void => {
@@ -1372,17 +1507,20 @@ const ChemistryTool: React.FC = () => {
       nodeId: customQueryModal?.id,
       smiles: customQueryModal?.smiles,
       query: customQueryText,
+      attachments: customQueryAttachments,
       runSettings: {
         promptDebugging: debugMode,
         moleculeName: orchestratorSettings.moleculeName || 'brand',
       },
       ...propertyDetails,
     };
+    registerAttachments(customQueryAttachments);
+    if (customQueryAttachments.length > 0) {
+      pendingAttachmentContextSyncRef.current = true;
+    }
     wsRef.current.send(JSON.stringify(message));
 
-    setCustomQueryModal(null);
-    setCustomQueryText('');
-    setCustomQueryType(null);
+    closeCustomQueryModal();
     setIsComputing(true); // If expecting new nodes
   };
 
@@ -2100,6 +2238,7 @@ const ChemistryTool: React.FC = () => {
           rdkitModule={rdkitModule}
           isOpen={sidebarOpen}
           onToggle={() => setSidebarOpen(!sidebarOpen)}
+          resolveImageDataUrl={resolveImageDataUrl}
         />
       </div>
 
@@ -2306,17 +2445,26 @@ const ChemistryTool: React.FC = () => {
                   dangerouslySetInnerHTML={{ __html: 'for ' + customQueryModal.label }}
                 ></div>
               </div>
-              <button onClick={() => setCustomQueryModal(null)} className="btn-icon">
+              <button onClick={closeCustomQueryModal} className="btn-icon">
                 <X className="w-6 h-6" />
               </button>
             </div>
 
-            <textarea
-              value={customQueryText}
-              onChange={(e) => setCustomQueryText(e.target.value)}
-              placeholder="Enter your custom query here..."
-              className="form-textarea h-40"
-            />
+            <div className="modal-body space-y-4">
+              <textarea
+                value={customQueryText}
+                onChange={(e) => setCustomQueryText(e.target.value)}
+                placeholder="Enter your custom query here..."
+                className="form-textarea h-40"
+              />
+
+              <AttachmentUpload
+                value={customQueryAttachments}
+                onChange={setCustomQueryAttachments}
+                maxFiles={5}
+                maxSizeBytes={5 * 1024 * 1024}
+              />
+            </div>
 
             <div className="modal-footer">
               <button
@@ -2328,7 +2476,7 @@ const ChemistryTool: React.FC = () => {
                 Submit Query
               </button>
 
-              <button onClick={() => setCustomQueryModal(null)} className="btn btn-tertiary">
+              <button onClick={closeCustomQueryModal} className="btn btn-tertiary">
                 Cancel
               </button>
             </div>
@@ -2369,12 +2517,21 @@ const ChemistryTool: React.FC = () => {
                   className="form-textarea h-32"
                 />
               </div>
+
+              <AttachmentUpload
+                value={customPromptAttachments}
+                onChange={setCustomPromptAttachments}
+                maxFiles={5}
+                maxSizeBytes={5 * 1024 * 1024}
+                label="Images sent with custom prompt"
+              />
             </div>
 
             <div className="modal-footer">
               <button
                 onClick={() => {
                   savePrompts(DEFAULT_CUSTOM_SYSTEM_PROMPT, '');
+                  setCustomPromptAttachments([]);
                 }}
                 className="btn btn-tertiary"
               >
@@ -2531,6 +2688,14 @@ const ChemistryTool: React.FC = () => {
               </pre>
             </div>
           )}
+
+          <AttachmentUpload
+            value={promptBreakpointAttachments}
+            onChange={setPromptBreakpointAttachments}
+            maxFiles={5}
+            maxSizeBytes={5 * 1024 * 1024}
+            label="Images sent with prompt"
+          />
 
           <div className="form-group">
             <label className="form-label-block">

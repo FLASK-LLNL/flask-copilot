@@ -94,7 +94,13 @@ export interface FlaskRunSettings {
   promptDebugging: boolean;
 }
 
-import type { OrchestratorSettings, SidebarMessage, SidebarState } from 'lc-conductor';
+import type {
+  AgentAttachment,
+  AgentImageRef,
+  OrchestratorSettings,
+  SidebarMessage,
+  SidebarState,
+} from 'lc-conductor';
 
 export interface FlaskOrchestratorSettings extends OrchestratorSettings {
   moleculeName?: MoleculeNameFormat;
@@ -125,7 +131,10 @@ export interface WebSocketMessageToServer {
   problemType?: string;
   nodeId?: string;
   query?: string;
-  experimentContext?: string;
+  // Browser -> server: full transient upload payloads for the current agent turn.
+  // Persisted copies come back later through experimentContext, not SidebarMessage.images.
+  attachments?: AgentAttachment[];
+  experimentContext?: any;
   enabledTools?: ToolMap;
 
   // Lead molecule optimization
@@ -170,7 +179,7 @@ export interface WebSocketMessage {
   edge?: Edge;
   message?: SidebarMessage;
   tools?: Tool[];
-  experimentContext?: string;
+  experimentContext?: any;
   orchestratorSettings?: FlaskOrchestratorSettings;
 
   withNode?: boolean;
@@ -181,6 +190,11 @@ export interface WebSocketMessage {
   // Prompt debugging
   prompt?: string;
   metadata?: any;
+  // Server -> browser: lightweight image refs for prompt breakpoint previews.
+  // Sidebar message previews use message.images.
+  images?: Record<string, AgentImageRef>;
+  // Server -> browser for prompt breakpoint editing, and browser -> server on approval.
+  attachments?: AgentAttachment[];
 
   // Local MCP proxy requests
   requestId?: string;
@@ -315,7 +329,7 @@ export interface Experiment {
   sidebarState?: SidebarState;
 
   // Experiment state
-  experimentContext?: string;
+  experimentContext?: any;
 }
 
 export interface Project {

@@ -17,7 +17,7 @@ from charge_backend.lmo.lmo_task import (
     MoleculeOutputSchema,
 )
 from typing import Optional
-from backend_helper_funcs import (
+from charge_backend.backend_helper_funcs import (
     Node,
     Edge,
     get_bandgap,
@@ -26,7 +26,7 @@ from backend_helper_funcs import (
     CallbackHandler,
     FlaskRunSettings,
 )
-from moleculedb.molecule_naming import smiles_to_html, MolNameFormat
+from charge_backend.moleculedb.molecule_naming import smiles_to_html, MolNameFormat
 from lc_conductor import ToolRuntime
 
 # TODO: Convert this to a dataclass
@@ -75,6 +75,7 @@ async def generate_lead_molecule(
     additional_constraints: Optional[list[str]] = None,
     number_of_molecules: int = 10,
     num_top_candidates: int = 3,
+    attachments: Optional[list[dict[str, object]]] = None,
 ) -> None:
     """Generate a lead molecule and stream its progress.
     Args:
@@ -345,6 +346,7 @@ async def generate_lead_molecule(
         property_tool_name=calculate_property_tool,
         property_name=property,
         optimize_direction=condition,
+        attachments=attachments or [],
         **tool_runtime.task_kwargs(),
     )
     await lmo_task.get_initial_property_value()

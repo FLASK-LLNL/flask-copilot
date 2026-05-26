@@ -4,7 +4,10 @@ from typing import Any, Dict, Optional, Sequence
 
 from loguru import logger
 
-from rdkitjs_payload import build_rdkitjs_mapped_reaction, mapped_reaction_to_json_dict
+from charge_backend.rdkitjs_payload import (
+    build_rdkitjs_mapped_reaction,
+    mapped_reaction_to_json_dict,
+)
 
 
 def build_mapped_reaction_dict_or_none(

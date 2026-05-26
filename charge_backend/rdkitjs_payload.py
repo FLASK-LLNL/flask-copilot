@@ -5,10 +5,9 @@ from typing import Any, Dict, List, Optional, Sequence, Tuple, Union
 
 from rdkit import Chem
 
-import rdkit_mol_differ as mol_differ
+import charge_backend.rdkit_mol_differ as mol_differ
 
-from backend_helper_funcs import RdkitjsMolPayload
-
+from charge_backend.backend_helper_funcs import RdkitjsMolPayload
 
 MolInput = Union[str, Chem.Mol]
 

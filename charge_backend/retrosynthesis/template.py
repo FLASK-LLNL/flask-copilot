@@ -5,21 +5,21 @@ from lc_conductor.callback_logger import CallbackLogger
 from typing import Optional, Union, TYPE_CHECKING
 from collections import deque
 
-from backend_helper_funcs import (
+from charge_backend.backend_helper_funcs import (
     Node,
     Reaction,
     ReactionAlternative,
     PathwayStep,
     FlaskRunSettings,
 )
-from retrosynthesis.context import RetrosynthesisContext
+from charge_backend.retrosynthesis.context import RetrosynthesisContext
 from charge_backend.moleculedb.molecule_naming import (
     smiles_to_html,
     MolNameFormat,
 )
 from charge_backend.moleculedb.purchasable import is_purchasable
 from charge_backend.retrosynthesis.database import find_exact_reactions
-from retrosynthesis.mapping import build_mapped_reaction_dict_or_none
+from charge_backend.retrosynthesis.mapping import build_mapped_reaction_dict_or_none
 
 if TYPE_CHECKING:
     import aizynthfinder.reactiontree

@@ -9,7 +9,7 @@ from fastapi import WebSocket
 from typing import Optional, Any
 from uuid import uuid4
 
-from backend_helper_funcs import (
+from charge_backend.backend_helper_funcs import (
     Node,
     Edge,
     PathwayStep,
