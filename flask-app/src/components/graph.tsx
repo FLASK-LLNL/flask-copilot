@@ -1,8 +1,8 @@
 // Molecule graph view
 import { Loader2, Move } from 'lucide-react';
-import { useRef, useCallback, useEffect, useState, useMemo } from 'react';
+import { Fragment, useRef, useCallback, useEffect, useState, useMemo } from 'react';
 import { BOX_HEIGHT, BOX_WIDTH, NODE_STYLES, REACTION_STYLES } from '../constants';
-import { MoleculeGraphProps, MoleculeGraphState, Position, Reaction, TreeNode } from '../types';
+import { MoleculeGraphProps, MoleculeGraphState, Position, TreeNode } from '../types';
 import { MoleculeSVG } from './molecule';
 import { MarkdownText } from 'lc-conductor';
 import { estimateTextWidth } from '../tree_utils';
@@ -386,10 +386,9 @@ export const MoleculeGraph: React.FC<MoleculeGraphProps> = ({
               );
             })}
 
-          {nodes.map((node, idx) => (
-            <>
+          {nodes.map((node) => (
+            <Fragment key={node.id}>
               <div
-                key={node.id}
                 data-node-id={node.id}
                 className="graph-node"
                 style={{
@@ -524,7 +523,7 @@ export const MoleculeGraph: React.FC<MoleculeGraphProps> = ({
                   </div>
                 </div>
               )}
-            </>
+            </Fragment>
           ))}
         </div>
 
