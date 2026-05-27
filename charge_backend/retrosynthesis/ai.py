@@ -124,7 +124,7 @@ async def ai_based_retrosynthesis(
     user_prompt += "\nDouble check the reactants with the `predict_reaction_products` tool to see if the products are equivalent to the given product. If there is any inconsistency (canonicalize both sides of the equation first), log it and try some other set of reactants."
     if query is not None:
         user_prompt += (
-            f"\n\nAdditionally, adhere to the following requirements: {query}"
+            f"\n\nAdditionally, adhere to the following requirements:\n{query}\n\n"
         )
 
     retro_task = RetrosynthesisTask(
