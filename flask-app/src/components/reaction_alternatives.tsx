@@ -446,12 +446,12 @@ export const ReactionAlternativesSidebar: React.FC<ReactionAlternativesSidebarPr
         <div className="flex items-center justify-between p-4 border-b border-secondary">
           <div className="flex-1 min-w-0">
             <h3 className="text-lg font-semibold text-primary truncate">Synthesis Pathways</h3>
-            <p className="text-sm text-secondary truncate" title={productMolecule}>
+            <div className="text-sm text-secondary truncate" title={productMolecule}>
               <div
                 className="modal-subtitle"
                 dangerouslySetInnerHTML={{ __html: 'for ' + productMolecule }}
               ></div>
-            </p>
+            </div>
           </div>
           <button onClick={onClose} className="btn-icon ml-2">
             <X className="w-5 h-5" />
