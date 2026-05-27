@@ -127,6 +127,88 @@ def test_agent_history_normalization_includes_raw_fields_in_debug_mode():
     )
 
 
+def test_agent_history_reports_estimated_context_usage():
+    manager = make_manager()
+    record = {
+        "modelInfo": {"model": "gpt-5.4"},
+        "task": {
+            "system_prompt": "You are a careful chemistry assistant.",
+            "user_prompt": "Summarize this reaction.",
+        },
+        "memory": json.dumps(
+            {
+                "state": {
+                    "in_memory": {
+                        "messages": [
+                            {
+                                "role": "user",
+                                "contents": [
+                                    {"type": "text", "text": "Summarize this reaction."}
+                                ],
+                            },
+                            {
+                                "role": "assistant",
+                                "contents": [
+                                    {
+                                        "type": "text",
+                                        "text": "It forms the oxidized product.",
+                                    }
+                                ],
+                            },
+                        ]
+                    }
+                }
+            }
+        ),
+    }
+
+    history = manager._normalize_agent_history("reaction:node_1", record)
+
+    assert history["contextUsage"]["usedTokens"] > 0
+    assert "maxTokens" not in history["contextUsage"]
+    assert "percentUsed" not in history["contextUsage"]
+    assert history["contextUsage"]["estimated"] is True
+    assert history["contextUsage"]["source"] == "estimate"
+    assert history["contextUsage"]["model"] == "gpt-5.4"
+
+
+def test_agent_history_prefers_provider_context_usage():
+    manager = make_manager()
+    record = {
+        "modelInfo": {
+            "model": "gpt-5.4",
+            "lastUsage": {
+                "inputTokens": 1234,
+                "outputTokens": 56,
+                "totalTokens": 1290,
+            },
+        },
+        "memory": json.dumps(
+            {
+                "state": {
+                    "in_memory": {
+                        "messages": [
+                            {
+                                "role": "user",
+                                "contents": [{"type": "text", "text": "Hello"}],
+                            }
+                        ]
+                    }
+                }
+            }
+        ),
+    }
+
+    history = manager._normalize_agent_history("custom:main", record)
+
+    assert history["contextUsage"]["usedTokens"] == 1234
+    assert history["contextUsage"]["outputTokens"] == 56
+    assert history["contextUsage"]["totalTokens"] == 1290
+    assert history["contextUsage"]["estimated"] is False
+    assert history["contextUsage"]["source"] == "provider"
+    assert "maxTokens" not in history["contextUsage"]
+
+
 def test_agent_history_uses_per_message_metadata_for_prompt_context_and_label():
     manager = make_manager()
     record = {

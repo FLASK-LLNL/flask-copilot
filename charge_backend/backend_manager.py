@@ -4,6 +4,7 @@ import asyncio
 import os
 import hashlib
 import json
+import math
 from lc_conductor import ActionManager, TaskManager, CallbackLogger
 from lc_conductor import (
     BuiltinToolDefinition,
@@ -776,6 +777,120 @@ class FlaskActionManager(ActionManager):
         return self._prompt_context_from_task(record.get("task"))
 
     @staticmethod
+    def _token_count(text: str, model: object = None) -> int:
+        if not text:
+            return 0
+        return max(1, math.ceil(len(text) / 4))
+
+    def _content_token_count(self, content: object, model: object = None) -> int:
+        if content is None:
+            return 0
+        if not isinstance(content, dict):
+            return self._token_count(str(content), model)
+
+        text = content.get("text")
+        if isinstance(text, str):
+            return self._token_count(text, model)
+
+        uri = content.get("uri") or content.get("dataUrl")
+        if isinstance(uri, str) and uri.startswith("data:image/"):
+            return 85
+
+        for key in ("arguments", "result", "output"):
+            value = content.get(key)
+            if value is not None:
+                return self._token_count(json.dumps(value, default=str), model)
+
+        return self._token_count(json.dumps(content, default=str), model)
+
+    def _message_token_count(
+        self, raw_message: dict[str, Any], model: object = None
+    ) -> int:
+        token_count = 4 + self._token_count(
+            self._normalized_message_role(raw_message), model
+        )
+        contents = raw_message.get("contents", [])
+        if not isinstance(contents, list):
+            contents = [contents]
+        for content in contents:
+            token_count += self._content_token_count(content, model)
+        return token_count
+
+    def _context_usage_from_model_info(
+        self, model_info: dict[str, Any]
+    ) -> Optional[dict[str, Any]]:
+        raw_usage = model_info.get("lastUsage")
+        if not isinstance(raw_usage, dict):
+            return None
+
+        input_tokens = raw_usage.get("inputTokens")
+        output_tokens = raw_usage.get("outputTokens")
+        total_tokens = raw_usage.get("totalTokens")
+        used_tokens = total_tokens
+        if not isinstance(used_tokens, int):
+            return None
+
+        model = model_info.get("model")
+        usage: dict[str, Any] = {
+            "usedTokens": used_tokens,
+            "estimated": False,
+        }
+        if isinstance(input_tokens, int):
+            usage["inputTokens"] = input_tokens
+        if isinstance(output_tokens, int):
+            usage["outputTokens"] = output_tokens
+        if isinstance(total_tokens, int):
+            usage["totalTokens"] = total_tokens
+        if isinstance(model, str) and model.strip():
+            usage["model"] = model
+        return usage
+
+    def _estimate_context_usage(
+        self,
+        record: dict[str, Any],
+        raw_messages: list[dict[str, Any]],
+    ) -> dict[str, Any]:
+        model_info = record.get("modelInfo") if isinstance(record, dict) else {}
+        if not isinstance(model_info, dict):
+            model_info = {}
+        model = model_info.get("model")
+        task = record.get("task") if isinstance(record.get("task"), dict) else {}
+
+        used_tokens = 0
+        if isinstance(task, dict):
+            system_prompt = task.get("system_prompt")
+            if isinstance(system_prompt, str):
+                used_tokens += self._token_count(system_prompt, model)
+            if not raw_messages:
+                user_prompt = task.get("user_prompt")
+                if isinstance(user_prompt, str):
+                    used_tokens += self._token_count(user_prompt, model)
+
+        for raw_message in raw_messages:
+            if isinstance(raw_message, dict):
+                used_tokens += self._message_token_count(raw_message, model)
+
+        usage: dict[str, Any] = {
+            "usedTokens": used_tokens,
+            "estimated": True,
+        }
+        if isinstance(model, str) and model.strip():
+            usage["model"] = model
+        return usage
+
+    def _context_usage_for_history(
+        self,
+        record: dict[str, Any],
+        raw_messages: list[dict[str, Any]],
+    ) -> dict[str, Any]:
+        model_info = record.get("modelInfo")
+        if isinstance(model_info, dict):
+            actual_usage = self._context_usage_from_model_info(model_info)
+            if actual_usage is not None:
+                return actual_usage
+        return self._estimate_context_usage(record, raw_messages)
+
+    @staticmethod
     def _message_label_for_task(
         task: Optional[dict[str, Any]],
         *,
@@ -1007,6 +1122,7 @@ class FlaskActionManager(ActionManager):
             "subtitle": metadata.get("subtitle") or metadata.get("smiles") or "",
             "metadata": metadata,
             "modelInfo": record.get("modelInfo", {}),
+            "contextUsage": self._context_usage_for_history(record, raw_messages),
             "promptContext": prompt_context,
             "messages": messages,
             "lastMessage": (last_message or {}).get("text", ""),
