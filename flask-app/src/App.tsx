@@ -1,5 +1,5 @@
 /* eslint-disable react-hooks/exhaustive-deps */
-import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useRef, useEffect, useLayoutEffect, useCallback, useMemo } from 'react';
 import { flushSync } from 'react-dom';
 import {
   Loader2,
@@ -501,15 +501,15 @@ const ChemistryTool: React.FC = () => {
   }, [selectableToolsMap, selectedTools.length]);
 
   // Update refs whenever state changes
-  useEffect(() => {
+  useLayoutEffect(() => {
     treeNodesRef.current = treeNodes;
   }, [treeNodes]);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     edgesRef.current = edges;
   }, [edges]);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     sidebarStateRef.current = sidebarState;
   }, [sidebarState]);
 
@@ -754,6 +754,11 @@ const ChemistryTool: React.FC = () => {
     return getContextRef.current();
   };
 
+  const syncAndGetContext = (): Experiment => {
+    flushSync(() => {});
+    return getContextRef.current();
+  };
+
   const loadContextFromExperiment = (projectId: string, experimentId: string | null): void => {
     console.log('Loading context:', { projectId, experimentId });
     const project = projectData.projectsRef.current.find((p) => p.id === projectId);
@@ -833,7 +838,7 @@ const ChemistryTool: React.FC = () => {
     const experimentId = projectSidebar.selectionRef.current.experimentId;
     console.log('Saving experiments', projectId, experimentId);
     if (projectId && experimentId) {
-      projectManagement.updateExperiment(projectId, getContext());
+      projectManagement.updateExperiment(projectId, syncAndGetContext());
       return true;
     }
     return false;
@@ -905,6 +910,9 @@ const ChemistryTool: React.FC = () => {
     setIsComputing(true);
     setTreeNodes([]);
     setEdges([]);
+    setExperimentContext(undefined);
+    attachmentRegistryRef.current = {};
+    setAttachmentRegistry({});
     graphState.setOffset({ x: 50, y: 50 });
     graphState.setZoom(1);
 
@@ -972,6 +980,11 @@ const ChemistryTool: React.FC = () => {
     };
 
     socket.onmessage = (event: MessageEvent) => {
+      let shouldSaveState = false;
+      let shouldSyncExperimentContext = false;
+      let pdfReferenceToPersist: PdfReferenceMetadata | null | undefined;
+      let experimentContextToPersist: any;
+      let shouldDownloadFullContext = false;
       flushSync(() => {
         if (wsRef.current !== socket) return; // Ignore messages from old sockets
 
@@ -1042,7 +1055,7 @@ const ChemistryTool: React.FC = () => {
             setIsComputingTemplates(false);
             unhighlightNodes();
             setTreeNodes(clearLeafReactions);
-            saveStateToExperiment();
+            shouldSaveState = true;
             break;
           }
           case 'complete': {
@@ -1050,10 +1063,10 @@ const ChemistryTool: React.FC = () => {
             setIsComputingTemplates(false);
             unhighlightNodes();
             setTreeNodes(clearLeafReactions);
-            saveStateToExperiment();
+            shouldSaveState = true;
             if (pendingAttachmentContextSyncRef.current) {
               pendingAttachmentContextSyncRef.current = false;
-              requestExperimentContextSync();
+              shouldSyncExperimentContext = true;
             }
             break;
           }
@@ -1074,18 +1087,7 @@ const ChemistryTool: React.FC = () => {
           case 'pdf-reference-response': {
             const nextReference = data.reference || null;
             setPdfReference(nextReference);
-            const projectId = projectSidebar.selectionRef.current.projectId;
-            const experimentId = projectSidebar.selectionRef.current.experimentId;
-            if (projectId && experimentId) {
-              try {
-                projectManagement.updateExperiment(projectId, {
-                  ...getContext(),
-                  pdfReference: persistedPdfReference(nextReference),
-                });
-              } catch (error) {
-                console.error('Unable to persist PDF reference metadata:', error);
-              }
-            }
+            pdfReferenceToPersist = nextReference;
             break;
           }
           case 'local-mcp-request': {
@@ -1160,18 +1162,12 @@ const ChemistryTool: React.FC = () => {
             const mode = saveContextModeRef.current || 'download';
             saveContextModeRef.current = null;
             if (mode === 'sync') {
-              const projectId = projectSidebar.selectionRef.current.projectId;
-              const experimentId = projectSidebar.selectionRef.current.experimentId;
-              if (projectId && experimentId) {
-                projectManagement.updateExperiment(projectId, {
-                  ...getContext(),
-                  experimentContext: nextExperimentContext,
-                });
-              }
+              experimentContextToPersist = nextExperimentContext;
               break;
             }
 
-            saveFullContext(nextExperimentContext);
+            experimentContextToPersist = nextExperimentContext;
+            shouldDownloadFullContext = true;
             break;
           }
           case 'get-username-response': {
@@ -1200,6 +1196,40 @@ const ChemistryTool: React.FC = () => {
           }
         }
       });
+      if (shouldSaveState) {
+        saveStateToExperiment();
+      }
+      if (shouldSyncExperimentContext) {
+        requestExperimentContextSync();
+      }
+      if (pdfReferenceToPersist !== undefined) {
+        const projectId = projectSidebar.selectionRef.current.projectId;
+        const experimentId = projectSidebar.selectionRef.current.experimentId;
+        if (projectId && experimentId) {
+          try {
+            projectManagement.updateExperiment(projectId, {
+              ...syncAndGetContext(),
+              pdfReference: persistedPdfReference(pdfReferenceToPersist),
+            });
+          } catch (error) {
+            console.error('Unable to persist PDF reference metadata:', error);
+          }
+        }
+      }
+      if (experimentContextToPersist !== undefined) {
+        if (shouldDownloadFullContext) {
+          saveFullContext(experimentContextToPersist);
+        } else {
+          const projectId = projectSidebar.selectionRef.current.projectId;
+          const experimentId = projectSidebar.selectionRef.current.experimentId;
+          if (projectId && experimentId) {
+            projectManagement.updateExperiment(projectId, {
+              ...syncAndGetContext(),
+              experimentContext: experimentContextToPersist,
+            });
+          }
+        }
+      }
     };
 
     socket.onerror = (error: Event) => {
@@ -1286,7 +1316,7 @@ const ChemistryTool: React.FC = () => {
     wsRef.current.send(JSON.stringify({ action: 'stop' }));
   };
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     getContextRef.current = () => {
       const projectId = projectSidebar.selectionRef.current.projectId;
       const experimentId = projectSidebar.selectionRef.current.experimentId;
@@ -1359,33 +1389,22 @@ const ChemistryTool: React.FC = () => {
 
   const requestSaveContext = (): void => {
     // We need to request the up-to-date Project object from the server before saving
+    const currentContext = syncAndGetContext();
     saveContextModeRef.current = 'download';
-    sendMessageToServer('save-context');
+    sendMessageToServer('save-context', { problemType: currentContext.problemType });
   };
 
   const requestExperimentContextSync = (): void => {
+    const currentContext = syncAndGetContext();
     saveContextModeRef.current = 'sync';
-    sendMessageToServer('save-context');
+    sendMessageToServer('save-context', { problemType: currentContext.problemType });
   };
 
   const saveFullContext = (experimentContext: any): void => {
+    const currentContext = syncAndGetContext();
     const data = {
+      ...currentContext,
       lastModified: new Date().toISOString(),
-      smiles,
-      problemType,
-      systemPrompt,
-      problemPrompt,
-      propertyType,
-      customPropertyName,
-      customPropertyDesc,
-      customPropertyAscending,
-      customization,
-      treeNodes,
-      edges,
-      graphState,
-      metricsDashboardState,
-      sidebarState,
-      pdfReference: persistedPdfReference(pdfReference),
       experimentContext,
     };
     const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
