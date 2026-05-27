@@ -74,6 +74,14 @@ class FlaskActionManager(ActionManager):
         if "runSettings" in data:
             self.run_settings = FlaskRunSettings(**data["runSettings"])
 
+    def reset_problem_context(self, problem_type: Optional[str]) -> None:
+        """Reset backend-only state that is scoped to the active problem type."""
+        self.experiment.reset()
+        if problem_type == "retrosynthesis":
+            self.retro_synth_context = RetrosynthesisContext()
+        else:
+            self.retro_synth_context = None
+
     def selected_tool_runtime(self) -> ToolRuntime:
         runtime = super().selected_tool_runtime()
         if not self.pdf_registry.has_active_document(self.username):
@@ -168,9 +176,9 @@ class FlaskActionManager(ActionManager):
         await self._send_processing_message(progress, "Reasoning")
 
     async def handle_compute(self, data: dict) -> None:
-        self.experiment.reset()
         self.setup_run_settings(data)
         problem_type = data.get("problemType")
+        self.reset_problem_context(problem_type)
         if problem_type == "optimization":
             asyncio.create_task(self._handle_optimization(data))
         elif problem_type == "retrosynthesis":
@@ -675,5 +683,7 @@ class FlaskActionManager(ActionManager):
 
         problem_type = data.get("problemType")
         if problem_type == "retrosynthesis":
-            if not self.retro_synth_context:
-                await self.get_retro_synth_context().load_state(data)
+            self.retro_synth_context = RetrosynthesisContext()
+            await self.retro_synth_context.load_state(data)
+        else:
+            self.retro_synth_context = None

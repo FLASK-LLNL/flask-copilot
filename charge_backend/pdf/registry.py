@@ -212,7 +212,8 @@ class PdfDocumentRegistry:
         return metadata
 
     def clear(self, user: str) -> None:
-        del self._documents[user]
+        if user in self._documents:
+            del self._documents[user]
 
     def cleanup(self) -> None:
         self._documents.clear()

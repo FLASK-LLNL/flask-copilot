@@ -801,14 +801,15 @@ export const useProjectSidebar = () => {
     projectId: null,
     experimentId: null,
   });
+  const selectionRef = React.useRef(selection);
 
   // Save selection to localStorage whenever it changes
   const setSelection = React.useCallback((newSelection: ProjectSelection) => {
+    selectionRef.current = newSelection;
     setSelectionState(newSelection);
     localStorage.setItem(SELECTION_STORAGE_KEY, JSON.stringify(newSelection));
   }, []);
 
-  const selectionRef = React.useRef(selection);
   React.useEffect(() => {
     selectionRef.current = selection;
   }, [selection]);
