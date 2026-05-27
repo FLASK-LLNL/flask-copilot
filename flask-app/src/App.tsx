@@ -2970,6 +2970,7 @@ const ChemistryTool: React.FC = () => {
                           kind: 'reaction',
                           nodeId: contextMenu.node!.id,
                           smiles: contextMenu.node!.smiles,
+                          reactionHoverInfo: contextMenu.node!.reaction?.hoverInfo,
                         },
                       })
                     }

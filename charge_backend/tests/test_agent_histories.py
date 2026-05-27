@@ -3,7 +3,9 @@ from types import SimpleNamespace
 
 from charge.experiments.experiment import Experiment
 
+from charge_backend.backend_helper_funcs import Node, Reaction
 from charge_backend.backend_manager import FlaskActionManager
+from charge_backend.retrosynthesis.context import RetrosynthesisContext
 
 
 class FakeWebSocket:
@@ -261,3 +263,91 @@ def test_agent_history_uses_per_message_metadata_for_prompt_context_and_label():
     assert history["messages"][0]["context"][0]["text"] == "Original reaction context"
     assert history["messages"][2]["context"][0]["text"] == "Follow-up chat context"
     assert "Latest task only" not in history["messages"][0]["context"][0]["text"]
+
+
+def test_reaction_context_includes_reaction_hover_info():
+    manager = make_manager()
+    manager.retro_synth_context = RetrosynthesisContext(
+        node_ids={
+            "product": Node(
+                id="product",
+                smiles="CCO",
+                label="Product",
+                hoverInfo="Product hover",
+                level=0,
+                reaction=Reaction(
+                    id="rxn",
+                    hoverInfo="# Literature reaction\nYield: 82%",
+                ),
+            ),
+            "reactant": Node(
+                id="reactant",
+                smiles="CCBr",
+                label="Reactant",
+                hoverInfo="Reactant hover",
+                level=1,
+            ),
+        },
+        parents={"reactant": "product"},
+    )
+
+    context = manager._reaction_context_for_node("product")
+
+    assert "Product: CCO" in context
+    assert "Reactants:\nCCBr" in context
+    assert "Reaction hover information:\n# Literature reaction\nYield: 82%" in context
+
+
+def test_reaction_chat_task_appends_hover_info_to_existing_prompt():
+    manager = make_manager()
+    manager.retro_synth_context = RetrosynthesisContext(
+        node_ids={
+            "product": Node(
+                id="product",
+                smiles="CCO",
+                label="Product",
+                hoverInfo="Product hover",
+                level=0,
+                reaction=Reaction(id="rxn", hoverInfo="Template match: Suzuki"),
+            )
+        }
+    )
+    manager.experiment.agent_registry["reaction:product"] = {
+        "agent": SimpleNamespace(
+            task=SimpleNamespace(get_system_prompt=lambda: "Existing instructions")
+        )
+    }
+    manager.selected_tool_runtime = lambda: SimpleNamespace(task_kwargs=lambda: {})
+
+    task = manager._chat_task_for_agent(
+        "reaction:product",
+        {"nodeId": "product", "query": "Why this route?"},
+        [],
+    )
+    task_json = task.to_json()
+
+    assert "Existing instructions" in task_json["system_prompt"]
+    assert (
+        "Reaction hover information:\nTemplate match: Suzuki"
+        in task_json["system_prompt"]
+    )
+
+
+def test_reaction_chat_task_uses_hover_info_metadata_fallback():
+    manager = make_manager()
+    manager.selected_tool_runtime = lambda: SimpleNamespace(task_kwargs=lambda: {})
+
+    task = manager._chat_task_for_agent(
+        "reaction:product",
+        {
+            "nodeId": "product",
+            "query": "What is the yield?",
+            "metadata": {"reactionHoverInfo": "Database yield: 75%"},
+        },
+        [],
+    )
+    task_json = task.to_json()
+
+    assert (
+        "Reaction hover information:\nDatabase yield: 75%" in task_json["system_prompt"]
+    )

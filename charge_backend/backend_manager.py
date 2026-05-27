@@ -647,20 +647,7 @@ class FlaskActionManager(ActionManager):
             **tool_runtime.task_kwargs(),
         )
 
-        # No charge client (likely only AZF was run), add context from tree
-        # if data["nodeId"] not in self.retro_synth_context.node_id_to_charge_client:
-        child_nodes = [
-            nid
-            for nid, p in self.retro_synth_context.parents.items()
-            if p == data["nodeId"]
-        ]
-        reactants = [self.retro_synth_context.node_ids[nid] for nid in child_nodes]
-        reactants_str = "\n".join(reactant.smiles for reactant in reactants)
-        reaction_str = f"Product: {node.smiles}\nReactants:\n{reactants_str}"
-
-        # Enrich context from prior discovery
-        if data["nodeId"] in self.retro_synth_context.node_id_to_reasoning_summary:
-            reaction_str += f"\nAdditionally, the following context is given: {self.retro_synth_context.node_id_to_reasoning_summary[data['nodeId']]}"
+        reaction_str = self._reaction_context_for_node(str(data["nodeId"]), data)
 
         task.system_prompt = f"You are a helpful chemical assistant who answers in concise but factual responses. Given the following reaction (as SMILES strings):\n{reaction_str}\n\nAnswer the following query."
 
@@ -1182,12 +1169,35 @@ class FlaskActionManager(ActionManager):
             }
         )
 
-    def _reaction_context_for_node(self, node_id: str) -> str:
+    def _reaction_hover_info_for_node(
+        self, node_id: str, data: Optional[dict[str, Any]] = None
+    ) -> str:
+        if (
+            self.retro_synth_context is not None
+            and node_id in self.retro_synth_context.node_ids
+        ):
+            reaction = self.retro_synth_context.node_ids[node_id].reaction
+            hover_info = getattr(reaction, "hoverInfo", None)
+            if isinstance(hover_info, str) and hover_info.strip():
+                return hover_info.strip()
+
+        metadata = data.get("metadata") if isinstance(data, dict) else None
+        if isinstance(metadata, dict):
+            for key in ("reactionHoverInfo", "hoverInfo"):
+                hover_info = metadata.get(key)
+                if isinstance(hover_info, str) and hover_info.strip():
+                    return hover_info.strip()
+        return ""
+
+    def _reaction_context_for_node(
+        self, node_id: str, data: Optional[dict[str, Any]] = None
+    ) -> str:
         if (
             self.retro_synth_context is None
             or node_id not in self.retro_synth_context.node_ids
         ):
-            return ""
+            hover_info = self._reaction_hover_info_for_node(node_id, data)
+            return f"Reaction hover information:\n{hover_info}" if hover_info else ""
         node = self.retro_synth_context.node_ids[node_id]
         child_nodes = [
             nid
@@ -1202,7 +1212,18 @@ class FlaskActionManager(ActionManager):
                 "\nAdditionally, the following context is given: "
                 f"{self.retro_synth_context.node_id_to_reasoning_summary[node_id]}"
             )
+        hover_info = self._reaction_hover_info_for_node(node_id, data)
+        if hover_info:
+            reaction_str += f"\n\nReaction hover information:\n{hover_info}"
         return reaction_str
+
+    def _with_reaction_hover_info(
+        self, system_prompt: str, node_id: str, data: Optional[dict[str, Any]] = None
+    ) -> str:
+        hover_info = self._reaction_hover_info_for_node(node_id, data)
+        if not hover_info or hover_info in system_prompt:
+            return system_prompt
+        return f"{system_prompt}\n\nReaction hover information:\n{hover_info}"
 
     def _chat_task_for_agent(
         self,
@@ -1234,7 +1255,7 @@ class FlaskActionManager(ActionManager):
                 )
             elif kind == "reaction":
                 node_id = data.get("nodeId") or target
-                reaction_context = self._reaction_context_for_node(str(node_id))
+                reaction_context = self._reaction_context_for_node(str(node_id), data)
                 system_prompt = (
                     "You are a helpful chemical assistant who answers in concise but "
                     "factual responses. Given the following reaction as SMILES strings:\n"
@@ -1247,6 +1268,9 @@ class FlaskActionManager(ActionManager):
                 )
 
             system_prompt = self._with_document_reference_context(system_prompt)
+        elif kind == "reaction":
+            node_id = str(data.get("nodeId") or target)
+            system_prompt = self._with_reaction_hover_info(system_prompt, node_id, data)
 
         return Task(
             system_prompt=system_prompt,
