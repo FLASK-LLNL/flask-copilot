@@ -15,6 +15,7 @@ import {
   MessageCircleQuestion,
   StepForward,
   MessageSquareShare,
+  MessagesSquare,
   Brain,
   PanelRightOpen,
   Sliders,
@@ -62,10 +63,12 @@ import {
   ReasoningSidebar,
   useSidebarState,
   MarkdownText,
+  AgentChatModal,
+  AgentHistoryList,
   BACKEND_OPTIONS,
   handleLocalMcpProxyRequest,
 } from 'lc-conductor';
-import type { AgentAttachment } from 'lc-conductor';
+import type { AgentAttachment, AgentChatHistory, AgentChatMessage } from 'lc-conductor';
 
 import { CombinedCustomizationModal } from './components/combined_customization_modal';
 import { Modal } from './components/modal';
@@ -327,6 +330,51 @@ const withPersistedImageAttachments = (
   };
 };
 
+const isPendingAgentChatMessage = (message: AgentChatMessage): boolean =>
+  message.id.startsWith('pending:');
+
+const mergeAgentChatHistory = (
+  incoming: AgentChatHistory,
+  current: AgentChatHistory | null
+): AgentChatHistory => {
+  if (!current || current.agentKey !== incoming.agentKey) {
+    return incoming;
+  }
+
+  const mergedBase = {
+    ...incoming,
+    promptContext:
+      incoming.promptContext && incoming.promptContext.length > 0
+        ? incoming.promptContext
+        : current.promptContext,
+  };
+
+  const pendingMessages = current.messages.filter(isPendingAgentChatMessage);
+  if (pendingMessages.length === 0) {
+    return mergedBase;
+  }
+
+  const incomingUserTexts = new Set(
+    incoming.messages
+      .filter((message) => message.role === 'user')
+      .map((message) => message.text.trim())
+      .filter(Boolean)
+  );
+  const stillPending = pendingMessages.filter(
+    (message) => !incomingUserTexts.has(message.text.trim())
+  );
+
+  if (stillPending.length === 0) {
+    return mergedBase;
+  }
+
+  return {
+    ...mergedBase,
+    messages: [...mergedBase.messages, ...stillPending],
+    lastMessage: stillPending[stillPending.length - 1]?.text || mergedBase.lastMessage,
+  };
+};
+
 const persistedPdfReference = (
   reference: PdfReferenceMetadata | null
 ): PdfReferenceMetadata | null => {
@@ -365,7 +413,14 @@ const ChemistryTool: React.FC = () => {
   const [customQueryModal, setCustomQueryModal] = useState<TreeNode | null>(null);
   const [customQueryText, setCustomQueryText] = useState<string>('');
   const [customQueryType, setCustomQueryType] = useState<string | null>(null);
+  const [customQueryAiOnly, setCustomQueryAiOnly] = useState<boolean>(false);
   const [customQueryAttachments, setCustomQueryAttachments] = useState<AgentAttachment[]>([]);
+  const [agentChatOpen, setAgentChatOpen] = useState<boolean>(false);
+  const [agentChatHistory, setAgentChatHistory] = useState<AgentChatHistory | null>(null);
+  const [agentChatDebug, setAgentChatDebug] = useState<boolean>(false);
+  const [agentChatPending, setAgentChatPending] = useState<boolean>(false);
+  const [allChatsOpen, setAllChatsOpen] = useState<boolean>(false);
+  const [agentHistories, setAgentHistories] = useState<AgentChatHistory[]>([]);
   const [experimentContext, setExperimentContext] = useState<any>(undefined);
   const [attachmentRegistry, setAttachmentRegistry] = useState<Record<string, AgentAttachment>>({});
   const [wsConnected, setWsConnected] = useState<boolean>(false);
@@ -425,6 +480,16 @@ const ChemistryTool: React.FC = () => {
   const projectData = useProjectData();
   const projectManagement = useProjectManagement(projectData);
   const attachmentRegistryRef = useRef<Record<string, AgentAttachment>>({});
+  const agentChatHistoryRef = useRef<AgentChatHistory | null>(null);
+  const agentChatDebugRef = useRef<boolean>(false);
+
+  useEffect(() => {
+    agentChatHistoryRef.current = agentChatHistory;
+  }, [agentChatHistory]);
+
+  useEffect(() => {
+    agentChatDebugRef.current = agentChatDebug;
+  }, [agentChatDebug]);
 
   const registerAttachments = useCallback((attachments: AgentAttachment[]): void => {
     if (attachments.length === 0) return;
@@ -529,8 +594,8 @@ const ChemistryTool: React.FC = () => {
     sidebarStateRef.current = sidebarState;
   }, [sidebarState]);
 
-  // Load initial settings from localStorage or environment
-  const getInitialSettings = () => {
+  // Load initial settings from localStorage
+  const getInitialSettings = (): FlaskOrchestratorSettings => {
     const saved = localStorage.getItem('orchestratorSettings');
     if (saved) {
       try {
@@ -540,7 +605,8 @@ const ChemistryTool: React.FC = () => {
           useCustomUrl: parsed.useCustomUrl || false,
           customUrl: parsed.customUrl || 'http://localhost:8000/v1',
           model: parsed.model || 'gpt-oss',
-          reasoningEffort: parsed.reasoningEffort || 'medium',
+          reasoningEffort: (parsed.reasoningEffort ||
+            'medium') as FlaskOrchestratorSettings['reasoningEffort'],
           apiKey: parsed.apiKey || '',
           backendLabel: parsed.backendLabel || 'vLLM',
           useCustomModel: parsed.useCustomModel,
@@ -554,12 +620,12 @@ const ChemistryTool: React.FC = () => {
     // Use environment variables from window.APP_CONFIG if available
     const envConfig = window.APP_CONFIG?.ORCHESTRATOR;
     return {
-      backend: envConfig?.backend || 'vllm',
-      useCustomUrl: Boolean(envConfig?.baseUrl),
-      customUrl: envConfig?.baseUrl || 'http://localhost:8000/v1',
-      model: envConfig?.model || 'gpt-oss',
-      reasoningEffort: 'medium',
-      apiKey: envConfig?.apiKey || '',
+      backend: 'vllm',
+      useCustomUrl: false,
+      customUrl: 'http://localhost:8000/v1',
+      model: 'gpt-oss',
+      reasoningEffort: 'medium' as FlaskOrchestratorSettings['reasoningEffort'],
+      apiKey: '',
       backendLabel: 'vLLM',
       toolServers: [],
     };
@@ -1188,6 +1254,39 @@ const ChemistryTool: React.FC = () => {
             shouldDownloadFullContext = true;
             break;
           }
+          case 'agent-history-response': {
+            if (data.history) {
+              const currentHistory = agentChatHistoryRef.current;
+              const mergedHistory = mergeAgentChatHistory(data.history, currentHistory);
+              const pendingMessages = mergedHistory.messages.filter(isPendingAgentChatMessage);
+              agentChatHistoryRef.current = mergedHistory;
+              setAgentChatHistory(mergedHistory);
+              setAgentChatPending(pendingMessages.length > 0);
+              hydrateAttachmentRegistry(data.experimentContext);
+              if (
+                agentChatDebugRef.current &&
+                data.history.messages.length > 0 &&
+                !data.history.rawSession
+              ) {
+                requestAgentHistory(data.history.agentKey, true, {
+                  metadata: mergedHistory.metadata,
+                  smiles:
+                    typeof mergedHistory.metadata?.smiles === 'string'
+                      ? mergedHistory.metadata.smiles
+                      : undefined,
+                  nodeId:
+                    typeof mergedHistory.metadata?.nodeId === 'string'
+                      ? mergedHistory.metadata.nodeId
+                      : undefined,
+                });
+              }
+            }
+            break;
+          }
+          case 'agent-histories-response': {
+            setAgentHistories(data.histories || []);
+            break;
+          }
           case 'get-username-response': {
             setUsername(data.username!);
             break;
@@ -1303,6 +1402,12 @@ const ChemistryTool: React.FC = () => {
     setContextMenu({ node: null, isReaction: false, x: 0, y: 0 });
     setCustomQueryModal(null);
     setCustomQueryAttachments([]);
+    setCustomQueryAiOnly(false);
+    setAgentChatOpen(false);
+    setAgentChatHistory(null);
+    setAgentChatPending(false);
+    setAllChatsOpen(false);
+    setAgentHistories([]);
     setExperimentContext(undefined);
     attachmentRegistryRef.current = {};
     setAttachmentRegistry({});
@@ -1646,6 +1751,124 @@ const ChemistryTool: React.FC = () => {
     [debugMode, orchestratorSettings]
   );
 
+  const requestAgentHistory = useCallback(
+    (
+      agentKey: string,
+      debug = agentChatDebug,
+      extra?: Omit<WebSocketMessageToServer, 'action' | 'agentKey' | 'debug'>
+    ): void => {
+      sendMessageToServer('get-agent-history', { agentKey, debug, ...extra });
+    },
+    [agentChatDebug, sendMessageToServer]
+  );
+
+  const requestAgentHistories = useCallback(
+    (debug = agentChatDebug): void => {
+      sendMessageToServer('list-agent-histories', { debug });
+    },
+    [agentChatDebug, sendMessageToServer]
+  );
+
+  const openAgentChat = useCallback(
+    (
+      agentKey: string,
+      fallback: Pick<AgentChatHistory, 'title' | 'subtitle'> & {
+        metadata?: Record<string, unknown>;
+      }
+    ): void => {
+      setAgentChatHistory({
+        agentKey,
+        title: fallback.title,
+        subtitle: fallback.subtitle,
+        metadata: fallback.metadata,
+        messages: [],
+      });
+      setAgentChatOpen(true);
+      setContextMenu({ node: null, isReaction: false, x: 0, y: 0 });
+      requestAgentHistory(agentKey, agentChatDebug, {
+        metadata: fallback.metadata,
+        smiles:
+          typeof fallback.metadata?.smiles === 'string' ? fallback.metadata.smiles : undefined,
+        nodeId:
+          typeof fallback.metadata?.nodeId === 'string' ? fallback.metadata.nodeId : undefined,
+      });
+    },
+    [agentChatDebug, requestAgentHistory]
+  );
+
+  const submitAgentChatMessage = useCallback(
+    (query: string, attachments: AgentAttachment[]): void => {
+      if (!agentChatHistory) return;
+      registerAttachments(attachments);
+      pendingAttachmentContextSyncRef.current = true;
+      const optimisticMessage: AgentChatMessage = {
+        id: `pending:${Date.now()}`,
+        role: 'user',
+        text: query,
+        context: agentChatHistory.promptContext,
+        images: attachments
+          .filter((attachment) => attachment.mimeType.startsWith('image/'))
+          .map((attachment) => ({
+            id: attachment.id,
+            name: attachment.name,
+            mimeType: attachment.mimeType,
+            sizeBytes: attachment.sizeBytes,
+            dataUrl: attachment.dataUrl,
+          })),
+      };
+      setAgentChatHistory((prev) => {
+        if (!prev || prev.agentKey !== agentChatHistory.agentKey) {
+          return prev;
+        }
+        return {
+          ...prev,
+          messages: [...prev.messages, optimisticMessage],
+          lastMessage: query,
+        };
+      });
+      setAgentChatPending(true);
+      sendMessageToServer('chat-agent', {
+        agentKey: agentChatHistory.agentKey,
+        query,
+        attachments,
+        debug: agentChatDebug,
+        metadata: agentChatHistory.metadata,
+        smiles:
+          typeof agentChatHistory.metadata?.smiles === 'string'
+            ? agentChatHistory.metadata.smiles
+            : undefined,
+        nodeId:
+          typeof agentChatHistory.metadata?.nodeId === 'string'
+            ? agentChatHistory.metadata.nodeId
+            : undefined,
+      });
+    },
+    [agentChatDebug, agentChatHistory, registerAttachments, sendMessageToServer]
+  );
+
+  const handleAgentChatDebugChange = useCallback(
+    (nextDebug: boolean): void => {
+      setAgentChatDebug(nextDebug);
+      if (agentChatHistory?.agentKey) {
+        requestAgentHistory(agentChatHistory.agentKey, nextDebug, {
+          metadata: agentChatHistory.metadata,
+          smiles:
+            typeof agentChatHistory.metadata?.smiles === 'string'
+              ? agentChatHistory.metadata.smiles
+              : undefined,
+          nodeId:
+            typeof agentChatHistory.metadata?.nodeId === 'string'
+              ? agentChatHistory.metadata.nodeId
+              : undefined,
+        });
+      }
+      if (allChatsOpen) {
+        requestAgentHistories(nextDebug);
+      }
+    },
+    [agentChatHistory?.agentKey, allChatsOpen, requestAgentHistories, requestAgentHistory]
+  );
+
   const handleReferenceDocumentSave = useCallback(
     (reference: AgentAttachment | null | undefined): void => {
       if (reference === undefined) {
@@ -1731,7 +1954,8 @@ const ChemistryTool: React.FC = () => {
 
       if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
         if (customPrompt) {
-          handleCustomQuery(selectedReactionNode!, 'compute-reaction-from');
+          handleCustomQuery(selectedReactionNode!, 'compute-reaction-from', { aiOnly });
+          return;
         } else {
           wsRef.current.send(
             JSON.stringify({
@@ -1755,11 +1979,16 @@ const ChemistryTool: React.FC = () => {
     return selectedReactionNode?.reaction?.alternatives || [];
   }, [selectedReactionNode?.id, selectedReactionNode?.reaction?.alternatives]);
 
-  const handleCustomQuery = (node: TreeNode, queryType: string | null): void => {
+  const handleCustomQuery = (
+    node: TreeNode,
+    queryType: string | null,
+    options?: { aiOnly?: boolean }
+  ): void => {
     setCustomQueryModal(node);
     setCustomQueryText('');
     setCustomQueryAttachments([]);
     setCustomQueryType(queryType);
+    setCustomQueryAiOnly(Boolean(options?.aiOnly));
     setContextMenu({ node: null, isReaction: false, x: 0, y: 0 });
   };
 
@@ -1768,6 +1997,7 @@ const ChemistryTool: React.FC = () => {
     setCustomQueryText('');
     setCustomQueryAttachments([]);
     setCustomQueryType(null);
+    setCustomQueryAiOnly(false);
   };
 
   const submitCustomQuery = (): void => {
@@ -1801,6 +2031,7 @@ const ChemistryTool: React.FC = () => {
         promptDebugging: debugMode,
         moleculeName: orchestratorSettings.moleculeName || 'brand',
       },
+      ...(customQueryAiOnly ? { aiOnly: true } : {}),
       ...propertyDetails,
     };
     registerAttachments(customQueryAttachments);
@@ -1979,6 +2210,17 @@ const ChemistryTool: React.FC = () => {
               >
                 <Brain className="w-4 h-4" />
                 Reasoning
+              </button>
+              <button
+                onClick={() => {
+                  setAllChatsOpen(true);
+                  requestAgentHistories();
+                }}
+                disabled={!wsConnected}
+                className="btn btn-secondary btn-sm"
+              >
+                <MessagesSquare className="w-4 h-4" />
+                All Chats
               </button>
               <SettingsButton
                 initialSettings={orchestratorSettings}
@@ -2571,10 +2813,20 @@ const ChemistryTool: React.FC = () => {
                 )}
               </button>
               <button
-                onClick={() => handleCustomQuery(contextMenu.node!, 'query-molecule')}
+                onClick={() =>
+                  openAgentChat(`molecule:${contextMenu.node!.id}`, {
+                    title: `Chat about molecule ${contextMenu.node!.id}`,
+                    subtitle: contextMenu.node!.smiles,
+                    metadata: {
+                      kind: 'molecule',
+                      nodeId: contextMenu.node!.id,
+                      smiles: contextMenu.node!.smiles,
+                    },
+                  })
+                }
                 className="context-menu-item"
               >
-                <MessageCircleQuestion className="w-4 h-4" /> Ask about molecule...
+                <MessageCircleQuestion className="w-4 h-4" /> Chat about molecule...
               </button>
               {problemType !== 'optimization' && (
                 <button
@@ -2710,10 +2962,20 @@ const ChemistryTool: React.FC = () => {
               contextMenu.isReaction && (
                 <>
                   <button
-                    onClick={() => handleCustomQuery(contextMenu.node!, 'query-reaction')}
+                    onClick={() =>
+                      openAgentChat(`reaction:${contextMenu.node!.id}`, {
+                        title: `Chat about reaction ${contextMenu.node!.id}`,
+                        subtitle: contextMenu.node!.smiles,
+                        metadata: {
+                          kind: 'reaction',
+                          nodeId: contextMenu.node!.id,
+                          smiles: contextMenu.node!.smiles,
+                        },
+                      })
+                    }
                     className="context-menu-item"
                   >
-                    <MessageCircleQuestion className="w-4 h-4" /> Ask about reaction...
+                    <MessageCircleQuestion className="w-4 h-4" /> Chat about reaction...
                   </button>
                   <button
                     onClick={() => {
@@ -2734,6 +2996,52 @@ const ChemistryTool: React.FC = () => {
               <MarkdownText text={contextMenu.node!.reaction!.hoverInfo} />
             </div>
           )}
+        </div>
+      )}
+
+      <AgentChatModal
+        isOpen={agentChatOpen}
+        onClose={() => {
+          setAgentChatOpen(false);
+          setAgentChatPending(false);
+        }}
+        history={agentChatHistory}
+        debug={agentChatDebug}
+        pending={agentChatPending}
+        onDebugChange={handleAgentChatDebugChange}
+        onSend={submitAgentChatMessage}
+        resolveImageDataUrl={resolveImageDataUrl}
+      />
+
+      {allChatsOpen && (
+        <div className="modal-overlay">
+          <div className="modal-content modal-content-lg agent-history-modal">
+            <div className="modal-header">
+              <div>
+                <h2 className="modal-title">All Agent Chats</h2>
+                <div className="modal-subtitle">Current experiment</div>
+              </div>
+              <button onClick={() => setAllChatsOpen(false)} className="btn-icon">
+                <X className="w-6 h-6" />
+              </button>
+            </div>
+            <div className="modal-body">
+              <AgentHistoryList
+                histories={agentHistories}
+                onSelect={(agentKey) => {
+                  const selectedHistory = agentHistories.find(
+                    (history) => history.agentKey === agentKey
+                  );
+                  setAllChatsOpen(false);
+                  openAgentChat(agentKey, {
+                    title: selectedHistory?.title || agentKey,
+                    subtitle: selectedHistory?.subtitle,
+                    metadata: selectedHistory?.metadata,
+                  });
+                }}
+              />
+            </div>
+          </div>
         </div>
       )}
 

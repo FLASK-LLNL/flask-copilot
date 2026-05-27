@@ -8,6 +8,7 @@ from charge.tasks.task import Task
 from charge_backend.backend_helper_funcs import Node, CallbackHandler, FlaskRunSettings
 from charge_backend.moleculedb.molecule_naming import smiles_to_html
 from charge_backend.prompt_debugger import debug_prompt
+from charge_backend.agent_chat_metadata import record_latest_user_message_metadata
 from lc_conductor import ToolRuntime
 
 
@@ -31,6 +32,14 @@ async def run_custom_problem(
     callback_handler = CallbackHandler(websocket)
     agent = experiment.create_agent_with_experiment_state(
         task=task,
+        agent_key="custom:main",
+        agent_metadata={
+            "kind": "custom",
+            "target": "main",
+            "smiles": start_smiles,
+            "title": "Custom prompt",
+            "subtitle": start_smiles,
+        },
         callback=callback_handler,
     )
 
@@ -38,6 +47,9 @@ async def run_custom_problem(
         await debug_prompt(agent, websocket)
     result = await agent.run(log_progress)
     await callback_handler.drain()
+    record_latest_user_message_metadata(
+        experiment, "custom:main", task, label="Custom prompt"
+    )
     experiment.add_to_context(agent, task, result)
     await websocket.send_json(
         {

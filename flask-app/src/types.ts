@@ -97,6 +97,7 @@ export interface FlaskRunSettings {
 
 import type {
   AgentAttachment,
+  AgentChatHistory,
   AgentImageRef,
   OrchestratorSettings,
   SidebarMessage,
@@ -148,6 +149,8 @@ export interface WebSocketMessageToServer {
   // Browser -> server: full transient upload payloads for the current agent turn.
   // Persisted copies come back later through experimentContext, not SidebarMessage.images.
   attachments?: AgentAttachment[];
+  agentKey?: string;
+  debug?: boolean;
   pdfReference?: AgentAttachment | null;
   silent?: boolean;
   experimentContext?: any;
@@ -198,6 +201,8 @@ export interface WebSocketMessage {
   experimentContext?: any;
   orchestratorSettings?: FlaskOrchestratorSettings;
   reference?: PdfReferenceMetadata | null;
+  history?: AgentChatHistory;
+  histories?: AgentChatHistory[];
 
   withNode?: boolean;
   username?: string;

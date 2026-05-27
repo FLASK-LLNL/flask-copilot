@@ -11,6 +11,7 @@ from charge.clients.agent_factory import ReasoningCallbackType
 from charge.experiments.experiment import Experiment
 from charge.utils.mcp_workbench_utils import call_mcp_tool_directly
 from charge_backend.prompt_debugger import debug_prompt_task
+from charge_backend.agent_chat_metadata import record_latest_user_message_metadata
 from lc_conductor import CallbackLogger
 from charge_backend.lmo.lmo_task import (
     LMOTask as LeadMoleculeOptimization,
@@ -392,8 +393,22 @@ async def generate_lead_molecule(
 
                 if run_settings.prompt_debugging:
                     await debug_prompt_task(lmo_task, websocket)
-                await experiment.run_async(log_progress, callback=callback)
+                await experiment.run_async(
+                    log_progress,
+                    callback=callback,
+                    agent_key="lmo:main",
+                    agent_metadata={
+                        "kind": "lmo",
+                        "target": "main",
+                        "smiles": start_smiles,
+                        "title": "Lead molecule optimization",
+                        "subtitle": start_smiles,
+                    },
+                )
                 await callback.drain()
+                record_latest_user_message_metadata(
+                    experiment, "lmo:main", lmo_task, label="LMO request"
+                )
                 finished_tasks = experiment.get_finished_tasks()
                 _, results = finished_tasks[-1]
 

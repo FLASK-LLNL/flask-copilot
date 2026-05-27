@@ -30,6 +30,7 @@ from charge_backend.retrosynthesis.retrosynthesis_task import (
     TemplateFreeRetrosynthesisTask as RetrosynthesisTask,
     TemplateFreeReactionOutputSchema as ReactionOutputSchema,
 )
+from charge_backend.agent_chat_metadata import record_latest_user_message_metadata
 
 from charge.experiments.experiment import Experiment
 from charge.clients.agent_factory import ReasoningCallbackType
@@ -94,6 +95,15 @@ async def ai_based_retrosynthesis(
         callback_handler = CallbackHandler(websocket)
         runner = experiment.create_agent_with_experiment_state(
             task=None,
+            agent_key=f"reaction:{node_id}",
+            agent_metadata={
+                "kind": "reaction",
+                "nodeId": node_id,
+                "target": node_id,
+                "smiles": current_node.smiles,
+                "title": f"Reaction {node_id}",
+                "subtitle": current_node.smiles,
+            },
             agent_name=f"retrosynth_{node_id}",
             callback=callback_handler,
         )
@@ -141,6 +151,9 @@ async def ai_based_retrosynthesis(
     output = await runner.run(log_progress)
     if isinstance(callback_handler, CallbackHandler):
         await callback_handler.drain()
+    record_latest_user_message_metadata(
+        experiment, f"reaction:{node_id}", retro_task, label="Retrosynthesis request"
+    )
     experiment.add_to_context(runner, retro_task, output)
 
     if os.getenv("CHARGE_DISABLE_OUTPUT_VALIDATION", "0") == "1":

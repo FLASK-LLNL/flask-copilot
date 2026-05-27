@@ -12,6 +12,12 @@
   --lcc-bg-primary: #8b5cf6;
   --lcc-bg-primary-hover: #7c3aed;
   --lcc-bg-primary-active: #6d28d9;
+  --lcc-border-subtle: rgba(168, 85, 247, 0.3);
+  --lcc-chat-surface: rgba(15, 23, 42, 0.55);
+  --lcc-chat-user-bg: rgba(37, 99, 235, 0.35);
+  --lcc-chat-user-text: #eff6ff;
+  --lcc-chat-agent-bg: rgba(255, 255, 255, 0.06);
+  --lcc-text-muted: #c4b5fd;
 }
 
 /* Custom scrollbars - applies to all scrollable elements */

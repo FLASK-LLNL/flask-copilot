@@ -2,6 +2,8 @@ from typing import Any, Optional
 from fastapi import WebSocket
 import asyncio
 import os
+import hashlib
+import json
 from lc_conductor import ActionManager, TaskManager, CallbackLogger
 from lc_conductor import (
     BuiltinToolDefinition,
@@ -372,10 +374,10 @@ class FlaskActionManager(ActionManager):
         logger.info("Synthesize tree leaf action received")
         logger.info(f"Data: {data}")
         node = self.retro_synth_context.node_ids[data["nodeId"]]
-        if attachments:
+        if data.get("query") or attachments:
             await self._send_processing_message(
-                f"Processing retrosynthesis prompt: {data.get('query', '')}",
-                source="User",
+                f"Retrosynthesis request for node {data['nodeId']}: {data.get('query', '')}".strip(),
+                source="Retrosynthesis Request",
                 images=image_refs(attachments),
             )
 
@@ -453,7 +455,7 @@ class FlaskActionManager(ActionManager):
         if prompt:
             await self._send_processing_message(
                 f"Processing optimization query: {prompt} for node {data['nodeId']}",
-                source="User",
+                source="LMO Request",
                 images=image_refs(attachments) if attachments else None,
             )
         else:
@@ -485,6 +487,13 @@ class FlaskActionManager(ActionManager):
         attachments = validate_image_attachments(data)
         if self.retro_synth_context is None:
             raise ValueError("Retrosynthesis context not initialized")
+
+        if data.get("query") or attachments:
+            await self._send_processing_message(
+                f"Retrosynthesis request for node {data['nodeId']}: {data.get('query', '')}".strip(),
+                source="Retrosynthesis Request",
+                images=image_refs(attachments) if attachments else None,
+            )
 
         # Get parent
         if data["nodeId"] not in self.retro_synth_context.parents:
@@ -588,6 +597,15 @@ class FlaskActionManager(ActionManager):
         callback_handler = CallbackHandler(self.websocket)
         agent = self.experiment.create_agent_with_experiment_state(
             task=task,
+            agent_key=f"molecule:{data['nodeId']}",
+            agent_metadata={
+                "kind": "molecule",
+                "nodeId": data["nodeId"],
+                "target": data["nodeId"],
+                "smiles": smiles,
+                "title": f"Molecule {data['nodeId']}",
+                "subtitle": smiles,
+            },
             callback=callback_handler,
         )
 
@@ -596,6 +614,9 @@ class FlaskActionManager(ActionManager):
                 await debug_prompt(agent, self.websocket)
             result = await agent.run(self.log_progress)
             await callback_handler.drain()
+            self._record_latest_user_message_metadata(
+                f"molecule:{data['nodeId']}", task
+            )
             self.experiment.add_to_context(agent, task, result)
             # Report answer
             await self._send_processing_message(result, source="Agent")
@@ -645,6 +666,15 @@ class FlaskActionManager(ActionManager):
         callback_handler = CallbackHandler(self.websocket)
         agent = self.experiment.create_agent_with_experiment_state(
             task=task,
+            agent_key=f"reaction:{data['nodeId']}",
+            agent_metadata={
+                "kind": "reaction",
+                "nodeId": data["nodeId"],
+                "target": data["nodeId"],
+                "smiles": node.smiles,
+                "title": f"Reaction {data['nodeId']}",
+                "subtitle": node.smiles,
+            },
             callback=callback_handler,
         )
         self.retro_synth_context.node_id_to_charge_client[data["nodeId"]] = agent
@@ -663,9 +693,500 @@ class FlaskActionManager(ActionManager):
                 await debug_prompt(agent, self.websocket)
             result = await agent.run(self.log_progress)
             await callback_handler.drain()
+            self._record_latest_user_message_metadata(
+                f"reaction:{data['nodeId']}", task
+            )
             self.experiment.add_to_context(agent, task, result)
             # Report answer
             await self._send_processing_message(result, source="Agent")
+            await self.websocket.send_json({"type": "complete"})
+
+        asyncio.create_task(self.task_manager.run_task(run_and_report()))
+
+    def _agent_key_parts(self, agent_key: str) -> tuple[str, str]:
+        if ":" not in agent_key:
+            return agent_key, ""
+        kind, target = agent_key.split(":", 1)
+        return kind, target
+
+    def _default_agent_metadata(
+        self, agent_key: str, data: Optional[dict[str, Any]] = None
+    ) -> dict[str, Any]:
+        data = data or {}
+        kind, target = self._agent_key_parts(agent_key)
+        metadata = {
+            "kind": kind,
+            "target": target,
+            **(data.get("metadata") if isinstance(data.get("metadata"), dict) else {}),
+        }
+        if data.get("nodeId") is not None:
+            metadata["nodeId"] = data["nodeId"]
+        if data.get("smiles") is not None:
+            metadata["smiles"] = data["smiles"]
+        if "title" not in metadata:
+            if kind == "reaction":
+                metadata["title"] = f"Reaction {target}"
+            elif kind == "molecule":
+                metadata["title"] = f"Molecule {target}"
+            elif kind == "custom":
+                metadata["title"] = "Custom prompt"
+            elif kind == "lmo":
+                metadata["title"] = "Lead molecule optimization"
+            else:
+                metadata["title"] = agent_key
+        return metadata
+
+    def _agent_session_records(self) -> dict[str, dict[str, Any]]:
+        state = self.experiment.save_state()
+        records = state.get("agentSessions", {})
+        return records if isinstance(records, dict) else {}
+
+    def _session_messages_from_record(
+        self, record: dict[str, Any]
+    ) -> tuple[list[dict[str, Any]], Optional[dict[str, Any]]]:
+        memory = record.get("memory")
+        if not memory:
+            return [], None
+        try:
+            session = json.loads(memory) if isinstance(memory, str) else memory
+        except json.JSONDecodeError:
+            return [], None
+        if not isinstance(session, dict):
+            return [], None
+        messages = session.get("state", {}).get("in_memory", {}).get("messages", [])
+        return (messages if isinstance(messages, list) else []), session
+
+    def _prompt_context_from_task(
+        self, task: Optional[dict[str, Any]]
+    ) -> list[dict[str, str]]:
+        if not isinstance(task, dict):
+            return []
+        context: list[dict[str, str]] = []
+        system_prompt = task.get("system_prompt")
+        if isinstance(system_prompt, str) and system_prompt.strip():
+            context.append({"title": "Instructions", "text": system_prompt})
+        user_prompt = task.get("user_prompt")
+        if isinstance(user_prompt, str) and user_prompt.strip():
+            context.append({"title": "Task prompt", "text": user_prompt})
+        return context
+
+    def _prompt_context_from_record(
+        self, record: dict[str, Any]
+    ) -> list[dict[str, str]]:
+        return self._prompt_context_from_task(record.get("task"))
+
+    @staticmethod
+    def _message_label_for_task(
+        task: Optional[dict[str, Any]],
+        *,
+        agent_key: str,
+        metadata: dict[str, Any],
+    ) -> Optional[str]:
+        if not isinstance(task, dict):
+            return None
+        class_name = str(task.get("class_name") or "")
+        module = str(task.get("module") or "")
+        kind = str(metadata.get("kind") or agent_key.split(":", 1)[0])
+        if "Retrosynthesis" in class_name or "retrosynthesis" in module:
+            return "Retrosynthesis request"
+        if class_name == "LMOTask" or ".lmo." in module:
+            return "LMO request"
+        if kind == "custom":
+            return "Custom prompt"
+        return None
+
+    @staticmethod
+    def _message_metadata_from_record(record: dict[str, Any]) -> dict[str, Any]:
+        metadata = record.get("messageMetadata")
+        return metadata if isinstance(metadata, dict) else {}
+
+    @staticmethod
+    def _normalized_message_role(raw_message: dict[str, Any]) -> str:
+        role = str(raw_message.get("role") or raw_message.get("type") or "assistant")
+        if role == "message":
+            role = "assistant"
+        return role if role in {"user", "assistant", "system", "tool"} else "assistant"
+
+    def _record_latest_user_message_metadata(
+        self,
+        agent_key: str,
+        task: Task,
+        *,
+        label: Optional[str] = None,
+    ) -> None:
+        registry_item = self.experiment.agent_registry.get(agent_key)
+        if not registry_item:
+            return
+        agent = registry_item.get("agent")
+        if agent is None or not hasattr(agent, "save_memory"):
+            return
+        memory = agent.save_memory()
+        raw_messages, _ = self._session_messages_from_record({"memory": memory})
+        latest_user_index = next(
+            (
+                index
+                for index, raw_message in reversed(list(enumerate(raw_messages)))
+                if isinstance(raw_message, dict)
+                and self._normalized_message_role(raw_message) == "user"
+            ),
+            None,
+        )
+        if latest_user_index is None:
+            return
+
+        task_json = task.to_json() if hasattr(task, "to_json") else {}
+        prompt_context = self._prompt_context_from_task(task_json)
+        metadata: dict[str, Any] = {}
+        if prompt_context:
+            metadata["promptContext"] = prompt_context
+        message_label = label or self._message_label_for_task(
+            task_json,
+            agent_key=agent_key,
+            metadata=registry_item.get("metadata", {}),
+        )
+        if message_label:
+            metadata["label"] = message_label
+        if not metadata:
+            return
+
+        message_metadata = {
+            **(
+                registry_item.get("messageMetadata")
+                if isinstance(registry_item.get("messageMetadata"), dict)
+                else {}
+            )
+        }
+        message_metadata[str(latest_user_index)] = metadata
+        registry_item["messageMetadata"] = message_metadata
+
+    @staticmethod
+    def _image_ref_from_data_url(
+        data_url: str, content: dict[str, Any]
+    ) -> dict[str, Any]:
+        image_id = content.get("id")
+        if not image_id:
+            image_id = (
+                "session-image-"
+                + hashlib.sha256(data_url.encode("utf-8")).hexdigest()[:16]
+            )
+        mime_type = (
+            content.get("media_type")
+            or content.get("mimeType")
+            or data_url.split(";", 1)[0].removeprefix("data:")
+            or "image"
+        )
+        return {
+            "id": image_id,
+            "name": content.get("name") or "Uploaded image",
+            "mimeType": mime_type,
+            "sizeBytes": int(content.get("sizeBytes") or 0),
+            "dataUrl": data_url,
+        }
+
+    def _normalize_agent_history(
+        self,
+        agent_key: str,
+        record: dict[str, Any],
+        *,
+        debug: bool = False,
+    ) -> dict[str, Any]:
+        metadata = {
+            **self._default_agent_metadata(agent_key),
+            **(
+                record.get("metadata")
+                if isinstance(record.get("metadata"), dict)
+                else {}
+            ),
+        }
+        raw_messages, raw_session = self._session_messages_from_record(record)
+        messages: list[dict[str, Any]] = []
+        prompt_context = self._prompt_context_from_record(record)
+        message_metadata = self._message_metadata_from_record(record)
+        user_message_indexes = [
+            index
+            for index, raw_message in enumerate(raw_messages)
+            if isinstance(raw_message, dict)
+            and self._normalized_message_role(raw_message) == "user"
+        ]
+
+        for index, raw_message in enumerate(raw_messages):
+            if not isinstance(raw_message, dict):
+                continue
+            role = self._normalized_message_role(raw_message)
+            text_parts: list[str] = []
+            reasoning_parts: list[dict[str, Any]] = []
+            tool_events: list[dict[str, Any]] = []
+            images: list[dict[str, Any]] = []
+            contents = raw_message.get("contents", [])
+            if not isinstance(contents, list):
+                contents = [contents]
+
+            for content in contents:
+                if not isinstance(content, dict):
+                    text_parts.append(str(content))
+                    continue
+                content_type = str(content.get("type") or "")
+                text = content.get("text")
+                uri = content.get("uri") or content.get("dataUrl")
+                if content_type == "text" and isinstance(text, str):
+                    text_parts.append(text)
+                elif "reasoning" in content_type:
+                    reasoning_item = {
+                        "type": content_type or "reasoning",
+                        "text": text if isinstance(text, str) else "",
+                    }
+                    if debug:
+                        reasoning_item["debug"] = content.get(
+                            "additional_properties", {}
+                        )
+                    reasoning_parts.append(reasoning_item)
+                elif isinstance(uri, str) and uri.startswith("data:image/"):
+                    images.append(self._image_ref_from_data_url(uri, content))
+                elif content_type in {
+                    "function_call",
+                    "function_result",
+                    "mcp_server_tool_call",
+                    "mcp_server_tool_result",
+                }:
+                    tool_event = {
+                        "type": content_type,
+                        "name": content.get("name") or content.get("tool_name"),
+                        "text": json.dumps(content, indent=2, default=str),
+                    }
+                    if debug:
+                        tool_event["raw"] = content
+                    tool_events.append(tool_event)
+                elif isinstance(text, str):
+                    text_parts.append(text)
+                elif debug:
+                    tool_events.append(
+                        {
+                            "type": content_type or "raw",
+                            "text": json.dumps(content, indent=2, default=str),
+                            "raw": content,
+                        }
+                    )
+
+            message: dict[str, Any] = {
+                "id": f"{agent_key}:{index}",
+                "role": role,
+                "text": "\n\n".join(part for part in text_parts if part),
+                "images": images,
+                "reasoning": reasoning_parts,
+                "toolEvents": tool_events,
+            }
+            if message["role"] == "user":
+                raw_metadata = message_metadata.get(str(index))
+                if not isinstance(raw_metadata, dict):
+                    raw_metadata = {}
+                message_context = raw_metadata.get("promptContext")
+                if not isinstance(message_context, list):
+                    message_context = []
+                elif not all(isinstance(item, dict) for item in message_context):
+                    message_context = []
+                if (
+                    not message_context
+                    and not message_metadata
+                    and len(user_message_indexes) <= 1
+                ):
+                    message_context = prompt_context
+                if message_context:
+                    message["context"] = message_context
+                message_label = raw_metadata.get("label")
+                if isinstance(message_label, str) and message_label.strip():
+                    message["label"] = message_label
+            if debug:
+                message["raw"] = raw_message
+            if message["text"] or images or reasoning_parts or tool_events or debug:
+                messages.append(message)
+
+        last_message = next((m for m in reversed(messages) if m.get("text")), None)
+        history: dict[str, Any] = {
+            "agentKey": agent_key,
+            "title": metadata.get("title") or agent_key,
+            "subtitle": metadata.get("subtitle") or metadata.get("smiles") or "",
+            "metadata": metadata,
+            "modelInfo": record.get("modelInfo", {}),
+            "promptContext": prompt_context,
+            "messages": messages,
+            "lastMessage": (last_message or {}).get("text", ""),
+        }
+        if debug and raw_session is not None:
+            history["rawSession"] = raw_session
+        return history
+
+    async def handle_list_agent_histories(self, data: dict[str, Any]) -> None:
+        debug = bool(data.get("debug"))
+        histories = [
+            self._normalize_agent_history(agent_key, record, debug=debug)
+            for agent_key, record in self._agent_session_records().items()
+        ]
+        await self.websocket.send_json(
+            {
+                "type": "agent-histories-response",
+                "histories": histories,
+            }
+        )
+
+    async def handle_get_agent_history(self, data: dict[str, Any]) -> None:
+        agent_key = str(data.get("agentKey") or "")
+        if not agent_key:
+            raise ValueError("agentKey is required")
+        debug = bool(data.get("debug"))
+        records = self._agent_session_records()
+        record = records.get(agent_key)
+        fallback_task = self._chat_task_for_agent(agent_key, data, [])
+        if record is None:
+            record = {
+                "agentKey": agent_key,
+                "metadata": self._default_agent_metadata(agent_key, data),
+                "memory": "",
+                "modelInfo": {},
+                "task": fallback_task.to_json(),
+            }
+        elif not isinstance(record.get("task"), dict):
+            record = {
+                **record,
+                "metadata": {
+                    **self._default_agent_metadata(agent_key, data),
+                    **(
+                        record.get("metadata")
+                        if isinstance(record.get("metadata"), dict)
+                        else {}
+                    ),
+                },
+                "task": fallback_task.to_json(),
+            }
+        await self.websocket.send_json(
+            {
+                "type": "agent-history-response",
+                "history": self._normalize_agent_history(
+                    agent_key, record, debug=debug
+                ),
+            }
+        )
+
+    def _reaction_context_for_node(self, node_id: str) -> str:
+        if (
+            self.retro_synth_context is None
+            or node_id not in self.retro_synth_context.node_ids
+        ):
+            return ""
+        node = self.retro_synth_context.node_ids[node_id]
+        child_nodes = [
+            nid
+            for nid, parent in self.retro_synth_context.parents.items()
+            if parent == node_id
+        ]
+        reactants = [self.retro_synth_context.node_ids[nid] for nid in child_nodes]
+        reactants_str = "\n".join(reactant.smiles for reactant in reactants)
+        reaction_str = f"Product: {node.smiles}\nReactants:\n{reactants_str}"
+        if node_id in self.retro_synth_context.node_id_to_reasoning_summary:
+            reaction_str += (
+                "\nAdditionally, the following context is given: "
+                f"{self.retro_synth_context.node_id_to_reasoning_summary[node_id]}"
+            )
+        return reaction_str
+
+    def _chat_task_for_agent(
+        self,
+        agent_key: str,
+        data: dict[str, Any],
+        attachments: list[dict[str, object]],
+    ) -> Task:
+        kind, target = self._agent_key_parts(agent_key)
+        existing = self.experiment.agent_registry.get(agent_key)
+        existing_agent = existing.get("agent") if existing else None
+        existing_task = getattr(existing_agent, "task", None)
+        system_prompt = (
+            existing_task.get_system_prompt()
+            if existing_task is not None and hasattr(existing_task, "get_system_prompt")
+            else ""
+        )
+
+        if not system_prompt:
+            if kind == "molecule":
+                request_metadata = (
+                    data.get("metadata")
+                    if isinstance(data.get("metadata"), dict)
+                    else {}
+                )
+                smiles = data.get("smiles") or request_metadata.get("smiles") or target
+                system_prompt = (
+                    "You are a helpful chemical assistant who answers in concise but "
+                    f"factual responses. Answer questions about the molecule `{smiles}`."
+                )
+            elif kind == "reaction":
+                node_id = data.get("nodeId") or target
+                reaction_context = self._reaction_context_for_node(str(node_id))
+                system_prompt = (
+                    "You are a helpful chemical assistant who answers in concise but "
+                    "factual responses. Given the following reaction as SMILES strings:\n"
+                    f"{reaction_context}\n\nAnswer the user's questions."
+                )
+            else:
+                system_prompt = (
+                    "You are a helpful chemical assistant who answers in concise but "
+                    "factual responses."
+                )
+
+            system_prompt = self._with_document_reference_context(system_prompt)
+
+        return Task(
+            system_prompt=system_prompt,
+            user_prompt=str(data.get("query") or ""),
+            attachments=attachments,
+            **self.selected_tool_runtime().task_kwargs(),
+        )
+
+    async def handle_chat_agent(self, data: dict[str, Any]) -> None:
+        self.setup_run_settings(data)
+        agent_key = str(data.get("agentKey") or "")
+        if not agent_key:
+            raise ValueError("agentKey is required")
+        query = str(data.get("query") or "").strip()
+        if not query:
+            raise ValueError("query is required")
+
+        attachments = validate_image_attachments(data)
+        metadata = self._default_agent_metadata(agent_key, data)
+        task = self._chat_task_for_agent(agent_key, data, attachments)
+        await self._send_processing_message(
+            query,
+            source="User",
+            images=image_refs(attachments) if attachments else None,
+        )
+        callback_handler = CallbackHandler(self.websocket)
+        agent = self.experiment.create_agent_with_experiment_state(
+            task=task,
+            agent_key=agent_key,
+            agent_metadata=metadata,
+            callback=callback_handler,
+        )
+        kind, target = self._agent_key_parts(agent_key)
+        if kind == "reaction" and self.retro_synth_context is not None:
+            node_id = str(data.get("nodeId") or metadata.get("nodeId") or target)
+            self.retro_synth_context.node_id_to_charge_client[node_id] = agent
+
+        async def run_and_report():
+            if self.run_settings.prompt_debugging:
+                await debug_prompt(agent, self.websocket)
+            result = await agent.run(self.log_progress)
+            await callback_handler.drain()
+            self._record_latest_user_message_metadata(agent_key, task)
+            self.experiment.add_to_context(agent, task, result)
+            await self._send_processing_message(result, source="Agent")
+            records = self._agent_session_records()
+            await self.websocket.send_json(
+                {
+                    "type": "agent-history-response",
+                    "history": self._normalize_agent_history(
+                        agent_key,
+                        records[agent_key],
+                        debug=bool(data.get("debug")),
+                    ),
+                }
+            )
             await self.websocket.send_json({"type": "complete"})
 
         asyncio.create_task(self.task_manager.run_task(run_and_report()))

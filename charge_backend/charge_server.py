@@ -283,6 +283,9 @@ async def websocket_endpoint(websocket: WebSocket):
         # Settings
         "ui-update-orchestrator-settings": action_manager.handle_orchestrator_settings_update,
         "get-username": action_manager.handle_get_username,
+        "list-agent-histories": action_manager.handle_list_agent_histories,
+        "get-agent-history": action_manager.handle_get_agent_history,
+        "chat-agent": action_manager.handle_chat_agent,
         # Context management
         "save-context": action_manager.handle_save_state,
         "load-context": action_manager.handle_load_state,
