@@ -2,7 +2,7 @@ import os
 import asyncio
 from fastapi import WebSocket
 from lc_conductor.callback_logger import CallbackLogger
-from typing import Optional
+from typing import Awaitable, Callable, Optional
 
 from charge_backend.backend_helper_funcs import (
     CallbackHandler,
@@ -73,6 +73,7 @@ async def ai_based_retrosynthesis(
     tool_runtime: ToolRuntime,
     log_progress: ReasoningCallbackType,
     attachments: Optional[list[dict[str, object]]] = None,
+    history_callback: Optional[Callable[[], Awaitable[None]]] = None,
 ):
     """Performs template-free retrosynthesis using the AI orchestrator."""
     clogger = CallbackLogger(websocket, source="ai_based_retrosynthesis")
@@ -87,15 +88,18 @@ async def ai_based_retrosynthesis(
         smiles=current_node.smiles,
     )
 
+    agent_key = f"reaction:{node_id}"
     if node_id in context.node_id_to_charge_client:
         # Existing context
         runner = context.node_id_to_charge_client[node_id]
     else:
         # New context
-        callback_handler = CallbackHandler(websocket)
+        callback_handler = CallbackHandler(
+            websocket, agent_key=agent_key, on_agent_update=history_callback
+        )
         runner = experiment.create_agent_with_experiment_state(
             task=None,
-            agent_key=f"reaction:{node_id}",
+            agent_key=agent_key,
             agent_metadata={
                 "kind": "reaction",
                 "nodeId": node_id,
@@ -110,6 +114,9 @@ async def ai_based_retrosynthesis(
         context.node_id_to_charge_client[node_id] = runner
 
     callback_handler = getattr(runner, "callback", None)
+    if isinstance(callback_handler, CallbackHandler):
+        callback_handler.agent_key = agent_key
+        callback_handler.on_agent_update = history_callback
 
     if constraint:
         user_prompt = RETROSYNTH_CONSTRAINED_USER_PROMPT_TEMPLATE.format(
@@ -152,9 +159,15 @@ async def ai_based_retrosynthesis(
     if isinstance(callback_handler, CallbackHandler):
         await callback_handler.drain()
     record_latest_user_message_metadata(
-        experiment, f"reaction:{node_id}", retro_task, label="Retrosynthesis request"
+        experiment,
+        agent_key,
+        retro_task,
+        label="Retrosynthesis request",
+        display_text=query,
     )
     experiment.add_to_context(runner, retro_task, output)
+    if history_callback is not None:
+        await history_callback()
 
     if os.getenv("CHARGE_DISABLE_OUTPUT_VALIDATION", "0") == "1":
         await clogger.warning(
@@ -322,6 +335,7 @@ async def db_then_ai_retrosynthesis(
     tool_runtime: ToolRuntime,
     log_progress: ReasoningCallbackType,
     attachments: Optional[list[dict[str, object]]] = None,
+    history_callback: Optional[Callable[[], Awaitable[None]]] = None,
 ):
     """Searches the reaction database first; falls back to AI-based retrosynthesis if no exact match is found."""
     node = context.node_ids.get(node_id)
@@ -355,4 +369,5 @@ async def db_then_ai_retrosynthesis(
         tool_runtime,
         log_progress,
         attachments,
+        history_callback,
     )

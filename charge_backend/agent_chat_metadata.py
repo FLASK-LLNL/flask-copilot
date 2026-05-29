@@ -64,6 +64,7 @@ def record_latest_user_message_metadata(
     task: Task,
     *,
     label: Optional[str] = None,
+    display_text: Optional[str] = None,
 ) -> None:
     registry_item = experiment.agent_registry.get(agent_key)
     if not registry_item:
@@ -96,6 +97,8 @@ def record_latest_user_message_metadata(
     )
     if message_label:
         metadata["label"] = message_label
+    if isinstance(display_text, str) and display_text.strip():
+        metadata["displayText"] = display_text
     if not metadata:
         return
 

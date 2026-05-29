@@ -4,7 +4,7 @@ import asyncio
 import json
 from pydantic.dataclasses import dataclass
 from pydantic import Field
-from typing import Any, Dict, Optional, Literal, Tuple
+from typing import Any, Awaitable, Callable, Dict, Optional, Literal, Tuple
 from dataclasses import asdict
 
 from flask_tools.chemistry import smiles_utils
@@ -152,13 +152,38 @@ def get_bandgap(smiles: str) -> float:
 
 
 class CallbackHandler:
-    def __init__(self, websocket: WebSocket, name: Optional[str] = None):
+    def __init__(
+        self,
+        websocket: WebSocket,
+        name: Optional[str] = None,
+        agent_key: Optional[str] = None,
+        on_agent_update: Optional[Callable[[], Awaitable[None]]] = None,
+    ):
         self.websocket = websocket
         self.name = name
+        self.agent_key = agent_key
+        self.on_agent_update = on_agent_update
         self.clogger = CallbackLogger(websocket)
         self.pending_tool_calls: dict[str, dict[str, Any]] = {}
         self.pending_tool_calls_by_name: dict[str, list[dict[str, Any]]] = {}
         self._pending_send_tasks: set[asyncio.Task[Any]] = set()
+
+    async def _notify_agent_update(self) -> None:
+        if self.on_agent_update is not None:
+            await self.on_agent_update()
+
+    def _response_payload(
+        self,
+        message_payload: dict[str, Any],
+        *,
+        role: Optional[str] = None,
+        label: Optional[str] = None,
+    ) -> dict[str, Any]:
+        payload: dict[str, Any] = {
+            "type": "response",
+            "message": message_payload,
+        }
+        return payload
 
     @staticmethod
     def _parse_tool_arguments(
@@ -267,6 +292,7 @@ class CallbackHandler:
                 self.pending_tool_calls[call_id] = call_info
         else:
             self.pending_tool_calls_by_name.setdefault(tool_name, []).append(call_info)
+        await self._notify_agent_update()
 
     def _pop_pending_tool_call(
         self,
@@ -326,10 +352,11 @@ class CallbackHandler:
                 f"```{fence_suffix}\n{formatted_result_text}\n```"
             )
 
-        payload: dict[str, Any] = {
-            "type": "response",
-            "message": {"source": tool_name, "message": message},
-        }
+        payload = self._response_payload(
+            {"source": tool_name, "message": message},
+            role="tool",
+            label=tool_name,
+        )
         if call_info is not None and call_info["smiles"] is not None:
             payload["smiles"] = call_info["smiles"]
         if call_id is not None:
@@ -337,6 +364,7 @@ class CallbackHandler:
 
         logger.info(message)
         await send(payload)
+        await self._notify_agent_update()
 
     async def send(self, assistant_message):
         send = self.websocket.send_json
@@ -348,14 +376,26 @@ class CallbackHandler:
                     f"[{source}] User: {getattr(assistant_message, 'content', '')}"
                 )
                 logger.info(message)
-                await send({"type": "response", "message": {"message": message}})
+                await send(
+                    self._response_payload(
+                        {"message": message},
+                        role="user",
+                        label=source,
+                    )
+                )
             elif message_type == "AssistantMessage":
                 thought = getattr(assistant_message, "thought", None)
                 if thought is not None:
                     _str = f"[{source}] Model thought: {thought}"
                     output = ModelMessage(message=_str, smiles=None)
                     logger.info(_str)
-                    await send({"type": "response", "message": output.json()})
+                    await send(
+                        self._response_payload(
+                            output.json(),
+                            role="assistant",
+                            label="Reasoning",
+                        )
+                    )
                 content = getattr(assistant_message, "content", None)
                 if isinstance(content, list):
                     for item in content:

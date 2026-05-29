@@ -182,6 +182,7 @@ def test_agent_history_prefers_provider_context_usage():
             "lastUsage": {
                 "inputTokens": 1234,
                 "outputTokens": 56,
+                "reasoningTokens": 12,
                 "totalTokens": 1290,
             },
         },
@@ -203,8 +204,9 @@ def test_agent_history_prefers_provider_context_usage():
 
     history = manager._normalize_agent_history("custom:main", record)
 
-    assert history["contextUsage"]["usedTokens"] == 1234
+    assert history["contextUsage"]["usedTokens"] == 1290
     assert history["contextUsage"]["outputTokens"] == 56
+    assert history["contextUsage"]["reasoningTokens"] == 12
     assert history["contextUsage"]["totalTokens"] == 1290
     assert history["contextUsage"]["estimated"] is False
     assert history["contextUsage"]["source"] == "provider"
@@ -263,6 +265,46 @@ def test_agent_history_uses_per_message_metadata_for_prompt_context_and_label():
     assert history["messages"][0]["context"][0]["text"] == "Original reaction context"
     assert history["messages"][2]["context"][0]["text"] == "Follow-up chat context"
     assert "Latest task only" not in history["messages"][0]["context"][0]["text"]
+
+
+def test_agent_history_uses_display_text_while_preserving_raw_message_in_debug():
+    manager = make_manager()
+    record = {
+        "messageMetadata": {
+            "0": {
+                "label": "Retrosynthesis request",
+                "displayText": "Use greener reactants",
+            }
+        },
+        "memory": json.dumps(
+            {
+                "state": {
+                    "in_memory": {
+                        "messages": [
+                            {
+                                "role": "user",
+                                "contents": [
+                                    {
+                                        "type": "text",
+                                        "text": "Generated retrosynthesis task prompt with many instructions.",
+                                    }
+                                ],
+                            }
+                        ]
+                    }
+                }
+            }
+        ),
+    }
+
+    history = manager._normalize_agent_history("reaction:node_1", record, debug=True)
+
+    assert history["messages"][0]["text"] == "Use greener reactants"
+    assert history["messages"][0]["label"] == "Retrosynthesis request"
+    assert (
+        history["messages"][0]["raw"]["contents"][0]["text"]
+        == "Generated retrosynthesis task prompt with many instructions."
+    )
 
 
 def test_reaction_context_includes_reaction_hover_info():

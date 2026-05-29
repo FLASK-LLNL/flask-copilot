@@ -54,3 +54,28 @@ def test_callback_handler_drain_flushes_background_send():
         ]
 
     asyncio.run(run())
+
+
+def test_callback_handler_notifies_agent_update_without_tagging_sidebar_messages():
+    async def run() -> None:
+        websocket = FakeWebSocket()
+        update_count = 0
+
+        async def on_update() -> None:
+            nonlocal update_count
+            update_count += 1
+
+        callback = CallbackHandler(
+            websocket,
+            name="test-agent",
+            agent_key="reaction:node_1",
+            on_agent_update=on_update,
+        )
+
+        await callback.on_tool_result("lookup_reaction", {"ok": True})
+
+        assert "agentKey" not in websocket.messages[0]
+        assert websocket.messages[0]["message"]["source"] == "lookup_reaction"
+        assert update_count == 1
+
+    asyncio.run(run())

@@ -174,9 +174,12 @@ class FlaskActionManager(ActionManager):
             }
         )
 
-    async def log_progress(self, progress: str):
+    async def log_progress(self, progress: str, agent_key: Optional[str] = None):
         logger.info(f"Reasoning: {progress}")
-        await self._send_processing_message(progress, "Reasoning")
+        await self._send_processing_message(
+            progress,
+            "Reasoning",
+        )
 
     async def handle_compute(self, data: dict) -> None:
         self.setup_run_settings(data)
@@ -296,6 +299,17 @@ class FlaskActionManager(ActionManager):
         depth = customization.get("depth", 3)
         tool_runtime = self.selected_tool_runtime()
         attachments = validate_image_attachments(data)
+        if not data.get("_agentRequestAnnounced"):
+            request_text = (
+                f"LMO request: {data.get('query')}"
+                if data.get("query")
+                else f"LMO request for {data.get('smiles', 'current molecule')}"
+            )
+            await self._send_processing_message(
+                request_text,
+                source="LMO request",
+                images=image_refs(attachments) if attachments else None,
+            )
 
         run_func = partial(
             generate_lead_molecule,
@@ -307,7 +321,7 @@ class FlaskActionManager(ActionManager):
             tool_runtime,
             self.task_manager.websocket,
             self.run_settings,
-            self.log_progress,
+            partial(self.log_progress, agent_key="lmo:main"),
             *property_attributes,
             data.get("query", None),
             initial_level,
@@ -321,6 +335,11 @@ class FlaskActionManager(ActionManager):
             number_of_molecules,
             num_top_candidates,
             attachments,
+            partial(
+                self._send_agent_history_update,
+                "lmo:main",
+                debug=bool(data.get("debug")),
+            ),
         )
         await self.task_manager.run_task(run_func())
 
@@ -343,12 +362,11 @@ class FlaskActionManager(ActionManager):
         logger.info(f"Data: {data}")
         tool_runtime = self.selected_tool_runtime()
         attachments = validate_image_attachments(data)
-        if attachments:
-            await self._send_processing_message(
-                "Processing custom prompt with attached images",
-                source="User",
-                images=image_refs(attachments),
-            )
+        await self._send_processing_message(
+            data.get("userPrompt") or "Custom prompt",
+            source="User",
+            images=image_refs(attachments) if attachments else None,
+        )
 
         run_func = partial(
             run_custom_problem,
@@ -359,8 +377,13 @@ class FlaskActionManager(ActionManager):
             tool_runtime,
             self.task_manager.websocket,
             self.run_settings,
-            self.log_progress,
+            partial(self.log_progress, agent_key="custom:main"),
             attachments,
+            partial(
+                self._send_agent_history_update,
+                "custom:main",
+                debug=bool(data.get("debug")),
+            ),
         )
 
         await self.task_manager.run_task(run_func())
@@ -375,12 +398,16 @@ class FlaskActionManager(ActionManager):
         logger.info("Synthesize tree leaf action received")
         logger.info(f"Data: {data}")
         node = self.retro_synth_context.node_ids[data["nodeId"]]
-        if data.get("query") or attachments:
-            await self._send_processing_message(
-                f"Retrosynthesis request for node {data['nodeId']}: {data.get('query', '')}".strip(),
-                source="Retrosynthesis Request",
-                images=image_refs(attachments),
-            )
+        request_text = (
+            f"Retrosynthesis request for node {data['nodeId']}: {data.get('query', '')}".strip()
+            if data.get("query")
+            else f"Retrosynthesis request for node {data['nodeId']}"
+        )
+        await self._send_processing_message(
+            request_text,
+            source="Retrosynthesis Request",
+            images=image_refs(attachments) if attachments else None,
+        )
 
         has_children = any(
             v == data["nodeId"] for v in self.retro_synth_context.parents.values()
@@ -421,8 +448,13 @@ class FlaskActionManager(ActionManager):
             self.args.config_file,
             self.run_settings,
             self.selected_tool_runtime(),
-            self.log_progress,
+            partial(self.log_progress, agent_key=f"reaction:{data['nodeId']}"),
             attachments,
+            partial(
+                self._send_agent_history_update,
+                f"reaction:{data['nodeId']}",
+                debug=bool(data.get("debug")),
+            ),
         )
 
         asyncio.create_task(self.task_manager.run_task(run_func()))
@@ -461,8 +493,10 @@ class FlaskActionManager(ActionManager):
             )
         else:
             await self._send_processing_message(
-                f"Processing optimization refinement for node {data['nodeId']}"
+                f"Processing optimization refinement for node {data['nodeId']}",
+                source="LMO Request",
             )
+        data["_agentRequestAnnounced"] = True
 
         node: str = data["nodeId"]
         if "_" in node:
@@ -489,13 +523,6 @@ class FlaskActionManager(ActionManager):
         if self.retro_synth_context is None:
             raise ValueError("Retrosynthesis context not initialized")
 
-        if data.get("query") or attachments:
-            await self._send_processing_message(
-                f"Retrosynthesis request for node {data['nodeId']}: {data.get('query', '')}".strip(),
-                source="Retrosynthesis Request",
-                images=image_refs(attachments) if attachments else None,
-            )
-
         # Get parent
         if data["nodeId"] not in self.retro_synth_context.parents:
             await self._send_processing_message(
@@ -507,6 +534,16 @@ class FlaskActionManager(ActionManager):
         parent_nodeid = self.retro_synth_context.parents[data["nodeId"]]
         parent_node = self.retro_synth_context.node_ids[parent_nodeid]
         smiles = self.retro_synth_context.node_ids[data["nodeId"]].smiles
+        request_text = (
+            f"Retrosynthesis request for node {data['nodeId']}: {data.get('query', '')}".strip()
+            if data.get("query")
+            else f"Retrosynthesis request for node {data['nodeId']}"
+        )
+        await self._send_processing_message(
+            request_text,
+            source="Retrosynthesis Request",
+            images=image_refs(attachments) if attachments else None,
+        )
 
         # Clear subtree and levels for layouting
         await self.retro_synth_context.delete_subtree(parent_nodeid, self.websocket)
@@ -536,8 +573,13 @@ class FlaskActionManager(ActionManager):
             self.args.config_file,
             self.run_settings,
             self.selected_tool_runtime(),
-            self.log_progress,
+            partial(self.log_progress, agent_key=f"reaction:{parent_nodeid}"),
             attachments,
+            partial(
+                self._send_agent_history_update,
+                f"reaction:{parent_nodeid}",
+                debug=bool(data.get("debug")),
+            ),
         )
 
         asyncio.create_task(self.task_manager.run_task(run_func()))
@@ -595,7 +637,15 @@ class FlaskActionManager(ActionManager):
         )
 
         # Use the full experiment state
-        callback_handler = CallbackHandler(self.websocket)
+        callback_handler = CallbackHandler(
+            self.websocket,
+            agent_key=f"molecule:{data['nodeId']}",
+            on_agent_update=partial(
+                self._send_agent_history_update,
+                f"molecule:{data['nodeId']}",
+                debug=bool(data.get("debug")),
+            ),
+        )
         agent = self.experiment.create_agent_with_experiment_state(
             task=task,
             agent_key=f"molecule:{data['nodeId']}",
@@ -613,14 +663,22 @@ class FlaskActionManager(ActionManager):
         async def run_and_report():
             if self.run_settings.prompt_debugging:
                 await debug_prompt(agent, self.websocket)
-            result = await agent.run(self.log_progress)
+            result = await agent.run(
+                partial(self.log_progress, agent_key=f"molecule:{data['nodeId']}")
+            )
             await callback_handler.drain()
             self._record_latest_user_message_metadata(
-                f"molecule:{data['nodeId']}", task
+                f"molecule:{data['nodeId']}", task, display_text=data.get("query")
             )
             self.experiment.add_to_context(agent, task, result)
+            await self._send_agent_history_update(
+                f"molecule:{data['nodeId']}", debug=bool(data.get("debug"))
+            )
             # Report answer
-            await self._send_processing_message(result, source="Agent")
+            await self._send_processing_message(
+                result,
+                source="Agent",
+            )
             await self.websocket.send_json({"type": "complete"})
 
         asyncio.create_task(self.task_manager.run_task(run_and_report()))
@@ -651,7 +709,15 @@ class FlaskActionManager(ActionManager):
 
         task.system_prompt = f"You are a helpful chemical assistant who answers in concise but factual responses. Given the following reaction (as SMILES strings):\n{reaction_str}\n\nAnswer the following query."
 
-        callback_handler = CallbackHandler(self.websocket)
+        callback_handler = CallbackHandler(
+            self.websocket,
+            agent_key=f"reaction:{data['nodeId']}",
+            on_agent_update=partial(
+                self._send_agent_history_update,
+                f"reaction:{data['nodeId']}",
+                debug=bool(data.get("debug")),
+            ),
+        )
         agent = self.experiment.create_agent_with_experiment_state(
             task=task,
             agent_key=f"reaction:{data['nodeId']}",
@@ -679,14 +745,22 @@ class FlaskActionManager(ActionManager):
         async def run_and_report():
             if self.run_settings.prompt_debugging:
                 await debug_prompt(agent, self.websocket)
-            result = await agent.run(self.log_progress)
+            result = await agent.run(
+                partial(self.log_progress, agent_key=f"reaction:{data['nodeId']}")
+            )
             await callback_handler.drain()
             self._record_latest_user_message_metadata(
-                f"reaction:{data['nodeId']}", task
+                f"reaction:{data['nodeId']}", task, display_text=data.get("query")
             )
             self.experiment.add_to_context(agent, task, result)
+            await self._send_agent_history_update(
+                f"reaction:{data['nodeId']}", debug=bool(data.get("debug"))
+            )
             # Report answer
-            await self._send_processing_message(result, source="Agent")
+            await self._send_processing_message(
+                result,
+                source="Agent",
+            )
             await self.websocket.send_json({"type": "complete"})
 
         asyncio.create_task(self.task_manager.run_task(run_and_report()))
@@ -728,6 +802,22 @@ class FlaskActionManager(ActionManager):
         state = self.experiment.save_state()
         records = state.get("agentSessions", {})
         return records if isinstance(records, dict) else {}
+
+    async def _send_agent_history_update(
+        self, agent_key: str, *, debug: bool = False
+    ) -> None:
+        records = self._agent_session_records()
+        record = records.get(agent_key)
+        if record is None:
+            return
+        await self.websocket.send_json(
+            {
+                "type": "agent-history-response",
+                "history": self._normalize_agent_history(
+                    agent_key, record, debug=debug
+                ),
+            }
+        )
 
     def _session_messages_from_record(
         self, record: dict[str, Any]
@@ -812,6 +902,7 @@ class FlaskActionManager(ActionManager):
 
         input_tokens = raw_usage.get("inputTokens")
         output_tokens = raw_usage.get("outputTokens")
+        reasoning_tokens = raw_usage.get("reasoningTokens")
         total_tokens = raw_usage.get("totalTokens")
         used_tokens = total_tokens
         if not isinstance(used_tokens, int):
@@ -821,11 +912,14 @@ class FlaskActionManager(ActionManager):
         usage: dict[str, Any] = {
             "usedTokens": used_tokens,
             "estimated": False,
+            "source": "provider",
         }
         if isinstance(input_tokens, int):
             usage["inputTokens"] = input_tokens
         if isinstance(output_tokens, int):
             usage["outputTokens"] = output_tokens
+        if isinstance(reasoning_tokens, int):
+            usage["reasoningTokens"] = reasoning_tokens
         if isinstance(total_tokens, int):
             usage["totalTokens"] = total_tokens
         if isinstance(model, str) and model.strip():
@@ -860,6 +954,7 @@ class FlaskActionManager(ActionManager):
         usage: dict[str, Any] = {
             "usedTokens": used_tokens,
             "estimated": True,
+            "source": "estimate",
         }
         if isinstance(model, str) and model.strip():
             usage["model"] = model
@@ -915,6 +1010,7 @@ class FlaskActionManager(ActionManager):
         task: Task,
         *,
         label: Optional[str] = None,
+        display_text: Optional[str] = None,
     ) -> None:
         registry_item = self.experiment.agent_registry.get(agent_key)
         if not registry_item:
@@ -948,6 +1044,8 @@ class FlaskActionManager(ActionManager):
         )
         if message_label:
             metadata["label"] = message_label
+        if isinstance(display_text, str) and display_text.strip():
+            metadata["displayText"] = display_text
         if not metadata:
             return
 
@@ -1097,6 +1195,9 @@ class FlaskActionManager(ActionManager):
                 message_label = raw_metadata.get("label")
                 if isinstance(message_label, str) and message_label.strip():
                     message["label"] = message_label
+                display_text = raw_metadata.get("displayText")
+                if isinstance(display_text, str) and display_text.strip():
+                    message["text"] = display_text
             if debug:
                 message["raw"] = raw_message
             if message["text"] or images or reasoning_parts or tool_events or debug:
@@ -1296,7 +1397,15 @@ class FlaskActionManager(ActionManager):
             source="User",
             images=image_refs(attachments) if attachments else None,
         )
-        callback_handler = CallbackHandler(self.websocket)
+        callback_handler = CallbackHandler(
+            self.websocket,
+            agent_key=agent_key,
+            on_agent_update=partial(
+                self._send_agent_history_update,
+                agent_key,
+                debug=bool(data.get("debug")),
+            ),
+        )
         agent = self.experiment.create_agent_with_experiment_state(
             task=task,
             agent_key=agent_key,
@@ -1311,11 +1420,17 @@ class FlaskActionManager(ActionManager):
         async def run_and_report():
             if self.run_settings.prompt_debugging:
                 await debug_prompt(agent, self.websocket)
-            result = await agent.run(self.log_progress)
+            result = await agent.run(partial(self.log_progress, agent_key=agent_key))
             await callback_handler.drain()
             self._record_latest_user_message_metadata(agent_key, task)
             self.experiment.add_to_context(agent, task, result)
-            await self._send_processing_message(result, source="Agent")
+            await self._send_agent_history_update(
+                agent_key, debug=bool(data.get("debug"))
+            )
+            await self._send_processing_message(
+                result,
+                source="Agent",
+            )
             records = self._agent_session_records()
             await self.websocket.send_json(
                 {

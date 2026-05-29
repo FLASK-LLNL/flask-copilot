@@ -1,6 +1,6 @@
 from fastapi import WebSocket
 import re
-from typing import Optional
+from typing import Awaitable, Callable, Optional
 
 from charge.clients.agent_factory import ReasoningCallbackType
 from charge.experiments.experiment import Experiment
@@ -22,6 +22,7 @@ async def run_custom_problem(
     run_settings: FlaskRunSettings,
     log_progress: ReasoningCallbackType,
     attachments: Optional[list[dict[str, object]]] = None,
+    history_callback: Optional[Callable[[], Awaitable[None]]] = None,
 ):
     task = Task(
         system_prompt=system_prompt,
@@ -29,7 +30,9 @@ async def run_custom_problem(
         attachments=attachments or [],
         **tool_runtime.task_kwargs(),
     )
-    callback_handler = CallbackHandler(websocket)
+    callback_handler = CallbackHandler(
+        websocket, agent_key="custom:main", on_agent_update=history_callback
+    )
     agent = experiment.create_agent_with_experiment_state(
         task=task,
         agent_key="custom:main",
@@ -48,13 +51,22 @@ async def run_custom_problem(
     result = await agent.run(log_progress)
     await callback_handler.drain()
     record_latest_user_message_metadata(
-        experiment, "custom:main", task, label="Custom prompt"
+        experiment,
+        "custom:main",
+        task,
+        label="Custom prompt",
+        display_text=user_prompt,
     )
     experiment.add_to_context(agent, task, result)
+    if history_callback is not None:
+        await history_callback()
     await websocket.send_json(
         {
             "type": "response",
-            "message": {"source": "Assistant", "message": result},
+            "message": {
+                "source": "Assistant",
+                "message": result,
+            },
         }
     )
 

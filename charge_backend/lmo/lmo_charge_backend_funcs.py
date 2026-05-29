@@ -17,7 +17,7 @@ from charge_backend.lmo.lmo_task import (
     LMOTask as LeadMoleculeOptimization,
     MoleculeOutputSchema,
 )
-from typing import Optional
+from typing import Awaitable, Callable, Optional
 from charge_backend.backend_helper_funcs import (
     Node,
     Edge,
@@ -77,6 +77,7 @@ async def generate_lead_molecule(
     number_of_molecules: int = 10,
     num_top_candidates: int = 3,
     attachments: Optional[list[dict[str, object]]] = None,
+    history_callback: Optional[Callable[[], Awaitable[None]]] = None,
 ) -> None:
     """Generate a lead molecule and stream its progress.
     Args:
@@ -340,7 +341,9 @@ async def generate_lead_molecule(
     current_best_smiles = lead_molecule_smiles  # Track the best molecule
     # Initialize best value based on the actual property being optimized
     current_best_value = lead_molecule_data.get(property, 0.0)
-    callback = CallbackHandler(websocket)
+    callback = CallbackHandler(
+        websocket, agent_key="lmo:main", on_agent_update=history_callback
+    )
     lmo_task = LeadMoleculeOptimization(
         lead_molecule=lead_molecule_smiles,
         user_prompt=formatted_user_prompt + "\n",
@@ -407,8 +410,14 @@ async def generate_lead_molecule(
                 )
                 await callback.drain()
                 record_latest_user_message_metadata(
-                    experiment, "lmo:main", lmo_task, label="LMO request"
+                    experiment,
+                    "lmo:main",
+                    lmo_task,
+                    label="LMO request",
+                    display_text=custom_prompt,
                 )
+                if history_callback is not None:
+                    await history_callback()
                 finished_tasks = experiment.get_finished_tasks()
                 _, results = finished_tasks[-1]
 
