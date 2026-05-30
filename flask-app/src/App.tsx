@@ -1488,20 +1488,46 @@ const ChemistryTool: React.FC = () => {
     setProblemType(problem_type);
   };
 
-  const createNewRetrosynthesisExperiment = async (startingSmiles: string): Promise<void> => {
+  const getTimestampedProjectName = (): string => {
+    const now = new Date();
+    const month = String(now.getMonth() + 1).padStart(2, '0');
+    const day = String(now.getDate()).padStart(2, '0');
+    const year = String(now.getFullYear()).slice(-2);
+    const hours = String(now.getHours()).padStart(2, '0');
+    const minutes = String(now.getMinutes()).padStart(2, '0');
+    const timestamp = `${month}/${day}/${year} ${hours}:${minutes}`;
+
+    return `Project ${timestamp}`;
+  };
+
+  const createNewExperimentFromMolecule = async (
+    startingSmiles: string,
+    targetProblemType: string
+  ): Promise<void> => {
     // Close context menu
     setContextMenu({ node: null, isReaction: false, x: 0, y: 0 });
 
     saveStateToExperiment();
 
-    // Find the project to create a new experiment in
-    const projectId = projectSidebar.selectionRef.current.projectId!;
-    const experimentName = `Synthesizing ${startingSmiles}`;
+    const propertyName =
+      propertyType === 'custom' ? customPropertyName : PROPERTY_NAMES[propertyType];
+    const experimentName =
+      targetProblemType === 'optimization'
+        ? `Optimizing ${propertyName} for ${startingSmiles}`
+        : `Synthesizing ${startingSmiles}`;
 
-    let experiment = undefined;
     try {
-      experiment = projectManagement.createExperiment(projectId, experimentName);
-      projectSidebar.setSelection({ projectId, experimentId: experiment.id });
+      const selectedProjectId = projectSidebar.selectionRef.current.projectId;
+      if (selectedProjectId) {
+        const experiment = projectManagement.createExperiment(selectedProjectId, experimentName);
+        projectSidebar.setSelection({ projectId: selectedProjectId, experimentId: experiment.id });
+      } else {
+        const { projectId, experimentId } = await projectManagement.createProjectAndExperiment(
+          getTimestampedProjectName(),
+          experimentName
+        );
+        projectSidebar.setSelection({ projectId, experimentId });
+      }
       await new Promise((resolve) => setTimeout(resolve, 100));
     } catch (error) {
       console.error('Error creating experiment:', error);
@@ -1511,8 +1537,16 @@ const ChemistryTool: React.FC = () => {
 
     reset();
     setSmiles(startingSmiles);
-    resetProblemType('retrosynthesis');
+    resetProblemType(targetProblemType);
     saveStateToExperiment();
+  };
+
+  const createNewRetrosynthesisExperiment = async (startingSmiles: string): Promise<void> => {
+    await createNewExperimentFromMolecule(startingSmiles, 'retrosynthesis');
+  };
+
+  const createNewOptimizationExperiment = async (startingSmiles: string): Promise<void> => {
+    await createNewExperimentFromMolecule(startingSmiles, 'optimization');
   };
 
   const handleNodeClick = (e: React.MouseEvent<HTMLDivElement>, node: TreeNode): void => {
@@ -2524,6 +2558,17 @@ const ChemistryTool: React.FC = () => {
               >
                 <MessageCircleQuestion className="w-4 h-4" /> Ask about molecule...
               </button>
+              {problemType !== 'optimization' && (
+                <button
+                  onClick={() => {
+                    createNewOptimizationExperiment(contextMenu.node!.smiles);
+                  }}
+                  className="context-menu-item context-menu-divider"
+                >
+                  <Sparkles className="w-4 h-4" />
+                  Start Lead Molecule Optimization
+                </button>
+              )}
             </>
           )}
 
@@ -2592,18 +2637,21 @@ const ChemistryTool: React.FC = () => {
                   <MessageSquareShare className="w-4 h-4" />
                   Refine search (with prompt)
                 </button>
-                <button
-                  onClick={() => {
-                    createNewRetrosynthesisExperiment(contextMenu.node!.smiles);
-                  }}
-                  className="context-menu-item"
-                >
-                  <FlaskConical className="w-4 h-4" />
-                  Plan synthesis pathway
-                </button>
               </>
             )
           }
+
+          {problemType !== 'retrosynthesis' && (
+            <button
+              onClick={() => {
+                createNewRetrosynthesisExperiment(contextMenu.node!.smiles);
+              }}
+              className="context-menu-item"
+            >
+              <FlaskConical className="w-4 h-4" />
+              Plan synthesis pathway
+            </button>
+          )}
 
           {
             /* Retrosynthesis (Molecule) */ problemType == 'retrosynthesis' &&
