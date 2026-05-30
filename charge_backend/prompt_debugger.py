@@ -4,7 +4,7 @@ prompt using the given websocket.
 """
 
 import asyncio
-from dataclasses import dataclass, asdict
+from dataclasses import asdict, dataclass
 from charge.clients.agent_factory import Agent
 from charge.tasks.task import Task
 from fastapi import WebSocket
@@ -41,6 +41,30 @@ breakpoints for multiple clients at the same time.
 """
 
 
+async def _send_prompt_breakpoint_update(
+    websocket: WebSocket,
+    prompt_changed: bool,
+    new_prompt: str,
+    attachments_changed: bool,
+    new_attachments: list[dict[str, Any]],
+) -> None:
+    if not prompt_changed and not attachments_changed:
+        return
+
+    message_str = "Prompt breakpoint:"
+    if prompt_changed:
+        message_str += f"\n\nText updated to '{new_prompt}'."
+
+    if attachments_changed:
+        message_str += "\n\nAttachments updated"
+
+    message: dict[str, Any] = {"source": "Prompt-point", "message": message_str}
+    if attachments_changed:
+        message["images"] = image_refs(new_attachments) if new_attachments else {}
+
+    await websocket.send_json({"type": "response", "message": message})
+
+
 async def debug_prompt_task(task: Task, websocket: WebSocket):
     """
     Prompts the Web UI to approve/edit the prompt (and potential metadata).
@@ -57,7 +81,10 @@ async def debug_prompt_task(task: Task, websocket: WebSocket):
     DEBUG_PROMPT_RESPONSES[websocket] = asyncio.Future()
 
     user_prompt = task.user_prompt or ""
-    attachments = getattr(task, "attachments", []) or []
+    if hasattr(task, "attachments"):
+        attachments = validate_image_attachments({"attachments": task.attachments})
+    else:
+        attachments = []
     images = image_refs(
         [attachment for attachment in attachments if isinstance(attachment, dict)]
     )
@@ -70,24 +97,24 @@ async def debug_prompt_task(task: Task, websocket: WebSocket):
     del DEBUG_PROMPT_RESPONSES[websocket]
 
     # Continue with new prompt
-    if json.get("prompt"):
-        task.user_prompt = json["prompt"]
+    next_prompt = str(json["prompt"]) if "prompt" in json else user_prompt
+    prompt_changed = next_prompt != user_prompt
+    task.user_prompt = next_prompt
+
+    next_attachments = attachments
+    attachments_changed = False
     if "attachments" in json:
-        task.attachments = validate_image_attachments(json)
-        await websocket.send_json(
-            {
-                "type": "response",
-                "message": {
-                    "source": "User",
-                    "message": (
-                        "Prompt breakpoint approved with attached images"
-                        if task.attachments
-                        else "Prompt breakpoint approved without attached images"
-                    ),
-                    "images": image_refs(task.attachments) if task.attachments else {},
-                },
-            }
-        )
+        next_attachments = validate_image_attachments(json)
+        attachments_changed = next_attachments != attachments
+        task.attachments = next_attachments
+
+    await _send_prompt_breakpoint_update(
+        websocket,
+        prompt_changed,
+        next_prompt,
+        attachments_changed,
+        next_attachments,
+    )
 
 
 async def debug_prompt(runner: Agent, websocket: WebSocket):
