@@ -35,6 +35,7 @@ from lc_conductor.tool_registration import (
     delete_mcp_server_endpoint,
     get_registered_servers,
 )
+from lc_conductor import discover_models_endpoint, validate_initial_model
 
 from lc_conductor import TaskManager
 from lc_conductor.local_mcp_proxy import resolve_local_mcp_response
@@ -114,6 +115,8 @@ app.post("/delete-mcp-server")(
 
 
 app.post("/check-mcp-servers")(check_mcp_servers_endpoint)
+
+app.post("/api/discover-models")(discover_models_endpoint)
 
 
 @app.get("/registered-mcp-servers")
@@ -218,6 +221,15 @@ async def websocket_endpoint(websocket: WebSocket):
         model = args.model
     if not backend:
         backend = args.backend
+
+    # Validate and potentially correct the initial model
+    model = validate_initial_model(
+        backend=backend,
+        model=model,
+        base_url=BASE_URL,
+        api_key=API_KEY,
+        timeout=5,
+    )
 
     # set up an AutoGenAgent backend for tasks on this endpoint
     # AgentFactory.register_backend(
