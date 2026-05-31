@@ -1,11 +1,12 @@
 import React, { useState } from 'react';
-import { BookOpen, FileText, X, Wrench, Network, FlaskConical } from 'lucide-react';
+import { BookOpen, FileText, X, Wrench, Network, FlaskConical, TestTubeDiagonal } from 'lucide-react';
 import { AttachmentUpload } from 'lc-conductor';
 import type { AgentAttachment } from 'lc-conductor';
 import { OptimizationCustomization, PdfReferenceMetadata, SelectableTool } from '../types';
 import { ToolSelectionContent } from './tool_selection_content';
 import { OptimizationCustomizationContent } from './optimization_customization_content';
 import { MoleculePropertiesContent } from './molecule_properties';
+import { RetrosynthesisCustomizationContent } from './retrosynthesis_customization_content';
 
 interface CombinedCustomizationModalProps {
   isOpen: boolean;
@@ -33,11 +34,27 @@ interface CombinedCustomizationModalProps {
   referenceUploadDisabled?: boolean;
   onReferenceDocumentSave?: (reference: AgentAttachment | null | undefined) => void | Promise<void>;
 
+  // Retrosynthesis settings props
+  aiOnly?: boolean;
+  onAiOnlyChange?: (value: boolean) => void;
+  useRsa?: boolean;
+  onUseRsaChange?: (value: boolean) => void;
+  rsaMode?: 'standalone' | 'rag';
+  onRsaModeChange?: (mode: 'standalone' | 'rag') => void;
+  rsaN?: number;
+  onRsaNChange?: (value: number) => void;
+  rsaK?: number;
+  onRsaKChange?: (value: number) => void;
+  rsaT?: number;
+  onRsaTChange?: (value: number) => void;
+
   // Show optimization tab only for optimization problem type
   showOptimizationTab?: boolean;
+  // Show retrosynthesis tab only for retrosynthesis problem type
+  showRetrosynthesisTab?: boolean;
 }
 
-type TabType = 'tools' | 'optimization' | 'molecule' | 'references';
+type TabType = 'tools' | 'optimization' | 'molecule' | 'references' | 'retrosynthesis';
 
 const sizeLabel = (sizeBytes: number): string => {
   if (sizeBytes < 1024 * 1024) {
@@ -64,7 +81,20 @@ const CombinedCustomizationModalContent: React.FC<CombinedCustomizationModalProp
   referenceDocument,
   referenceUploadDisabled = false,
   onReferenceDocumentSave,
+  aiOnly = true,
+  onAiOnlyChange,
+  useRsa = false,
+  onUseRsaChange,
+  rsaMode = 'standalone',
+  onRsaModeChange,
+  rsaN = 8,
+  onRsaNChange,
+  rsaK = 4,
+  onRsaKChange,
+  rsaT = 3,
+  onRsaTChange,
   showOptimizationTab = true,
+  showRetrosynthesisTab = false,
 }) => {
   const [activeTab, setActiveTab] = useState<TabType>('tools');
   const [pendingCustomization, setPendingCustomization] =
@@ -158,6 +188,25 @@ const CombinedCustomizationModalContent: React.FC<CombinedCustomizationModalProp
             )}
           </button>
 
+          {showRetrosynthesisTab && (
+            <button
+              onClick={() => setActiveTab('retrosynthesis')}
+              className={`flex items-center gap-2 px-6 py-3 font-medium transition-colors border-b-2 ${
+                activeTab === 'retrosynthesis'
+                  ? 'border-primary text-primary'
+                  : 'border-transparent text-secondary hover:text-primary'
+              }`}
+            >
+              <TestTubeDiagonal className="w-4 h-4" />
+              Retrosynthesis
+              {useRsa && (
+                <span className="ml-1 px-2 py-0.5 text-xs rounded-full bg-primary/20 text-primary">
+                  RSA
+                </span>
+              )}
+            </button>
+          )}
+
           {showOptimizationTab && (
             <button
               onClick={() => setActiveTab('optimization')}
@@ -216,6 +265,30 @@ const CombinedCustomizationModalContent: React.FC<CombinedCustomizationModalProp
               onSelectionChange={onToolSelectionChange}
             />
           )}
+
+          {activeTab === 'retrosynthesis' &&
+            showRetrosynthesisTab &&
+            onAiOnlyChange &&
+            onUseRsaChange &&
+            onRsaModeChange &&
+            onRsaNChange &&
+            onRsaKChange &&
+            onRsaTChange && (
+              <RetrosynthesisCustomizationContent
+                aiOnly={aiOnly}
+                onAiOnlyChange={onAiOnlyChange}
+                useRsa={useRsa}
+                onUseRsaChange={onUseRsaChange}
+                rsaMode={rsaMode}
+                onRsaModeChange={onRsaModeChange}
+                rsaN={rsaN}
+                onRsaNChange={onRsaNChange}
+                rsaK={rsaK}
+                onRsaKChange={onRsaKChange}
+                rsaT={rsaT}
+                onRsaTChange={onRsaTChange}
+              />
+            )}
 
           {activeTab === 'optimization' && showOptimizationTab && (
             <OptimizationCustomizationContent

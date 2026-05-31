@@ -390,6 +390,16 @@ const ChemistryTool: React.FC = () => {
   );
   const [debugModalMinimized, setDebugModalMinimized] = useState<boolean>(false);
 
+  // Retrosynthesis approach
+  const [aiOnly, setAiOnly] = useState<boolean>(true);
+
+  // RSA settings
+  const [useRsa, setUseRsa] = useState<boolean>(false);
+  const [rsaMode, setRsaMode] = useState<'standalone' | 'rag'>('standalone');
+  const [rsaN, setRsaN] = useState<number>(8);
+  const [rsaK, setRsaK] = useState<number>(4);
+  const [rsaT, setRsaT] = useState<number>(3);
+
   // Function to refresh tools list from backend
   const refreshToolsList = useCallback(() => {
     if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
@@ -926,9 +936,15 @@ const ChemistryTool: React.FC = () => {
       customPropertyAscending,
       systemPrompt,
       userPrompt: problemPrompt,
+      aiOnly,
       runSettings: {
         promptDebugging: debugMode,
         moleculeName: orchestratorSettings.moleculeName || 'brand',
+        useRsa,
+        rsaMode,
+        rsaN,
+        rsaK,
+        rsaT,
       },
       customization,
       ...(problemType === 'custom' && customPromptAttachments.length > 0
@@ -1619,13 +1635,18 @@ const ChemistryTool: React.FC = () => {
         runSettings: {
           promptDebugging: debugMode,
           moleculeName: orchestratorSettings.moleculeName || 'brand',
+          useRsa,
+          rsaMode,
+          rsaN,
+          rsaK,
+          rsaT,
         },
         ...data,
       };
       wsRef.current.send(JSON.stringify(msg));
       setContextMenu({ node: null, isReaction: false, x: 0, y: 0 });
     },
-    [debugMode, orchestratorSettings]
+    [debugMode, orchestratorSettings, useRsa, rsaMode, rsaN, rsaK, rsaT]
   );
 
   const handleReferenceDocumentSave = useCallback(
@@ -1723,6 +1744,11 @@ const ChemistryTool: React.FC = () => {
               runSettings: {
                 promptDebugging: debugMode,
                 moleculeName: orchestratorSettings.moleculeName || 'brand',
+                useRsa,
+                rsaMode,
+                rsaN,
+                rsaK,
+                rsaT,
               },
             })
           );
@@ -1730,8 +1756,8 @@ const ChemistryTool: React.FC = () => {
       }
       setIsComputing(true);
     },
-    [selectedReactionNode?.id, debugMode, orchestratorSettings]
-  ); // Only depend on the ID
+    [selectedReactionNode?.id, debugMode, orchestratorSettings, useRsa, rsaMode, rsaN, rsaK, rsaT]
+  );
 
   const stableAlternatives = useMemo(() => {
     return selectedReactionNode?.reaction?.alternatives || [];
@@ -1779,9 +1805,15 @@ const ChemistryTool: React.FC = () => {
       smiles: customQueryModal?.smiles,
       query: customQueryText,
       attachments: customQueryAttachments,
+      aiOnly,
       runSettings: {
         promptDebugging: debugMode,
         moleculeName: orchestratorSettings.moleculeName || 'brand',
+        useRsa,
+        rsaMode,
+        rsaN,
+        rsaK,
+        rsaT,
       },
       ...propertyDetails,
     };
@@ -2945,6 +2977,19 @@ const ChemistryTool: React.FC = () => {
         referenceUploadDisabled={!wsConnected}
         onReferenceDocumentSave={handleReferenceDocumentSave}
         showOptimizationTab={problemType === 'optimization'}
+        showRetrosynthesisTab={problemType === 'retrosynthesis'}
+        aiOnly={aiOnly}
+        onAiOnlyChange={setAiOnly}
+        useRsa={useRsa}
+        onUseRsaChange={setUseRsa}
+        rsaMode={rsaMode}
+        onRsaModeChange={setRsaMode}
+        rsaN={rsaN}
+        onRsaNChange={setRsaN}
+        rsaK={rsaK}
+        onRsaKChange={setRsaK}
+        rsaT={rsaT}
+        onRsaTChange={setRsaT}
       />
 
       {/* Prompt Debugging Modal */}
