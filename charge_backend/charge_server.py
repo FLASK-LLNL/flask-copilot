@@ -15,6 +15,7 @@ from fastapi.middleware.cors import CORSMiddleware
 import os
 import argparse
 import httpx
+import json
 from lc_conductor import try_get_public_hostname
 import os
 
@@ -152,13 +153,22 @@ if os.path.exists(ASSETS_PATH):
         with open(os.path.join(DIST_PATH, "index.html"), "r") as fp:
             html = fp.read()
 
+        # Read orchestrator config from environment
+        orchestrator_config = {
+            "backend": os.getenv("FLASK_ORCHESTRATOR_BACKEND", args.backend),
+            "model": os.getenv("FLASK_ORCHESTRATOR_MODEL", args.model),
+            "apiKey": os.getenv("FLASK_ORCHESTRATOR_API_KEY", ""),
+            "baseUrl": os.getenv("FLASK_ORCHESTRATOR_URL", ""),
+        }
+
         html = html.replace(
             "<!-- APP CONFIG -->",
             f"""
            <script>
            window.APP_CONFIG = {{
                WS_SERVER: '{os.getenv("WS_SERVER", "ws://localhost:8001/ws")}',
-               VERSION: '{os.getenv("SERVER_VERSION", "")}'
+               VERSION: '{os.getenv("SERVER_VERSION", "")}',
+               ORCHESTRATOR: {json.dumps(orchestrator_config)}
            }};
            </script>""",
         )

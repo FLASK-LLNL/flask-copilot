@@ -75,6 +75,22 @@ import { copyToClipboard } from './utils';
 
 import './animations.css';
 import 'lc-conductor/styles';
+
+// Extend Window interface for APP_CONFIG
+declare global {
+  interface Window {
+    APP_CONFIG?: {
+      WS_SERVER?: string;
+      VERSION?: string;
+      ORCHESTRATOR?: {
+        backend?: string;
+        model?: string;
+        apiKey?: string;
+        baseUrl?: string;
+      };
+    };
+  }
+}
 import { MetricsDashboard, useMetricsDashboardState } from './components/metrics';
 import { useProjectData } from './hooks/useProjectData';
 import { ReactionAlternativesSidebar } from './components/reaction_alternatives';
@@ -513,7 +529,7 @@ const ChemistryTool: React.FC = () => {
     sidebarStateRef.current = sidebarState;
   }, [sidebarState]);
 
-  // Load initial settings from localStorage
+  // Load initial settings from localStorage or environment
   const getInitialSettings = () => {
     const saved = localStorage.getItem('orchestratorSettings');
     if (saved) {
@@ -535,13 +551,15 @@ const ChemistryTool: React.FC = () => {
         console.error('Error parsing settings:', e);
       }
     }
+    // Use environment variables from window.APP_CONFIG if available
+    const envConfig = window.APP_CONFIG?.ORCHESTRATOR;
     return {
-      backend: 'vllm',
-      useCustomUrl: false,
-      customUrl: 'http://localhost:8000/v1',
-      model: 'gpt-oss',
+      backend: envConfig?.backend || 'vllm',
+      useCustomUrl: Boolean(envConfig?.baseUrl),
+      customUrl: envConfig?.baseUrl || 'http://localhost:8000/v1',
+      model: envConfig?.model || 'gpt-oss',
       reasoningEffort: 'medium',
-      apiKey: '',
+      apiKey: envConfig?.apiKey || '',
       backendLabel: 'vLLM',
       toolServers: [],
     };
@@ -1134,7 +1152,7 @@ const ChemistryTool: React.FC = () => {
               customUrl: data.orchestratorSettings!.customUrl,
               model: data.orchestratorSettings!.model,
               reasoningEffort: data.orchestratorSettings!.reasoningEffort,
-              apiKey: data.orchestratorSettings!.apiKey,
+              apiKey: orchestratorSettingsRef.current?.apiKey || '', // Preserve current API key
               backendLabel: data.orchestratorSettings!.backendLabel,
               toolServers: data.orchestratorSettings!.toolServers || [],
               moleculeName: data.orchestratorSettings!.moleculeName,
