@@ -241,13 +241,7 @@ async def websocket_endpoint(websocket: WebSocket):
         timeout=5,
     )
 
-    # set up an AutoGenAgent backend for tasks on this endpoint
-    # AgentFactory.register_backend(
-    #     "autogen",
-    #     AutoGenBackend(
-    #         model=model, backend=backend, api_key=API_KEY, base_url=BASE_URL
-    #     ),
-    # )
+    # set up an AgentFramework backend for tasks on this endpoint
     AgentFactory.register_backend(
         "agentframework",
         AgentFrameworkBackend(
