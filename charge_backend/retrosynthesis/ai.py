@@ -12,6 +12,7 @@ from charge_backend.backend_helper_funcs import (
     ReactionAlternative,
     PathwayStep,
     FlaskRunSettings,
+    build_root_node,
 )
 from charge_backend.prompt_debugger import debug_prompt
 from charge_backend.retrosynthesis.context import RetrosynthesisContext
@@ -72,9 +73,25 @@ async def ai_based_retrosynthesis(
     tool_runtime: ToolRuntime,
     log_progress: ReasoningCallbackType,
     attachments: Optional[list[dict[str, object]]] = None,
+    root_smiles: Optional[str] = None,
 ):
-    """Performs template-free retrosynthesis using the AI orchestrator."""
+    """Performs template-free retrosynthesis using the AI orchestrator.
+
+    If ``root_smiles`` is provided and ``node_id`` is not yet in the context,
+    a fresh root node is created from that SMILES (used by the initial compute
+    action). Callers that already have a populated context (e.g.
+    ``db_then_ai_retrosynthesis``) leave ``root_smiles`` as ``None``.
+    """
     clogger = CallbackLogger(websocket, source="ai_based_retrosynthesis")
+
+    if root_smiles is not None:
+        # Caller wants a fresh compute starting from root_smiles. Reset and rebuild
+        # unconditionally so a second compute in the same session does not inherit
+        # stale nodes from the previous run.
+        context.reset()
+        root = build_root_node(root_smiles, run_settings)
+        await context.add_node(root, websocket=websocket)
+
     current_node = context.node_ids.get(node_id)
     if current_node is None:
         await clogger.error(f"Node ID {node_id} not found")
@@ -134,13 +151,45 @@ async def ai_based_retrosynthesis(
         f"Finding synthesis routes for {current_node.smiles} using available tools: {tool_runtime.tool_summary()}."
     )
 
-    # Run task
+    # Run task (with optional RSA mode)
     await highlight_node(current_node, websocket, True)
     if run_settings.prompt_debugging:
         await debug_prompt(runner, websocket)
-    output = await runner.run(log_progress)
-    if isinstance(callback_handler, CallbackHandler):
-        await callback_handler.drain()
+
+    # Check if RSA mode is enabled
+    if run_settings.use_rsa:
+        try:
+            from charge_backend.retrosynthesis.ai_rsa import run_rsa_retrosynthesis
+
+            output, _ = await run_rsa_retrosynthesis(
+                current_node=current_node,
+                runner=runner,
+                callback_handler=callback_handler,
+                run_settings=run_settings,
+                tool_runtime=tool_runtime,
+                user_prompt=user_prompt,
+                clogger=clogger,
+                experiment=experiment,
+                websocket=websocket,
+                node_id=node_id,
+                log_progress=log_progress,
+            )
+        except Exception as e:
+            # Fallback to standard mode if RSA fails
+            await clogger.error(
+                f"RSA mode failed: {str(e)}, falling back to standard retrosynthesis"
+            )
+            # Reset task to original
+            runner.task = retro_task
+            output = await runner.run(log_progress)
+            if isinstance(callback_handler, CallbackHandler):
+                await callback_handler.drain()
+    else:
+        # Standard mode (no RSA)
+        output = await runner.run(log_progress)
+        if isinstance(callback_handler, CallbackHandler):
+            await callback_handler.drain()
+
     experiment.add_to_context(runner, retro_task, output)
 
     if os.getenv("CHARGE_DISABLE_OUTPUT_VALIDATION", "0") == "1":
@@ -150,6 +199,14 @@ async def ai_based_retrosynthesis(
         )
 
     result = ReactionOutputSchema.model_validate_json(output)
+
+    if not result.reactants_smiles_list:
+        await clogger.warning(
+            f"Model returned no reactants for {current_node.smiles}. "
+            "This often indicates a refusal or a malformed output. Try a "
+            "different target molecule, enable RSA mode, or use RSA + RAG "
+            "for a higher success rate."
+        )
 
     await highlight_node(current_node, websocket, False)
 
@@ -244,6 +301,9 @@ async def ai_based_retrosynthesis(
         await context.add_node(node, websocket)
         await asyncio.sleep(0)
 
+    # Template-based expansion of reactants (optional).
+    # run_retro_planner returns (None, []) when the AZF config is missing or no
+    # routes are found, so no separate config-existence check is needed here.
     for node, purch in zip(new_nodes, purchasable):
         if purch:  # Skip purchasable nodes unless explicitly asked for
             continue
@@ -252,23 +312,32 @@ async def ai_based_retrosynthesis(
         await highlight_node(node, websocket, True)
 
         # Find paths for the leaf nodes
-        reaction, routes = await run_retro_planner(
-            config_file, node.smiles, clogger, run_settings
-        )
-        if reaction is None:
-            await clogger.warning(f"No routes found for {node.smiles}. Skipping...")
-            continue
-        node.reaction = reaction
+        try:
+            reaction, routes = await run_retro_planner(
+                config_file, node.smiles, clogger, run_settings
+            )
+            if reaction is None:
+                await clogger.warning(
+                    f"No routes found for {node.smiles}. Skipping..."
+                )
+                await highlight_node(node, websocket, False)
+                continue
+            node.reaction = reaction
 
-        # Use child nodes and edges of the first route
-        await generate_nodes_for_molecular_graph(
-            routes[0].nodes,
-            context,
-            websocket,
-            start_level=level,
-            include_root_node=False,
-            root_node_id=node.id,
-        )
+            # Use child nodes and edges of the first route
+            await generate_nodes_for_molecular_graph(
+                routes[0].nodes,
+                context,
+                websocket,
+                start_level=level,
+                include_root_node=False,
+                root_node_id=node.id,
+            )
+        except Exception as e:
+            await clogger.warning(
+                f"Template-based expansion failed for {node.smiles}: {str(e)}. Continuing..."
+            )
+            await highlight_node(node, websocket, False)
 
         # Attach mapped reaction for immediate reactants -> product.
         # This is needed so hover-highlighting works for the first template step
