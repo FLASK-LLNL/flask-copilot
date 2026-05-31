@@ -1,3 +1,6 @@
 [submodule "externals/lc_conductor"]
 	path = externals/lc_conductor
 	url = https://github.com/FLASK-LLNL/LC-Conductor.git
+[submodule "externals/ChARGe"]
+	path = externals/ChARGe
+	url = https://github.com/FLASK-LLNL/ChARGe.git
