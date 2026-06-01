@@ -27,11 +27,13 @@ WORKDIR /app/flask-app
 RUN . $HOME/.nvm/nvm.sh && \
     npm install && \
     rm -rf node_modules/.vite dist .vite
-RUN /bin/bash -lc '. "$HOME/.nvm/nvm.sh" && \
-    set -o pipefail && \
-    npm run build 2>&1 | tee /tmp/flask-app-vite-build.log && \
+RUN . $HOME/.nvm/nvm.sh && \
+    npm run build > /tmp/flask-app-vite-build.log 2>&1; \
+    build_status=$?; \
+    cat /tmp/flask-app-vite-build.log; \
+    if [ "$build_status" -ne 0 ]; then exit "$build_status"; fi; \
     grep -Fq "scheduler/cjs/scheduler.production.min.js" /tmp/flask-app-vite-build.log || \
-    { echo "ERROR: Vite build did not bundle scheduler/cjs/scheduler.production.min.js"; exit 1; }'
+    { echo "ERROR: Vite build did not bundle scheduler/cjs/scheduler.production.min.js"; exit 1; }
 
 # Switch back to the top level to build everything else
 WORKDIR /app/
