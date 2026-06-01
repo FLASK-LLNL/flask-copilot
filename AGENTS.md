@@ -10,6 +10,14 @@ Frontend code lives in `flask-app/src/`, with reusable UI in `components/`, hook
 
 `externals/ChARGe` is the `charge` Python agent framework used by the backend for tasks, clients, and experiments. `externals/lc_conductor` provides LC-Conductor Python utilities plus the `lcc_ui_components` React library consumed by `flask-app/package.json`. Treat both as separate repositories: make intentional commits inside the submodule, then update the parent repo's submodule pointer.
 
+## Reuse-First Development
+
+Before adding code, inspect `ARCHITECTURE.md` and search for existing helpers, models, hooks, components, and submodule APIs. Reuse `charge_backend` domain helpers, LC-Conductor orchestration/tooling, ChARGe task/backend abstractions, and existing React components before creating new primitives. Add abstractions only when existing ones cannot represent the behavior cleanly.
+
+## Local Skills
+
+Shared Codex skills live in `.codex/skills/`. To enable them locally, symlink or copy each skill directory into `$CODEX_HOME/skills` or `~/.codex/skills`; agents should still follow the reuse-first guidance here even when the skill is not installed.
+
 ## Build, Test, and Development Commands
 
 - `pip install -e .[all]`: install the backend package and optional dependencies.
