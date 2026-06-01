@@ -1,3 +1,4 @@
+import os
 import asyncio
 from fastapi import WebSocket
 from charge_backend.retrosynthesis import aizynth_tools as azf
@@ -11,6 +12,7 @@ from charge_backend.backend_helper_funcs import (
     ReactionAlternative,
     PathwayStep,
     FlaskRunSettings,
+    build_root_node,
 )
 from charge_backend.retrosynthesis.context import RetrosynthesisContext
 from charge_backend.moleculedb.molecule_naming import (
@@ -205,6 +207,14 @@ async def run_retro_planner(
     :return: A 2-tuple of (Reaction object, list of routes) if routes found, or
              ``(None, [])`` if nothing was discovered.
     """
+    # Check if config file exists
+    if not os.path.exists(config_file):
+        await clogger.info(
+            f"Template-based retrosynthesis config not found at {config_file}. "
+            "Template search unavailable."
+        )
+        return None, []
+
     await clogger.info(f"Running RetroPlanner for SMILES: {smiles}")
     report_init = False
     if azf.RetroPlanner.finder is None:
@@ -274,30 +284,7 @@ async def template_based_retrosynthesis(
     clogger = CallbackLogger(websocket, source="template_based_retrosynthesis")
     await clogger.info(f"Planning retrosynthesis for: `{start_smiles}`.")
 
-    # Generate root node
-    mol_sources = is_purchasable(start_smiles)
-    if mol_sources:
-        purchasable_str = f"Yes (via {', '.join(mol_sources)})"
-    else:
-        purchasable_str = "No"
-    root = Node(
-        id="node_0",
-        smiles=start_smiles,
-        label=smiles_to_html(start_smiles, run_settings.molecule_name_format),
-        hoverInfo=f"""# Root molecule
-**SMILES:** {start_smiles}
-
-**Purchasable**? {purchasable_str}""",
-        level=0,
-        parentId=None,
-        cost=None,
-        bandgap=None,
-        yield_=None,
-        purchasable=(len(mol_sources) > 0),
-        highlight="yellow",
-        x=100,
-        y=100,
-    )
+    root = build_root_node(start_smiles, run_settings)
     context.reset()  # Clear context
     await context.add_node(root, websocket=websocket)
 

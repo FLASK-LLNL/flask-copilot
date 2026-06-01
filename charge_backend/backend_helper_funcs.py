@@ -10,7 +10,8 @@ from dataclasses import asdict
 from flask_tools.chemistry import smiles_utils
 from flask_tools.lmo.molecular_property_utils import get_density
 from lc_conductor import CallbackLogger, RunSettings
-from charge_backend.moleculedb.molecule_naming import MolNameFormat
+from charge_backend.moleculedb.molecule_naming import MolNameFormat, smiles_to_html
+from charge_backend.moleculedb.purchasable import is_purchasable
 
 
 @dataclass
@@ -108,6 +109,12 @@ class ModelMessage:
 @dataclass
 class FlaskRunSettings(RunSettings):
     molecule_name_format: MolNameFormat = Field(alias="moleculeName", default="brand")
+    # RSA settings
+    use_rsa: bool = Field(alias="useRsa", default=False)
+    rsa_n: int = Field(alias="rsaN", default=8)
+    rsa_k: int = Field(alias="rsaK", default=4)
+    rsa_t: int = Field(alias="rsaT", default=3)
+    rsa_mode: str = Field(alias="rsaMode", default="standalone")
 
 
 @dataclass(frozen=True)
@@ -122,6 +129,33 @@ class RdkitjsMolPayload:
     smiles: str
     highlight_atom_idxs: list[int]
     highlight_atom_mapnums: list[int]
+
+
+def build_root_node(smiles: str, run_settings: "FlaskRunSettings") -> "Node":
+    """Build the level-0 root Node for a retrosynthesis run.
+
+    Shared by ai_based_retrosynthesis and template_based_retrosynthesis to
+    avoid duplicating the Node construction in two places.
+    """
+    mol_sources = is_purchasable(smiles)
+    purchasable_str = (
+        f"Yes (via {', '.join(mol_sources)})" if mol_sources else "No"
+    )
+    return Node(
+        id="node_0",
+        smiles=smiles,
+        label=smiles_to_html(smiles, run_settings.molecule_name_format),
+        hoverInfo=f"# Root molecule\n**SMILES:** {smiles}\n\n**Purchasable**? {purchasable_str}",
+        level=0,
+        parentId=None,
+        cost=None,
+        bandgap=None,
+        yield_=None,
+        purchasable=bool(mol_sources),
+        highlight="yellow",
+        x=100,
+        y=100,
+    )
 
 
 def get_price(smiles: str) -> float:

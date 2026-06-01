@@ -1,7 +1,6 @@
 from typing import Any, Optional
 from fastapi import WebSocket
 import asyncio
-import os
 from lc_conductor import ActionManager, TaskManager, CallbackLogger
 from lc_conductor import (
     BuiltinToolDefinition,
@@ -323,14 +322,37 @@ class FlaskActionManager(ActionManager):
 
     async def _handle_retrosynthesis(self, data: dict) -> None:
         """Handle retrosynthesis problem type."""
-        run_func = partial(
-            template_based_retrosynthesis,
-            data["smiles"],
-            self.args.config_file,
-            self.get_retro_synth_context(),
-            self.task_manager.websocket,
-            self.run_settings,
-        )
+        # aiOnly flag (top-level on the websocket message) controls AI vs template approach.
+        # template_based_retrosynthesis surfaces a "no routes found" message when the
+        # AZF config is missing, so no pre-check is needed here.
+        ai_only = data.get("aiOnly", True)
+
+        if ai_only:
+            # ai_based_retrosynthesis creates the root node itself when given root_smiles.
+            run_func = partial(
+                ai_based_retrosynthesis,
+                "node_0",
+                self.get_retro_synth_context(),
+                data.get("query", None),
+                None,  # Unconstrained
+                self.task_manager.websocket,
+                self.experiment,
+                self.args.config_file,
+                self.run_settings,
+                self.selected_tool_runtime(),
+                self.log_progress,
+                root_smiles=data["smiles"],
+            )
+        else:
+            # Use template-based retrosynthesis
+            run_func = partial(
+                template_based_retrosynthesis,
+                data["smiles"],
+                self.args.config_file,
+                self.get_retro_synth_context(),
+                self.task_manager.websocket,
+                self.run_settings,
+            )
 
         await self.task_manager.run_task(run_func())
 

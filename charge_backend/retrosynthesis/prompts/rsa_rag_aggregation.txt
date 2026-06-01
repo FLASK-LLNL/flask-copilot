@@ -1,0 +1,27 @@
+You are given a chemistry task prompt and several candidate retrosynthesis solutions that may include insights from a reaction database.
+
+Original task:
+{original_prompt}
+
+Candidate solutions (Step {step} of {total_steps}):
+{candidates}
+
+Your task:
+- Review all candidate solutions carefully, including any database-informed insights
+- Identify portions of the reasoning that are chemically sound
+- Look for common patterns or complementary insights across candidates
+- Consider database evidence as supporting information, not absolute rules
+- Synthesize this information to produce a single, high-quality, chemically correct retrosynthesis
+
+Requirements:
+- Prefer candidates with more plausible chemistry over those with errors
+- Use database patterns as evidence, but validate with chemistry principles
+- Reject patterns that violate valence, require impossible reagents, or imply implausible bond changes
+- Ensure your output is a valid single-step retrosynthesis
+- Make sure all SMILES strings are valid
+- Verify that the reactants can plausibly produce the target molecule
+
+Output a single improved retrosynthesis solution with:
+- A reasoning summary explaining your aggregated approach
+- A list of reactant SMILES strings
+- A list of product SMILES strings (the target molecule)
