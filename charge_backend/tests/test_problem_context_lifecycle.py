@@ -1,7 +1,8 @@
 import asyncio
 from types import SimpleNamespace
 
-from charge.experiments.experiment import Experiment
+from charge.clients.agent_factory import AgentRuntimeConfig
+from charge.experiments.experiment import AgentRegistryEntry, Experiment
 
 from charge_backend.backend_helper_funcs import Node
 from charge_backend.backend_manager import FlaskActionManager
@@ -37,7 +38,13 @@ def make_manager():
 def test_reset_problem_context_clears_retrosynthesis_state_for_lmo():
     manager = make_manager()
     manager.retro_synth_context = RetrosynthesisContext()
-    manager.experiment.saved_agent_sessions = {"reaction:node_0": {"memory": "old"}}
+    manager.experiment.agent_registry["reaction:node_0"] = AgentRegistryEntry(
+        agent_key="reaction:node_0",
+        agent=SimpleNamespace(task=None, save_memory=lambda: "old"),
+        runtime_config=AgentRuntimeConfig(
+            agent_key="reaction:node_0",
+        ),
+    )
 
     manager.reset_problem_context("optimization")
 

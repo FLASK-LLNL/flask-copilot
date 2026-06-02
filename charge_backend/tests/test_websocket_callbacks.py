@@ -1,6 +1,6 @@
 import asyncio
 
-from backend_helper_funcs import CallbackHandler
+from charge_backend.backend_helper_funcs import CallbackHandler
 from lc_conductor.callback_logger import CallbackLogger
 
 
@@ -39,7 +39,7 @@ def test_callback_logger_sends_immediately_and_in_order():
 def test_callback_handler_drain_flushes_background_send():
     async def run() -> None:
         websocket = FakeWebSocket()
-        callback = CallbackHandler(websocket, name="test-agent")
+        callback = CallbackHandler(websocket, agent_key="test-agent")
 
         callback(FakeAssistantMessage())
         assert websocket.messages == []
@@ -67,7 +67,6 @@ def test_callback_handler_notifies_agent_update_without_tagging_sidebar_messages
 
         callback = CallbackHandler(
             websocket,
-            name="test-agent",
             agent_key="reaction:node_1",
             on_agent_update=on_update,
         )

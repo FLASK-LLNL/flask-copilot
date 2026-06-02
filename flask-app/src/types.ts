@@ -97,8 +97,8 @@ export interface FlaskRunSettings {
 
 import type {
   AgentAttachment,
-  AgentChatHistory,
   AgentImageRef,
+  SerializedAgent,
   OrchestratorSettings,
   SidebarMessage,
   SidebarState,
@@ -201,8 +201,8 @@ export interface WebSocketMessage {
   experimentContext?: any;
   orchestratorSettings?: FlaskOrchestratorSettings;
   reference?: PdfReferenceMetadata | null;
-  history?: AgentChatHistory;
-  histories?: AgentChatHistory[];
+  agent?: SerializedAgent;
+  agents?: SerializedAgent[];
 
   withNode?: boolean;
   username?: string;

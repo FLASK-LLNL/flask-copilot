@@ -7,6 +7,7 @@ from pydantic import Field
 from typing import Any, Awaitable, Callable, Dict, Optional, Literal, Tuple
 from dataclasses import asdict
 
+from charge.clients.agent_factory import AgentCallback
 from flask_tools.chemistry import smiles_utils
 from flask_tools.lmo.molecular_property_utils import get_density
 from lc_conductor import CallbackLogger, RunSettings
@@ -151,39 +152,20 @@ def get_bandgap(smiles: str) -> float:
     return round(random.uniform(1.0, 5.0), 2)
 
 
-class CallbackHandler:
+class CallbackHandler(AgentCallback):
     def __init__(
         self,
         websocket: WebSocket,
-        name: Optional[str] = None,
         agent_key: Optional[str] = None,
         on_agent_update: Optional[Callable[[], Awaitable[None]]] = None,
     ):
         self.websocket = websocket
-        self.name = name
         self.agent_key = agent_key
         self.on_agent_update = on_agent_update
         self.clogger = CallbackLogger(websocket)
         self.pending_tool_calls: dict[str, dict[str, Any]] = {}
         self.pending_tool_calls_by_name: dict[str, list[dict[str, Any]]] = {}
         self._pending_send_tasks: set[asyncio.Task[Any]] = set()
-
-    async def _notify_agent_update(self) -> None:
-        if self.on_agent_update is not None:
-            await self.on_agent_update()
-
-    def _response_payload(
-        self,
-        message_payload: dict[str, Any],
-        *,
-        role: Optional[str] = None,
-        label: Optional[str] = None,
-    ) -> dict[str, Any]:
-        payload: dict[str, Any] = {
-            "type": "response",
-            "message": message_payload,
-        }
-        return payload
 
     @staticmethod
     def _parse_tool_arguments(
@@ -266,7 +248,7 @@ class CallbackHandler:
         source: Optional[str] = None,
         call_id: Optional[str] = None,
     ) -> None:
-        source_name = source or self.name or "FLASK-Generic"
+        source_name = source or self.agent_key or "FLASK-Generic"
         arguments_str, log_msg, smiles = self._parse_tool_arguments(arguments)
         call_info: dict[str, Any] = {
             "tool_name": tool_name,
@@ -292,7 +274,8 @@ class CallbackHandler:
                 self.pending_tool_calls[call_id] = call_info
         else:
             self.pending_tool_calls_by_name.setdefault(tool_name, []).append(call_info)
-        await self._notify_agent_update()
+        if self.on_agent_update is not None:
+            await self.on_agent_update()
 
     def _pop_pending_tool_call(
         self,
@@ -325,7 +308,7 @@ class CallbackHandler:
         source_name = (
             call_info["source_name"]
             if call_info is not None
-            else source or self.name or "FLASK-Generic"
+            else source or self.agent_key or "FLASK-Generic"
         )
         result_lang, formatted_result_text = self._format_result_text(result)
         fence_suffix = result_lang if result_lang else ""
@@ -352,11 +335,10 @@ class CallbackHandler:
                 f"```{fence_suffix}\n{formatted_result_text}\n```"
             )
 
-        payload = self._response_payload(
-            {"source": tool_name, "message": message},
-            role="tool",
-            label=tool_name,
-        )
+        payload: dict[str, Any] = {
+            "type": "response",
+            "message": {"source": tool_name, "message": message},
+        }
         if call_info is not None and call_info["smiles"] is not None:
             payload["smiles"] = call_info["smiles"]
         if call_id is not None:
@@ -364,11 +346,12 @@ class CallbackHandler:
 
         logger.info(message)
         await send(payload)
-        await self._notify_agent_update()
+        if self.on_agent_update is not None:
+            await self.on_agent_update()
 
     async def send(self, assistant_message):
         send = self.websocket.send_json
-        source = self.name if self.name else "FLASK-Generic"
+        source = self.agent_key or "FLASK-Generic"
         try:
             message_type = getattr(assistant_message, "type", None)
             if message_type == "UserMessage":
@@ -377,11 +360,10 @@ class CallbackHandler:
                 )
                 logger.info(message)
                 await send(
-                    self._response_payload(
-                        {"message": message},
-                        role="user",
-                        label=source,
-                    )
+                    {
+                        "type": "response",
+                        "message": {"message": message},
+                    }
                 )
             elif message_type == "AssistantMessage":
                 thought = getattr(assistant_message, "thought", None)
@@ -390,11 +372,10 @@ class CallbackHandler:
                     output = ModelMessage(message=_str, smiles=None)
                     logger.info(_str)
                     await send(
-                        self._response_payload(
-                            output.json(),
-                            role="assistant",
-                            label="Reasoning",
-                        )
+                        {
+                            "type": "response",
+                            "message": output.json(),
+                        }
                     )
                 content = getattr(assistant_message, "content", None)
                 if isinstance(content, list):

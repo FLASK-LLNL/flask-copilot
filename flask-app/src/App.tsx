@@ -66,9 +66,15 @@ import {
   AgentChatModal,
   AgentHistoryList,
   BACKEND_OPTIONS,
+  deserializeAgentChatHistory,
   handleLocalMcpProxyRequest,
 } from 'lc-conductor';
-import type { AgentAttachment, AgentChatHistory, AgentChatMessage } from 'lc-conductor';
+import type {
+  AgentAttachment,
+  AgentChatHistory,
+  AgentChatMessage,
+  SerializedAgent,
+} from 'lc-conductor';
 
 import { CombinedCustomizationModal } from './components/combined_customization_modal';
 import { Modal } from './components/modal';
@@ -349,6 +355,12 @@ const mergeAgentChatHistory = (
 
   const mergedBase = {
     ...incoming,
+    title: incoming.title && incoming.title !== incoming.agentKey ? incoming.title : current.title,
+    subtitle: incoming.subtitle || current.subtitle,
+    metadata: {
+      ...(incoming.metadata || {}),
+      ...(current.metadata || {}),
+    },
     promptContext:
       incoming.promptContext && incoming.promptContext.length > 0
         ? incoming.promptContext
@@ -1421,10 +1433,13 @@ const ChemistryTool: React.FC = () => {
             shouldDownloadFullContext = true;
             break;
           }
-          case 'agent-history-response': {
-            if (data.history) {
+          case 'agent-response': {
+            if (data.agent) {
+              const incomingHistory = deserializeAgentChatHistory(data.agent, {
+                debug: agentChatDebugRef.current,
+              });
               const currentHistory = agentChatHistoryRef.current;
-              const mergedHistory = mergeAgentChatHistory(data.history, currentHistory);
+              const mergedHistory = mergeAgentChatHistory(incomingHistory, currentHistory);
               agentChatHistoryRef.current = mergedHistory;
               setAgentChatHistory(mergedHistory);
               setAgentHistories((prev) =>
@@ -1434,28 +1449,14 @@ const ChemistryTool: React.FC = () => {
                 )
               );
               hydrateAttachmentRegistry(data.experimentContext);
-              if (
-                agentChatDebugRef.current &&
-                data.history.messages.length > 0 &&
-                !data.history.rawSession
-              ) {
-                requestAgentHistory(data.history.agentKey, true, {
-                  metadata: mergedHistory.metadata,
-                  smiles:
-                    typeof mergedHistory.metadata?.smiles === 'string'
-                      ? mergedHistory.metadata.smiles
-                      : undefined,
-                  nodeId:
-                    typeof mergedHistory.metadata?.nodeId === 'string'
-                      ? mergedHistory.metadata.nodeId
-                      : undefined,
-                });
-              }
             }
             break;
           }
-          case 'agent-histories-response': {
-            setAgentHistories((prev) => mergeAgentHistoryList(data.histories || [], prev));
+          case 'list-agents-response': {
+            const histories = (data.agents || []).map((agent: SerializedAgent) =>
+              deserializeAgentChatHistory(agent, { debug: agentChatDebugRef.current })
+            );
+            setAgentHistories((prev) => mergeAgentHistoryList(histories, prev));
             break;
           }
           case 'get-username-response': {
@@ -1931,14 +1932,14 @@ const ChemistryTool: React.FC = () => {
       debug = agentChatDebug,
       extra?: Omit<WebSocketMessageToServer, 'action' | 'agentKey' | 'debug'>
     ): void => {
-      sendMessageToServer('get-agent-history', { agentKey, debug, ...extra });
+      sendMessageToServer('get-agent', { agentKey, debug, ...extra });
     },
     [agentChatDebug, sendMessageToServer]
   );
 
   const requestAgentHistories = useCallback(
     (debug = agentChatDebug): void => {
-      sendMessageToServer('list-agent-histories', { debug });
+      sendMessageToServer('list-agents', { debug });
     },
     [agentChatDebug, sendMessageToServer]
   );

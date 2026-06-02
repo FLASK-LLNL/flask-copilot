@@ -1,7 +1,9 @@
-import json
+import asyncio
 from types import SimpleNamespace
 
-from charge.experiments.experiment import Experiment
+from charge.clients.agent_factory import AgentRuntimeConfig
+from charge.experiments.experiment import AgentRegistryEntry, Experiment
+from charge.tasks.task import Task
 
 from charge_backend.backend_helper_funcs import Node, Reaction
 from charge_backend.backend_manager import FlaskActionManager
@@ -35,276 +37,72 @@ def make_manager():
     return manager
 
 
-def test_agent_history_normalization_hides_debug_fields_by_default():
+def test_get_agent_returns_serialized_agent_record():
     manager = make_manager()
-    record = {
-        "metadata": {"title": "Reaction node_1", "subtitle": "CCO"},
-        "modelInfo": {"model": "test-model"},
-        "task": {
-            "system_prompt": "You are given reaction context: CCO>>CC=O",
-            "user_prompt": "What is this?",
-        },
-        "memory": json.dumps(
-            {
-                "state": {
-                    "in_memory": {
-                        "messages": [
-                            {
-                                "role": "user",
-                                "contents": [
-                                    {"type": "text", "text": "What is this?"},
-                                    {
-                                        "type": "data",
-                                        "uri": "data:image/png;base64,ZmFrZQ==",
-                                        "media_type": "image/png",
-                                        "name": "sample.png",
-                                    },
-                                ],
-                            },
-                            {
-                                "role": "assistant",
-                                "contents": [
-                                    {
-                                        "type": "text_reasoning",
-                                        "text": "reasoning summary",
-                                        "additional_properties": {
-                                            "encrypted_content": "secret"
-                                        },
-                                    },
-                                    {"type": "text", "text": "It is ethanol."},
-                                ],
-                            },
-                        ]
-                    }
-                }
-            }
+    memory = '{"state":{"in_memory":{"messages":[{"role":"user"}]}}}'
+    task = Task(system_prompt="System", user_prompt="Hello")
+    manager.experiment.agent_registry["custom:main"] = AgentRegistryEntry(
+        agent_key="custom:main",
+        agent=SimpleNamespace(
+            task=task,
+            save_memory=lambda: memory,
+            get_model_info=lambda: {"backend": "dummy", "model": "dummy-model"},
         ),
-    }
-
-    history = manager._normalize_agent_history("reaction:node_1", record)
-
-    assert history["title"] == "Reaction node_1"
-    assert "rawSession" not in history
-    assert history["messages"][0]["text"] == "What is this?"
-    assert history["messages"][0]["context"][0]["title"] == "Instructions"
-    assert "CCO>>CC=O" in history["messages"][0]["context"][0]["text"]
-    assert history["messages"][0]["images"][0]["dataUrl"].startswith("data:image/png")
-    assert history["messages"][1]["reasoning"][0]["text"] == "reasoning summary"
-    assert "debug" not in history["messages"][1]["reasoning"][0]
-
-
-def test_agent_history_normalization_includes_raw_fields_in_debug_mode():
-    manager = make_manager()
-    record = {
-        "memory": json.dumps(
-            {
-                "state": {
-                    "in_memory": {
-                        "messages": [
-                            {
-                                "role": "assistant",
-                                "contents": [
-                                    {
-                                        "type": "text_reasoning",
-                                        "text": "reasoning summary",
-                                        "additional_properties": {
-                                            "encrypted_content": "secret"
-                                        },
-                                    }
-                                ],
-                            }
-                        ]
-                    }
-                }
-            }
-        )
-    }
-
-    history = manager._normalize_agent_history("custom:main", record, debug=True)
-
-    assert history["rawSession"]["state"]["in_memory"]["messages"]
-    assert history["messages"][0]["raw"]["role"] == "assistant"
-    assert (
-        history["messages"][0]["reasoning"][0]["debug"]["encrypted_content"] == "secret"
+        runtime_config=AgentRuntimeConfig(
+            agent_key="custom:main",
+            backend="dummy",
+            model="dummy-model",
+        ),
     )
 
+    asyncio.run(manager.handle_get_agent({"agentKey": "custom:main"}))
 
-def test_agent_history_reports_estimated_context_usage():
+    assert manager.websocket.last_payload["type"] == "agent-response"
+    agent = manager.websocket.last_payload["agent"]
+    assert agent["agentKey"] == "custom:main"
+    assert agent["memory"] == memory
+    assert agent["task"]["system_prompt"] == "System"
+    assert agent["runtimeConfig"]["backend"] == "dummy"
+    assert agent["modelInfo"]["model"] == "dummy-model"
+
+
+def test_list_agents_returns_serialized_agent_records():
     manager = make_manager()
-    record = {
-        "modelInfo": {"model": "gpt-5.4"},
-        "task": {
-            "system_prompt": "You are a careful chemistry assistant.",
-            "user_prompt": "Summarize this reaction.",
-        },
-        "memory": json.dumps(
-            {
-                "state": {
-                    "in_memory": {
-                        "messages": [
-                            {
-                                "role": "user",
-                                "contents": [
-                                    {"type": "text", "text": "Summarize this reaction."}
-                                ],
-                            },
-                            {
-                                "role": "assistant",
-                                "contents": [
-                                    {
-                                        "type": "text",
-                                        "text": "It forms the oxidized product.",
-                                    }
-                                ],
-                            },
-                        ]
-                    }
-                }
-            }
+    manager.experiment.agent_registry["custom:main"] = AgentRegistryEntry(
+        agent_key="custom:main",
+        agent=SimpleNamespace(
+            task=None,
+            save_memory=lambda: "",
+            get_model_info=lambda: {"backend": "dummy", "model": "dummy-model"},
         ),
-    }
-
-    history = manager._normalize_agent_history("reaction:node_1", record)
-
-    assert history["contextUsage"]["usedTokens"] > 0
-    assert "maxTokens" not in history["contextUsage"]
-    assert "percentUsed" not in history["contextUsage"]
-    assert history["contextUsage"]["estimated"] is True
-    assert history["contextUsage"]["source"] == "estimate"
-    assert history["contextUsage"]["model"] == "gpt-5.4"
-
-
-def test_agent_history_prefers_provider_context_usage():
-    manager = make_manager()
-    record = {
-        "modelInfo": {
-            "model": "gpt-5.4",
-            "lastUsage": {
-                "inputTokens": 1234,
-                "outputTokens": 56,
-                "reasoningTokens": 12,
-                "totalTokens": 1290,
-            },
-        },
-        "memory": json.dumps(
-            {
-                "state": {
-                    "in_memory": {
-                        "messages": [
-                            {
-                                "role": "user",
-                                "contents": [{"type": "text", "text": "Hello"}],
-                            }
-                        ]
-                    }
-                }
-            }
+        runtime_config=AgentRuntimeConfig(
+            agent_key="custom:main",
+            backend="dummy",
+            model="dummy-model",
         ),
-    }
-
-    history = manager._normalize_agent_history("custom:main", record)
-
-    assert history["contextUsage"]["usedTokens"] == 1290
-    assert history["contextUsage"]["outputTokens"] == 56
-    assert history["contextUsage"]["reasoningTokens"] == 12
-    assert history["contextUsage"]["totalTokens"] == 1290
-    assert history["contextUsage"]["estimated"] is False
-    assert history["contextUsage"]["source"] == "provider"
-    assert "maxTokens" not in history["contextUsage"]
-
-
-def test_agent_history_uses_per_message_metadata_for_prompt_context_and_label():
-    manager = make_manager()
-    record = {
-        "task": {
-            "system_prompt": "Latest task only",
-            "user_prompt": "Latest user prompt",
-        },
-        "messageMetadata": {
-            "0": {
-                "label": "Retrosynthesis request",
-                "promptContext": [
-                    {"title": "Instructions", "text": "Original reaction context"}
-                ],
-            },
-            "2": {
-                "promptContext": [
-                    {"title": "Instructions", "text": "Follow-up chat context"}
-                ],
-            },
-        },
-        "memory": json.dumps(
-            {
-                "state": {
-                    "in_memory": {
-                        "messages": [
-                            {
-                                "role": "user",
-                                "contents": [{"type": "text", "text": "Compute path"}],
-                            },
-                            {
-                                "role": "assistant",
-                                "contents": [{"type": "text", "text": "Done"}],
-                            },
-                            {
-                                "role": "user",
-                                "contents": [
-                                    {"type": "text", "text": "What just happened?"}
-                                ],
-                            },
-                        ]
-                    }
-                }
-            }
-        ),
-    }
-
-    history = manager._normalize_agent_history("reaction:node_1", record)
-
-    assert history["messages"][0]["label"] == "Retrosynthesis request"
-    assert history["messages"][0]["context"][0]["text"] == "Original reaction context"
-    assert history["messages"][2]["context"][0]["text"] == "Follow-up chat context"
-    assert "Latest task only" not in history["messages"][0]["context"][0]["text"]
-
-
-def test_agent_history_uses_display_text_while_preserving_raw_message_in_debug():
-    manager = make_manager()
-    record = {
-        "messageMetadata": {
-            "0": {
-                "label": "Retrosynthesis request",
-                "displayText": "Use greener reactants",
-            }
-        },
-        "memory": json.dumps(
-            {
-                "state": {
-                    "in_memory": {
-                        "messages": [
-                            {
-                                "role": "user",
-                                "contents": [
-                                    {
-                                        "type": "text",
-                                        "text": "Generated retrosynthesis task prompt with many instructions.",
-                                    }
-                                ],
-                            }
-                        ]
-                    }
-                }
-            }
-        ),
-    }
-
-    history = manager._normalize_agent_history("reaction:node_1", record, debug=True)
-
-    assert history["messages"][0]["text"] == "Use greener reactants"
-    assert history["messages"][0]["label"] == "Retrosynthesis request"
-    assert (
-        history["messages"][0]["raw"]["contents"][0]["text"]
-        == "Generated retrosynthesis task prompt with many instructions."
     )
+
+    asyncio.run(manager.handle_list_agents({}))
+
+    assert manager.websocket.last_payload["type"] == "list-agents-response"
+    assert [
+        agent["agentKey"] for agent in manager.websocket.last_payload["agents"]
+    ] == ["custom:main"]
+
+
+def test_get_agent_returns_empty_record_for_missing_agent():
+    manager = make_manager()
+
+    asyncio.run(manager.handle_get_agent({"agentKey": "missing:main"}))
+
+    assert manager.websocket.last_payload == {
+        "type": "agent-response",
+        "agent": {
+            "agentKey": "missing:main",
+            "memory": "",
+            "modelInfo": {},
+        },
+    }
 
 
 def test_reaction_context_includes_reaction_hover_info():
@@ -354,11 +152,15 @@ def test_reaction_chat_task_appends_hover_info_to_existing_prompt():
             )
         }
     )
-    manager.experiment.agent_registry["reaction:product"] = {
-        "agent": SimpleNamespace(
+    manager.experiment.agent_registry["reaction:product"] = AgentRegistryEntry(
+        agent_key="reaction:product",
+        agent=SimpleNamespace(
             task=SimpleNamespace(get_system_prompt=lambda: "Existing instructions")
-        )
-    }
+        ),
+        runtime_config=AgentRuntimeConfig(
+            agent_key="reaction:product",
+        ),
+    )
     manager.selected_tool_runtime = lambda: SimpleNamespace(task_kwargs=lambda: {})
 
     task = manager._chat_task_for_agent(

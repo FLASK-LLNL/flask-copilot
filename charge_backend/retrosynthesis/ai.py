@@ -30,7 +30,6 @@ from charge_backend.retrosynthesis.retrosynthesis_task import (
     TemplateFreeRetrosynthesisTask as RetrosynthesisTask,
     TemplateFreeReactionOutputSchema as ReactionOutputSchema,
 )
-from charge_backend.agent_chat_metadata import record_latest_user_message_metadata
 
 from charge.experiments.experiment import Experiment
 from charge.clients.agent_factory import ReasoningCallbackType
@@ -89,6 +88,7 @@ async def ai_based_retrosynthesis(
     )
 
     agent_key = f"reaction:{node_id}"
+    callback_handler: CallbackHandler | None = None
     if node_id in context.node_id_to_charge_client:
         # Existing context
         runner = context.node_id_to_charge_client[node_id]
@@ -100,21 +100,13 @@ async def ai_based_retrosynthesis(
         runner = experiment.create_agent_with_experiment_state(
             task=None,
             agent_key=agent_key,
-            agent_metadata={
-                "kind": "reaction",
-                "nodeId": node_id,
-                "target": node_id,
-                "smiles": current_node.smiles,
-                "title": f"Reaction {node_id}",
-                "subtitle": current_node.smiles,
-            },
-            agent_name=f"retrosynth_{node_id}",
             callback=callback_handler,
         )
         context.node_id_to_charge_client[node_id] = runner
 
-    callback_handler = getattr(runner, "callback", None)
-    if isinstance(callback_handler, CallbackHandler):
+    if callback_handler is None and isinstance(runner.callback, CallbackHandler):
+        callback_handler = runner.callback
+    if callback_handler is not None:
         callback_handler.agent_key = agent_key
         callback_handler.on_agent_update = history_callback
 
@@ -156,15 +148,8 @@ async def ai_based_retrosynthesis(
     if run_settings.prompt_debugging:
         await debug_prompt(runner, websocket)
     output = await runner.run(log_progress)
-    if isinstance(callback_handler, CallbackHandler):
+    if callback_handler is not None:
         await callback_handler.drain()
-    record_latest_user_message_metadata(
-        experiment,
-        agent_key,
-        retro_task,
-        label="Retrosynthesis request",
-        display_text=query,
-    )
     experiment.add_to_context(runner, retro_task, output)
     if history_callback is not None:
         await history_callback()
