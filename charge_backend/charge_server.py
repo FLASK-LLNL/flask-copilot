@@ -15,6 +15,7 @@ from fastapi.middleware.cors import CORSMiddleware
 import os
 import argparse
 import httpx
+import json
 from lc_conductor import try_get_public_hostname
 import os
 
@@ -35,6 +36,7 @@ from lc_conductor.tool_registration import (
     delete_mcp_server_endpoint,
     get_registered_servers,
 )
+from lc_conductor import discover_models_endpoint, validate_initial_model
 
 from lc_conductor import TaskManager
 from lc_conductor.local_mcp_proxy import resolve_local_mcp_response
@@ -115,6 +117,8 @@ app.post("/delete-mcp-server")(
 
 app.post("/check-mcp-servers")(check_mcp_servers_endpoint)
 
+app.post("/api/discover-models")(discover_models_endpoint)
+
 
 @app.get("/registered-mcp-servers")
 async def registered_servers_endpoint(request: Request):
@@ -149,13 +153,22 @@ if os.path.exists(ASSETS_PATH):
         with open(os.path.join(DIST_PATH, "index.html"), "r") as fp:
             html = fp.read()
 
+        # Read orchestrator config from environment
+        orchestrator_config = {
+            "backend": os.getenv("FLASK_ORCHESTRATOR_BACKEND", args.backend),
+            "model": os.getenv("FLASK_ORCHESTRATOR_MODEL", args.model),
+            "apiKey": os.getenv("FLASK_ORCHESTRATOR_API_KEY", ""),
+            "baseUrl": os.getenv("FLASK_ORCHESTRATOR_URL", ""),
+        }
+
         html = html.replace(
             "<!-- APP CONFIG -->",
             f"""
            <script>
            window.APP_CONFIG = {{
                WS_SERVER: '{os.getenv("WS_SERVER", "ws://localhost:8001/ws")}',
-               VERSION: '{os.getenv("SERVER_VERSION", "")}'
+               VERSION: '{os.getenv("SERVER_VERSION", "")}',
+               ORCHESTRATOR: {json.dumps(orchestrator_config)}
            }};
            </script>""",
         )
@@ -219,13 +232,16 @@ async def websocket_endpoint(websocket: WebSocket):
     if not backend:
         backend = args.backend
 
-    # set up an AutoGenAgent backend for tasks on this endpoint
-    # AgentFactory.register_backend(
-    #     "autogen",
-    #     AutoGenBackend(
-    #         model=model, backend=backend, api_key=API_KEY, base_url=BASE_URL
-    #     ),
-    # )
+    # Validate and potentially correct the initial model
+    model = validate_initial_model(
+        backend=backend,
+        model=model,
+        base_url=BASE_URL,
+        api_key=API_KEY,
+        timeout=5,
+    )
+
+    # set up an AgentFramework backend for tasks on this endpoint
     AgentFactory.register_backend(
         "agentframework",
         AgentFrameworkBackend(
