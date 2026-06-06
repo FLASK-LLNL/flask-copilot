@@ -69,12 +69,7 @@ import {
   deserializeAgentChatHistory,
   handleLocalMcpProxyRequest,
 } from 'lc-conductor';
-import type {
-  AgentAttachment,
-  AgentChatHistory,
-  AgentChatMessage,
-  SerializedAgent,
-} from 'lc-conductor';
+import type { AgentAttachment, AgentChatHistory } from 'lc-conductor';
 
 import { CombinedCustomizationModal } from './components/combined_customization_modal';
 import { Modal } from './components/modal';
@@ -336,60 +331,6 @@ const withPersistedImageAttachments = (
   };
 };
 
-const isPendingAgentChatMessage = (message: AgentChatMessage): boolean =>
-  message.id.startsWith('pending:');
-
-const isTransientAgentChatMessage = (message: AgentChatMessage): boolean =>
-  isPendingAgentChatMessage(message);
-
-const agentMessageFingerprint = (message: AgentChatMessage): string =>
-  `${message.role}:${message.text.trim()}`;
-
-const mergeAgentChatHistory = (
-  incoming: AgentChatHistory,
-  current: AgentChatHistory | null
-): AgentChatHistory => {
-  if (!current || current.agentKey !== incoming.agentKey) {
-    return incoming;
-  }
-
-  const mergedBase = {
-    ...incoming,
-    title: incoming.title && incoming.title !== incoming.agentKey ? incoming.title : current.title,
-    subtitle: incoming.subtitle || current.subtitle,
-    metadata: {
-      ...(incoming.metadata || {}),
-      ...(current.metadata || {}),
-    },
-    promptContext:
-      incoming.promptContext && incoming.promptContext.length > 0
-        ? incoming.promptContext
-        : current.promptContext,
-  };
-
-  const transientMessages = current.messages.filter(isTransientAgentChatMessage);
-  if (transientMessages.length === 0) {
-    return mergedBase;
-  }
-
-  const incomingMessageFingerprints = new Set(
-    incoming.messages.map(agentMessageFingerprint).filter(Boolean)
-  );
-  const stillTransient = transientMessages.filter(
-    (message) => !incomingMessageFingerprints.has(agentMessageFingerprint(message))
-  );
-
-  if (stillTransient.length === 0) {
-    return mergedBase;
-  }
-
-  return {
-    ...mergedBase,
-    messages: [...mergedBase.messages, ...stillTransient],
-    lastMessage: stillTransient[stillTransient.length - 1]?.text || mergedBase.lastMessage,
-  };
-};
-
 const persistedPdfReference = (
   reference: PdfReferenceMetadata | null
 ): PdfReferenceMetadata | null => {
@@ -434,7 +375,7 @@ const ChemistryTool: React.FC = () => {
   const [agentChatHistory, setAgentChatHistory] = useState<AgentChatHistory | null>(null);
   const [agentChatDebug, setAgentChatDebug] = useState<boolean>(false);
   const [allChatsOpen, setAllChatsOpen] = useState<boolean>(false);
-  const [agentHistories, setAgentHistories] = useState<AgentChatHistory[]>([]);
+  const [agentKeys, setAgentKeys] = useState<string[]>([]);
   const [activeAgentKeys, setActiveAgentKeys] = useState<string[]>([]);
   const [experimentContext, setExperimentContext] = useState<any>(undefined);
   const [attachmentRegistry, setAttachmentRegistry] = useState<Record<string, AgentAttachment>>({});
@@ -495,13 +436,10 @@ const ChemistryTool: React.FC = () => {
   const projectData = useProjectData();
   const projectManagement = useProjectManagement(projectData);
   const attachmentRegistryRef = useRef<Record<string, AgentAttachment>>({});
-  const agentChatHistoryRef = useRef<AgentChatHistory | null>(null);
+  const selectedAgentKeyRef = useRef<string | null>(null);
   const agentChatDebugRef = useRef<boolean>(false);
   const activeAgentKeysRef = useRef<Set<string>>(new Set());
-
-  useEffect(() => {
-    agentChatHistoryRef.current = agentChatHistory;
-  }, [agentChatHistory]);
+  const allChatsOpenRef = useRef<boolean>(false);
 
   useEffect(() => {
     agentChatDebugRef.current = agentChatDebug;
@@ -536,130 +474,16 @@ const ChemistryTool: React.FC = () => {
     messages: [],
   });
 
-  const upsertAgentHistory = (
-    histories: AgentChatHistory[],
-    agentKey: string,
-    fallback?: Pick<AgentChatHistory, 'title' | 'subtitle'> & {
-      metadata?: Record<string, unknown>;
-    }
-  ): AgentChatHistory[] => {
-    const existingIndex = histories.findIndex((history) => history.agentKey === agentKey);
-    if (existingIndex === -1) {
-      return [makeAgentHistoryFallback(agentKey, fallback), ...histories];
-    }
-
-    if (!fallback) {
-      return histories;
-    }
-
-    const next = [...histories];
-    next[existingIndex] = {
-      ...next[existingIndex],
-      title: next[existingIndex].title || fallback.title,
-      subtitle: next[existingIndex].subtitle || fallback.subtitle,
-      metadata: {
-        ...(fallback.metadata || {}),
-        ...(next[existingIndex].metadata || {}),
-      },
-    };
-    return next;
-  };
-
-  const appendAgentMessageToHistory = (
-    history: AgentChatHistory,
-    message: AgentChatMessage
-  ): AgentChatHistory => {
-    const fingerprint = agentMessageFingerprint(message);
-    const existingIndex = history.messages.findIndex(
-      (existing) => agentMessageFingerprint(existing) === fingerprint
-    );
-    if (existingIndex !== -1) {
-      const nextMessages = [...history.messages];
-      const existing = nextMessages[existingIndex];
-      if (isPendingAgentChatMessage(existing) && message.role === existing.role) {
-        nextMessages[existingIndex] = message;
-      }
-      return {
-        ...history,
-        messages: nextMessages,
-        lastMessage: message.text || history.lastMessage,
-      };
-    }
-
-    return {
-      ...history,
-      messages: [...history.messages, message],
-      lastMessage: message.text || history.lastMessage,
-    };
-  };
-
-  const markAgentChatActive = (
-    agentKey: string,
-    fallback?: Pick<AgentChatHistory, 'title' | 'subtitle'> & {
-      metadata?: Record<string, unknown>;
-    }
-  ): void => {
+  const markAgentChatActive = (agentKey: string): void => {
     const nextActive = new Set(activeAgentKeysRef.current);
     nextActive.add(agentKey);
     activeAgentKeysRef.current = nextActive;
     setActiveAgentKeys(Array.from(nextActive));
-    setAgentHistories((prev) => upsertAgentHistory(prev, agentKey, fallback));
-  };
-
-  const appendOptimisticUserMessage = (
-    agentKey: string,
-    text: string,
-    fallback?: Pick<AgentChatHistory, 'title' | 'subtitle'> & {
-      metadata?: Record<string, unknown>;
-    },
-    label?: string
-  ): void => {
-    const trimmed = text.trim();
-    if (!trimmed) return;
-    const optimisticMessage: AgentChatMessage = {
-      id: `pending:${agentKey}:${Date.now()}`,
-      role: 'user',
-      label,
-      text: trimmed,
-    };
-    setAgentChatHistory((prev) => {
-      if (!prev || prev.agentKey !== agentKey) {
-        return prev;
-      }
-      return appendAgentMessageToHistory(prev, optimisticMessage);
-    });
-    setAgentHistories((prev) =>
-      upsertAgentHistory(prev, agentKey, fallback).map((history) =>
-        history.agentKey === agentKey
-          ? appendAgentMessageToHistory(history, optimisticMessage)
-          : history
-      )
-    );
   };
 
   const clearActiveAgentChats = (): void => {
     activeAgentKeysRef.current = new Set();
     setActiveAgentKeys([]);
-  };
-
-  const mergeAgentHistoryList = (
-    incomingHistories: AgentChatHistory[],
-    currentHistories: AgentChatHistory[]
-  ): AgentChatHistory[] => {
-    const nextByKey = new Map<string, AgentChatHistory>();
-    incomingHistories.forEach((incoming) => {
-      const current = currentHistories.find((history) => history.agentKey === incoming.agentKey);
-      nextByKey.set(incoming.agentKey, mergeAgentChatHistory(incoming, current || null));
-    });
-
-    currentHistories.forEach((current) => {
-      if (nextByKey.has(current.agentKey)) return;
-      if (activeAgentKeysRef.current.has(current.agentKey)) {
-        nextByKey.set(current.agentKey, current);
-      }
-    });
-
-    return Array.from(nextByKey.values());
   };
 
   const hydrateAttachmentRegistry = useCallback(
@@ -1148,25 +972,9 @@ const ChemistryTool: React.FC = () => {
 
     setIsComputing(true);
     if (problemType === 'optimization') {
-      markAgentChatActive('lmo:main', {
-        title: 'Lead molecule optimization',
-        subtitle: smiles,
-        metadata: {
-          kind: 'lmo',
-          target: 'main',
-          smiles,
-        },
-      });
+      markAgentChatActive('lmo:main');
     } else if (problemType === 'custom') {
-      markAgentChatActive('custom:main', {
-        title: 'Custom prompt',
-        subtitle: smiles,
-        metadata: {
-          kind: 'custom',
-          target: 'main',
-          smiles,
-        },
-      });
+      markAgentChatActive('custom:main');
     }
     setTreeNodes([]);
     setEdges([]);
@@ -1434,29 +1242,23 @@ const ChemistryTool: React.FC = () => {
             break;
           }
           case 'agent-response': {
-            if (data.agent) {
-              const incomingHistory = deserializeAgentChatHistory(data.agent, {
+            if (data.agent && data.agentKey) {
+              const incomingHistory = deserializeAgentChatHistory(data.agentKey, data.agent, {
                 debug: agentChatDebugRef.current,
               });
-              const currentHistory = agentChatHistoryRef.current;
-              const mergedHistory = mergeAgentChatHistory(incomingHistory, currentHistory);
-              agentChatHistoryRef.current = mergedHistory;
-              setAgentChatHistory(mergedHistory);
-              setAgentHistories((prev) =>
-                mergeAgentHistoryList(
-                  [mergedHistory],
-                  upsertAgentHistory(prev, mergedHistory.agentKey)
-                )
+              setAgentChatHistory((prev) =>
+                selectedAgentKeyRef.current === data.agentKey || prev?.agentKey === data.agentKey
+                  ? incomingHistory
+                  : prev
               );
               hydrateAttachmentRegistry(data.experimentContext);
             }
             break;
           }
           case 'list-agents-response': {
-            const histories = (data.agents || []).map((agent: SerializedAgent) =>
-              deserializeAgentChatHistory(agent, { debug: agentChatDebugRef.current })
-            );
-            setAgentHistories((prev) => mergeAgentHistoryList(histories, prev));
+            if (allChatsOpenRef.current) {
+              setAgentKeys(data.agents || []);
+            }
             break;
           }
           case 'get-username-response': {
@@ -1579,9 +1381,11 @@ const ChemistryTool: React.FC = () => {
     setCustomQueryAiOnly(false);
     setAgentChatOpen(false);
     setAgentChatHistory(null);
+    selectedAgentKeyRef.current = null;
     clearActiveAgentChats();
+    allChatsOpenRef.current = false;
     setAllChatsOpen(false);
-    setAgentHistories([]);
+    setAgentKeys([]);
     setExperimentContext(undefined);
     attachmentRegistryRef.current = {};
     setAttachmentRegistry({});
@@ -1951,21 +1755,8 @@ const ChemistryTool: React.FC = () => {
         metadata?: Record<string, unknown>;
       }
     ): void => {
-      setAgentChatHistory((prev) =>
-        prev?.agentKey === agentKey
-          ? {
-              ...prev,
-              title: prev.title || fallback.title,
-              subtitle: prev.subtitle || fallback.subtitle,
-              metadata: {
-                ...(fallback.metadata || {}),
-                ...(prev.metadata || {}),
-              },
-            }
-          : agentHistories.find((history) => history.agentKey === agentKey) ||
-            makeAgentHistoryFallback(agentKey, fallback)
-      );
-      setAgentHistories((prev) => upsertAgentHistory(prev, agentKey, fallback));
+      selectedAgentKeyRef.current = agentKey;
+      setAgentChatHistory(makeAgentHistoryFallback(agentKey, fallback));
       setAgentChatOpen(true);
       setContextMenu({ node: null, isReaction: false, x: 0, y: 0 });
       requestAgentHistory(agentKey, agentChatDebug, {
@@ -1984,47 +1775,7 @@ const ChemistryTool: React.FC = () => {
       if (!agentChatHistory) return;
       registerAttachments(attachments);
       pendingAttachmentContextSyncRef.current = true;
-      const optimisticMessage: AgentChatMessage = {
-        id: `pending:${Date.now()}`,
-        role: 'user',
-        text: query,
-        context: agentChatHistory.promptContext,
-        images: attachments
-          .filter((attachment) => attachment.mimeType.startsWith('image/'))
-          .map((attachment) => ({
-            id: attachment.id,
-            name: attachment.name,
-            mimeType: attachment.mimeType,
-            sizeBytes: attachment.sizeBytes,
-            dataUrl: attachment.dataUrl,
-          })),
-      };
-      setAgentChatHistory((prev) => {
-        if (!prev || prev.agentKey !== agentChatHistory.agentKey) {
-          return prev;
-        }
-        return {
-          ...prev,
-          messages: [...prev.messages, optimisticMessage],
-          lastMessage: query,
-        };
-      });
-      setAgentHistories((prev) =>
-        upsertAgentHistory(prev, agentChatHistory.agentKey, {
-          title: agentChatHistory.title,
-          subtitle: agentChatHistory.subtitle,
-          metadata: agentChatHistory.metadata,
-        }).map((history) =>
-          history.agentKey === agentChatHistory.agentKey
-            ? appendAgentMessageToHistory(history, optimisticMessage)
-            : history
-        )
-      );
-      markAgentChatActive(agentChatHistory.agentKey, {
-        title: agentChatHistory.title,
-        subtitle: agentChatHistory.subtitle,
-        metadata: agentChatHistory.metadata,
-      });
+      markAgentChatActive(agentChatHistory.agentKey);
       setIsComputing(true);
       sendMessageToServer('chat-agent', {
         agentKey: agentChatHistory.agentKey,
@@ -2156,17 +1907,7 @@ const ChemistryTool: React.FC = () => {
           handleCustomQuery(selectedReactionNode!, 'compute-reaction-from', { aiOnly });
           return;
         } else {
-          markAgentChatActive(`reaction:${nodeId}`, {
-            title: `Reaction ${nodeId}`,
-            subtitle: selectedReactionNode?.smiles,
-            metadata: {
-              kind: 'reaction',
-              nodeId,
-              target: nodeId,
-              smiles: selectedReactionNode?.smiles,
-              reactionHoverInfo: selectedReactionNode?.reaction?.hoverInfo,
-            },
-          });
+          markAgentChatActive(`reaction:${nodeId}`);
           wsRef.current.send(
             JSON.stringify({
               action: 'compute-reaction-from',
@@ -2253,34 +1994,9 @@ const ChemistryTool: React.FC = () => {
     const action = message.action;
     const nodeId = customQueryModal?.id;
     if (action === 'optimize-from') {
-      const fallback = {
-        title: 'Lead molecule optimization',
-        subtitle: customQueryModal?.smiles,
-        metadata: {
-          kind: 'lmo',
-          target: 'main',
-          smiles: customQueryModal?.smiles,
-        },
-      };
-      markAgentChatActive('lmo:main', {
-        ...fallback,
-      });
-      appendOptimisticUserMessage('lmo:main', customQueryText, fallback, 'LMO request');
+      markAgentChatActive('lmo:main');
     } else if (action === 'compute-reaction-from' && nodeId) {
-      const agentKey = `reaction:${nodeId}`;
-      const fallback = {
-        title: `Reaction ${nodeId}`,
-        subtitle: customQueryModal?.smiles,
-        metadata: {
-          kind: 'reaction',
-          nodeId,
-          target: nodeId,
-          smiles: customQueryModal?.smiles,
-          reactionHoverInfo: customQueryModal?.reaction?.hoverInfo,
-        },
-      };
-      markAgentChatActive(agentKey, fallback);
-      appendOptimisticUserMessage(agentKey, customQueryText, fallback, 'Retrosynthesis request');
+      markAgentChatActive(`reaction:${nodeId}`);
     } else if (
       (action === 'recompute-reaction' || action === 'recompute-parent-reaction') &&
       nodeId
@@ -2288,20 +2004,7 @@ const ChemistryTool: React.FC = () => {
       const parentEdge = edges.find((edge) => edge.toNode === nodeId);
       const parentNode = treeNodes.find((node) => node.id === parentEdge?.fromNode);
       if (parentNode) {
-        const agentKey = `reaction:${parentNode.id}`;
-        const fallback = {
-          title: `Reaction ${parentNode.id}`,
-          subtitle: parentNode.smiles,
-          metadata: {
-            kind: 'reaction',
-            nodeId: parentNode.id,
-            target: parentNode.id,
-            smiles: parentNode.smiles,
-            reactionHoverInfo: parentNode.reaction?.hoverInfo,
-          },
-        };
-        markAgentChatActive(agentKey, fallback);
-        appendOptimisticUserMessage(agentKey, customQueryText, fallback, 'Retrosynthesis request');
+        markAgentChatActive(`reaction:${parentNode.id}`);
       }
     }
     wsRef.current.send(JSON.stringify(message));
@@ -2330,6 +2033,10 @@ const ChemistryTool: React.FC = () => {
 
   const currentAgentChatPending =
     !!agentChatHistory?.agentKey && activeAgentKeys.includes(agentChatHistory.agentKey);
+  const visibleAgentKeys = useMemo(
+    () => Array.from(new Set([...activeAgentKeys, ...agentKeys])),
+    [activeAgentKeys, agentKeys]
+  );
 
   return (
     <div className="app-background">
@@ -2482,6 +2189,8 @@ const ChemistryTool: React.FC = () => {
               </button>
               <button
                 onClick={() => {
+                  allChatsOpenRef.current = true;
+                  setAgentKeys([]);
                   setAllChatsOpen(true);
                   requestAgentHistories();
                 }}
@@ -3155,15 +2864,7 @@ const ChemistryTool: React.FC = () => {
                       smiles: contextMenu.node!.smiles,
                       xpos: contextMenu.node!.x,
                     });
-                    markAgentChatActive('lmo:main', {
-                      title: 'Lead molecule optimization',
-                      subtitle: contextMenu.node!.smiles,
-                      metadata: {
-                        kind: 'lmo',
-                        target: 'main',
-                        smiles: contextMenu.node!.smiles,
-                      },
-                    });
+                    markAgentChatActive('lmo:main');
                     setIsComputing(true);
                   }}
                   className="context-menu-item context-menu-divider"
@@ -3208,17 +2909,7 @@ const ChemistryTool: React.FC = () => {
                   {!contextMenu.node.reaction && (
                     <button
                       onClick={() => {
-                        markAgentChatActive(`reaction:${contextMenu.node!.id}`, {
-                          title: `Reaction ${contextMenu.node!.id}`,
-                          subtitle: contextMenu.node!.smiles,
-                          metadata: {
-                            kind: 'reaction',
-                            nodeId: contextMenu.node!.id,
-                            target: contextMenu.node!.id,
-                            smiles: contextMenu.node!.smiles,
-                            reactionHoverInfo: contextMenu.node!.reaction?.hoverInfo,
-                          },
-                        });
+                        markAgentChatActive(`reaction:${contextMenu.node!.id}`);
                         sendMessageToServer('compute-reaction-from', {
                           nodeId: contextMenu.node!.id,
                         });
@@ -3240,17 +2931,7 @@ const ChemistryTool: React.FC = () => {
                           (node) => node.id === parentEdge?.fromNode
                         );
                         if (parentNode) {
-                          markAgentChatActive(`reaction:${parentNode.id}`, {
-                            title: `Reaction ${parentNode.id}`,
-                            subtitle: parentNode.smiles,
-                            metadata: {
-                              kind: 'reaction',
-                              nodeId: parentNode.id,
-                              target: parentNode.id,
-                              smiles: parentNode.smiles,
-                              reactionHoverInfo: parentNode.reaction?.hoverInfo,
-                            },
-                          });
+                          markAgentChatActive(`reaction:${parentNode.id}`);
                         }
                         sendMessageToServer('recompute-parent-reaction', {
                           nodeId: contextMenu.node!.id,
@@ -3314,6 +2995,8 @@ const ChemistryTool: React.FC = () => {
         isOpen={agentChatOpen}
         onClose={() => {
           setAgentChatOpen(false);
+          setAgentChatHistory(null);
+          selectedAgentKeyRef.current = null;
         }}
         history={agentChatHistory}
         debug={agentChatDebug}
@@ -3332,23 +3015,27 @@ const ChemistryTool: React.FC = () => {
                 <h2 className="modal-title">All Agent Chats</h2>
                 <div className="modal-subtitle">Current experiment</div>
               </div>
-              <button onClick={() => setAllChatsOpen(false)} className="btn-icon">
+              <button
+                onClick={() => {
+                  allChatsOpenRef.current = false;
+                  setAgentKeys([]);
+                  setAllChatsOpen(false);
+                }}
+                className="btn-icon"
+              >
                 <X className="w-6 h-6" />
               </button>
             </div>
             <div className="modal-body">
               <AgentHistoryList
-                histories={agentHistories}
+                histories={visibleAgentKeys.map((agentKey) => makeAgentHistoryFallback(agentKey))}
                 activeAgentKeys={activeAgentKeys}
                 onSelect={(agentKey) => {
-                  const selectedHistory = agentHistories.find(
-                    (history) => history.agentKey === agentKey
-                  );
+                  allChatsOpenRef.current = false;
+                  setAgentKeys([]);
                   setAllChatsOpen(false);
                   openAgentChat(agentKey, {
-                    title: selectedHistory?.title || agentKey,
-                    subtitle: selectedHistory?.subtitle,
-                    metadata: selectedHistory?.metadata,
+                    title: agentKey,
                   });
                 }}
               />

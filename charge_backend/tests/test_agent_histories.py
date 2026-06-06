@@ -1,7 +1,8 @@
 import asyncio
 from types import SimpleNamespace
+from typing import Any
 
-from charge.clients.agent_factory import AgentRuntimeConfig
+from charge.clients.agent_factory import Agent, AgentRuntimeConfig
 from charge.experiments.experiment import AgentRegistryEntry, Experiment
 from charge.tasks.task import Task
 
@@ -25,6 +26,36 @@ class FakeTaskManager:
         self.selected_tool_runtime = None
 
 
+class FakeAgent(Agent):
+    def __init__(
+        self,
+        task: Task | None,
+        *,
+        memory: str,
+        model_info: dict[str, Any],
+    ):
+        super().__init__(task)
+        self.memory = memory
+        self.model_info = model_info
+
+    def run(self, reasoning_callback=None, **kwargs) -> str:
+        return ""
+
+    def load_memory(self, json_str: str) -> None:
+        self.memory = json_str
+
+    def save_memory(self) -> str:
+        return self.memory
+
+    def get_model_info(self) -> dict[str, Any]:
+        return self.model_info
+
+
+class FakeToolRuntime:
+    def task_kwargs(self) -> dict[str, Any]:
+        return {}
+
+
 def make_manager():
     websocket = FakeWebSocket()
     task_manager = FakeTaskManager(websocket)
@@ -42,14 +73,12 @@ def test_get_agent_returns_serialized_agent_record():
     memory = '{"state":{"in_memory":{"messages":[{"role":"user"}]}}}'
     task = Task(system_prompt="System", user_prompt="Hello")
     manager.experiment.agent_registry["custom:main"] = AgentRegistryEntry(
-        agent_key="custom:main",
-        agent=SimpleNamespace(
+        agent=FakeAgent(
             task=task,
-            save_memory=lambda: memory,
-            get_model_info=lambda: {"backend": "dummy", "model": "dummy-model"},
+            memory=memory,
+            model_info={"backend": "dummy", "model": "dummy-model"},
         ),
         runtime_config=AgentRuntimeConfig(
-            agent_key="custom:main",
             backend="dummy",
             model="dummy-model",
         ),
@@ -58,8 +87,8 @@ def test_get_agent_returns_serialized_agent_record():
     asyncio.run(manager.handle_get_agent({"agentKey": "custom:main"}))
 
     assert manager.websocket.last_payload["type"] == "agent-response"
+    assert manager.websocket.last_payload["agentKey"] == "custom:main"
     agent = manager.websocket.last_payload["agent"]
-    assert agent["agentKey"] == "custom:main"
     assert agent["memory"] == memory
     assert agent["task"]["system_prompt"] == "System"
     assert agent["runtimeConfig"]["backend"] == "dummy"
@@ -69,14 +98,12 @@ def test_get_agent_returns_serialized_agent_record():
 def test_list_agents_returns_serialized_agent_records():
     manager = make_manager()
     manager.experiment.agent_registry["custom:main"] = AgentRegistryEntry(
-        agent_key="custom:main",
-        agent=SimpleNamespace(
+        agent=FakeAgent(
             task=None,
-            save_memory=lambda: "",
-            get_model_info=lambda: {"backend": "dummy", "model": "dummy-model"},
+            memory="",
+            model_info={"backend": "dummy", "model": "dummy-model"},
         ),
         runtime_config=AgentRuntimeConfig(
-            agent_key="custom:main",
             backend="dummy",
             model="dummy-model",
         ),
@@ -85,9 +112,7 @@ def test_list_agents_returns_serialized_agent_records():
     asyncio.run(manager.handle_list_agents({}))
 
     assert manager.websocket.last_payload["type"] == "list-agents-response"
-    assert [
-        agent["agentKey"] for agent in manager.websocket.last_payload["agents"]
-    ] == ["custom:main"]
+    assert manager.websocket.last_payload["agents"] == ["custom:main"]
 
 
 def test_get_agent_returns_empty_record_for_missing_agent():
@@ -97,8 +122,8 @@ def test_get_agent_returns_empty_record_for_missing_agent():
 
     assert manager.websocket.last_payload == {
         "type": "agent-response",
+        "agentKey": "missing:main",
         "agent": {
-            "agentKey": "missing:main",
             "memory": "",
             "modelInfo": {},
         },
@@ -153,15 +178,14 @@ def test_reaction_chat_task_appends_hover_info_to_existing_prompt():
         }
     )
     manager.experiment.agent_registry["reaction:product"] = AgentRegistryEntry(
-        agent_key="reaction:product",
-        agent=SimpleNamespace(
-            task=SimpleNamespace(get_system_prompt=lambda: "Existing instructions")
+        agent=FakeAgent(
+            task=Task(system_prompt="Existing instructions", user_prompt=""),
+            memory="",
+            model_info={"backend": "dummy", "model": "dummy-model"},
         ),
-        runtime_config=AgentRuntimeConfig(
-            agent_key="reaction:product",
-        ),
+        runtime_config=AgentRuntimeConfig(),
     )
-    manager.selected_tool_runtime = lambda: SimpleNamespace(task_kwargs=lambda: {})
+    manager.selected_tool_runtime = FakeToolRuntime
 
     task = manager._chat_task_for_agent(
         "reaction:product",
@@ -179,7 +203,7 @@ def test_reaction_chat_task_appends_hover_info_to_existing_prompt():
 
 def test_reaction_chat_task_uses_hover_info_metadata_fallback():
     manager = make_manager()
-    manager.selected_tool_runtime = lambda: SimpleNamespace(task_kwargs=lambda: {})
+    manager.selected_tool_runtime = FakeToolRuntime
 
     task = manager._chat_task_for_agent(
         "reaction:product",

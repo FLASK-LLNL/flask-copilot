@@ -201,8 +201,9 @@ export interface WebSocketMessage {
   experimentContext?: any;
   orchestratorSettings?: FlaskOrchestratorSettings;
   reference?: PdfReferenceMetadata | null;
+  agentKey?: string;
   agent?: SerializedAgent;
-  agents?: SerializedAgent[];
+  agents?: string[];
 
   withNode?: boolean;
   username?: string;

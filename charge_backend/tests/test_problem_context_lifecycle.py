@@ -39,11 +39,8 @@ def test_reset_problem_context_clears_retrosynthesis_state_for_lmo():
     manager = make_manager()
     manager.retro_synth_context = RetrosynthesisContext()
     manager.experiment.agent_registry["reaction:node_0"] = AgentRegistryEntry(
-        agent_key="reaction:node_0",
         agent=SimpleNamespace(task=None, save_memory=lambda: "old"),
-        runtime_config=AgentRuntimeConfig(
-            agent_key="reaction:node_0",
-        ),
+        runtime_config=AgentRuntimeConfig(),
     )
 
     manager.reset_problem_context("optimization")
