@@ -10,7 +10,7 @@ This document is for agents developing or debugging code. Use it to identify the
 
 - `charge_backend/`: FLASK Copilot-specific backend behavior, domain workflows, WebSocket actions, PDF support, and chemistry tools.
 - `flask-app/`: React frontend for graph-based molecule workflows, project state, settings, attachments, and result visualization.
-- `externals/ChARGe`: submodule providing the generic `charge` task, client, backend, and experiment framework.
+- `externals/charge`: submodule providing the generic `ChARGe` task, client, backend, and experiment framework.
 - `externals/lc_conductor`: submodule providing shared backend orchestration utilities and reusable React components consumed by the frontend.
 
 Changes to generic agent execution usually belong in `externals/ChARGe`. Changes to tool registration, selected MCP runtime, local MCP proxying, or shared UI components usually belong in `externals/lc_conductor`. Changes to FLASK-specific chemistry workflows belong in `charge_backend/` or `flask-app/src/`.
