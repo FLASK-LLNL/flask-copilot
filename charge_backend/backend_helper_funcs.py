@@ -167,6 +167,10 @@ class CallbackHandler(AgentCallback):
         self.pending_tool_calls_by_name: dict[str, list[dict[str, Any]]] = {}
         self._pending_send_tasks: set[asyncio.Task[Any]] = set()
 
+    async def on_task_start(self) -> None:
+        if self.on_agent_update is not None:
+            await self.on_agent_update()
+
     @staticmethod
     def _parse_tool_arguments(
         arguments: Any,

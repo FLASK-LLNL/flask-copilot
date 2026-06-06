@@ -130,6 +130,55 @@ def test_get_agent_returns_empty_record_for_missing_agent():
     }
 
 
+def test_get_agent_includes_pending_user_message_from_running_request():
+    manager = make_manager()
+    agent = FakeAgent(
+        task=Task(system_prompt="System", user_prompt="Current question"),
+        memory='{"state":{"in_memory":{"messages":[{"role":"user"}]}}}',
+        model_info={"backend": "dummy", "model": "dummy-model"},
+    )
+    agent.pending_user_message = {
+        "text": "Current question",
+        "afterMessageCount": 1,
+    }
+    manager.experiment.agent_registry["custom:main"] = AgentRegistryEntry(
+        agent=agent,
+        runtime_config=AgentRuntimeConfig(
+            backend="dummy",
+            model="dummy-model",
+        ),
+    )
+
+    asyncio.run(manager.handle_get_agent({"agentKey": "custom:main"}))
+
+    assert manager.websocket.last_payload["type"] == "agent-response"
+    assert manager.websocket.last_payload["agentKey"] == "custom:main"
+    assert manager.websocket.last_payload["agent"]["pendingUserMessage"] == {
+        "text": "Current question",
+        "afterMessageCount": 1,
+    }
+
+
+def test_agent_task_lifecycle_tracks_pending_message_and_instructions():
+    agent = FakeAgent(
+        task=Task(system_prompt="System", user_prompt="Current question"),
+        memory='{"state":{"in_memory":{"messages":[{"role":"user"}]}}}',
+        model_info={},
+    )
+
+    agent.begin_task_run()
+    assert agent.pending_user_message == {
+        "text": "Current question",
+        "afterMessageCount": 1,
+    }
+
+    agent.finish_task_run()
+    assert agent.pending_user_message is None
+    assert [snapshot.to_json() for snapshot in agent.instruction_history] == [
+        {"messageCount": 1, "instructions": "System"}
+    ]
+
+
 def test_reaction_context_includes_reaction_hover_info():
     manager = make_manager()
     manager.retro_synth_context = RetrosynthesisContext(
