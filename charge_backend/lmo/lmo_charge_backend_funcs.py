@@ -7,7 +7,6 @@ import os
 from pathlib import Path
 import json
 from uuid import uuid4
-from charge.clients.agent_factory import ReasoningCallbackType
 from charge.experiments.experiment import Experiment
 from charge.utils.mcp_workbench_utils import call_mcp_tool_directly
 from charge_backend.prompt_debugger import debug_prompt_task
@@ -59,7 +58,6 @@ async def generate_lead_molecule(
     tool_runtime: ToolRuntime,
     websocket: WebSocket,
     run_settings: FlaskRunSettings,
-    log_progress: ReasoningCallbackType,
     property: str = "density",
     property_description: str = "molecular density (g/cc)",
     calculate_property_tool: str = "calculate_property_hf",
@@ -396,7 +394,6 @@ async def generate_lead_molecule(
                 if run_settings.prompt_debugging:
                     await debug_prompt_task(lmo_task, websocket)
                 await experiment.run_async(
-                    log_progress,
                     callback=callback,
                     agent_key="lmo:main",
                 )

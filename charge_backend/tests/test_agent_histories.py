@@ -38,7 +38,7 @@ class FakeAgent(Agent):
         self.memory = memory
         self.model_info = model_info
 
-    def run(self, reasoning_callback=None, **kwargs) -> str:
+    def run(self, **kwargs) -> str:
         return ""
 
     def load_memory(self, json_str: str) -> None:

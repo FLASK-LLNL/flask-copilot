@@ -175,6 +175,24 @@ class CallbackHandler(AgentCallback):
         if self.on_agent_update is not None:
             await self.on_agent_update()
 
+    async def on_reasoning_update(
+        self,
+        text: str,
+        *,
+        source: Optional[str] = None,
+    ) -> None:
+        del source
+        logger.info(f"Reasoning: {text}")
+        await self.websocket.send_json(
+            {
+                "type": "response",
+                "message": {
+                    "source": "Reasoning",
+                    "message": text,
+                },
+            }
+        )
+
     @staticmethod
     def _parse_tool_arguments(
         arguments: Any,

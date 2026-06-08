@@ -32,7 +32,6 @@ from charge_backend.retrosynthesis.retrosynthesis_task import (
 )
 
 from charge.experiments.experiment import Experiment
-from charge.clients.agent_factory import ReasoningCallbackType
 from lc_conductor import ToolRuntime
 
 
@@ -70,7 +69,6 @@ async def ai_based_retrosynthesis(
     config_file: str,
     run_settings: FlaskRunSettings,
     tool_runtime: ToolRuntime,
-    log_progress: ReasoningCallbackType,
     attachments: Optional[list[dict[str, object]]] = None,
     history_callback: Optional[Callable[[], Awaitable[None]]] = None,
 ):
@@ -147,7 +145,7 @@ async def ai_based_retrosynthesis(
     await highlight_node(current_node, websocket, True)
     if run_settings.prompt_debugging:
         await debug_prompt(runner, websocket)
-    output = await runner.run(log_progress)
+    output = await runner.run()
     if callback_handler is not None:
         await callback_handler.drain()
     experiment.add_to_context(runner, retro_task, output)
@@ -316,7 +314,6 @@ async def db_then_ai_retrosynthesis(
     config_file: str,
     run_settings: FlaskRunSettings,
     tool_runtime: ToolRuntime,
-    log_progress: ReasoningCallbackType,
     attachments: Optional[list[dict[str, object]]] = None,
     history_callback: Optional[Callable[[], Awaitable[None]]] = None,
 ):
@@ -350,7 +347,6 @@ async def db_then_ai_retrosynthesis(
         config_file,
         run_settings,
         tool_runtime,
-        log_progress,
         attachments,
         history_callback,
     )

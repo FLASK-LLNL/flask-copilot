@@ -174,13 +174,6 @@ class FlaskActionManager(ActionManager):
             }
         )
 
-    async def log_progress(self, progress: str, agent_key: Optional[str] = None):
-        logger.info(f"Reasoning: {progress}")
-        await self._send_processing_message(
-            progress,
-            "Reasoning",
-        )
-
     async def handle_compute(self, data: dict) -> None:
         self.setup_run_settings(data)
         problem_type = data.get("problemType")
@@ -321,7 +314,6 @@ class FlaskActionManager(ActionManager):
             tool_runtime,
             self.task_manager.websocket,
             self.run_settings,
-            partial(self.log_progress, agent_key="lmo:main"),
             *property_attributes,
             data.get("query", None),
             initial_level,
@@ -373,7 +365,6 @@ class FlaskActionManager(ActionManager):
             tool_runtime,
             self.task_manager.websocket,
             self.run_settings,
-            partial(self.log_progress, agent_key="custom:main"),
             attachments,
             self._agent_update_callback("custom:main", data),
         )
@@ -440,7 +431,6 @@ class FlaskActionManager(ActionManager):
             self.args.config_file,
             self.run_settings,
             self.selected_tool_runtime(),
-            partial(self.log_progress, agent_key=f"reaction:{data['nodeId']}"),
             attachments,
             self._agent_update_callback(f"reaction:{data['nodeId']}", data),
         )
@@ -561,13 +551,8 @@ class FlaskActionManager(ActionManager):
             self.args.config_file,
             self.run_settings,
             self.selected_tool_runtime(),
-            partial(self.log_progress, agent_key=f"reaction:{parent_nodeid}"),
             attachments,
-            partial(
-                self.send_agent_update,
-                f"reaction:{parent_nodeid}",
-                debug=bool(data.get("debug")),
-            ),
+            self._agent_update_callback(f"reaction:{parent_nodeid}", data),
         )
 
         asyncio.create_task(self.task_manager.run_task(run_func()))
@@ -641,9 +626,7 @@ class FlaskActionManager(ActionManager):
         async def run_and_report():
             if self.run_settings.prompt_debugging:
                 await debug_prompt(agent, self.websocket)
-            result = await agent.run(
-                partial(self.log_progress, agent_key=f"molecule:{data['nodeId']}")
-            )
+            result = await agent.run()
             await callback_handler.drain()
             self.experiment.add_to_context(agent, task, result)
             # Report answer
@@ -707,9 +690,7 @@ class FlaskActionManager(ActionManager):
         async def run_and_report():
             if self.run_settings.prompt_debugging:
                 await debug_prompt(agent, self.websocket)
-            result = await agent.run(
-                partial(self.log_progress, agent_key=f"reaction:{data['nodeId']}")
-            )
+            result = await agent.run()
             await callback_handler.drain()
             self.experiment.add_to_context(agent, task, result)
             # Report answer
@@ -871,7 +852,7 @@ class FlaskActionManager(ActionManager):
         async def run_and_report():
             if self.run_settings.prompt_debugging:
                 await debug_prompt(agent, self.websocket)
-            result = await agent.run(partial(self.log_progress, agent_key=agent_key))
+            result = await agent.run()
             await callback_handler.drain()
             self.experiment.add_to_context(agent, task, result)
             await self._send_processing_message(

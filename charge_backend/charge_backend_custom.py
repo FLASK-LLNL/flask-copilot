@@ -2,7 +2,6 @@ from fastapi import WebSocket
 import re
 from typing import Awaitable, Callable, Optional
 
-from charge.clients.agent_factory import ReasoningCallbackType
 from charge.experiments.experiment import Experiment
 from charge.tasks.task import Task
 from charge_backend.backend_helper_funcs import Node, CallbackHandler, FlaskRunSettings
@@ -19,7 +18,6 @@ async def run_custom_problem(
     tool_runtime: ToolRuntime,
     websocket: WebSocket,
     run_settings: FlaskRunSettings,
-    log_progress: ReasoningCallbackType,
     attachments: Optional[list[dict[str, object]]] = None,
     history_callback: Optional[Callable[[], Awaitable[None]]] = None,
 ):
@@ -40,7 +38,7 @@ async def run_custom_problem(
 
     if run_settings.prompt_debugging:
         await debug_prompt(agent, websocket)
-    result = await agent.run(log_progress)
+    result = await agent.run()
     await callback_handler.drain()
     experiment.add_to_context(agent, task, result)
     await websocket.send_json(

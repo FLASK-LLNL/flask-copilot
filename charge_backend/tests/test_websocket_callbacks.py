@@ -78,3 +78,34 @@ def test_callback_handler_notifies_agent_update_without_tagging_sidebar_messages
         assert update_count == 1
 
     asyncio.run(run())
+
+
+def test_callback_handler_sends_reasoning_update_as_processing_message():
+    async def run() -> None:
+        websocket = FakeWebSocket()
+        update_count = 0
+
+        async def on_update() -> None:
+            nonlocal update_count
+            update_count += 1
+
+        callback = CallbackHandler(
+            websocket,
+            agent_key="reaction:node_1",
+            on_agent_update=on_update,
+        )
+
+        await callback.on_reasoning_update("checking synthesis options")
+
+        assert websocket.messages == [
+            {
+                "type": "response",
+                "message": {
+                    "source": "Reasoning",
+                    "message": "checking synthesis options",
+                },
+            }
+        ]
+        assert update_count == 0
+
+    asyncio.run(run())
