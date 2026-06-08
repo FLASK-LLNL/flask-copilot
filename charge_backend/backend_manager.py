@@ -99,6 +99,9 @@ class FlaskActionManager(ActionManager):
             ],
         )
 
+    def _agent_update_callback(self, agent_key: str, data: dict[str, Any]):
+        return partial(self.send_agent_update, agent_key, debug=bool(data.get("debug")))
+
     def _document_reference_context(self) -> str:
         metadata = self.pdf_registry.active_metadata(self.username)
         if metadata is None:
@@ -332,11 +335,7 @@ class FlaskActionManager(ActionManager):
             number_of_molecules,
             num_top_candidates,
             attachments,
-            partial(
-                self.send_agent_update,
-                "lmo:main",
-                debug=bool(data.get("debug")),
-            ),
+            self._agent_update_callback("lmo:main", data),
         )
         await self.task_manager.run_task(run_func())
 
@@ -376,11 +375,7 @@ class FlaskActionManager(ActionManager):
             self.run_settings,
             partial(self.log_progress, agent_key="custom:main"),
             attachments,
-            partial(
-                self.send_agent_update,
-                "custom:main",
-                debug=bool(data.get("debug")),
-            ),
+            self._agent_update_callback("custom:main", data),
         )
 
         await self.task_manager.run_task(run_func())
@@ -447,11 +442,7 @@ class FlaskActionManager(ActionManager):
             self.selected_tool_runtime(),
             partial(self.log_progress, agent_key=f"reaction:{data['nodeId']}"),
             attachments,
-            partial(
-                self.send_agent_update,
-                f"reaction:{data['nodeId']}",
-                debug=bool(data.get("debug")),
-            ),
+            self._agent_update_callback(f"reaction:{data['nodeId']}", data),
         )
 
         asyncio.create_task(self.task_manager.run_task(run_func()))
@@ -637,10 +628,8 @@ class FlaskActionManager(ActionManager):
         callback_handler = CallbackHandler(
             self.websocket,
             agent_key=f"molecule:{data['nodeId']}",
-            on_agent_update=partial(
-                self.send_agent_update,
-                f"molecule:{data['nodeId']}",
-                debug=bool(data.get("debug")),
+            on_agent_update=self._agent_update_callback(
+                f"molecule:{data['nodeId']}", data
             ),
         )
         agent = self.experiment.create_agent_with_experiment_state(
@@ -657,9 +646,6 @@ class FlaskActionManager(ActionManager):
             )
             await callback_handler.drain()
             self.experiment.add_to_context(agent, task, result)
-            await self.send_agent_update(
-                f"molecule:{data['nodeId']}", debug=bool(data.get("debug"))
-            )
             # Report answer
             await self._send_processing_message(
                 result,
@@ -698,10 +684,8 @@ class FlaskActionManager(ActionManager):
         callback_handler = CallbackHandler(
             self.websocket,
             agent_key=f"reaction:{data['nodeId']}",
-            on_agent_update=partial(
-                self.send_agent_update,
-                f"reaction:{data['nodeId']}",
-                debug=bool(data.get("debug")),
+            on_agent_update=self._agent_update_callback(
+                f"reaction:{data['nodeId']}", data
             ),
         )
         agent = self.experiment.create_agent_with_experiment_state(
@@ -728,9 +712,6 @@ class FlaskActionManager(ActionManager):
             )
             await callback_handler.drain()
             self.experiment.add_to_context(agent, task, result)
-            await self.send_agent_update(
-                f"reaction:{data['nodeId']}", debug=bool(data.get("debug"))
-            )
             # Report answer
             await self._send_processing_message(
                 result,
@@ -875,11 +856,7 @@ class FlaskActionManager(ActionManager):
         callback_handler = CallbackHandler(
             self.websocket,
             agent_key=agent_key,
-            on_agent_update=partial(
-                self.send_agent_update,
-                agent_key,
-                debug=bool(data.get("debug")),
-            ),
+            on_agent_update=self._agent_update_callback(agent_key, data),
         )
         agent = self.experiment.create_agent_with_experiment_state(
             task=task,
@@ -897,7 +874,6 @@ class FlaskActionManager(ActionManager):
             result = await agent.run(partial(self.log_progress, agent_key=agent_key))
             await callback_handler.drain()
             self.experiment.add_to_context(agent, task, result)
-            await self.send_agent_update(agent_key, debug=bool(data.get("debug")))
             await self._send_processing_message(
                 result,
                 source="Agent",

@@ -171,6 +171,10 @@ class CallbackHandler(AgentCallback):
         if self.on_agent_update is not None:
             await self.on_agent_update()
 
+    async def on_task_finish(self) -> None:
+        if self.on_agent_update is not None:
+            await self.on_agent_update()
+
     @staticmethod
     def _parse_tool_arguments(
         arguments: Any,

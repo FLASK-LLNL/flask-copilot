@@ -45,10 +45,6 @@ from charge_backend.builtin_tools import list_builtin_tool_definitions
 from charge_backend.pdf import PdfDocumentRegistry
 from charge_backend import prompt_debugger
 
-# Pydantic models for new endpoints
-from pydantic import BaseModel
-from typing import Optional
-
 parser = argparse.ArgumentParser()
 
 parser.add_argument(

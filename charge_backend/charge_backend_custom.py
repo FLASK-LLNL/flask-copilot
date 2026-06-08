@@ -43,8 +43,6 @@ async def run_custom_problem(
     result = await agent.run(log_progress)
     await callback_handler.drain()
     experiment.add_to_context(agent, task, result)
-    if history_callback is not None:
-        await history_callback()
     await websocket.send_json(
         {
             "type": "response",

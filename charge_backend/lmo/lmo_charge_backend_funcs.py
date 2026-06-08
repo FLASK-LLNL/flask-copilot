@@ -401,8 +401,6 @@ async def generate_lead_molecule(
                     agent_key="lmo:main",
                 )
                 await callback.drain()
-                if history_callback is not None:
-                    await history_callback()
                 finished_tasks = experiment.get_finished_tasks()
                 _, results = finished_tasks[-1]
 

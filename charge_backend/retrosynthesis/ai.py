@@ -151,8 +151,6 @@ async def ai_based_retrosynthesis(
     if callback_handler is not None:
         await callback_handler.drain()
     experiment.add_to_context(runner, retro_task, output)
-    if history_callback is not None:
-        await history_callback()
 
     if os.getenv("CHARGE_DISABLE_OUTPUT_VALIDATION", "0") == "1":
         await clogger.warning(
