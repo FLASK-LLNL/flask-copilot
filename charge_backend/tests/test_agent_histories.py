@@ -51,11 +51,6 @@ class FakeAgent(Agent):
         return self.model_info
 
 
-class FakeToolRuntime:
-    def task_kwargs(self) -> dict[str, Any]:
-        return {}
-
-
 def make_manager():
     websocket = FakeWebSocket()
     task_manager = FakeTaskManager(websocket)
@@ -212,59 +207,71 @@ def test_reaction_context_includes_reaction_hover_info():
     assert "Reaction hover information:\n# Literature reaction\nYield: 82%" in context
 
 
-def test_reaction_chat_task_appends_hover_info_to_existing_prompt():
+def test_reaction_context_uses_hover_info_metadata_fallback():
     manager = make_manager()
-    manager.retro_synth_context = RetrosynthesisContext(
-        node_ids={
-            "product": Node(
-                id="product",
-                smiles="CCO",
-                label="Product",
-                hoverInfo="Product hover",
-                level=0,
-                reaction=Reaction(id="rxn", hoverInfo="Template match: Suzuki"),
-            )
-        }
-    )
-    manager.experiment.agent_registry["reaction:product"] = AgentRegistryEntry(
-        agent=FakeAgent(
-            task=Task(system_prompt="Existing instructions", user_prompt=""),
-            memory="",
-            model_info={"backend": "dummy", "model": "dummy-model"},
-        ),
-        runtime_config=AgentRuntimeConfig(),
-    )
-    manager.selected_tool_runtime = FakeToolRuntime
 
-    task = manager._chat_task_for_agent(
-        "reaction:product",
-        {"nodeId": "product", "query": "Why this route?"},
-        [],
-    )
-    task_json = task.to_json()
-
-    assert "Existing instructions" in task_json["system_prompt"]
-    assert (
-        "Reaction hover information:\nTemplate match: Suzuki"
-        in task_json["system_prompt"]
+    context = manager._reaction_context_for_node(
+        "product",
+        {"metadata": {"reactionHoverInfo": "Database yield: 75%"}},
     )
 
+    assert "Reaction hover information:\nDatabase yield: 75%" in context
 
-def test_reaction_chat_task_uses_hover_info_metadata_fallback():
+
+def test_chat_agent_routes_molecule_to_custom_query_handler():
     manager = make_manager()
-    manager.selected_tool_runtime = FakeToolRuntime
+    routed = []
 
-    task = manager._chat_task_for_agent(
-        "reaction:product",
+    async def fake_handle_custom_query_molecule(data):
+        routed.append(data)
+
+    manager.handle_custom_query_molecule = fake_handle_custom_query_molecule
+
+    asyncio.run(
+        manager.handle_chat_agent(
+            {
+                "agentKey": "molecule:product",
+                "query": "  Why this scaffold?  ",
+                "metadata": {"smiles": "CCO"},
+            }
+        )
+    )
+
+    assert routed == [
         {
+            "agentKey": "molecule:product",
+            "query": "Why this scaffold?",
+            "metadata": {"smiles": "CCO"},
             "nodeId": "product",
+            "smiles": "CCO",
+        }
+    ]
+
+
+def test_chat_agent_routes_reaction_to_custom_query_handler():
+    manager = make_manager()
+    routed = []
+
+    async def fake_handle_custom_query_reaction(data):
+        routed.append(data)
+
+    manager.handle_custom_query_reaction = fake_handle_custom_query_reaction
+
+    asyncio.run(
+        manager.handle_chat_agent(
+            {
+                "agentKey": "reaction:product",
+                "query": "What is the yield?",
+                "metadata": {"reactionHoverInfo": "Database yield: 75%"},
+            }
+        )
+    )
+
+    assert routed == [
+        {
+            "agentKey": "reaction:product",
             "query": "What is the yield?",
             "metadata": {"reactionHoverInfo": "Database yield: 75%"},
-        },
-        [],
-    )
-    task_json = task.to_json()
-
-    assert (
-        "Reaction hover information:\nDatabase yield: 75%" in task_json["system_prompt"]
-    )
+            "nodeId": "product",
+        }
+    ]

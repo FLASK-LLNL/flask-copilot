@@ -437,6 +437,7 @@ const ChemistryTool: React.FC = () => {
   const projectManagement = useProjectManagement(projectData);
   const attachmentRegistryRef = useRef<Record<string, AgentAttachment>>({});
   const selectedAgentKeyRef = useRef<string | null>(null);
+  const agentChatMetadataRef = useRef<Record<string, Record<string, unknown>>>({});
   const agentChatDebugRef = useRef<boolean>(false);
   const activeAgentKeysRef = useRef<Set<string>>(new Set());
   const allChatsOpenRef = useRef<boolean>(false);
@@ -473,6 +474,37 @@ const ChemistryTool: React.FC = () => {
     metadata: fallback?.metadata,
     messages: [],
   });
+
+  const preserveAgentHistoryUiMetadata = (
+    incoming: AgentChatHistory,
+    previous: AgentChatHistory | null
+  ): AgentChatHistory => {
+    const preservedMetadata =
+      incoming.metadata ??
+      (previous?.agentKey === incoming.agentKey ? previous.metadata : undefined) ??
+      agentChatMetadataRef.current[incoming.agentKey];
+    if (preservedMetadata) {
+      agentChatMetadataRef.current[incoming.agentKey] = preservedMetadata;
+    }
+    if (!previous || previous.agentKey !== incoming.agentKey) {
+      if (!preservedMetadata) {
+        return incoming;
+      }
+      return {
+        ...incoming,
+        metadata: preservedMetadata,
+      };
+    }
+    if (!preservedMetadata) {
+      return incoming;
+    }
+    return {
+      ...incoming,
+      title: incoming.title === incoming.agentKey ? previous.title : incoming.title,
+      subtitle: incoming.subtitle ?? previous.subtitle,
+      metadata: preservedMetadata,
+    };
+  };
 
   const markAgentChatActive = (agentKey: string): void => {
     const nextActive = new Set(activeAgentKeysRef.current);
@@ -1248,7 +1280,7 @@ const ChemistryTool: React.FC = () => {
               });
               setAgentChatHistory((prev) =>
                 selectedAgentKeyRef.current === data.agentKey || prev?.agentKey === data.agentKey
-                  ? incomingHistory
+                  ? preserveAgentHistoryUiMetadata(incomingHistory, prev)
                   : prev
               );
               hydrateAttachmentRegistry(data.experimentContext);
@@ -1755,6 +1787,9 @@ const ChemistryTool: React.FC = () => {
         metadata?: Record<string, unknown>;
       }
     ): void => {
+      if (fallback.metadata) {
+        agentChatMetadataRef.current[agentKey] = fallback.metadata;
+      }
       selectedAgentKeyRef.current = agentKey;
       setAgentChatHistory(makeAgentHistoryFallback(agentKey, fallback));
       setAgentChatOpen(true);
@@ -1773,6 +1808,8 @@ const ChemistryTool: React.FC = () => {
   const submitAgentChatMessage = useCallback(
     (query: string, attachments: AgentAttachment[]): void => {
       if (!agentChatHistory) return;
+      const metadata =
+        agentChatHistory.metadata ?? agentChatMetadataRef.current[agentChatHistory.agentKey];
       registerAttachments(attachments);
       pendingAttachmentContextSyncRef.current = true;
       markAgentChatActive(agentChatHistory.agentKey);
@@ -1782,15 +1819,9 @@ const ChemistryTool: React.FC = () => {
         query,
         attachments,
         debug: agentChatDebug,
-        metadata: agentChatHistory.metadata,
-        smiles:
-          typeof agentChatHistory.metadata?.smiles === 'string'
-            ? agentChatHistory.metadata.smiles
-            : undefined,
-        nodeId:
-          typeof agentChatHistory.metadata?.nodeId === 'string'
-            ? agentChatHistory.metadata.nodeId
-            : undefined,
+        metadata,
+        smiles: typeof metadata?.smiles === 'string' ? metadata.smiles : undefined,
+        nodeId: typeof metadata?.nodeId === 'string' ? metadata.nodeId : undefined,
       });
     },
     [agentChatDebug, agentChatHistory, registerAttachments, sendMessageToServer]
@@ -1800,16 +1831,12 @@ const ChemistryTool: React.FC = () => {
     (nextDebug: boolean): void => {
       setAgentChatDebug(nextDebug);
       if (agentChatHistory?.agentKey) {
+        const metadata =
+          agentChatHistory.metadata ?? agentChatMetadataRef.current[agentChatHistory.agentKey];
         requestAgentHistory(agentChatHistory.agentKey, nextDebug, {
-          metadata: agentChatHistory.metadata,
-          smiles:
-            typeof agentChatHistory.metadata?.smiles === 'string'
-              ? agentChatHistory.metadata.smiles
-              : undefined,
-          nodeId:
-            typeof agentChatHistory.metadata?.nodeId === 'string'
-              ? agentChatHistory.metadata.nodeId
-              : undefined,
+          metadata,
+          smiles: typeof metadata?.smiles === 'string' ? metadata.smiles : undefined,
+          nodeId: typeof metadata?.nodeId === 'string' ? metadata.nodeId : undefined,
         });
       }
       if (allChatsOpen) {

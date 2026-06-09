@@ -641,42 +641,44 @@ class FlaskActionManager(ActionManager):
     async def handle_custom_query_reaction(self, data: dict) -> None:
         """Handle a query on the reaction (from nodeId to its reactants)."""
         self.setup_run_settings(data)
-        assert self.retro_synth_context is not None
+        node_id = str(data["nodeId"])
         attachments = validate_image_attachments(data)
 
         await self._send_processing_message(
-            f"Processing reaction query: {data['query']} for node {data['nodeId']}",
+            f"Processing reaction query: {data['query']} for node {node_id}",
             source="User",
             images=image_refs(attachments) if attachments else None,
         )
 
-        node = self.retro_synth_context.node_ids[data["nodeId"]]
         tool_runtime = self.selected_tool_runtime()
 
         task = Task(
-            system_prompt=self._with_document_reference_context(""),
+            system_prompt="",
             user_prompt=data["query"],
             attachments=attachments,
             **tool_runtime.task_kwargs(),
         )
 
-        reaction_str = self._reaction_context_for_node(str(data["nodeId"]), data)
+        reaction_str = self._reaction_context_for_node(node_id, data)
 
-        task.system_prompt = f"You are a helpful chemical assistant who answers in concise but factual responses. Given the following reaction (as SMILES strings):\n{reaction_str}\n\nAnswer the following query."
+        task.system_prompt = self._with_document_reference_context(
+            "You are a helpful chemical assistant who answers in concise but factual "
+            "responses. Given the following reaction (as SMILES strings):\n"
+            f"{reaction_str}\n\nAnswer the following query."
+        )
 
         callback_handler = CallbackHandler(
             self.websocket,
-            agent_key=f"reaction:{data['nodeId']}",
-            on_agent_update=self._agent_update_callback(
-                f"reaction:{data['nodeId']}", data
-            ),
+            agent_key=f"reaction:{node_id}",
+            on_agent_update=self._agent_update_callback(f"reaction:{node_id}", data),
         )
         agent = self.experiment.create_agent_with_experiment_state(
             task=task,
-            agent_key=f"reaction:{data['nodeId']}",
+            agent_key=f"reaction:{node_id}",
             callback=callback_handler,
         )
-        self.retro_synth_context.node_id_to_charge_client[data["nodeId"]] = agent
+        if self.retro_synth_context is not None:
+            self.retro_synth_context.node_id_to_charge_client[node_id] = agent
 
         # TODO(later): For some reason the below code does not work because memory is not maintained
         # else:
@@ -701,12 +703,6 @@ class FlaskActionManager(ActionManager):
             await self.websocket.send_json({"type": "complete"})
 
         asyncio.create_task(self.task_manager.run_task(run_and_report()))
-
-    def _agent_key_parts(self, agent_key: str) -> tuple[str, str]:
-        if ":" not in agent_key:
-            return agent_key, ""
-        kind, target = agent_key.split(":", 1)
-        return kind, target
 
     def _reaction_hover_info_for_node(
         self, node_id: str, data: Optional[dict[str, Any]] = None
@@ -756,68 +752,6 @@ class FlaskActionManager(ActionManager):
             reaction_str += f"\n\nReaction hover information:\n{hover_info}"
         return reaction_str
 
-    def _with_reaction_hover_info(
-        self, system_prompt: str, node_id: str, data: Optional[dict[str, Any]] = None
-    ) -> str:
-        hover_info = self._reaction_hover_info_for_node(node_id, data)
-        if not hover_info or hover_info in system_prompt:
-            return system_prompt
-        return f"{system_prompt}\n\nReaction hover information:\n{hover_info}"
-
-    def _chat_task_for_agent(
-        self,
-        agent_key: str,
-        data: dict[str, Any],
-        attachments: list[dict[str, object]],
-    ) -> Task:
-        kind, target = self._agent_key_parts(agent_key)
-        existing = self.experiment.agent_registry.get(agent_key)
-        existing_agent = existing.agent if existing else None
-        existing_task = getattr(existing_agent, "task", None)
-        system_prompt = (
-            existing_task.get_system_prompt()
-            if existing_task is not None and hasattr(existing_task, "get_system_prompt")
-            else ""
-        )
-
-        if not system_prompt:
-            if kind == "molecule":
-                request_metadata = (
-                    data.get("metadata")
-                    if isinstance(data.get("metadata"), dict)
-                    else {}
-                )
-                smiles = data.get("smiles") or request_metadata.get("smiles") or target
-                system_prompt = (
-                    "You are a helpful chemical assistant who answers in concise but "
-                    f"factual responses. Answer questions about the molecule `{smiles}`."
-                )
-            elif kind == "reaction":
-                node_id = data.get("nodeId") or target
-                reaction_context = self._reaction_context_for_node(str(node_id), data)
-                system_prompt = (
-                    "You are a helpful chemical assistant who answers in concise but "
-                    "factual responses. Given the following reaction as SMILES strings:\n"
-                    f"{reaction_context}\n\nAnswer the user's questions."
-                )
-            else:
-                system_prompt = (
-                    "You are a helpful chemical assistant who answers in concise but "
-                    "factual responses."
-                )
-
-            system_prompt = self._with_document_reference_context(system_prompt)
-        elif kind == "reaction":
-            node_id = str(data.get("nodeId") or target)
-            system_prompt = self._with_reaction_hover_info(system_prompt, node_id, data)
-
-        return Task(
-            system_prompt=system_prompt,
-            user_prompt=str(data.get("query") or ""),
-            attachments=attachments,
-            **self.selected_tool_runtime().task_kwargs(),
-        )
-
     async def handle_chat_agent(self, data: dict[str, Any]) -> None:
         self.setup_run_settings(data)
         agent_key = str(data.get("agentKey") or "")
@@ -827,41 +761,23 @@ class FlaskActionManager(ActionManager):
         if not query:
             raise ValueError("query is required")
 
-        attachments = validate_image_attachments(data)
-        task = self._chat_task_for_agent(agent_key, data, attachments)
-        await self._send_processing_message(
-            query,
-            source="User",
-            images=image_refs(attachments) if attachments else None,
-        )
-        callback_handler = CallbackHandler(
-            self.websocket,
-            agent_key=agent_key,
-            on_agent_update=self._agent_update_callback(agent_key, data),
-        )
-        agent = self.experiment.create_agent_with_experiment_state(
-            task=task,
-            agent_key=agent_key,
-            callback=callback_handler,
-        )
-        kind, target = self._agent_key_parts(agent_key)
-        if kind == "reaction" and self.retro_synth_context is not None:
-            node_id = str(data.get("nodeId") or target)
-            self.retro_synth_context.node_id_to_charge_client[node_id] = agent
-
-        async def run_and_report():
-            if self.run_settings.prompt_debugging:
-                await debug_prompt(agent, self.websocket)
-            result = await agent.run()
-            await callback_handler.drain()
-            self.experiment.add_to_context(agent, task, result)
-            await self._send_processing_message(
-                result,
-                source="Agent",
+        kind, _, target = agent_key.partition(":")
+        routed_data = {**data, "query": query}
+        if kind == "molecule":
+            metadata = (
+                data.get("metadata") if isinstance(data.get("metadata"), dict) else {}
             )
-            await self.websocket.send_json({"type": "complete"})
-
-        asyncio.create_task(self.task_manager.run_task(run_and_report()))
+            routed_data["nodeId"] = data.get("nodeId") or target
+            routed_data["smiles"] = (
+                data.get("smiles") or metadata.get("smiles") or target
+            )
+            await self.handle_custom_query_molecule(routed_data)
+            return
+        if kind == "reaction":
+            routed_data["nodeId"] = data.get("nodeId") or target
+            await self.handle_custom_query_reaction(routed_data)
+            return
+        raise ValueError(f"Unsupported chat agent key: {agent_key}")
 
     async def handle_get_username(self, _: dict) -> None:
         await self.websocket.send_json(
