@@ -742,11 +742,6 @@ class FlaskActionManager(ActionManager):
         reactants = [self.retro_synth_context.node_ids[nid] for nid in child_nodes]
         reactants_str = "\n".join(reactant.smiles for reactant in reactants)
         reaction_str = f"Product: {node.smiles}\nReactants:\n{reactants_str}"
-        if node_id in self.retro_synth_context.node_id_to_reasoning_summary:
-            reaction_str += (
-                "\nAdditionally, the following context is given: "
-                f"{self.retro_synth_context.node_id_to_reasoning_summary[node_id]}"
-            )
         hover_info = self._reaction_hover_info_for_node(node_id, data)
         if hover_info:
             reaction_str += f"\n\nReaction hover information:\n{hover_info}"
