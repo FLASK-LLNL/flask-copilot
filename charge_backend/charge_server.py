@@ -45,10 +45,6 @@ from charge_backend.builtin_tools import list_builtin_tool_definitions
 from charge_backend.pdf import PdfDocumentRegistry
 from charge_backend import prompt_debugger
 
-# Pydantic models for new endpoints
-from pydantic import BaseModel
-from typing import Optional
-
 parser = argparse.ArgumentParser()
 
 parser.add_argument(
@@ -283,6 +279,9 @@ async def websocket_endpoint(websocket: WebSocket):
         # Settings
         "ui-update-orchestrator-settings": action_manager.handle_orchestrator_settings_update,
         "get-username": action_manager.handle_get_username,
+        "list-agents": action_manager.handle_list_agents,
+        "get-agent": action_manager.handle_get_agent,
+        "chat-agent": action_manager.handle_chat_agent,
         # Context management
         "save-context": action_manager.handle_save_state,
         "load-context": action_manager.handle_load_state,

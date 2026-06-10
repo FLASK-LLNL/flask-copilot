@@ -1,6 +1,6 @@
 import asyncio
 
-from backend_helper_funcs import CallbackHandler
+from charge_backend.backend_helper_funcs import CallbackHandler
 from lc_conductor.callback_logger import CallbackLogger
 
 
@@ -39,7 +39,7 @@ def test_callback_logger_sends_immediately_and_in_order():
 def test_callback_handler_drain_flushes_background_send():
     async def run() -> None:
         websocket = FakeWebSocket()
-        callback = CallbackHandler(websocket, name="test-agent")
+        callback = CallbackHandler(websocket, agent_key="test-agent")
 
         callback(FakeAssistantMessage())
         assert websocket.messages == []
@@ -52,5 +52,60 @@ def test_callback_handler_drain_flushes_background_send():
                 "message": {"message": "[test-agent] User: hello"},
             }
         ]
+
+    asyncio.run(run())
+
+
+def test_callback_handler_notifies_agent_update_without_tagging_sidebar_messages():
+    async def run() -> None:
+        websocket = FakeWebSocket()
+        update_count = 0
+
+        async def on_update() -> None:
+            nonlocal update_count
+            update_count += 1
+
+        callback = CallbackHandler(
+            websocket,
+            agent_key="reaction:node_1",
+            on_agent_update=on_update,
+        )
+
+        await callback.on_tool_result("lookup_reaction", {"ok": True})
+
+        assert "agentKey" not in websocket.messages[0]
+        assert websocket.messages[0]["message"]["source"] == "lookup_reaction"
+        assert update_count == 1
+
+    asyncio.run(run())
+
+
+def test_callback_handler_sends_reasoning_update_as_processing_message():
+    async def run() -> None:
+        websocket = FakeWebSocket()
+        update_count = 0
+
+        async def on_update() -> None:
+            nonlocal update_count
+            update_count += 1
+
+        callback = CallbackHandler(
+            websocket,
+            agent_key="reaction:node_1",
+            on_agent_update=on_update,
+        )
+
+        await callback.on_reasoning_update("checking synthesis options")
+
+        assert websocket.messages == [
+            {
+                "type": "response",
+                "message": {
+                    "source": "Reasoning",
+                    "message": "checking synthesis options",
+                },
+            }
+        ]
+        assert update_count == 0
 
     asyncio.run(run())

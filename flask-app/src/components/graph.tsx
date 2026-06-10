@@ -439,7 +439,6 @@ export const MoleculeGraph: React.FC<MoleculeGraphProps> = ({
               </div>
               {node.reaction && (
                 <div
-                  key={`reaction-${node.id}`}
                   data-node-id={`reaction-${node.id}`}
                   className="graph-reaction"
                   style={{

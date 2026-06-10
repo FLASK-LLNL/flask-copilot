@@ -99,6 +99,9 @@ class FlaskActionManager(ActionManager):
             ],
         )
 
+    def _agent_update_callback(self, agent_key: str, data: dict[str, Any]):
+        return partial(self.send_agent_update, agent_key, debug=bool(data.get("debug")))
+
     def _document_reference_context(self) -> str:
         metadata = self.pdf_registry.active_metadata(self.username)
         if metadata is None:
@@ -170,10 +173,6 @@ class FlaskActionManager(ActionManager):
                 "reference": metadata.json(),
             }
         )
-
-    async def log_progress(self, progress: str):
-        logger.info(f"Reasoning: {progress}")
-        await self._send_processing_message(progress, "Reasoning")
 
     async def handle_compute(self, data: dict) -> None:
         self.setup_run_settings(data)
@@ -293,6 +292,17 @@ class FlaskActionManager(ActionManager):
         depth = customization.get("depth", 3)
         tool_runtime = self.selected_tool_runtime()
         attachments = validate_image_attachments(data)
+        if not data.get("_agentRequestAnnounced"):
+            request_text = (
+                f"LMO request: {data.get('query')}"
+                if data.get("query")
+                else f"LMO request for {data.get('smiles', 'current molecule')}"
+            )
+            await self._send_processing_message(
+                request_text,
+                source="LMO request",
+                images=image_refs(attachments) if attachments else None,
+            )
 
         run_func = partial(
             generate_lead_molecule,
@@ -304,7 +314,6 @@ class FlaskActionManager(ActionManager):
             tool_runtime,
             self.task_manager.websocket,
             self.run_settings,
-            self.log_progress,
             *property_attributes,
             data.get("query", None),
             initial_level,
@@ -318,6 +327,7 @@ class FlaskActionManager(ActionManager):
             number_of_molecules,
             num_top_candidates,
             attachments,
+            self._agent_update_callback("lmo:main", data),
         )
         await self.task_manager.run_task(run_func())
 
@@ -340,12 +350,11 @@ class FlaskActionManager(ActionManager):
         logger.info(f"Data: {data}")
         tool_runtime = self.selected_tool_runtime()
         attachments = validate_image_attachments(data)
-        if attachments:
-            await self._send_processing_message(
-                "Processing custom prompt with attached images",
-                source="User",
-                images=image_refs(attachments),
-            )
+        await self._send_processing_message(
+            data.get("userPrompt") or "Custom prompt",
+            source="User",
+            images=image_refs(attachments) if attachments else None,
+        )
 
         run_func = partial(
             run_custom_problem,
@@ -356,8 +365,8 @@ class FlaskActionManager(ActionManager):
             tool_runtime,
             self.task_manager.websocket,
             self.run_settings,
-            self.log_progress,
             attachments,
+            self._agent_update_callback("custom:main", data),
         )
 
         await self.task_manager.run_task(run_func())
@@ -372,12 +381,16 @@ class FlaskActionManager(ActionManager):
         logger.info("Synthesize tree leaf action received")
         logger.info(f"Data: {data}")
         node = self.retro_synth_context.node_ids[data["nodeId"]]
-        if attachments:
-            await self._send_processing_message(
-                f"Processing retrosynthesis prompt: {data.get('query', '')}",
-                source="User",
-                images=image_refs(attachments),
-            )
+        request_text = (
+            f"Retrosynthesis request for node {data['nodeId']}: {data.get('query', '')}".strip()
+            if data.get("query")
+            else f"Retrosynthesis request for node {data['nodeId']}"
+        )
+        await self._send_processing_message(
+            request_text,
+            source="Retrosynthesis Request",
+            images=image_refs(attachments) if attachments else None,
+        )
 
         has_children = any(
             v == data["nodeId"] for v in self.retro_synth_context.parents.values()
@@ -418,8 +431,8 @@ class FlaskActionManager(ActionManager):
             self.args.config_file,
             self.run_settings,
             self.selected_tool_runtime(),
-            self.log_progress,
             attachments,
+            self._agent_update_callback(f"reaction:{data['nodeId']}", data),
         )
 
         asyncio.create_task(self.task_manager.run_task(run_func()))
@@ -453,13 +466,15 @@ class FlaskActionManager(ActionManager):
         if prompt:
             await self._send_processing_message(
                 f"Processing optimization query: {prompt} for node {data['nodeId']}",
-                source="User",
+                source="LMO Request",
                 images=image_refs(attachments) if attachments else None,
             )
         else:
             await self._send_processing_message(
-                f"Processing optimization refinement for node {data['nodeId']}"
+                f"Processing optimization refinement for node {data['nodeId']}",
+                source="LMO Request",
             )
+        data["_agentRequestAnnounced"] = True
 
         node: str = data["nodeId"]
         if "_" in node:
@@ -497,6 +512,16 @@ class FlaskActionManager(ActionManager):
         parent_nodeid = self.retro_synth_context.parents[data["nodeId"]]
         parent_node = self.retro_synth_context.node_ids[parent_nodeid]
         smiles = self.retro_synth_context.node_ids[data["nodeId"]].smiles
+        request_text = (
+            f"Retrosynthesis request for node {data['nodeId']}: {data.get('query', '')}".strip()
+            if data.get("query")
+            else f"Retrosynthesis request for node {data['nodeId']}"
+        )
+        await self._send_processing_message(
+            request_text,
+            source="Retrosynthesis Request",
+            images=image_refs(attachments) if attachments else None,
+        )
 
         # Clear subtree and levels for layouting
         await self.retro_synth_context.delete_subtree(parent_nodeid, self.websocket)
@@ -526,8 +551,8 @@ class FlaskActionManager(ActionManager):
             self.args.config_file,
             self.run_settings,
             self.selected_tool_runtime(),
-            self.log_progress,
             attachments,
+            self._agent_update_callback(f"reaction:{parent_nodeid}", data),
         )
 
         asyncio.create_task(self.task_manager.run_task(run_func()))
@@ -585,20 +610,30 @@ class FlaskActionManager(ActionManager):
         )
 
         # Use the full experiment state
-        callback_handler = CallbackHandler(self.websocket)
+        callback_handler = CallbackHandler(
+            self.websocket,
+            agent_key=f"molecule:{data['nodeId']}",
+            on_agent_update=self._agent_update_callback(
+                f"molecule:{data['nodeId']}", data
+            ),
+        )
         agent = self.experiment.create_agent_with_experiment_state(
             task=task,
+            agent_key=f"molecule:{data['nodeId']}",
             callback=callback_handler,
         )
 
         async def run_and_report():
             if self.run_settings.prompt_debugging:
                 await debug_prompt(agent, self.websocket)
-            result = await agent.run(self.log_progress)
+            result = await agent.run()
             await callback_handler.drain()
             self.experiment.add_to_context(agent, task, result)
             # Report answer
-            await self._send_processing_message(result, source="Agent")
+            await self._send_processing_message(
+                result,
+                source="Agent",
+            )
             await self.websocket.send_json({"type": "complete"})
 
         asyncio.create_task(self.task_manager.run_task(run_and_report()))
@@ -606,48 +641,44 @@ class FlaskActionManager(ActionManager):
     async def handle_custom_query_reaction(self, data: dict) -> None:
         """Handle a query on the reaction (from nodeId to its reactants)."""
         self.setup_run_settings(data)
-        assert self.retro_synth_context is not None
+        node_id = str(data["nodeId"])
         attachments = validate_image_attachments(data)
 
         await self._send_processing_message(
-            f"Processing reaction query: {data['query']} for node {data['nodeId']}",
+            f"Processing reaction query: {data['query']} for node {node_id}",
             source="User",
             images=image_refs(attachments) if attachments else None,
         )
 
-        node = self.retro_synth_context.node_ids[data["nodeId"]]
         tool_runtime = self.selected_tool_runtime()
 
         task = Task(
-            system_prompt=self._with_document_reference_context(""),
+            system_prompt="",
             user_prompt=data["query"],
             attachments=attachments,
             **tool_runtime.task_kwargs(),
         )
 
-        # No charge client (likely only AZF was run), add context from tree
-        # if data["nodeId"] not in self.retro_synth_context.node_id_to_charge_client:
-        child_nodes = [
-            nid
-            for nid, p in self.retro_synth_context.parents.items()
-            if p == data["nodeId"]
-        ]
-        reactants = [self.retro_synth_context.node_ids[nid] for nid in child_nodes]
-        reactants_str = "\n".join(reactant.smiles for reactant in reactants)
-        reaction_str = f"Product: {node.smiles}\nReactants:\n{reactants_str}"
+        reaction_str = self._reaction_context_for_node(node_id, data)
 
-        # Enrich context from prior discovery
-        if data["nodeId"] in self.retro_synth_context.node_id_to_reasoning_summary:
-            reaction_str += f"\nAdditionally, the following context is given: {self.retro_synth_context.node_id_to_reasoning_summary[data['nodeId']]}"
+        task.system_prompt = self._with_document_reference_context(
+            "You are a helpful chemical assistant who answers in concise but factual "
+            "responses. Given the following reaction (as SMILES strings):\n"
+            f"{reaction_str}\n\nAnswer the following query."
+        )
 
-        task.system_prompt = f"You are a helpful chemical assistant who answers in concise but factual responses. Given the following reaction (as SMILES strings):\n{reaction_str}\n\nAnswer the following query."
-
-        callback_handler = CallbackHandler(self.websocket)
+        callback_handler = CallbackHandler(
+            self.websocket,
+            agent_key=f"reaction:{node_id}",
+            on_agent_update=self._agent_update_callback(f"reaction:{node_id}", data),
+        )
         agent = self.experiment.create_agent_with_experiment_state(
             task=task,
+            agent_key=f"reaction:{node_id}",
             callback=callback_handler,
         )
-        self.retro_synth_context.node_id_to_charge_client[data["nodeId"]] = agent
+        if self.retro_synth_context is not None:
+            self.retro_synth_context.node_id_to_charge_client[node_id] = agent
 
         # TODO(later): For some reason the below code does not work because memory is not maintained
         # else:
@@ -661,14 +692,87 @@ class FlaskActionManager(ActionManager):
         async def run_and_report():
             if self.run_settings.prompt_debugging:
                 await debug_prompt(agent, self.websocket)
-            result = await agent.run(self.log_progress)
+            result = await agent.run()
             await callback_handler.drain()
             self.experiment.add_to_context(agent, task, result)
             # Report answer
-            await self._send_processing_message(result, source="Agent")
+            await self._send_processing_message(
+                result,
+                source="Agent",
+            )
             await self.websocket.send_json({"type": "complete"})
 
         asyncio.create_task(self.task_manager.run_task(run_and_report()))
+
+    def _reaction_hover_info_for_node(
+        self, node_id: str, data: Optional[dict[str, Any]] = None
+    ) -> str:
+        if (
+            self.retro_synth_context is not None
+            and node_id in self.retro_synth_context.node_ids
+        ):
+            reaction = self.retro_synth_context.node_ids[node_id].reaction
+            hover_info = getattr(reaction, "hoverInfo", None)
+            if isinstance(hover_info, str) and hover_info.strip():
+                return hover_info.strip()
+
+        metadata = data.get("metadata") if isinstance(data, dict) else None
+        if isinstance(metadata, dict):
+            for key in ("reactionHoverInfo", "hoverInfo"):
+                hover_info = metadata.get(key)
+                if isinstance(hover_info, str) and hover_info.strip():
+                    return hover_info.strip()
+        return ""
+
+    def _reaction_context_for_node(
+        self, node_id: str, data: Optional[dict[str, Any]] = None
+    ) -> str:
+        if (
+            self.retro_synth_context is None
+            or node_id not in self.retro_synth_context.node_ids
+        ):
+            hover_info = self._reaction_hover_info_for_node(node_id, data)
+            return f"Reaction hover information:\n{hover_info}" if hover_info else ""
+        node = self.retro_synth_context.node_ids[node_id]
+        child_nodes = [
+            nid
+            for nid, parent in self.retro_synth_context.parents.items()
+            if parent == node_id
+        ]
+        reactants = [self.retro_synth_context.node_ids[nid] for nid in child_nodes]
+        reactants_str = "\n".join(reactant.smiles for reactant in reactants)
+        reaction_str = f"Product: {node.smiles}\nReactants:\n{reactants_str}"
+        hover_info = self._reaction_hover_info_for_node(node_id, data)
+        if hover_info:
+            reaction_str += f"\n\nReaction hover information:\n{hover_info}"
+        return reaction_str
+
+    async def handle_chat_agent(self, data: dict[str, Any]) -> None:
+        self.setup_run_settings(data)
+        agent_key = str(data.get("agentKey") or "")
+        if not agent_key:
+            raise ValueError("agentKey is required")
+        query = str(data.get("query") or "").strip()
+        if not query:
+            raise ValueError("query is required")
+
+        kind, _, target = agent_key.partition(":")
+        routed_data = {**data, "query": query}
+        if kind == "molecule":
+            metadata = (
+                data.get("metadata") if isinstance(data.get("metadata"), dict) else {}
+            )
+            routed_data["nodeId"] = data.get("nodeId") or target
+            routed_data["smiles"] = (
+                data.get("smiles") or metadata.get("smiles") or target
+            )
+            await self.handle_custom_query_molecule(routed_data)
+            return
+        if kind == "reaction":
+            routed_data["nodeId"] = data.get("nodeId") or target
+            await self.handle_custom_query_reaction(routed_data)
+            return
+        raise ValueError(f"Unsupported chat agent key: {agent_key}")
 
     async def handle_get_username(self, _: dict) -> None:
         await self.websocket.send_json(

@@ -7,7 +7,6 @@ import os
 from pathlib import Path
 import json
 from uuid import uuid4
-from charge.clients.agent_factory import ReasoningCallbackType
 from charge.experiments.experiment import Experiment
 from charge.utils.mcp_workbench_utils import call_mcp_tool_directly
 from charge_backend.prompt_debugger import debug_prompt_task
@@ -16,7 +15,7 @@ from charge_backend.lmo.lmo_task import (
     LMOTask as LeadMoleculeOptimization,
     MoleculeOutputSchema,
 )
-from typing import Optional
+from typing import Awaitable, Callable, Optional
 from charge_backend.backend_helper_funcs import (
     Node,
     Edge,
@@ -59,7 +58,6 @@ async def generate_lead_molecule(
     tool_runtime: ToolRuntime,
     websocket: WebSocket,
     run_settings: FlaskRunSettings,
-    log_progress: ReasoningCallbackType,
     property: str = "density",
     property_description: str = "molecular density (g/cc)",
     calculate_property_tool: str = "calculate_property_hf",
@@ -76,6 +74,7 @@ async def generate_lead_molecule(
     number_of_molecules: int = 10,
     num_top_candidates: int = 3,
     attachments: Optional[list[dict[str, object]]] = None,
+    history_callback: Optional[Callable[[], Awaitable[None]]] = None,
 ) -> None:
     """Generate a lead molecule and stream its progress.
     Args:
@@ -339,7 +338,9 @@ async def generate_lead_molecule(
     current_best_smiles = lead_molecule_smiles  # Track the best molecule
     # Initialize best value based on the actual property being optimized
     current_best_value = lead_molecule_data.get(property, 0.0)
-    callback = CallbackHandler(websocket)
+    callback = CallbackHandler(
+        websocket, agent_key="lmo:main", on_agent_update=history_callback
+    )
     lmo_task = LeadMoleculeOptimization(
         lead_molecule=lead_molecule_smiles,
         user_prompt=formatted_user_prompt + "\n",
@@ -392,7 +393,10 @@ async def generate_lead_molecule(
 
                 if run_settings.prompt_debugging:
                     await debug_prompt_task(lmo_task, websocket)
-                await experiment.run_async(log_progress, callback=callback)
+                await experiment.run_async(
+                    callback=callback,
+                    agent_key="lmo:main",
+                )
                 await callback.drain()
                 finished_tasks = experiment.get_finished_tasks()
                 _, results = finished_tasks[-1]

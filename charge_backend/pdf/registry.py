@@ -85,7 +85,7 @@ class PdfDocument:
         experiment = Experiment(task=None)
         agent = experiment.create_agent_with_experiment_state(
             task=task,
-            agent_name="Scholar",
+            agent_key="Scholar",
             max_retries=1,
             max_tool_calls=max(1, min(int(max_tool_calls), 40)),
         )

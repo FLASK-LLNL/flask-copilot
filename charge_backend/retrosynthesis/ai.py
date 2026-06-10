@@ -2,7 +2,7 @@ import os
 import asyncio
 from fastapi import WebSocket
 from lc_conductor.callback_logger import CallbackLogger
-from typing import Optional
+from typing import Awaitable, Callable, Optional
 
 from charge_backend.backend_helper_funcs import (
     CallbackHandler,
@@ -32,7 +32,6 @@ from charge_backend.retrosynthesis.retrosynthesis_task import (
 )
 
 from charge.experiments.experiment import Experiment
-from charge.clients.agent_factory import ReasoningCallbackType
 from lc_conductor import ToolRuntime
 
 
@@ -70,8 +69,8 @@ async def ai_based_retrosynthesis(
     config_file: str,
     run_settings: FlaskRunSettings,
     tool_runtime: ToolRuntime,
-    log_progress: ReasoningCallbackType,
     attachments: Optional[list[dict[str, object]]] = None,
+    history_callback: Optional[Callable[[], Awaitable[None]]] = None,
 ):
     """Performs template-free retrosynthesis using the AI orchestrator."""
     clogger = CallbackLogger(websocket, source="ai_based_retrosynthesis")
@@ -86,20 +85,28 @@ async def ai_based_retrosynthesis(
         smiles=current_node.smiles,
     )
 
+    agent_key = f"reaction:{node_id}"
+    callback_handler: CallbackHandler | None = None
     if node_id in context.node_id_to_charge_client:
         # Existing context
         runner = context.node_id_to_charge_client[node_id]
     else:
         # New context
-        callback_handler = CallbackHandler(websocket)
+        callback_handler = CallbackHandler(
+            websocket, agent_key=agent_key, on_agent_update=history_callback
+        )
         runner = experiment.create_agent_with_experiment_state(
             task=None,
-            agent_name=f"retrosynth_{node_id}",
+            agent_key=agent_key,
             callback=callback_handler,
         )
         context.node_id_to_charge_client[node_id] = runner
 
-    callback_handler = getattr(runner, "callback", None)
+    if callback_handler is None and isinstance(runner.callback, CallbackHandler):
+        callback_handler = runner.callback
+    if callback_handler is not None:
+        callback_handler.agent_key = agent_key
+        callback_handler.on_agent_update = history_callback
 
     if constraint:
         user_prompt = RETROSYNTH_CONSTRAINED_USER_PROMPT_TEMPLATE.format(
@@ -114,7 +121,7 @@ async def ai_based_retrosynthesis(
     user_prompt += "\nDouble check the reactants with the `predict_reaction_products` tool to see if the products are equivalent to the given product. If there is any inconsistency (canonicalize both sides of the equation first), log it and try some other set of reactants."
     if query is not None:
         user_prompt += (
-            f"\n\nAdditionally, adhere to the following requirements: {query}"
+            f"\n\nAdditionally, adhere to the following requirements:\n{query}\n\n"
         )
 
     retro_task = RetrosynthesisTask(
@@ -138,8 +145,8 @@ async def ai_based_retrosynthesis(
     await highlight_node(current_node, websocket, True)
     if run_settings.prompt_debugging:
         await debug_prompt(runner, websocket)
-    output = await runner.run(log_progress)
-    if isinstance(callback_handler, CallbackHandler):
+    output = await runner.run()
+    if callback_handler is not None:
         await callback_handler.drain()
     experiment.add_to_context(runner, retro_task, output)
 
@@ -307,8 +314,8 @@ async def db_then_ai_retrosynthesis(
     config_file: str,
     run_settings: FlaskRunSettings,
     tool_runtime: ToolRuntime,
-    log_progress: ReasoningCallbackType,
     attachments: Optional[list[dict[str, object]]] = None,
+    history_callback: Optional[Callable[[], Awaitable[None]]] = None,
 ):
     """Searches the reaction database first; falls back to AI-based retrosynthesis if no exact match is found."""
     node = context.node_ids.get(node_id)
@@ -340,6 +347,6 @@ async def db_then_ai_retrosynthesis(
         config_file,
         run_settings,
         tool_runtime,
-        log_progress,
         attachments,
+        history_callback,
     )

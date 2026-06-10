@@ -15,6 +15,7 @@ import {
   MessageCircleQuestion,
   StepForward,
   MessageSquareShare,
+  MessagesSquare,
   Brain,
   PanelRightOpen,
   Sliders,
@@ -62,10 +63,13 @@ import {
   ReasoningSidebar,
   useSidebarState,
   MarkdownText,
+  AgentChatModal,
+  AgentHistoryList,
   BACKEND_OPTIONS,
+  deserializeAgentChatHistory,
   handleLocalMcpProxyRequest,
 } from 'lc-conductor';
-import type { AgentAttachment } from 'lc-conductor';
+import type { AgentAttachment, AgentChatHistory } from 'lc-conductor';
 
 import { CombinedCustomizationModal } from './components/combined_customization_modal';
 import { Modal } from './components/modal';
@@ -365,7 +369,14 @@ const ChemistryTool: React.FC = () => {
   const [customQueryModal, setCustomQueryModal] = useState<TreeNode | null>(null);
   const [customQueryText, setCustomQueryText] = useState<string>('');
   const [customQueryType, setCustomQueryType] = useState<string | null>(null);
+  const [customQueryAiOnly, setCustomQueryAiOnly] = useState<boolean>(false);
   const [customQueryAttachments, setCustomQueryAttachments] = useState<AgentAttachment[]>([]);
+  const [agentChatOpen, setAgentChatOpen] = useState<boolean>(false);
+  const [agentChatHistory, setAgentChatHistory] = useState<AgentChatHistory | null>(null);
+  const [agentChatDebug, setAgentChatDebug] = useState<boolean>(false);
+  const [allChatsOpen, setAllChatsOpen] = useState<boolean>(false);
+  const [agentKeys, setAgentKeys] = useState<string[]>([]);
+  const [activeAgentKeys, setActiveAgentKeys] = useState<string[]>([]);
   const [experimentContext, setExperimentContext] = useState<any>(undefined);
   const [attachmentRegistry, setAttachmentRegistry] = useState<Record<string, AgentAttachment>>({});
   const [wsConnected, setWsConnected] = useState<boolean>(false);
@@ -425,6 +436,15 @@ const ChemistryTool: React.FC = () => {
   const projectData = useProjectData();
   const projectManagement = useProjectManagement(projectData);
   const attachmentRegistryRef = useRef<Record<string, AgentAttachment>>({});
+  const selectedAgentKeyRef = useRef<string | null>(null);
+  const agentChatMetadataRef = useRef<Record<string, Record<string, unknown>>>({});
+  const agentChatDebugRef = useRef<boolean>(false);
+  const activeAgentKeysRef = useRef<Set<string>>(new Set());
+  const allChatsOpenRef = useRef<boolean>(false);
+
+  useEffect(() => {
+    agentChatDebugRef.current = agentChatDebug;
+  }, [agentChatDebug]);
 
   const registerAttachments = useCallback((attachments: AgentAttachment[]): void => {
     if (attachments.length === 0) return;
@@ -441,6 +461,62 @@ const ChemistryTool: React.FC = () => {
       return nextState;
     });
   }, []);
+
+  const makeAgentHistoryFallback = (
+    agentKey: string,
+    fallback?: Pick<AgentChatHistory, 'title' | 'subtitle'> & {
+      metadata?: Record<string, unknown>;
+    }
+  ): AgentChatHistory => ({
+    agentKey,
+    title: fallback?.title || agentKey,
+    subtitle: fallback?.subtitle,
+    metadata: fallback?.metadata,
+    messages: [],
+  });
+
+  const preserveAgentHistoryUiMetadata = (
+    incoming: AgentChatHistory,
+    previous: AgentChatHistory | null
+  ): AgentChatHistory => {
+    const preservedMetadata =
+      incoming.metadata ??
+      (previous?.agentKey === incoming.agentKey ? previous.metadata : undefined) ??
+      agentChatMetadataRef.current[incoming.agentKey];
+    if (preservedMetadata) {
+      agentChatMetadataRef.current[incoming.agentKey] = preservedMetadata;
+    }
+    if (!previous || previous.agentKey !== incoming.agentKey) {
+      if (!preservedMetadata) {
+        return incoming;
+      }
+      return {
+        ...incoming,
+        metadata: preservedMetadata,
+      };
+    }
+    if (!preservedMetadata) {
+      return incoming;
+    }
+    return {
+      ...incoming,
+      title: incoming.title === incoming.agentKey ? previous.title : incoming.title,
+      subtitle: incoming.subtitle ?? previous.subtitle,
+      metadata: preservedMetadata,
+    };
+  };
+
+  const markAgentChatActive = (agentKey: string): void => {
+    const nextActive = new Set(activeAgentKeysRef.current);
+    nextActive.add(agentKey);
+    activeAgentKeysRef.current = nextActive;
+    setActiveAgentKeys(Array.from(nextActive));
+  };
+
+  const clearActiveAgentChats = (): void => {
+    activeAgentKeysRef.current = new Set();
+    setActiveAgentKeys([]);
+  };
 
   const hydrateAttachmentRegistry = useCallback(
     (context: any): void => {
@@ -529,8 +605,8 @@ const ChemistryTool: React.FC = () => {
     sidebarStateRef.current = sidebarState;
   }, [sidebarState]);
 
-  // Load initial settings from localStorage or environment
-  const getInitialSettings = () => {
+  // Load initial settings from localStorage
+  const getInitialSettings = (): FlaskOrchestratorSettings => {
     const saved = localStorage.getItem('orchestratorSettings');
     if (saved) {
       try {
@@ -540,7 +616,8 @@ const ChemistryTool: React.FC = () => {
           useCustomUrl: parsed.useCustomUrl || false,
           customUrl: parsed.customUrl || 'http://localhost:8000/v1',
           model: parsed.model || 'gpt-oss',
-          reasoningEffort: parsed.reasoningEffort || 'medium',
+          reasoningEffort: (parsed.reasoningEffort ||
+            'medium') as FlaskOrchestratorSettings['reasoningEffort'],
           apiKey: parsed.apiKey || '',
           backendLabel: parsed.backendLabel || 'vLLM',
           useCustomModel: parsed.useCustomModel,
@@ -558,9 +635,9 @@ const ChemistryTool: React.FC = () => {
       useCustomUrl: Boolean(envConfig?.baseUrl),
       customUrl: envConfig?.baseUrl || 'http://localhost:8000/v1',
       model: envConfig?.model || 'gpt-oss',
-      reasoningEffort: 'medium',
+      reasoningEffort: 'medium' as FlaskOrchestratorSettings['reasoningEffort'],
       apiKey: envConfig?.apiKey || '',
-      backendLabel: 'vLLM',
+      backendLabel: envConfig?.backendLabel || 'vLLM',
       toolServers: [],
     };
   };
@@ -926,6 +1003,11 @@ const ChemistryTool: React.FC = () => {
     }
 
     setIsComputing(true);
+    if (problemType === 'optimization') {
+      markAgentChatActive('lmo:main');
+    } else if (problemType === 'custom') {
+      markAgentChatActive('custom:main');
+    }
     setTreeNodes([]);
     setEdges([]);
     setExperimentContext(undefined);
@@ -948,6 +1030,7 @@ const ChemistryTool: React.FC = () => {
         promptDebugging: debugMode,
         moleculeName: orchestratorSettings.moleculeName || 'brand',
       },
+      debug: agentChatDebug,
       customization,
       ...(problemType === 'custom' && customPromptAttachments.length > 0
         ? { attachments: customPromptAttachments }
@@ -1071,6 +1154,7 @@ const ChemistryTool: React.FC = () => {
             console.log('Computation stopped by backend');
             setIsComputing(false);
             setIsComputingTemplates(false);
+            clearActiveAgentChats();
             unhighlightNodes();
             setTreeNodes(clearLeafReactions);
             shouldSaveState = true;
@@ -1079,6 +1163,7 @@ const ChemistryTool: React.FC = () => {
           case 'complete': {
             setIsComputing(false);
             setIsComputingTemplates(false);
+            clearActiveAgentChats();
             unhighlightNodes();
             setTreeNodes(clearLeafReactions);
             shouldSaveState = true;
@@ -1188,6 +1273,26 @@ const ChemistryTool: React.FC = () => {
             shouldDownloadFullContext = true;
             break;
           }
+          case 'agent-response': {
+            if (data.agent && data.agentKey) {
+              const incomingHistory = deserializeAgentChatHistory(data.agentKey, data.agent, {
+                debug: agentChatDebugRef.current,
+              });
+              setAgentChatHistory((prev) =>
+                selectedAgentKeyRef.current === data.agentKey || prev?.agentKey === data.agentKey
+                  ? preserveAgentHistoryUiMetadata(incomingHistory, prev)
+                  : prev
+              );
+              hydrateAttachmentRegistry(data.experimentContext);
+            }
+            break;
+          }
+          case 'list-agents-response': {
+            if (allChatsOpenRef.current) {
+              setAgentKeys(data.agents || []);
+            }
+            break;
+          }
           case 'get-username-response': {
             setUsername(data.username!);
             break;
@@ -1258,6 +1363,7 @@ const ChemistryTool: React.FC = () => {
         setWsReconnecting(false);
         setIsComputing(false);
         setIsComputingTemplates(false);
+        clearActiveAgentChats();
         setWsError((error as any).message || 'Connection failed');
         setAvailableTools([]);
         setSelectedTools([]);
@@ -1274,6 +1380,7 @@ const ChemistryTool: React.FC = () => {
         setWsConnected(false);
         setIsComputing(false);
         setIsComputingTemplates(false);
+        clearActiveAgentChats();
         setWsReconnecting(false);
         setAvailableTools([]);
         setSelectedTools([]);
@@ -1303,6 +1410,14 @@ const ChemistryTool: React.FC = () => {
     setContextMenu({ node: null, isReaction: false, x: 0, y: 0 });
     setCustomQueryModal(null);
     setCustomQueryAttachments([]);
+    setCustomQueryAiOnly(false);
+    setAgentChatOpen(false);
+    setAgentChatHistory(null);
+    selectedAgentKeyRef.current = null;
+    clearActiveAgentChats();
+    allChatsOpenRef.current = false;
+    setAllChatsOpen(false);
+    setAgentKeys([]);
     setExperimentContext(undefined);
     attachmentRegistryRef.current = {};
     setAttachmentRegistry({});
@@ -1638,12 +1753,97 @@ const ChemistryTool: React.FC = () => {
           promptDebugging: debugMode,
           moleculeName: orchestratorSettings.moleculeName || 'brand',
         },
+        debug: agentChatDebug,
         ...data,
       };
       wsRef.current.send(JSON.stringify(msg));
       setContextMenu({ node: null, isReaction: false, x: 0, y: 0 });
     },
     [debugMode, orchestratorSettings]
+  );
+
+  const requestAgentHistory = useCallback(
+    (
+      agentKey: string,
+      debug = agentChatDebug,
+      extra?: Omit<WebSocketMessageToServer, 'action' | 'agentKey' | 'debug'>
+    ): void => {
+      sendMessageToServer('get-agent', { agentKey, debug, ...extra });
+    },
+    [agentChatDebug, sendMessageToServer]
+  );
+
+  const requestAgentHistories = useCallback(
+    (debug = agentChatDebug): void => {
+      sendMessageToServer('list-agents', { debug });
+    },
+    [agentChatDebug, sendMessageToServer]
+  );
+
+  const openAgentChat = useCallback(
+    (
+      agentKey: string,
+      fallback: Pick<AgentChatHistory, 'title' | 'subtitle'> & {
+        metadata?: Record<string, unknown>;
+      }
+    ): void => {
+      if (fallback.metadata) {
+        agentChatMetadataRef.current[agentKey] = fallback.metadata;
+      }
+      selectedAgentKeyRef.current = agentKey;
+      setAgentChatHistory(makeAgentHistoryFallback(agentKey, fallback));
+      setAgentChatOpen(true);
+      setContextMenu({ node: null, isReaction: false, x: 0, y: 0 });
+      requestAgentHistory(agentKey, agentChatDebug, {
+        metadata: fallback.metadata,
+        smiles:
+          typeof fallback.metadata?.smiles === 'string' ? fallback.metadata.smiles : undefined,
+        nodeId:
+          typeof fallback.metadata?.nodeId === 'string' ? fallback.metadata.nodeId : undefined,
+      });
+    },
+    [agentChatDebug, requestAgentHistory]
+  );
+
+  const submitAgentChatMessage = useCallback(
+    (query: string, attachments: AgentAttachment[]): void => {
+      if (!agentChatHistory) return;
+      const metadata =
+        agentChatHistory.metadata ?? agentChatMetadataRef.current[agentChatHistory.agentKey];
+      registerAttachments(attachments);
+      pendingAttachmentContextSyncRef.current = true;
+      markAgentChatActive(agentChatHistory.agentKey);
+      setIsComputing(true);
+      sendMessageToServer('chat-agent', {
+        agentKey: agentChatHistory.agentKey,
+        query,
+        attachments,
+        debug: agentChatDebug,
+        metadata,
+        smiles: typeof metadata?.smiles === 'string' ? metadata.smiles : undefined,
+        nodeId: typeof metadata?.nodeId === 'string' ? metadata.nodeId : undefined,
+      });
+    },
+    [agentChatDebug, agentChatHistory, registerAttachments, sendMessageToServer]
+  );
+
+  const handleAgentChatDebugChange = useCallback(
+    (nextDebug: boolean): void => {
+      setAgentChatDebug(nextDebug);
+      if (agentChatHistory?.agentKey) {
+        const metadata =
+          agentChatHistory.metadata ?? agentChatMetadataRef.current[agentChatHistory.agentKey];
+        requestAgentHistory(agentChatHistory.agentKey, nextDebug, {
+          metadata,
+          smiles: typeof metadata?.smiles === 'string' ? metadata.smiles : undefined,
+          nodeId: typeof metadata?.nodeId === 'string' ? metadata.nodeId : undefined,
+        });
+      }
+      if (allChatsOpen) {
+        requestAgentHistories(nextDebug);
+      }
+    },
+    [agentChatHistory?.agentKey, allChatsOpen, requestAgentHistories, requestAgentHistory]
   );
 
   const handleReferenceDocumentSave = useCallback(
@@ -1731,8 +1931,10 @@ const ChemistryTool: React.FC = () => {
 
       if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
         if (customPrompt) {
-          handleCustomQuery(selectedReactionNode!, 'compute-reaction-from');
+          handleCustomQuery(selectedReactionNode!, 'compute-reaction-from', { aiOnly });
+          return;
         } else {
+          markAgentChatActive(`reaction:${nodeId}`);
           wsRef.current.send(
             JSON.stringify({
               action: 'compute-reaction-from',
@@ -1742,6 +1944,7 @@ const ChemistryTool: React.FC = () => {
                 promptDebugging: debugMode,
                 moleculeName: orchestratorSettings.moleculeName || 'brand',
               },
+              debug: agentChatDebug,
             })
           );
         }
@@ -1755,11 +1958,16 @@ const ChemistryTool: React.FC = () => {
     return selectedReactionNode?.reaction?.alternatives || [];
   }, [selectedReactionNode?.id, selectedReactionNode?.reaction?.alternatives]);
 
-  const handleCustomQuery = (node: TreeNode, queryType: string | null): void => {
+  const handleCustomQuery = (
+    node: TreeNode,
+    queryType: string | null,
+    options?: { aiOnly?: boolean }
+  ): void => {
     setCustomQueryModal(node);
     setCustomQueryText('');
     setCustomQueryAttachments([]);
     setCustomQueryType(queryType);
+    setCustomQueryAiOnly(Boolean(options?.aiOnly));
     setContextMenu({ node: null, isReaction: false, x: 0, y: 0 });
   };
 
@@ -1768,6 +1976,7 @@ const ChemistryTool: React.FC = () => {
     setCustomQueryText('');
     setCustomQueryAttachments([]);
     setCustomQueryType(null);
+    setCustomQueryAiOnly(false);
   };
 
   const submitCustomQuery = (): void => {
@@ -1801,11 +2010,29 @@ const ChemistryTool: React.FC = () => {
         promptDebugging: debugMode,
         moleculeName: orchestratorSettings.moleculeName || 'brand',
       },
+      debug: agentChatDebug,
+      ...(customQueryAiOnly ? { aiOnly: true } : {}),
       ...propertyDetails,
     };
     registerAttachments(customQueryAttachments);
     if (customQueryAttachments.length > 0) {
       pendingAttachmentContextSyncRef.current = true;
+    }
+    const action = message.action;
+    const nodeId = customQueryModal?.id;
+    if (action === 'optimize-from') {
+      markAgentChatActive('lmo:main');
+    } else if (action === 'compute-reaction-from' && nodeId) {
+      markAgentChatActive(`reaction:${nodeId}`);
+    } else if (
+      (action === 'recompute-reaction' || action === 'recompute-parent-reaction') &&
+      nodeId
+    ) {
+      const parentEdge = edges.find((edge) => edge.toNode === nodeId);
+      const parentNode = treeNodes.find((node) => node.id === parentEdge?.fromNode);
+      if (parentNode) {
+        markAgentChatActive(`reaction:${parentNode.id}`);
+      }
     }
     wsRef.current.send(JSON.stringify(message));
 
@@ -1830,6 +2057,13 @@ const ChemistryTool: React.FC = () => {
       return prev;
     });
   };
+
+  const currentAgentChatPending =
+    !!agentChatHistory?.agentKey && activeAgentKeys.includes(agentChatHistory.agentKey);
+  const visibleAgentKeys = useMemo(
+    () => Array.from(new Set([...activeAgentKeys, ...agentKeys])),
+    [activeAgentKeys, agentKeys]
+  );
 
   return (
     <div className="app-background">
@@ -1979,6 +2213,19 @@ const ChemistryTool: React.FC = () => {
               >
                 <Brain className="w-4 h-4" />
                 Reasoning
+              </button>
+              <button
+                onClick={() => {
+                  allChatsOpenRef.current = true;
+                  setAgentKeys([]);
+                  setAllChatsOpen(true);
+                  requestAgentHistories();
+                }}
+                disabled={!wsConnected}
+                className="btn btn-secondary btn-sm"
+              >
+                <MessagesSquare className="w-4 h-4" />
+                All Chats
               </button>
               <SettingsButton
                 initialSettings={orchestratorSettings}
@@ -2571,10 +2818,20 @@ const ChemistryTool: React.FC = () => {
                 )}
               </button>
               <button
-                onClick={() => handleCustomQuery(contextMenu.node!, 'query-molecule')}
+                onClick={() =>
+                  openAgentChat(`molecule:${contextMenu.node!.id}`, {
+                    title: `Chat about molecule ${contextMenu.node!.id}`,
+                    subtitle: contextMenu.node!.smiles,
+                    metadata: {
+                      kind: 'molecule',
+                      nodeId: contextMenu.node!.id,
+                      smiles: contextMenu.node!.smiles,
+                    },
+                  })
+                }
                 className="context-menu-item"
               >
-                <MessageCircleQuestion className="w-4 h-4" /> Ask about molecule...
+                <MessageCircleQuestion className="w-4 h-4" /> Chat about molecule...
               </button>
               {problemType !== 'optimization' && (
                 <button
@@ -2634,6 +2891,7 @@ const ChemistryTool: React.FC = () => {
                       smiles: contextMenu.node!.smiles,
                       xpos: contextMenu.node!.x,
                     });
+                    markAgentChatActive('lmo:main');
                     setIsComputing(true);
                   }}
                   className="context-menu-item context-menu-divider"
@@ -2678,9 +2936,11 @@ const ChemistryTool: React.FC = () => {
                   {!contextMenu.node.reaction && (
                     <button
                       onClick={() => {
+                        markAgentChatActive(`reaction:${contextMenu.node!.id}`);
                         sendMessageToServer('compute-reaction-from', {
                           nodeId: contextMenu.node!.id,
                         });
+                        setIsComputing(true);
                       }}
                       className="context-menu-item context-menu-divider"
                     >
@@ -2691,9 +2951,19 @@ const ChemistryTool: React.FC = () => {
                   {!isRootNode(contextMenu.node.id, treeNodes) && (
                     <button
                       onClick={() => {
+                        const parentEdge = edges.find(
+                          (edge) => edge.toNode === contextMenu.node!.id
+                        );
+                        const parentNode = treeNodes.find(
+                          (node) => node.id === parentEdge?.fromNode
+                        );
+                        if (parentNode) {
+                          markAgentChatActive(`reaction:${parentNode.id}`);
+                        }
                         sendMessageToServer('recompute-parent-reaction', {
                           nodeId: contextMenu.node!.id,
                         });
+                        setIsComputing(true);
                       }}
                       className="context-menu-item context-menu-divider"
                     >
@@ -2710,10 +2980,21 @@ const ChemistryTool: React.FC = () => {
               contextMenu.isReaction && (
                 <>
                   <button
-                    onClick={() => handleCustomQuery(contextMenu.node!, 'query-reaction')}
+                    onClick={() =>
+                      openAgentChat(`reaction:${contextMenu.node!.id}`, {
+                        title: `Chat about reaction ${contextMenu.node!.id}`,
+                        subtitle: contextMenu.node!.smiles,
+                        metadata: {
+                          kind: 'reaction',
+                          nodeId: contextMenu.node!.id,
+                          smiles: contextMenu.node!.smiles,
+                          reactionHoverInfo: contextMenu.node!.reaction?.hoverInfo,
+                        },
+                      })
+                    }
                     className="context-menu-item"
                   >
-                    <MessageCircleQuestion className="w-4 h-4" /> Ask about reaction...
+                    <MessageCircleQuestion className="w-4 h-4" /> Chat about reaction...
                   </button>
                   <button
                     onClick={() => {
@@ -2734,6 +3015,59 @@ const ChemistryTool: React.FC = () => {
               <MarkdownText text={contextMenu.node!.reaction!.hoverInfo} />
             </div>
           )}
+        </div>
+      )}
+
+      <AgentChatModal
+        isOpen={agentChatOpen}
+        onClose={() => {
+          setAgentChatOpen(false);
+          setAgentChatHistory(null);
+          selectedAgentKeyRef.current = null;
+        }}
+        history={agentChatHistory}
+        debug={agentChatDebug}
+        pending={currentAgentChatPending}
+        sendDisabled={isComputing}
+        onDebugChange={handleAgentChatDebugChange}
+        onSend={submitAgentChatMessage}
+        resolveImageDataUrl={resolveImageDataUrl}
+      />
+
+      {allChatsOpen && (
+        <div className="modal-overlay">
+          <div className="modal-content modal-content-lg agent-history-modal">
+            <div className="modal-header">
+              <div>
+                <h2 className="modal-title">All Agent Chats</h2>
+                <div className="modal-subtitle">Current experiment</div>
+              </div>
+              <button
+                onClick={() => {
+                  allChatsOpenRef.current = false;
+                  setAgentKeys([]);
+                  setAllChatsOpen(false);
+                }}
+                className="btn-icon"
+              >
+                <X className="w-6 h-6" />
+              </button>
+            </div>
+            <div className="modal-body">
+              <AgentHistoryList
+                histories={visibleAgentKeys.map((agentKey) => makeAgentHistoryFallback(agentKey))}
+                activeAgentKeys={activeAgentKeys}
+                onSelect={(agentKey) => {
+                  allChatsOpenRef.current = false;
+                  setAgentKeys([]);
+                  setAllChatsOpen(false);
+                  openAgentChat(agentKey, {
+                    title: agentKey,
+                  });
+                }}
+              />
+            </div>
+          </div>
         </div>
       )}
 
