@@ -631,13 +631,13 @@ const ChemistryTool: React.FC = () => {
     // Use environment variables from window.APP_CONFIG if available
     const envConfig = window.APP_CONFIG?.ORCHESTRATOR;
     return {
-      backend: 'vllm',
-      useCustomUrl: false,
-      customUrl: 'http://localhost:8000/v1',
-      model: 'gpt-oss',
+      backend: envConfig?.backend || 'vllm',
+      useCustomUrl: Boolean(envConfig?.baseUrl),
+      customUrl: envConfig?.baseUrl || 'http://localhost:8000/v1',
+      model: envConfig?.model || 'gpt-oss',
       reasoningEffort: 'medium' as FlaskOrchestratorSettings['reasoningEffort'],
-      apiKey: '',
-      backendLabel: 'vLLM',
+      apiKey: envConfig?.apiKey || '',
+      backendLabel: envConfig?.backendLabel || 'vLLM',
       toolServers: [],
     };
   };
