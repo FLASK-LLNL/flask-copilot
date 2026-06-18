@@ -90,7 +90,7 @@ class FlaskActionManager(ActionManager):
 
     def selected_tool_runtime(self) -> ToolRuntime:
         runtime = super().selected_tool_runtime()
-        if not self.pdf_registry.has_active_document(self.username):
+        if not self.pdf_registry.has_active_document():
             return runtime
         if any(tool.identifier == "consult_with_document" for tool in runtime.tools):
             return runtime
@@ -109,7 +109,7 @@ class FlaskActionManager(ActionManager):
         return partial(self.send_agent_update, agent_key, debug=bool(data.get("debug")))
 
     def _document_reference_context(self) -> str:
-        metadata = self.pdf_registry.active_metadata(self.username)
+        metadata = self.pdf_registry.active_metadata()
         if metadata is None:
             return ""
         return (
@@ -126,7 +126,7 @@ class FlaskActionManager(ActionManager):
     async def handle_configure_pdf_reference(self, data: dict[str, Any]) -> None:
         reference = data.get("pdfReference")
         if reference is None:
-            self.pdf_registry.clear(self.username)
+            self.pdf_registry.clear()
             if data.get("silent"):
                 return
             await self.websocket.send_json(
@@ -140,7 +140,6 @@ class FlaskActionManager(ActionManager):
         try:
             metadata = await asyncio.to_thread(
                 self.pdf_registry.set_from_attachment,
-                self.username,
                 reference,
             )
         except ValueError as exc:
