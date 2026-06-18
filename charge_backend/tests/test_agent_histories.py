@@ -18,14 +18,6 @@ class FakeWebSocket:
         self.last_payload = payload
 
 
-class FakeTaskManager:
-    def __init__(self, websocket):
-        self.websocket = websocket
-        self.configured_tool_servers = []
-        self.discovered_local_mcp_tools = {}
-        self.selected_tool_runtime = None
-
-
 class FakeAgent(Agent):
     def __init__(
         self,
@@ -53,10 +45,8 @@ class FakeAgent(Agent):
 
 def make_manager():
     websocket = FakeWebSocket()
-    task_manager = FakeTaskManager(websocket)
     manager = FlaskActionManager(
-        task_manager=task_manager,
-        experiment=Experiment(task=None),
+        websocket=websocket,
         args=SimpleNamespace(),
         username="test-user",
     )
