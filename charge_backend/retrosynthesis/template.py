@@ -12,7 +12,7 @@ from charge_backend.backend_helper_funcs import (
     PathwayStep,
     FlaskRunSettings,
 )
-from charge_backend.retrosynthesis.context import RetrosynthesisContext
+from charge_backend.experiment import GraphContext
 from charge_backend.moleculedb.molecule_naming import (
     smiles_to_html,
     MolNameFormat,
@@ -41,7 +41,7 @@ def _run_retro_planner_sync(
 
 async def generate_nodes_for_molecular_graph(
     reaction_path_dict: dict[int, azf.Node],
-    retro_synth_context: RetrosynthesisContext,
+    retro_synth_context: GraphContext,
     websocket: WebSocket,
     start_level: int = 0,
     molecule_name_format: MolNameFormat = "brand",
@@ -266,7 +266,7 @@ Reaction SMARTS: `{root_smarts}`""",
 async def template_based_retrosynthesis(
     start_smiles: str,
     config_file: str,
-    context: RetrosynthesisContext,
+    context: GraphContext,
     websocket: WebSocket,
     run_settings: FlaskRunSettings,
 ):
@@ -373,7 +373,7 @@ async def template_based_retrosynthesis(
 async def compute_templates_for_node(
     node: Node,
     config_file: str,
-    context: RetrosynthesisContext,
+    context: GraphContext,
     websocket: WebSocket,
     run_settings: FlaskRunSettings,
 ):

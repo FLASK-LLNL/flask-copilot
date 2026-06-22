@@ -22,7 +22,6 @@ from typing import cast
 from loguru import logger
 from charge.clients.client import Client
 from charge.clients.agentframework import AgentFrameworkBackend
-from charge.experiments.experiment import Experiment
 from charge.clients.agent_factory import AgentFactory
 
 

@@ -7,7 +7,7 @@ import os
 from pathlib import Path
 import json
 from uuid import uuid4
-from charge.experiments.experiment import Experiment
+from charge_backend.experiment import FlaskExperiment
 from charge.utils.mcp_workbench_utils import call_mcp_tool_directly
 from charge_backend.prompt_debugger import debug_prompt_task
 from lc_conductor import CallbackLogger
@@ -51,7 +51,7 @@ with open(PROMPTS_DIR / "lmo_refine_prompt.txt", "r") as f:
 
 async def generate_lead_molecule(
     start_smiles: str,
-    experiment: Experiment,
+    experiment: FlaskExperiment,
     mol_file_path: str,
     max_retries: int,
     depth: int,

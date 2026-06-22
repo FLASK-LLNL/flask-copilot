@@ -9,14 +9,13 @@ from lc_conductor import (
     resolve_builtin_tool_descriptors,
 )
 from loguru import logger
-from charge.experiments.experiment import Experiment
 from charge.tasks.task import Task
 from charge_backend.backend_helper_funcs import (
     CallbackHandler,
     Reaction,
     FlaskRunSettings,
 )
-from charge_backend.retrosynthesis.context import RetrosynthesisContext
+from charge_backend.experiment import FlaskExperiment, GraphContext
 from charge_backend.lmo.lmo_charge_backend_funcs import generate_lead_molecule
 from charge_backend.charge_backend_custom import run_custom_problem
 from functools import partial
@@ -54,7 +53,7 @@ class FlaskActionManager(ActionManager):
             builtin_tool_definitions=builtin_tool_definitions,
         )
         self.run_settings: FlaskRunSettings = FlaskRunSettings()
-        self.retro_synth_context: Optional[RetrosynthesisContext] = None
+        self.retro_synth_context: Optional[GraphContext] = None
         self.pdf_registry = pdf_registry or PdfDocumentRegistry()
         self.builtin_tool_definitions = (
             builtin_tool_definitions or list_builtin_tool_definitions(self.pdf_registry)
@@ -69,9 +68,9 @@ class FlaskActionManager(ActionManager):
 
     def setup_retro_synth_context(self) -> None:
         if self.retro_synth_context is None:
-            self.retro_synth_context = RetrosynthesisContext()
+            self.retro_synth_context = self.experiment.graph_context
 
-    def get_retro_synth_context(self) -> RetrosynthesisContext:
+    def get_retro_synth_context(self) -> GraphContext:
         self.setup_retro_synth_context()
         assert self.retro_synth_context is not None
         return self.retro_synth_context
@@ -84,7 +83,7 @@ class FlaskActionManager(ActionManager):
         """Reset backend-only state that is scoped to the active problem type."""
         self.experiment.reset()
         if problem_type == "retrosynthesis":
-            self.retro_synth_context = RetrosynthesisContext()
+            self.retro_synth_context = self.experiment.graph_context
         else:
             self.retro_synth_context = None
 
@@ -688,8 +687,6 @@ class FlaskActionManager(ActionManager):
             agent_key=f"reaction:{node_id}",
             callback=callback_handler,
         )
-        if self.retro_synth_context is not None:
-            self.retro_synth_context.node_id_to_charge_client[node_id] = agent
 
         # TODO(later): For some reason the below code does not work because memory is not maintained
         # else:
@@ -792,7 +789,7 @@ class FlaskActionManager(ActionManager):
 
         problem_type = data.get("problemType")
         if problem_type == "retrosynthesis":
-            self.retro_synth_context = RetrosynthesisContext()
+            self.retro_synth_context = self.experiment.graph_context
             await self.retro_synth_context.load_state(data)
         else:
             self.retro_synth_context = None

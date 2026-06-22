@@ -6,7 +6,7 @@ from charge.experiments.experiment import AgentRegistryEntry, Experiment
 
 from charge_backend.backend_helper_funcs import Node
 from charge_backend.backend_manager import FlaskActionManager
-from charge_backend.retrosynthesis.context import RetrosynthesisContext
+from charge_backend.experiment import GraphContext
 
 
 class FakeWebSocket:
@@ -27,7 +27,7 @@ def make_manager():
 
 def test_reset_problem_context_clears_retrosynthesis_state_for_lmo():
     manager = make_manager()
-    manager.retro_synth_context = RetrosynthesisContext()
+    manager.retro_synth_context = GraphContext()
     manager.experiment.agent_registry["reaction:node_0"] = AgentRegistryEntry(
         agent=SimpleNamespace(task=None, save_memory=lambda: "old"),
         runtime_config=AgentRuntimeConfig(),
@@ -42,7 +42,7 @@ def test_reset_problem_context_clears_retrosynthesis_state_for_lmo():
 def test_load_retrosynthesis_state_replaces_existing_graph():
     async def run() -> None:
         manager = make_manager()
-        manager.retro_synth_context = RetrosynthesisContext()
+        manager.retro_synth_context = GraphContext()
         await manager.retro_synth_context.add_node(
             Node(
                 id="old_node",

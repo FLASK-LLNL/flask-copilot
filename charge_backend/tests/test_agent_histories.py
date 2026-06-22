@@ -8,7 +8,7 @@ from charge.tasks.task import Task
 
 from charge_backend.backend_helper_funcs import Node, Reaction
 from charge_backend.backend_manager import FlaskActionManager
-from charge_backend.retrosynthesis.context import RetrosynthesisContext
+from charge_backend.experiment import GraphContext
 
 
 class FakeWebSocket:
@@ -166,7 +166,7 @@ def test_agent_task_lifecycle_tracks_pending_message_and_instructions():
 
 def test_reaction_context_includes_reaction_hover_info():
     manager = make_manager()
-    manager.retro_synth_context = RetrosynthesisContext(
+    manager.retro_synth_context = GraphContext(
         node_ids={
             "product": Node(
                 id="product",
