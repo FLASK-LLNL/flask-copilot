@@ -22,8 +22,6 @@ from charge_backend.backend_helper_funcs import (
     calculate_positions,
 )
 
-from loguru import logger
-
 
 # Formerly RetroSynthesisContext
 @dataclass
@@ -121,13 +119,42 @@ class GraphContext:
 
         return descendants
 
-    @classmethod
-    async def _make_edge(
-        cls, node: Node, status: str = "complete", *, websocket=None
-    ) -> Edge:
-        edge = Edge(f"edge_{uuid4()}", node.parentId, node.id, status)
-        if websocket is not None:
-            await websocket.send_json({"type": "edge", "edge": edge.json()})
+    # NOTE (trb): This is the synchronous part of "add_node". FWIW, I
+    # find the asyncio model clunky at best, and it's very annoying
+    # that it can so easily pollute the interface with everything up
+    # to main() quickly getting `async`-ified. In this case, it's the
+    # websocket's fault. If websocket is None, this function, and this
+    # entire interface, is completely synchronous. Oh well.
+    def _add_node(self, node: Node, edge: Edge | None) -> Edge | None:
+        """
+        Handles the synchronous component of add_node. Returns the
+        edge that was added to the graph, if any.
+        """
+
+        if node.id in self.node_ids:
+            raise FileExistsError(f"Node with ID {node.id} already exists in context")
+        self.node_ids[node.id] = node
+        self.nodes_per_level[node.level] += 1
+
+        # Recalculate positions
+        all_nodes = list(self.node_ids.values())
+        calculate_positions(all_nodes)
+
+        if node.parentId is not None:
+            assert (
+                node.parentId in self.node_ids
+            )  # Parents must be added before children
+            self.parents[node.id] = node.parentId
+
+            if edge is None:
+                edge = Edge(f"edge_{uuid4()}", node.parentId, node.id, "complete")
+
+            # Verify that a user-input edge is sane.
+            assert edge.id not in self.edges
+            assert edge.toNode == node.id and edge.fromNode == node.parentId
+
+            self.edges[edge.id] = edge
+
         return edge
 
     async def add_node(
@@ -143,36 +170,12 @@ class GraphContext:
         :param websocket: If not None, notifies websocket of addition.
         :param edge: If not None, use this edge instead of generating one.
         """
-        if node.id in self.node_ids:
-            raise FileExistsError(f"Node with ID {node.id} already exists in context")
-        self.node_ids[node.id] = node
-        self.nodes_per_level[node.level] += 1
-
-        # Recalculate positions
-        all_nodes = list(self.node_ids.values())
-        calculate_positions(all_nodes)
+        added_edge = self._add_node(node, edge)
 
         if websocket is not None:
             await websocket.send_json({"type": "node", "node": node.json()})
-
-        if node.parentId is not None:
-            assert (
-                node.parentId in self.node_ids
-            )  # Parents must be added before children
-            self.parents[node.id] = node.parentId
-
-            if edge is None:
-                edge = await self._make_edge(node, websocket=websocket)
-                # NOTE (trb): This assumes that if the edge comes in
-                # as an arg, communication to the frontend either
-                # isn't necessary (e.g., load context triggered by
-                # front end anyway) or has been handled separately
-                # upon creation of that edge.
-
-            assert edge.id not in self.edges
-            assert edge.toNode == node.id and edge.fromNode == node.parentId
-
-            self.edges[edge.id] = edge
+            if edge is None and added_edge is not None:
+                await websocket.send_json({"type": "edge", "edge": added_edge.json()})
 
     async def update_node(
         self, node: Node, websocket: Optional[WebSocket] = None
@@ -220,8 +223,10 @@ class GraphContext:
 
             else:
                 # Create a new edge
-                edge = await self._make_edge(node, websocket=websocket)
+                edge = Edge(f"edge_{uuid4()}", node.parentId, node.id, "complete")
                 self.edges[edge.id] = edge
+                if websocket is not None:
+                    await websocket.send_json({"type": "edge", "edge": edge.json()})
 
             # Add the parent relationship
             self.parents[node.id] = node.parentId
@@ -268,7 +273,7 @@ class GraphContext:
 
         return TypeAdapter(GraphContext).dump_python(self)
 
-    async def load_state(self, data: dict[str, Any]) -> None:
+    def load_state(self, data: dict[str, Any]) -> None:
         """Restore a context from a dictionary serialization.
         Existing state is clobbered, even if the dictionary
         serialization is empty or "node"-less.
@@ -337,8 +342,10 @@ class GraphContext:
                 else None
             )
 
-            # FIXME (trb)!
-            await self.add_node(node, edge=edge)
+            self._add_node(node, edge)
+
+    def is_empty(self) -> bool:
+        return len(self.node_ids) == 0
 
     def new_node_id(self) -> str:
         """
@@ -378,8 +385,7 @@ class FlaskExperiment(Experiment):
                 state.get("graphContext")
             )
         else:
-            event_loop = asyncio.get_running_loop()
-            event_loop.run_until_complete(self.graph_context.load_state(state))
+            self.graph_context.load_state(state)
 
     def reset(self):
         super().reset()

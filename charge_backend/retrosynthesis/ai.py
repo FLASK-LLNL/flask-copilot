@@ -60,7 +60,6 @@ RETROSYNTH_CONSTRAINED_USER_PROMPT_TEMPLATE = (
 
 async def ai_based_retrosynthesis(
     node_id: str,
-    context: GraphContext,
     query: Optional[str],
     constraint: Optional[str],
     websocket: WebSocket,
@@ -73,6 +72,7 @@ async def ai_based_retrosynthesis(
 ):
     """Performs template-free retrosynthesis using the AI orchestrator."""
     clogger = CallbackLogger(websocket, source="ai_based_retrosynthesis")
+    context = experiment.graph_context
     current_node = context.node_ids.get(node_id)
     if current_node is None:
         await clogger.error(f"Node ID {node_id} not found")
@@ -303,7 +303,6 @@ def attach_mapped_reaction(node: Node, context: GraphContext) -> None:
 
 async def db_then_ai_retrosynthesis(
     node_id: str,
-    context: GraphContext,
     query: Optional[str],
     constraint: Optional[str],
     websocket: WebSocket,
@@ -315,8 +314,9 @@ async def db_then_ai_retrosynthesis(
     history_callback: Optional[Callable[[], Awaitable[None]]] = None,
 ):
     """Searches the reaction database first; falls back to AI-based retrosynthesis if no exact match is found."""
-    node = context.node_ids.get(node_id)
     clogger = CallbackLogger(websocket, source="db_then_ai_retrosynthesis")
+    context = experiment.graph_context
+    node = context.node_ids.get(node_id)
     if node is None:
         await clogger.error(f"Node ID {node_id} not found")
         await websocket.send_json({"type": "complete"})
@@ -336,7 +336,6 @@ async def db_then_ai_retrosynthesis(
     await clogger.info("No exact matches found. Computing with AI orchestrator...")
     await ai_based_retrosynthesis(
         node_id,
-        context,
         query,
         constraint,
         websocket,
