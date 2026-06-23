@@ -14,9 +14,10 @@ import os
 import argparse
 import json
 from lc_conductor import try_get_public_hostname
-from lc_conductor.session import UserSessionManager
+from lc_conductor.session import SessionTimedOut, UserSessionManager
 from charge_backend.flask_session import FlaskUserSession
 import os
+from typing import cast
 
 from loguru import logger
 from charge.clients.client import Client
@@ -35,7 +36,6 @@ from lc_conductor.tool_registration import (
     get_registered_servers,
 )
 from lc_conductor import discover_models_endpoint, validate_initial_model
-
 
 parser = argparse.ArgumentParser()
 
@@ -173,17 +173,34 @@ async def websocket_endpoint(websocket: WebSocket):
 
     await websocket.accept()
 
+    user_session: FlaskUserSession | None = cast(
+        FlaskUserSession | None,
+        UserSessionManager.get_latest_inactive_session(username),
+    )
+
     # If an inactive session exists, attach to it
-    user_session = UserSessionManager.get_latest_inactive_session(username)
     if user_session is not None:
-        await user_session.websocket.set_websocket(websocket)
-        logger.info("User session refreshed with new websocket")
-    else:
-        # Otherwise, create a new user session
+        # In a later PR, this branch will send the saved state back to the UI in
+        # order to resume the session. For now, we terminate the existing
+        # session.
+        await user_session.terminate()
+        user_session = None
+        # try:
+        #     await user_session.websocket.set_websocket(websocket)
+        #     logger.info("User session refreshed with new websocket")
+        # except SessionTimedOut:
+        #     await user_session.terminate()
+        #     user_session = None
+
+    # Otherwise, create a new user session.
+    if user_session is None:
         user_session = FlaskUserSession(username, args, websocket)
-        UserSessionManager.add_session(username, user_session)
+        logger.info("User session created")
+
+    try:
         await user_session.event_loop()
-        logger.info("User session spawned in new thread")
+    finally:
+        logger.info("User session websocket loop exited")
 
 
 def register_agent_backend():
