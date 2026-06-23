@@ -2045,7 +2045,7 @@ const ChemistryTool: React.FC = () => {
 
   const addSidebarMessage = (message: SidebarMessage): void => {
     message.id = message.id ?? Date.now();
-    message.timestamp = message.timestamp ?? new Date().toISOString();
+    message.timestamp = message.timestamp ?? Date.now();
     if (!message.source) {
       message.source = 'Backend';
     }
