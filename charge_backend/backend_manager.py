@@ -771,4 +771,4 @@ class FlaskActionManager(ActionManager):
             problem_type == "retrosynthesis"
             and self.experiment.graph_context.is_empty()
         ):
-            await self.experiment.graph_context.load_state(data)
+            self.experiment.graph_context.load_state(data)
