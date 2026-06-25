@@ -195,7 +195,7 @@ class GraphContext:
         """
 
         # Keep the old value alive (this will raise KeyError if
-        # node.id is unknown
+        # node.id is unknown)
         old_node = self.node_ids[node.id]
 
         # Following the order of add_node, we reset the node in

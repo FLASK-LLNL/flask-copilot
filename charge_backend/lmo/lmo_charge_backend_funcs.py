@@ -204,9 +204,14 @@ async def generate_lead_molecule(
             y=100,
         )
         logger.info(f"Sending root node: {node}")
+        await experiment.graph_context.add_node(node, websocket)
 
-        await websocket.send_json({"type": "node", "node": node.json()})
-
+    # FIXME (trb): This edge is a bit annoying. It seems to be a "UI
+    # edge" in that its "toNode" doesn't exist when it's created, and
+    # when (if) that node is created, it doesn't formally have a
+    # "parent" (in the Node.parentId sense). It's not referenced
+    # outside of adjusting the status/label for the frontend, so I'm
+    # *NOT* caching it in the experiment's GraphContext.
     initial_edge_uuid = uuid4()
     edge_data = Edge(
         id=f"edge_{initial_edge_uuid}",
@@ -506,8 +511,7 @@ async def generate_lead_molecule(
                             + (node_id - initial_node_id) * 300,
                             y=100,
                         )
-
-                        await websocket.send_json({"type": "node", "node": node.json()})
+                        await experiment.graph_context.add_node(node, websocket)
 
                     else:
                         await clogger.info(

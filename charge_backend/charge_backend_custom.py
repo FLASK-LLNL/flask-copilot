@@ -65,6 +65,6 @@ async def run_custom_problem(
                 x=50,
                 y=100 + i * 150,
             )
-            await websocket.send_json({"type": "node", "node": node.json()})
+            await experiment.graph_context.add_node(node, websocket)
 
     await websocket.send_json({"type": "complete"})
