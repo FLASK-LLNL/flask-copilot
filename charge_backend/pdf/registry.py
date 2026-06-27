@@ -169,22 +169,25 @@ class PdfDocument:
 
 
 class PdfDocumentRegistry:
+    """
+    A document registry (metadata, summary, ToC) that caches previously uploaded
+    PDFs.
+    """
+
     def __init__(self, cache_dir: str | Path | None = None):
         self._base_dir = Path(cache_dir) if cache_dir else Path(tempfile.mkdtemp())
         self._base_dir.mkdir(parents=True, exist_ok=True)
-        self._documents: dict[str, PdfDocument] = {}  # Maps user to document
+        self._document: PdfDocument | None = None
 
-    def active_metadata(self, user: str) -> PdfReferenceMetadata | None:
-        if user not in self._documents:
+    def active_metadata(self) -> PdfReferenceMetadata | None:
+        if self._document is None:
             return None
-        return self._documents[user].metadata
+        return self._document.metadata
 
-    def has_active_document(self, user: str) -> bool:
-        return user in self._documents
+    def has_active_document(self) -> bool:
+        return self._document is not None
 
-    def set_from_attachment(
-        self, user: str, attachment: dict[str, Any]
-    ) -> PdfReferenceMetadata:
+    def set_from_attachment(self, attachment: dict[str, Any]) -> PdfReferenceMetadata:
         normalized = validate_pdf_reference(attachment)
         raw_bytes = _decode_data_url(normalized["dataUrl"])
         document_id = hashlib.sha256(raw_bytes).hexdigest()
@@ -208,40 +211,36 @@ class PdfDocumentRegistry:
             pageCount=overview.page_count,
             createdAt=normalized["createdAt"],
         )
-        self._documents[user] = PdfDocument(metadata, path, document)
+        self._document = PdfDocument(metadata, path, document)
         return metadata
 
-    def clear(self, user: str) -> None:
-        if user in self._documents:
-            del self._documents[user]
+    def clear(self) -> None:
+        self._document = None
 
     def cleanup(self) -> None:
-        self._documents.clear()
+        self._document = None
         shutil.rmtree(self._base_dir, ignore_errors=True)
 
     async def consult(
         self,
-        user: str,
         question: str,
         document_id: str | None = None,
         max_tool_calls: int = SUBAGENT_MAX_TOOL_CALLS,
     ) -> str:
-        if user not in self._documents:
+        if not self.has_active_document():
             return (
                 "No PDF reference is available in this session. Ask the user to "
                 "reupload the PDF in Customize > References before consulting it."
             )
-
-        active_id = self._documents[user].metadata.documentId
+        assert self._document is not None
+        active_id = self._document.metadata.documentId
         if document_id and document_id != active_id:
             return (
                 f"The requested PDF `{document_id}` is not active. The only active "
-                f"PDF is `{active_id}` ({self._documents[user].metadata.name})."
+                f"PDF is `{active_id}` ({self._document.metadata.name})."
             )
 
-        return await self._documents[user].consult(
-            question, max_tool_calls=max_tool_calls
-        )
+        return await self._document.consult(question, max_tool_calls=max_tool_calls)
 
 
 def validate_pdf_reference(attachment: dict[str, Any]) -> dict[str, Any]:

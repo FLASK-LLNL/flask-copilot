@@ -193,6 +193,7 @@ export interface WebSocketMessageToServer {
 // Messages received from backend
 export interface WebSocketMessage {
   type: string;
+  timestamp?: number;
 
   node?: TreeNode;
   edge?: Edge;

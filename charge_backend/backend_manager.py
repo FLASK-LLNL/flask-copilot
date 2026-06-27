@@ -1,8 +1,8 @@
+import argparse
 from typing import Any, Optional
 from fastapi import WebSocket
 import asyncio
-import os
-from lc_conductor import ActionManager, TaskManager, CallbackLogger
+from lc_conductor import ActionManager, handles
 from lc_conductor import (
     BuiltinToolDefinition,
     ToolRuntime,
@@ -13,9 +13,7 @@ from charge.experiments.experiment import Experiment
 from charge.tasks.task import Task
 from charge_backend.backend_helper_funcs import (
     CallbackHandler,
-    PathwayStep,
     Reaction,
-    ReactionAlternative,
     FlaskRunSettings,
 )
 from charge_backend.retrosynthesis.context import RetrosynthesisContext
@@ -35,6 +33,7 @@ from charge_backend.prompt_debugger import debug_prompt
 from charge_backend.backend_helper_funcs import Node
 from charge_backend.attachments import image_refs, validate_image_attachments
 from charge_backend.pdf import PdfDocumentRegistry
+from charge_backend.builtin_tools import list_builtin_tool_definitions
 
 
 class FlaskActionManager(ActionManager):
@@ -42,24 +41,31 @@ class FlaskActionManager(ActionManager):
 
     def __init__(
         self,
-        task_manager: TaskManager,
-        experiment: Experiment,
-        args,
+        websocket: WebSocket,
+        args: argparse.Namespace,
         username: str,
         pdf_registry: Optional[PdfDocumentRegistry] = None,
         builtin_tool_definitions: Optional[list[BuiltinToolDefinition]] = None,
     ):
         super().__init__(
-            task_manager,
-            experiment,
+            websocket,
             args,
             username,
             builtin_tool_definitions=builtin_tool_definitions,
         )
         self.run_settings: FlaskRunSettings = FlaskRunSettings()
-        self.websocket = task_manager.websocket
         self.retro_synth_context: Optional[RetrosynthesisContext] = None
         self.pdf_registry = pdf_registry or PdfDocumentRegistry()
+        self.builtin_tool_definitions = (
+            builtin_tool_definitions or list_builtin_tool_definitions(self.pdf_registry)
+        )
+
+    async def cleanup(self):
+        """
+        Tears down the action manager
+        """
+        self.pdf_registry.cleanup()
+        await super().cleanup()
 
     def setup_retro_synth_context(self) -> None:
         if self.retro_synth_context is None:
@@ -84,7 +90,7 @@ class FlaskActionManager(ActionManager):
 
     def selected_tool_runtime(self) -> ToolRuntime:
         runtime = super().selected_tool_runtime()
-        if not self.pdf_registry.has_active_document(self.username):
+        if not self.pdf_registry.has_active_document():
             return runtime
         if any(tool.identifier == "consult_with_document" for tool in runtime.tools):
             return runtime
@@ -103,7 +109,7 @@ class FlaskActionManager(ActionManager):
         return partial(self.send_agent_update, agent_key, debug=bool(data.get("debug")))
 
     def _document_reference_context(self) -> str:
-        metadata = self.pdf_registry.active_metadata(self.username)
+        metadata = self.pdf_registry.active_metadata()
         if metadata is None:
             return ""
         return (
@@ -116,14 +122,11 @@ class FlaskActionManager(ActionManager):
     def _with_document_reference_context(self, system_prompt: str) -> str:
         return f"{system_prompt}{self._document_reference_context()}"
 
-    async def handle_load_state(self, data, *args, **kwargs) -> None:
-        self.pdf_registry.clear(self.username)
-        await super().handle_load_state(data, *args, **kwargs)
-
+    @handles("configure-pdf-reference")
     async def handle_configure_pdf_reference(self, data: dict[str, Any]) -> None:
         reference = data.get("pdfReference")
         if reference is None:
-            self.pdf_registry.clear(self.username)
+            self.pdf_registry.clear()
             if data.get("silent"):
                 return
             await self.websocket.send_json(
@@ -137,7 +140,6 @@ class FlaskActionManager(ActionManager):
         try:
             metadata = await asyncio.to_thread(
                 self.pdf_registry.set_from_attachment,
-                self.username,
                 reference,
             )
         except ValueError as exc:
@@ -174,6 +176,7 @@ class FlaskActionManager(ActionManager):
             }
         )
 
+    @handles("compute")
     async def handle_compute(self, data: dict) -> None:
         self.setup_run_settings(data)
         problem_type = data.get("problemType")
@@ -371,6 +374,7 @@ class FlaskActionManager(ActionManager):
 
         await self.task_manager.run_task(run_func())
 
+    @handles("compute-reaction-from")
     async def handle_compute_reaction_from(self, data: dict) -> None:
         """Handle compute-reaction-from action."""
         self.setup_run_settings(data)
@@ -437,6 +441,7 @@ class FlaskActionManager(ActionManager):
 
         asyncio.create_task(self.task_manager.run_task(run_func()))
 
+    @handles("compute-reaction-templates")
     async def handle_template_retrosynthesis(self, data: dict) -> None:
         """Handle compute-reaction-templates action."""
         self.setup_run_settings(data)
@@ -458,6 +463,7 @@ class FlaskActionManager(ActionManager):
 
         asyncio.create_task(self.task_manager.run_task(run_func()))
 
+    @handles("optimize-from")
     async def handle_optimize_from(self, data: dict) -> None:
         """Handle optimize-from action."""
         self.setup_run_settings(data)
@@ -494,6 +500,7 @@ class FlaskActionManager(ActionManager):
             )
         )
 
+    @handles("recompute-parent-reaction")
     async def handle_recompute_reaction(self, data: dict) -> None:
         """Handle recompute-reaction action."""
         self.setup_run_settings(data)
@@ -557,6 +564,7 @@ class FlaskActionManager(ActionManager):
 
         asyncio.create_task(self.task_manager.run_task(run_func()))
 
+    @handles("set-reaction-alternative")
     async def handle_set_reaction_alternative(self, data: dict) -> None:
         """Handle set-reaction-alternative action."""
         self.setup_run_settings(data)
@@ -583,11 +591,13 @@ class FlaskActionManager(ActionManager):
             node, alt, self.retro_synth_context, self.websocket
         )
 
+    @handles("ui-update-orchestrator-settings")
     async def handle_orchestrator_settings_update(self, data: dict) -> None:
         if "moleculeName" in data:
             self.run_settings.molecule_name_format = data["moleculeName"]
-        await ActionManager.handle_orchestrator_settings_update(self, data)
+        await super().handle_orchestrator_settings_update(data)
 
+    @handles("query-molecule")
     async def handle_custom_query_molecule(self, data: dict) -> None:
         """Handle a query on the given molecule."""
         self.setup_run_settings(data)
@@ -638,6 +648,7 @@ class FlaskActionManager(ActionManager):
 
         asyncio.create_task(self.task_manager.run_task(run_and_report()))
 
+    @handles("query-reaction")
     async def handle_custom_query_reaction(self, data: dict) -> None:
         """Handle a query on the reaction (from nodeId to its reactants)."""
         self.setup_run_settings(data)
@@ -747,6 +758,7 @@ class FlaskActionManager(ActionManager):
             reaction_str += f"\n\nReaction hover information:\n{hover_info}"
         return reaction_str
 
+    @handles("chat-agent")
     async def handle_chat_agent(self, data: dict[str, Any]) -> None:
         self.setup_run_settings(data)
         agent_key = str(data.get("agentKey") or "")
@@ -774,14 +786,7 @@ class FlaskActionManager(ActionManager):
             return
         raise ValueError(f"Unsupported chat agent key: {agent_key}")
 
-    async def handle_get_username(self, _: dict) -> None:
-        await self.websocket.send_json(
-            {
-                "type": "get-username-response",
-                "username": self.username,
-            }
-        )
-
+    @handles("load-context")
     async def handle_load_state(self, data: dict, *args, **kwargs) -> None:
         await super().handle_load_state(data, *args, **kwargs)
 

@@ -5,19 +5,19 @@
 ## SPDX-License-Identifier: Apache-2.0
 ################################################################################
 
-import asyncio
-from concurrent.futures import ProcessPoolExecutor
 from functools import partial
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Request
+from fastapi import FastAPI, WebSocket, Request
 from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 import os
 import argparse
-import httpx
 import json
 from lc_conductor import try_get_public_hostname
+from lc_conductor.session import SessionTimedOut, UserSessionManager
+from charge_backend.flask_session import FlaskUserSession
 import os
+from typing import cast
 
 from loguru import logger
 from charge.clients.client import Client
@@ -27,7 +27,6 @@ from charge.clients.agent_factory import AgentFactory
 
 
 from lc_conductor.tool_registration import (
-    get_client_info,
     register_url,
     register_post,
     reload_server_list,
@@ -37,13 +36,6 @@ from lc_conductor.tool_registration import (
     get_registered_servers,
 )
 from lc_conductor import discover_models_endpoint, validate_initial_model
-
-from lc_conductor import TaskManager
-from lc_conductor.local_mcp_proxy import resolve_local_mcp_response
-from charge_backend.backend_manager import FlaskActionManager
-from charge_backend.builtin_tools import list_builtin_tool_definitions
-from charge_backend.pdf import PdfDocumentRegistry
-from charge_backend import prompt_debugger
 
 parser = argparse.ArgumentParser()
 
@@ -171,43 +163,6 @@ if os.path.exists(ASSETS_PATH):
         return HTMLResponse(html)
 
 
-async def _cancel_task_if_running(
-    action, task: asyncio.Task | None, executor: ProcessPoolExecutor | None
-):
-    if action not in [
-        "compute",
-        "optimize-from",
-        "compute-reaction-from",
-        "recompute-reaction",
-        "recompute-parent-reaction",
-    ]:
-        return
-
-    if task and not task.done():
-        logger.info("Cancelling existing compute task...")
-        task.cancel()
-        try:
-            await task
-        except asyncio.CancelledError:
-            logger.info("Previous compute task cancelled.")
-
-    if executor:
-        executor.shutdown(wait=False, cancel_futures=True)
-
-
-def _log_background_action_failure(task: asyncio.Task) -> None:
-    try:
-        exc = task.exception()
-    except asyncio.CancelledError:
-        logger.info("Background websocket action was cancelled")
-        return
-
-    if exc is None:
-        return
-
-    logger.exception(f"Background websocket action failed: {exc}")
-
-
 @app.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket):
     logger.info(f"Request for websocket received. Headers: {str(websocket.headers)}")
@@ -218,6 +173,40 @@ async def websocket_endpoint(websocket: WebSocket):
 
     await websocket.accept()
 
+    user_session: FlaskUserSession | None = cast(
+        FlaskUserSession | None,
+        UserSessionManager.get_latest_inactive_session(username),
+    )
+
+    # If an inactive session exists, attach to it
+    if user_session is not None:
+        # In a later PR, this branch will send the saved state back to the UI in
+        # order to resume the session. For now, we terminate the existing
+        # session.
+        await user_session.terminate()
+        user_session = None
+        # try:
+        #     await user_session.websocket.set_websocket(websocket)
+        #     logger.info("User session refreshed with new websocket")
+        # except SessionTimedOut:
+        #     await user_session.terminate()
+        #     user_session = None
+
+    # Otherwise, create a new user session.
+    if user_session is None:
+        user_session = FlaskUserSession(username, args, websocket)
+        logger.info("User session created")
+
+    try:
+        await user_session.event_loop()
+    finally:
+        logger.info("User session websocket loop exited")
+
+
+def register_agent_backend():
+    """
+    Handles ChARGe agent factory's initial model configuration
+    """
     API_KEY = os.getenv("FLASK_ORCHESTRATOR_API_KEY", None)
     model = os.getenv("FLASK_ORCHESTRATOR_MODEL", None)
     backend = os.getenv("FLASK_ORCHESTRATOR_BACKEND", None)
@@ -249,91 +238,6 @@ async def websocket_endpoint(websocket: WebSocket):
         ),
     )
 
-    # Set up an experiment class for current endpoint
-    experiment = Experiment(task=None)
-
-    task_manager = TaskManager(websocket)
-    pdf_registry = PdfDocumentRegistry()
-
-    action_manager = FlaskActionManager(
-        task_manager,
-        experiment,
-        args,
-        username,
-        pdf_registry=pdf_registry,
-        builtin_tool_definitions=list_builtin_tool_definitions(pdf_registry, username),
-    )
-    await action_manager.report_orchestrator_config()
-
-    action_handlers = {
-        # General actions
-        "query-molecule": action_manager.handle_custom_query_molecule,
-        "query-reaction": action_manager.handle_custom_query_reaction,
-        "compute": action_manager.handle_compute,
-        "reset": action_manager.handle_reset,
-        "stop": action_manager.handle_stop,
-        # Tools
-        "list-tools": action_manager.handle_list_tools,
-        "select-tools-for-task": action_manager.handle_select_tools_for_task,
-        "configure-pdf-reference": action_manager.handle_configure_pdf_reference,
-        # Settings
-        "ui-update-orchestrator-settings": action_manager.handle_orchestrator_settings_update,
-        "get-username": action_manager.handle_get_username,
-        "list-agents": action_manager.handle_list_agents,
-        "get-agent": action_manager.handle_get_agent,
-        "chat-agent": action_manager.handle_chat_agent,
-        # Context management
-        "save-context": action_manager.handle_save_state,
-        "load-context": action_manager.handle_load_state,
-        # Lead molecule optimization
-        "optimize-from": action_manager.handle_optimize_from,
-        # Retrosynthesis
-        "compute-reaction-from": action_manager.handle_compute_reaction_from,
-        "compute-reaction-templates": action_manager.handle_template_retrosynthesis,
-        "recompute-parent-reaction": action_manager.handle_recompute_reaction,
-        "set-reaction-alternative": action_manager.handle_set_reaction_alternative,
-    }
-
-    try:
-        while True:
-            try:
-                data = await websocket.receive_json()
-                action = data.get("action")
-
-                if action == "prompt-breakpoint-response":  # AI debugging
-                    prompt_debugger.DEBUG_PROMPT_RESPONSES[websocket].set_result(data)
-                    continue
-
-                if action == "local-mcp-response":
-                    if not resolve_local_mcp_response(websocket, data):
-                        logger.warning(f"Received unmatched local MCP response: {data}")
-                    continue
-
-                if action in action_handlers:
-                    handler_func = action_handlers[action]
-                    if action == "list-tools":
-                        task = asyncio.create_task(handler_func(data))
-                        task.add_done_callback(_log_background_action_failure)
-                    else:
-                        await handler_func(data)
-                else:
-                    logger.warning(
-                        f"Unknown action received: {action} with data {data}"
-                    )
-            except ValueError as e:
-                logger.error(f"Error in internal loop connection: {e}")
-
-    except WebSocketDisconnect:
-        logger.info("WebSocket disconnected")
-        pass
-    except httpx.ConnectError as e:
-        logger.error(f"Connection error: {e}")
-    except Exception as e:
-        logger.exception(f"Error in WebSocket connection: {e}")
-    finally:
-        pdf_registry.cleanup()
-        await task_manager.close()
-
 
 if __name__ == "__main__":
     import uvicorn
@@ -341,6 +245,8 @@ if __name__ == "__main__":
     host = args.host
     if host is None:
         _, host = try_get_public_hostname()
+
+    register_agent_backend()
 
     uvicorn.run(
         app,

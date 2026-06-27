@@ -1174,7 +1174,10 @@ const ChemistryTool: React.FC = () => {
             break;
           }
           case 'response': {
-            addSidebarMessage(data.message!);
+            addSidebarMessage({
+              ...data.message!,
+              timestamp: data.message?.timestamp ?? data.timestamp,
+            });
             console.log('Server response:', data.message);
             break;
           }
@@ -2041,8 +2044,8 @@ const ChemistryTool: React.FC = () => {
   };
 
   const addSidebarMessage = (message: SidebarMessage): void => {
-    message.id = Date.now();
-    message.timestamp = new Date().toISOString();
+    message.id = message.id ?? Date.now();
+    message.timestamp = message.timestamp ?? Date.now();
     if (!message.source) {
       message.source = 'Backend';
     }
