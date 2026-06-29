@@ -52,6 +52,7 @@ class FlaskActionManager(ActionManager):
             username,
             builtin_tool_definitions=builtin_tool_definitions,
         )
+        self.experiment = FlaskExperiment(task=None)  # Use the flask experiment instead
         self.run_settings: FlaskRunSettings = FlaskRunSettings()
         self.retro_synth_context: Optional[GraphContext] = None
         self.pdf_registry = pdf_registry or PdfDocumentRegistry()

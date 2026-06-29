@@ -63,10 +63,10 @@ class GraphContext:
         self, node_id: str, websocket: Optional[WebSocket] = None
     ) -> list[str]:
         """
-        Delete a subtree rooted at node_id from the retrosynthesis context.
+        Delete a subtree rooted at node_id from the graph context.
 
         This function removes all descendant nodes (children, grandchildren, etc.)
-        of the given node_id from all data structures in the Retrosynthesisself,
+        of the given node_id from all data structures in the graph,
         and recalculates the nodes_per_level counts to ensure proper positioning
         of future nodes. The node corresponding to "node_id" is not deleted.
 
@@ -239,9 +239,6 @@ class GraphContext:
 
         # Recalculate in case anything changed
         self.recalculate_nodes_per_level()
-
-        # FIXME (trb): Are there any cases in which I need to
-        # recalculate positions?
 
         if websocket is not None:
             await websocket.send_json({"type": "node_update", "node": node.json()})
