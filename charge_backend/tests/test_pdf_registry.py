@@ -55,9 +55,7 @@ def test_validate_pdf_reference_rejects_non_pdf():
 def test_registry_consult_without_active_document_requests_reupload():
     registry = PdfDocumentRegistry()
 
-    assert "reupload" in asyncio.run(
-        registry.consult("testusername", "What is this about?")
-    )
+    assert "reupload" in asyncio.run(registry.consult("What is this about?"))
 
     registry.cleanup()
 
@@ -66,7 +64,7 @@ def test_registry_upload_uses_filename_title_when_pdf_has_no_title():
     registry = PdfDocumentRegistry()
 
     metadata = registry.set_from_attachment(
-        "testusername", valid_pdf_attachment(name="sample-book.pdf")
+        valid_pdf_attachment(name="sample-book.pdf")
     )
 
     assert metadata.title == "sample-book"
@@ -80,11 +78,10 @@ def test_read_page_tool_returns_rendered_image_without_debug_file(
 ):
     monkeypatch.chdir(tmp_path)
     registry = PdfDocumentRegistry()
-    registry.set_from_attachment("testusername", valid_pdf_attachment())
-    document = registry._documents.get("testusername")
-    assert document is not None
+    registry.set_from_attachment(valid_pdf_attachment())
+    assert registry._document is not None
 
-    contents = document._read_page_tool()(1, True)
+    contents = registry._document._read_page_tool()(1, True)
 
     assert any(
         (getattr(content, "uri", None) or "").startswith("data:image/png;base64,")
