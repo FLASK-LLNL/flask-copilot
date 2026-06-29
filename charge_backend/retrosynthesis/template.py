@@ -12,7 +12,7 @@ from charge_backend.backend_helper_funcs import (
     PathwayStep,
     FlaskRunSettings,
 )
-from charge_backend.experiment import GraphContext
+from charge_backend.flask_experiment import GraphContext
 from charge_backend.moleculedb.molecule_naming import (
     smiles_to_html,
     MolNameFormat,

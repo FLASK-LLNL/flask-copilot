@@ -7,7 +7,7 @@
 
 import asyncio
 
-from charge_backend.experiment import GraphContext
+from charge_backend.flask_experiment import GraphContext
 from charge_backend.backend_helper_funcs import Node, Edge
 from typing import Optional
 

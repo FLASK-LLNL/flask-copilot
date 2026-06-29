@@ -14,7 +14,7 @@ from charge_backend.backend_helper_funcs import (
     FlaskRunSettings,
 )
 from charge_backend.prompt_debugger import debug_prompt
-from charge_backend.experiment import FlaskExperiment, GraphContext
+from charge_backend.flask_experiment import FlaskExperiment, GraphContext
 from charge_backend.moleculedb.molecule_naming import (
     smiles_to_html,
 )

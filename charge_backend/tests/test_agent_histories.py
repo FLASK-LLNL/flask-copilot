@@ -8,7 +8,7 @@ from charge.tasks.task import Task
 
 from charge_backend.backend_helper_funcs import Node, Reaction
 from charge_backend.backend_manager import FlaskActionManager
-from charge_backend.experiment import FlaskExperiment, GraphContext
+from charge_backend.flask_experiment import FlaskExperiment, GraphContext
 
 
 class FakeWebSocket:

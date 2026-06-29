@@ -2,7 +2,7 @@ from fastapi import WebSocket
 import re
 from typing import Awaitable, Callable, Optional
 
-from charge_backend.experiment import FlaskExperiment
+from charge_backend.flask_experiment import FlaskExperiment
 from charge.tasks.task import Task
 from charge_backend.backend_helper_funcs import Node, CallbackHandler, FlaskRunSettings
 from charge_backend.moleculedb.molecule_naming import smiles_to_html

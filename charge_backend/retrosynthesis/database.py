@@ -3,7 +3,7 @@ from fastapi import WebSocket
 import os
 from typing import Annotated, Any, Callable, Literal
 
-from charge_backend.experiment import GraphContext
+from charge_backend.flask_experiment import GraphContext
 from lc_conductor.callback_logger import CallbackLogger
 from charge_backend.backend_helper_funcs import (
     Node,

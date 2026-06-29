@@ -6,7 +6,7 @@ from charge_backend.backend_helper_funcs import (
     Node,
     Reaction,
 )
-from charge_backend.experiment import GraphContext
+from charge_backend.flask_experiment import GraphContext
 from charge_backend.moleculedb.purchasable import is_purchasable
 from charge_backend.retrosynthesis.mapping import build_mapped_reaction_dict_or_none
 

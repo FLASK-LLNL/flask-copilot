@@ -12,7 +12,7 @@ from pathlib import Path
 from typing import Any
 
 from agent_framework import Content
-from charge_backend.experiment import FlaskExperiment
+from charge_backend.flask_experiment import FlaskExperiment
 from charge.tasks.task import Task
 from loguru import logger
 

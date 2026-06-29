@@ -15,7 +15,7 @@ from charge_backend.backend_helper_funcs import (
     Reaction,
     FlaskRunSettings,
 )
-from charge_backend.experiment import FlaskExperiment, GraphContext
+from charge_backend.flask_experiment import FlaskExperiment, GraphContext
 from charge_backend.lmo.lmo_charge_backend_funcs import generate_lead_molecule
 from charge_backend.charge_backend_custom import run_custom_problem
 from functools import partial

@@ -361,6 +361,8 @@ class GraphContext:
 
 
 class FlaskExperiment(Experiment):
+    """Experiment subclass that manages a graph context"""
+
     graph_context: GraphContext
 
     def __init__(self, *args, **kwargs):
