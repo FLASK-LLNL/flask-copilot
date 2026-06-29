@@ -766,7 +766,15 @@ class FlaskActionManager(ActionManager):
     async def handle_load_state(self, data: dict, *args, **kwargs) -> None:
         await super().handle_load_state(data, *args, **kwargs)
 
-        # Handle legacy experiments
+        # Handle legacy experiments. The previous iteration of saved
+        # context from the front-end included "nodes" and "edges" in
+        # the top-level `data` dictionary -- they are NOT moved under
+        # "experimentContext". It would be good to preserve the
+        # back-compatibility with old experiments, and it's not a
+        # terrible amount of effort to do so. The two options are to
+        # manipulate `data` to put things in the current place, or to
+        # just call the legacy function directly. This opts for the
+        # latter approach.
         problem_type = data.get("problemType")
         if (
             problem_type == "retrosynthesis"
