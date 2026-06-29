@@ -7,7 +7,7 @@
 
 import asyncio
 
-from charge_backend.flask_experiment import GraphContext
+from charge_backend.flask_experiment import FlaskExperiment, GraphContext
 from charge_backend.backend_helper_funcs import Node, Edge
 from typing import Optional
 
@@ -182,3 +182,172 @@ def test_updating_node_with_new_parent():
     assert "c" not in g.parents.values()
     assert g.nodes_per_level[0] == 2
     assert g.nodes_per_level[1] == 1
+
+
+def test_graph_context_save_state():
+    g = GraphContext()
+    asyncio.run(g.add_node(make_node("a", 0)))
+    asyncio.run(g.add_node(make_node("b", 1, "a")))
+    asyncio.run(g.add_node(make_node("c", 2, "b")))
+    asyncio.run(g.add_node(make_node("d", 2, "b")))
+    asyncio.run(g.add_node(make_node("e", 3, "c")))
+
+    g_dict = g.save_state()
+
+    assert "node_ids" in g_dict
+    assert len(g_dict["node_ids"]) == 5
+    assert "edges" in g_dict
+    assert len(g_dict["edges"]) == 4
+
+    # A dumb little test, just to sanity check that the pydantic alias
+    # logic for Nodes is propagated through "model_dump" correctly.
+    assert "yield" in g_dict["node_ids"]["a"]
+    assert "yield_" not in g_dict["node_ids"]["a"]
+
+
+def test_graph_context_load_state():
+
+    g_dict = {}
+    g_empty = GraphContext()
+
+    assert g_empty.is_empty()
+    g_empty.load_state(g_dict)
+    assert g_empty.is_empty()
+
+    # "nodes" is a list of serialized Node objects
+    g_dict["nodes"] = [
+        {
+            "id": "a",
+            "smiles": "a_smiles",
+            "label": "a_label",
+            "hoverInfo": "a_hover",
+            "level": 0,
+            "parentId": None,
+        },
+        {
+            "id": "b",
+            "smiles": "b_smiles",
+            "label": "b_label",
+            "hoverInfo": "b_hover",
+            "level": 1,
+            "parentId": "a",
+        },
+        {
+            "id": "c",
+            "smiles": "c_smiles",
+            "label": "c_label",
+            "hoverInfo": "c_hover",
+            "level": 2,
+            "parentId": "b",
+        },
+        {
+            "id": "d",
+            "smiles": "d_smiles",
+            "label": "d_label",
+            "hoverInfo": "d_hover",
+            "level": 2,
+            "parentId": "b",
+        },
+        {
+            "id": "e",
+            "smiles": "e_smiles",
+            "label": "e_label",
+            "hoverInfo": "e_hover",
+            "level": 3,
+            "parentId": "c",
+        },
+    ]
+
+    g_from_nodes = GraphContext()
+    assert g_from_nodes.is_empty()
+    g_from_nodes.load_state(g_dict)
+
+    assert len(g_from_nodes.node_ids) == 5
+    assert g_from_nodes.node_ids.keys() == {"a", "b", "c", "d", "e"}
+    assert len(g_from_nodes.edges) == 4
+
+    # "edges" is a list of serialized Edge objects
+    g_dict["edges"] = [
+        {
+            "id": "edge_a_b",
+            "fromNode": "a",
+            "toNode": "b",
+            "status": "complete",
+            "label": None,
+        },
+        {
+            "id": "edge_b_c",
+            "fromNode": "b",
+            "toNode": "c",
+            "status": "complete",
+            "label": None,
+        },
+        {
+            "id": "edge_b_d",
+            "fromNode": "b",
+            "toNode": "d",
+            "status": "complete",
+            "label": None,
+        },
+        {
+            "id": "edge_c_e",
+            "fromNode": "c",
+            "toNode": "e",
+            "status": "complete",
+            "label": None,
+        },
+    ]
+    g_from_nodes_edges = GraphContext()
+    assert g_from_nodes_edges.is_empty()
+    g_from_nodes_edges.load_state(g_dict)
+
+    assert len(g_from_nodes_edges.node_ids) == 5
+    assert g_from_nodes_edges.node_ids.keys() == {"a", "b", "c", "d", "e"}
+    assert len(g_from_nodes_edges.edges) == 4
+    assert "edge_a_b" in g_from_nodes_edges.edges
+    assert "edge_b_c" in g_from_nodes_edges.edges
+    assert "edge_b_d" in g_from_nodes_edges.edges
+    assert "edge_c_e" in g_from_nodes_edges.edges
+    assert g_from_nodes_edges.edges.keys() == {
+        "edge_a_b",
+        "edge_b_c",
+        "edge_b_d",
+        "edge_c_e",
+    }
+
+
+def test_graph_context_in_flask_experiment_load_state():
+
+    g = GraphContext()
+    asyncio.run(g.add_node(make_node("a", 0)))
+    asyncio.run(g.add_node(make_node("b", 1, "a")))
+    asyncio.run(g.add_node(make_node("c", 2, "b")))
+    asyncio.run(g.add_node(make_node("d", 2, "b")))
+    asyncio.run(g.add_node(make_node("e", 3, "c")))
+
+    experimentContext = {}
+    experimentContext["graphContext"] = {}
+    experimentContext["graphContext"] = g.save_state()
+
+    e = FlaskExperiment(task=None)
+    e.load_state(experimentContext)
+
+    assert not e.graph_context.is_empty()
+    assert e.graph_context == g
+
+    # "graphContext" takes precedence over "nodes"
+    experimentContext["nodes"] = [
+        {
+            "id": "f",
+            "smiles": "f_smiles",
+            "label": "f_label",
+            "hoverInfo": "f_hover",
+            "level": 0,
+            "parentId": None,
+        }
+    ]
+    e.load_state(experimentContext)
+
+    assert not e.graph_context.is_empty()
+    assert "f" not in e.graph_context.node_ids
+    assert e.graph_context == g

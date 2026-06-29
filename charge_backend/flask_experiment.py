@@ -14,8 +14,7 @@ from charge.clients.agent_factory import Agent
 from charge.experiments.experiment import Experiment
 from collections import defaultdict
 from fastapi import WebSocket
-from pydantic import Field, TypeAdapter
-from pydantic.dataclasses import dataclass
+from pydantic import Field, TypeAdapter, BaseModel
 from typing import Optional, Any, TypeAlias
 from uuid import uuid4
 
@@ -30,8 +29,7 @@ from charge_backend.backend_helper_funcs import (
 
 
 # Formerly RetroSynthesisContext
-@dataclass
-class GraphContext:
+class GraphContext(BaseModel):
     """
     Manages nodes and edges in graph
     """
@@ -274,7 +272,7 @@ class GraphContext:
     def save_state(self) -> dict[str, Any]:
         """Export the class data as a Python dictionary."""
 
-        return TypeAdapter(GraphContext).dump_python(self)
+        return self.model_dump(mode="json")
 
     def load_state(self, data: dict[str, Any]) -> None:
         """Restore a context from a dictionary serialization.
@@ -384,11 +382,8 @@ class FlaskExperiment(Experiment):
         # If we have an "old-style" serialization, we won't get the
         # "graphContext", likely just "nodes" and "edges".
         if "graphContext" in state:
-            # Preferring symmetry with GraphContext.save_state's use
-            # of TypeAdapter(GraphContext).dump_python().
-            graph_context = TypeAdapter(GraphContext).validate_python(
-                state.get("graphContext")
-            )
+            # Preferring symmetry with GraphContext.save_state's impl
+            self.graph_context = GraphContext.model_validate(state.get("graphContext"))
         else:
             self.graph_context.load_state(state)
 
