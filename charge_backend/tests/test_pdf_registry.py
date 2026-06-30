@@ -11,6 +11,12 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from pdf.registry import PdfDocumentRegistry, validate_pdf_reference
 
 
+def make_registry() -> PdfDocumentRegistry:
+    # The Scholar subagent is never invoked in these tests, so no agent backend
+    # is needed; consult() only uses it to construct the subagent.
+    return PdfDocumentRegistry(None)
+
+
 def pdf_attachment(payload: bytes = b"%PDF-1.4\n", **overrides):
     encoded = base64.b64encode(payload).decode("ascii")
     data = {
@@ -53,7 +59,7 @@ def test_validate_pdf_reference_rejects_non_pdf():
 
 
 def test_registry_consult_without_active_document_requests_reupload():
-    registry = PdfDocumentRegistry()
+    registry = make_registry()
 
     assert "reupload" in asyncio.run(registry.consult("What is this about?"))
 
@@ -61,7 +67,7 @@ def test_registry_consult_without_active_document_requests_reupload():
 
 
 def test_registry_upload_uses_filename_title_when_pdf_has_no_title():
-    registry = PdfDocumentRegistry()
+    registry = make_registry()
 
     metadata = registry.set_from_attachment(
         valid_pdf_attachment(name="sample-book.pdf")
@@ -77,7 +83,7 @@ def test_read_page_tool_returns_rendered_image_without_debug_file(
     tmp_path, monkeypatch
 ):
     monkeypatch.chdir(tmp_path)
-    registry = PdfDocumentRegistry()
+    registry = make_registry()
     registry.set_from_attachment(valid_pdf_attachment())
     assert registry._document is not None
 

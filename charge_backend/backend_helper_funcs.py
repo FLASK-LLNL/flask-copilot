@@ -7,7 +7,7 @@ from pydantic import ConfigDict, Field, TypeAdapter
 from typing import Any, Awaitable, Callable, Dict, Literal, Optional, Tuple
 from dataclasses import asdict
 
-from charge.clients.agent_factory import AgentCallback
+from charge.clients.agent import AgentCallback
 from flask_tools.chemistry import smiles_utils
 from flask_tools.lmo.molecular_property_utils import get_density
 from lc_conductor import CallbackLogger, RunSettings

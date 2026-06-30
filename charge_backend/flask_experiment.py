@@ -10,7 +10,7 @@ FLASK-specific experiment with graph-based context
 
 import asyncio
 
-from charge.clients.agent_factory import Agent
+from charge.clients.agent import Agent
 from charge.experiments.experiment import Experiment
 from collections import defaultdict
 from fastapi import WebSocket
