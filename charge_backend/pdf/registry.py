@@ -12,7 +12,7 @@ from pathlib import Path
 from typing import Any
 
 from agent_framework import Content
-from charge.experiments.experiment import Experiment
+from charge_backend.flask_experiment import FlaskExperiment
 from charge.tasks.task import Task
 from loguru import logger
 
@@ -82,7 +82,7 @@ class PdfDocument:
 
         # Deliberately use a fresh Experiment so the subagent has no
         # orchestrator memory or task history.
-        experiment = Experiment(task=None)
+        experiment = FlaskExperiment(task=None)
         agent = experiment.create_agent_with_experiment_state(
             task=task,
             agent_key="Scholar",

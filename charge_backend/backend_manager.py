@@ -9,14 +9,13 @@ from lc_conductor import (
     resolve_builtin_tool_descriptors,
 )
 from loguru import logger
-from charge.experiments.experiment import Experiment
 from charge.tasks.task import Task
 from charge_backend.backend_helper_funcs import (
     CallbackHandler,
     Reaction,
     FlaskRunSettings,
 )
-from charge_backend.retrosynthesis.context import RetrosynthesisContext
+from charge_backend.flask_experiment import FlaskExperiment, GraphContext
 from charge_backend.lmo.lmo_charge_backend_funcs import generate_lead_molecule
 from charge_backend.charge_backend_custom import run_custom_problem
 from functools import partial
@@ -53,8 +52,9 @@ class FlaskActionManager(ActionManager):
             username,
             builtin_tool_definitions=builtin_tool_definitions,
         )
+        self.experiment = FlaskExperiment(task=None)  # Use the flask experiment instead
         self.run_settings: FlaskRunSettings = FlaskRunSettings()
-        self.retro_synth_context: Optional[RetrosynthesisContext] = None
+        self.retro_synth_context: Optional[GraphContext] = None
         self.pdf_registry = pdf_registry or PdfDocumentRegistry()
         self.builtin_tool_definitions = (
             builtin_tool_definitions or list_builtin_tool_definitions(self.pdf_registry)
@@ -67,14 +67,8 @@ class FlaskActionManager(ActionManager):
         self.pdf_registry.cleanup()
         await super().cleanup()
 
-    def setup_retro_synth_context(self) -> None:
-        if self.retro_synth_context is None:
-            self.retro_synth_context = RetrosynthesisContext()
-
-    def get_retro_synth_context(self) -> RetrosynthesisContext:
-        self.setup_retro_synth_context()
-        assert self.retro_synth_context is not None
-        return self.retro_synth_context
+    def get_retro_synth_context(self) -> GraphContext:
+        return self.experiment.graph_context
 
     def setup_run_settings(self, data: dict[str, Any]):
         if "runSettings" in data:
@@ -83,10 +77,6 @@ class FlaskActionManager(ActionManager):
     def reset_problem_context(self, problem_type: Optional[str]) -> None:
         """Reset backend-only state that is scoped to the active problem type."""
         self.experiment.reset()
-        if problem_type == "retrosynthesis":
-            self.retro_synth_context = RetrosynthesisContext()
-        else:
-            self.retro_synth_context = None
 
     def selected_tool_runtime(self) -> ToolRuntime:
         runtime = super().selected_tool_runtime()
@@ -379,12 +369,10 @@ class FlaskActionManager(ActionManager):
         """Handle compute-reaction-from action."""
         self.setup_run_settings(data)
         attachments = validate_image_attachments(data)
-        if self.retro_synth_context is None:
-            raise ValueError("Retrosynthesis context not initialized")
 
         logger.info("Synthesize tree leaf action received")
         logger.info(f"Data: {data}")
-        node = self.retro_synth_context.node_ids[data["nodeId"]]
+        node = self.experiment.graph_context.node_ids[data["nodeId"]]
         request_text = (
             f"Retrosynthesis request for node {data['nodeId']}: {data.get('query', '')}".strip()
             if data.get("query")
@@ -397,10 +385,12 @@ class FlaskActionManager(ActionManager):
         )
 
         has_children = any(
-            v == data["nodeId"] for v in self.retro_synth_context.parents.values()
+            v == data["nodeId"] for v in self.experiment.graph_context.parents.values()
         )
 
-        await self.retro_synth_context.delete_subtree(data["nodeId"], self.websocket)
+        await self.experiment.graph_context.delete_subtree(
+            data["nodeId"], self.websocket
+        )
         await self.websocket.send_json(
             {
                 "type": "node_update",
@@ -427,7 +417,6 @@ class FlaskActionManager(ActionManager):
                 else db_then_ai_retrosynthesis
             ),
             data["nodeId"],
-            self.retro_synth_context,
             data.get("query", None),
             None,  # Unconstrained
             self.task_manager.websocket,
@@ -445,18 +434,16 @@ class FlaskActionManager(ActionManager):
     async def handle_template_retrosynthesis(self, data: dict) -> None:
         """Handle compute-reaction-templates action."""
         self.setup_run_settings(data)
-        if self.retro_synth_context is None:
-            raise ValueError("Retrosynthesis context not initialized")
 
         logger.info("Synthesize tree leaf action received")
         logger.info(f"Data: {data}")
-        node = self.retro_synth_context.node_ids[data["nodeId"]]
+        node = self.experiment.graph_context.node_ids[data["nodeId"]]
 
         run_func = partial(
             compute_templates_for_node,
             node,
             self.args.config_file,
-            self.retro_synth_context,
+            self.experiment.graph_context,
             self.task_manager.websocket,
             self.run_settings,
         )
@@ -505,20 +492,18 @@ class FlaskActionManager(ActionManager):
         """Handle recompute-reaction action."""
         self.setup_run_settings(data)
         attachments = validate_image_attachments(data)
-        if self.retro_synth_context is None:
-            raise ValueError("Retrosynthesis context not initialized")
 
         # Get parent
-        if data["nodeId"] not in self.retro_synth_context.parents:
+        if data["nodeId"] not in self.experiment.graph_context.parents:
             await self._send_processing_message(
                 f"Cannot find parent reaction for node {data['nodeId']}", source="Agent"
             )
             await self.websocket.send_json({"type": "complete"})
             return
 
-        parent_nodeid = self.retro_synth_context.parents[data["nodeId"]]
-        parent_node = self.retro_synth_context.node_ids[parent_nodeid]
-        smiles = self.retro_synth_context.node_ids[data["nodeId"]].smiles
+        parent_nodeid = self.experiment.graph_context.parents[data["nodeId"]]
+        parent_node = self.experiment.graph_context.node_ids[parent_nodeid]
+        smiles = self.experiment.graph_context.node_ids[data["nodeId"]].smiles
         request_text = (
             f"Retrosynthesis request for node {data['nodeId']}: {data.get('query', '')}".strip()
             if data.get("query")
@@ -531,7 +516,9 @@ class FlaskActionManager(ActionManager):
         )
 
         # Clear subtree and levels for layouting
-        await self.retro_synth_context.delete_subtree(parent_nodeid, self.websocket)
+        await self.experiment.graph_context.delete_subtree(
+            parent_nodeid, self.websocket
+        )
         await self.websocket.send_json(
             {
                 "type": "node_update",
@@ -550,7 +537,6 @@ class FlaskActionManager(ActionManager):
         run_func = partial(
             ai_based_retrosynthesis,
             parent_nodeid,
-            self.retro_synth_context,
             data.get("query", None),
             smiles,
             self.task_manager.websocket,
@@ -568,17 +554,15 @@ class FlaskActionManager(ActionManager):
     async def handle_set_reaction_alternative(self, data: dict) -> None:
         """Handle set-reaction-alternative action."""
         self.setup_run_settings(data)
-        if self.retro_synth_context is None:
-            raise ValueError("Retrosynthesis context not initialized")
 
         # Get node
-        if data["nodeId"] not in self.retro_synth_context.node_ids:
+        if data["nodeId"] not in self.experiment.graph_context.node_ids:
             await self._send_processing_message(
                 f"Cannot find node {data['nodeId']}", source="Agent"
             )
             await self.websocket.send_json({"type": "complete"})
             return
-        node = self.retro_synth_context.node_ids[data["nodeId"]]
+        node = self.experiment.graph_context.node_ids[data["nodeId"]]
         alt = data["alternativeId"]
         if not node.reaction or not node.reaction.alternatives:
             await self._send_processing_message(
@@ -588,7 +572,7 @@ class FlaskActionManager(ActionManager):
             return
 
         await set_reaction_alternative(
-            node, alt, self.retro_synth_context, self.websocket
+            node, alt, self.experiment.graph_context, self.websocket
         )
 
     @handles("ui-update-orchestrator-settings")
@@ -688,8 +672,6 @@ class FlaskActionManager(ActionManager):
             agent_key=f"reaction:{node_id}",
             callback=callback_handler,
         )
-        if self.retro_synth_context is not None:
-            self.retro_synth_context.node_id_to_charge_client[node_id] = agent
 
         # TODO(later): For some reason the below code does not work because memory is not maintained
         # else:
@@ -718,11 +700,8 @@ class FlaskActionManager(ActionManager):
     def _reaction_hover_info_for_node(
         self, node_id: str, data: Optional[dict[str, Any]] = None
     ) -> str:
-        if (
-            self.retro_synth_context is not None
-            and node_id in self.retro_synth_context.node_ids
-        ):
-            reaction = self.retro_synth_context.node_ids[node_id].reaction
+        if node_id in self.experiment.graph_context.node_ids:
+            reaction = self.experiment.graph_context.node_ids[node_id].reaction
             hover_info = getattr(reaction, "hoverInfo", None)
             if isinstance(hover_info, str) and hover_info.strip():
                 return hover_info.strip()
@@ -738,19 +717,16 @@ class FlaskActionManager(ActionManager):
     def _reaction_context_for_node(
         self, node_id: str, data: Optional[dict[str, Any]] = None
     ) -> str:
-        if (
-            self.retro_synth_context is None
-            or node_id not in self.retro_synth_context.node_ids
-        ):
+        if node_id not in self.experiment.graph_context.node_ids:
             hover_info = self._reaction_hover_info_for_node(node_id, data)
             return f"Reaction hover information:\n{hover_info}" if hover_info else ""
-        node = self.retro_synth_context.node_ids[node_id]
+        node = self.experiment.graph_context.node_ids[node_id]
         child_nodes = [
             nid
-            for nid, parent in self.retro_synth_context.parents.items()
+            for nid, parent in self.experiment.graph_context.parents.items()
             if parent == node_id
         ]
-        reactants = [self.retro_synth_context.node_ids[nid] for nid in child_nodes]
+        reactants = [self.experiment.graph_context.node_ids[nid] for nid in child_nodes]
         reactants_str = "\n".join(reactant.smiles for reactant in reactants)
         reaction_str = f"Product: {node.smiles}\nReactants:\n{reactants_str}"
         hover_info = self._reaction_hover_info_for_node(node_id, data)
@@ -790,9 +766,18 @@ class FlaskActionManager(ActionManager):
     async def handle_load_state(self, data: dict, *args, **kwargs) -> None:
         await super().handle_load_state(data, *args, **kwargs)
 
+        # Handle legacy experiments. The previous iteration of saved
+        # context from the front-end included "nodes" and "edges" in
+        # the top-level `data` dictionary -- they are NOT moved under
+        # "experimentContext". It would be good to preserve the
+        # back-compatibility with old experiments, and it's not a
+        # terrible amount of effort to do so. The two options are to
+        # manipulate `data` to put things in the current place, or to
+        # just call the legacy function directly. This opts for the
+        # latter approach.
         problem_type = data.get("problemType")
-        if problem_type == "retrosynthesis":
-            self.retro_synth_context = RetrosynthesisContext()
-            await self.retro_synth_context.load_state(data)
-        else:
-            self.retro_synth_context = None
+        if (
+            problem_type == "retrosynthesis"
+            and self.experiment.graph_context.is_empty()
+        ):
+            self.experiment.graph_context.load_state(data)

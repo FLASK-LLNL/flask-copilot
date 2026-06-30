@@ -3,12 +3,12 @@ from types import SimpleNamespace
 from typing import Any
 
 from charge.clients.agent_factory import Agent, AgentRuntimeConfig
-from charge.experiments.experiment import AgentRegistryEntry, Experiment
+from charge.experiments.experiment import AgentRegistryEntry
 from charge.tasks.task import Task
 
 from charge_backend.backend_helper_funcs import Node, Reaction
 from charge_backend.backend_manager import FlaskActionManager
-from charge_backend.retrosynthesis.context import RetrosynthesisContext
+from charge_backend.flask_experiment import FlaskExperiment, GraphContext
 
 
 class FakeWebSocket:
@@ -166,7 +166,7 @@ def test_agent_task_lifecycle_tracks_pending_message_and_instructions():
 
 def test_reaction_context_includes_reaction_hover_info():
     manager = make_manager()
-    manager.retro_synth_context = RetrosynthesisContext(
+    manager.experiment.graph_context = GraphContext(
         node_ids={
             "product": Node(
                 id="product",

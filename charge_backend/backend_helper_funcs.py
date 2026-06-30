@@ -3,8 +3,8 @@ from fastapi import WebSocket
 import asyncio
 import json
 from pydantic.dataclasses import dataclass
-from pydantic import Field
-from typing import Any, Awaitable, Callable, Dict, Optional, Literal, Tuple
+from pydantic import ConfigDict, Field, TypeAdapter
+from typing import Any, Awaitable, Callable, Dict, Literal, Optional, Tuple
 from dataclasses import asdict
 
 from charge.clients.agent_factory import AgentCallback
@@ -53,7 +53,14 @@ class Reaction:
         return asdict(self)
 
 
-@dataclass
+# This handles "yield_" <--> "yield" automatically
+#
+# FIXME (trb): it's a minor detail, but we might consider factoring
+# out "(x, y, label, hoverInfo, highlight)" as "LayoutProperties" or
+# something and "(smiles, cost, bandgap, yield, density, sascore,
+# purchasable)" as "MoleculeProperties" or something, but this is out
+# of scope of my current changes.
+@dataclass(config=ConfigDict(serialize_by_alias=True))
 class Node:
     id: str
     smiles: str
@@ -67,7 +74,7 @@ class Node:
     # Properties
     cost: Optional[float] = None
     bandgap: Optional[float] = None
-    yield_: Optional[float] = None
+    yield_: Optional[float] = Field(default=None, alias="yield")
     density: Optional[float] = None
     sascore: Optional[float] = None
     purchasable: Optional[bool] = None
@@ -75,10 +82,10 @@ class Node:
     reaction: Optional[Reaction] = None
 
     def json(self):
-        ret = asdict(self)
-        ret["yield"] = ret["yield_"]
-        del ret["yield_"]
-        return ret
+        # NOTE (trb): NOT dump_json, because, contrary to the name of
+        # this function, these functions just return python
+        # dictionaries, not actually json objects.
+        return TypeAdapter(Node).dump_python(self)
 
 
 @dataclass

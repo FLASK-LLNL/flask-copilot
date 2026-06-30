@@ -7,7 +7,7 @@ import os
 from pathlib import Path
 import json
 from uuid import uuid4
-from charge.experiments.experiment import Experiment
+from charge_backend.flask_experiment import FlaskExperiment
 from charge.utils.mcp_workbench_utils import call_mcp_tool_directly
 from charge_backend.prompt_debugger import debug_prompt_task
 from lc_conductor import CallbackLogger
@@ -51,7 +51,7 @@ with open(PROMPTS_DIR / "lmo_refine_prompt.txt", "r") as f:
 
 async def generate_lead_molecule(
     start_smiles: str,
-    experiment: Experiment,
+    experiment: FlaskExperiment,
     mol_file_path: str,
     max_retries: int,
     depth: int,
@@ -204,9 +204,14 @@ async def generate_lead_molecule(
             y=100,
         )
         logger.info(f"Sending root node: {node}")
+        await experiment.graph_context.add_node(node, websocket)
 
-        await websocket.send_json({"type": "node", "node": node.json()})
-
+    # FIXME (trb): This edge is a bit annoying. It seems to be a "UI
+    # edge" in that its "toNode" doesn't exist when it's created, and
+    # when (if) that node is created, it doesn't formally have a
+    # "parent" (in the Node.parentId sense). It's not referenced
+    # outside of adjusting the status/label for the frontend, so I'm
+    # *NOT* caching it in the experiment's GraphContext.
     initial_edge_uuid = uuid4()
     edge_data = Edge(
         id=f"edge_{initial_edge_uuid}",
@@ -506,8 +511,7 @@ async def generate_lead_molecule(
                             + (node_id - initial_node_id) * 300,
                             y=100,
                         )
-
-                        await websocket.send_json({"type": "node", "node": node.json()})
+                        await experiment.graph_context.add_node(node, websocket)
 
                     else:
                         await clogger.info(

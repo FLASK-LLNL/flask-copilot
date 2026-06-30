@@ -2,7 +2,7 @@ from fastapi import WebSocket
 import re
 from typing import Awaitable, Callable, Optional
 
-from charge.experiments.experiment import Experiment
+from charge_backend.flask_experiment import FlaskExperiment
 from charge.tasks.task import Task
 from charge_backend.backend_helper_funcs import Node, CallbackHandler, FlaskRunSettings
 from charge_backend.moleculedb.molecule_naming import smiles_to_html
@@ -14,7 +14,7 @@ async def run_custom_problem(
     start_smiles: str,
     system_prompt: str,
     user_prompt: str,
-    experiment: Experiment,
+    experiment: FlaskExperiment,
     tool_runtime: ToolRuntime,
     websocket: WebSocket,
     run_settings: FlaskRunSettings,
@@ -65,6 +65,6 @@ async def run_custom_problem(
                 x=50,
                 y=100 + i * 150,
             )
-            await websocket.send_json({"type": "node", "node": node.json()})
+            await experiment.graph_context.add_node(node, websocket)
 
     await websocket.send_json({"type": "complete"})

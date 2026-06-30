@@ -14,7 +14,7 @@ from charge_backend.backend_helper_funcs import (
     FlaskRunSettings,
 )
 from charge_backend.prompt_debugger import debug_prompt
-from charge_backend.retrosynthesis.context import RetrosynthesisContext
+from charge_backend.flask_experiment import FlaskExperiment, GraphContext
 from charge_backend.moleculedb.molecule_naming import (
     smiles_to_html,
 )
@@ -31,7 +31,6 @@ from charge_backend.retrosynthesis.retrosynthesis_task import (
     TemplateFreeReactionOutputSchema as ReactionOutputSchema,
 )
 
-from charge.experiments.experiment import Experiment
 from lc_conductor import ToolRuntime
 
 
@@ -61,11 +60,10 @@ RETROSYNTH_CONSTRAINED_USER_PROMPT_TEMPLATE = (
 
 async def ai_based_retrosynthesis(
     node_id: str,
-    context: RetrosynthesisContext,
     query: Optional[str],
     constraint: Optional[str],
     websocket: WebSocket,
-    experiment: Experiment,
+    experiment: FlaskExperiment,
     config_file: str,
     run_settings: FlaskRunSettings,
     tool_runtime: ToolRuntime,
@@ -74,6 +72,7 @@ async def ai_based_retrosynthesis(
 ):
     """Performs template-free retrosynthesis using the AI orchestrator."""
     clogger = CallbackLogger(websocket, source="ai_based_retrosynthesis")
+    context = experiment.graph_context
     current_node = context.node_ids.get(node_id)
     if current_node is None:
         await clogger.error(f"Node ID {node_id} not found")
@@ -87,9 +86,9 @@ async def ai_based_retrosynthesis(
 
     agent_key = f"reaction:{node_id}"
     callback_handler: CallbackHandler | None = None
-    if node_id in context.node_id_to_charge_client:
+    if agent_key in experiment.agent_registry:
         # Existing context
-        runner = context.node_id_to_charge_client[node_id]
+        runner = experiment.agent_registry[agent_key]
     else:
         # New context
         callback_handler = CallbackHandler(
@@ -100,7 +99,6 @@ async def ai_based_retrosynthesis(
             agent_key=agent_key,
             callback=callback_handler,
         )
-        context.node_id_to_charge_client[node_id] = runner
 
     if callback_handler is None and isinstance(runner.callback, CallbackHandler):
         callback_handler = runner.callback
@@ -221,7 +219,6 @@ async def ai_based_retrosynthesis(
     current_node.reaction = ai_reaction
 
     # Update node with discovered reaction
-    context.node_id_to_reasoning_summary[node_id] = reasoning_summary
     await context.update_node(current_node, websocket)
     await asyncio.sleep(0)
 
@@ -286,7 +283,7 @@ async def ai_based_retrosynthesis(
     await websocket.send_json({"type": "complete"})
 
 
-def attach_mapped_reaction(node: Node, context: RetrosynthesisContext) -> None:
+def attach_mapped_reaction(node: Node, context: GraphContext) -> None:
     """Attach mapped reaction to the reaction object."""
     reaction = node.reaction
     if reaction is not None:
@@ -306,11 +303,10 @@ def attach_mapped_reaction(node: Node, context: RetrosynthesisContext) -> None:
 
 async def db_then_ai_retrosynthesis(
     node_id: str,
-    context: RetrosynthesisContext,
     query: Optional[str],
     constraint: Optional[str],
     websocket: WebSocket,
-    experiment: Experiment,
+    experiment: FlaskExperiment,
     config_file: str,
     run_settings: FlaskRunSettings,
     tool_runtime: ToolRuntime,
@@ -318,8 +314,9 @@ async def db_then_ai_retrosynthesis(
     history_callback: Optional[Callable[[], Awaitable[None]]] = None,
 ):
     """Searches the reaction database first; falls back to AI-based retrosynthesis if no exact match is found."""
-    node = context.node_ids.get(node_id)
     clogger = CallbackLogger(websocket, source="db_then_ai_retrosynthesis")
+    context = experiment.graph_context
+    node = context.node_ids.get(node_id)
     if node is None:
         await clogger.error(f"Node ID {node_id} not found")
         await websocket.send_json({"type": "complete"})
@@ -339,7 +336,6 @@ async def db_then_ai_retrosynthesis(
     await clogger.info("No exact matches found. Computing with AI orchestrator...")
     await ai_based_retrosynthesis(
         node_id,
-        context,
         query,
         constraint,
         websocket,

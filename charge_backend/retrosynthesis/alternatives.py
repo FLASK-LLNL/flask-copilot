@@ -6,7 +6,7 @@ from charge_backend.backend_helper_funcs import (
     Node,
     Reaction,
 )
-from charge_backend.retrosynthesis.context import RetrosynthesisContext
+from charge_backend.flask_experiment import GraphContext
 from charge_backend.moleculedb.purchasable import is_purchasable
 from charge_backend.retrosynthesis.mapping import build_mapped_reaction_dict_or_none
 
@@ -14,7 +14,7 @@ from charge_backend.retrosynthesis.mapping import build_mapped_reaction_dict_or_
 async def set_reaction_alternative(
     node: Node,
     alternative_id: str,
-    context: RetrosynthesisContext,
+    context: GraphContext,
     websocket: WebSocket,
 ):
     """
