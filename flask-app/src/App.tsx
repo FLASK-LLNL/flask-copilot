@@ -68,7 +68,7 @@ import {
   BACKEND_OPTIONS,
   deserializeAgentChatHistory,
   handleLocalMcpProxyRequest,
-  extractClientInitState,
+  extractInitialSettings,
 } from 'lc-conductor';
 import type { AgentAttachment, AgentChatHistory } from 'lc-conductor';
 
@@ -619,13 +619,13 @@ const ChemistryTool: React.FC = () => {
         })()
       : {};
 
-    // Use extractClientInitState for canonical merge of core settings
+    // Use extractInitialSettings for canonical merge of core settings
     // Priority: localStorage (userSettings) > APP_CONFIG > undefined
-    const coreSettings = extractClientInitState(userSettings, window.APP_CONFIG);
+    const coreSettings = extractInitialSettings(userSettings, window.APP_CONFIG);
 
     // Build complete FlaskOrchestratorSettings with FLASK-specific fields and defaults
     return {
-      // Core settings from extractClientInitState with FLASK defaults
+      // Core settings from extractInitialSettings with FLASK defaults
       backend: coreSettings.backend || 'vllm',
       model: coreSettings.model || 'gpt-oss',
       useCustomUrl: coreSettings.useCustomUrl ?? false,
