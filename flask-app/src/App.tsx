@@ -68,7 +68,6 @@ import {
   BACKEND_OPTIONS,
   deserializeAgentChatHistory,
   handleLocalMcpProxyRequest,
-  sendClientInit,
   extractClientInitState,
 } from 'lc-conductor';
 import type { AgentAttachment, AgentChatHistory } from 'lc-conductor';
@@ -1072,19 +1071,20 @@ const ChemistryTool: React.FC = () => {
       setWsReconnecting(false);
       setWsError('');
 
-      // IMPORTANT: Send client-init as the first message to reconcile browser state with server state.
-      // This sends API key via WebSocket data, not query params or headers,
-      // so it won't be logged in HTTP access logs
-      const initState = extractClientInitState(orchestratorSettingsRef.current, window.APP_CONFIG);
-      sendClientInit(socket, initState);
+      // IMPORTANT: Send orchestrator settings as the first message to reconcile browser
+      // state with server state. The API key travels in WebSocket
+      // data (not query params or headers), so it won't be logged in HTTP access logs.
+      // orchestratorSettingsRef is always fully populated by getInitialSettings(), which
+      // merges APP_CONFIG defaults, so backend/model/customUrl are never undefined.
+      sendOrchestratorSettingsToBackend(orchestratorSettingsRef.current);
 
-      // Now send other messages after client-init
+      // Now send other messages after the initial settings handshake
       reset(); // Server state must match UI state
 
       loadStateFromCurrentExperiment();
 
-      // NOTE: We don't send orchestrator settings here anymore because:
-      // 1. client-init already sent full settings (backend, model, API key, baseUrl)
+      // NOTE: We don't send orchestrator settings again here because:
+      // 1. The handshake above already sent full settings (backend, model, API key, customUrl)
       // 2. Backend will validate and respond with server-update-orchestrator-settings
       // 3. Sending again here would overwrite backend's validated settings
 

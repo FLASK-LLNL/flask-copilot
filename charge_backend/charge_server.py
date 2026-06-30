@@ -209,63 +209,20 @@ def register_agent_backend():
     """
     Handles ChARGe agent factory's initial model configuration
     """
-    # Wait for client-init message with browser state (most secure approach)
-    # This includes cached settings (backend, model, API key, base URL) sent via WebSocket data
-    client_init_data = await websocket.receive_json()
-
-    client_api_key = None
-    client_backend = None
-    client_model = None
-    client_base_url = None
-    has_service_key = False
-
-    if client_init_data.get("action") == "client-init":
-        logger.info("Received client-init message with browser state")
-        client_api_key = client_init_data.get("apiKey")
-        client_backend = client_init_data.get("backend")
-        client_model = client_init_data.get("model")
-        has_service_key = client_init_data.get("hasServiceApiKey", False)
-
-        # Handle base URL
-        use_custom_url = client_init_data.get("useCustomUrl", False)
-        if use_custom_url:
-            client_base_url = client_init_data.get("baseUrl")
-
-        # Empty string or None means use service key
-        if not client_api_key:
-            client_api_key = None
-
-        logger.info(
-            f"Client state: backend={client_backend}, model={client_model}, "
-            f"baseUrl={client_base_url}, hasApiKey={bool(client_api_key)}"
-        )
-    else:
-        logger.warning(
-            f"Expected client-init as first message, got: {client_init_data.get('action')}"
-        )
-
-    # Use centralized config resolution for defaults, but prefer client-provided values
-    config = resolve_orchestrator_config(
-        requested_api_key=client_api_key,
-        requested_backend=client_backend,
-        requested_model=client_model,
-        default_backend=args.backend,
-        default_model=args.model,
+    orchestrator_config = resolve_orchestrator_config(
+        requested_backend=args.backend,
+        requested_model=args.model,
         return_api_key=True,
-    )
-
-    logger.info(
-        f"Final config: backend={config['backend']}, model={config['model']}, baseUrl={config['baseUrl']}"
     )
 
     # Set up an AgentFramework backend for tasks on this endpoint
     AgentFactory.register_backend(
         "agentframework",
         AgentFrameworkBackend(
-            model=config["model"],
-            backend=config["backend"],
-            api_key=config["apiKey"],
-            base_url=config["baseUrl"],
+            model=orchestrator_config["model"],
+            backend=orchestrator_config["backend"],
+            api_key=orchestrator_config["apiKey"],
+            base_url=orchestrator_config["baseUrl"],
             use_responses_api=True,
         ),
     )
