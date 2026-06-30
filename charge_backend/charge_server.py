@@ -21,8 +21,6 @@ from typing import cast
 
 from loguru import logger
 from charge.clients.client import Client
-from charge.clients.agentframework import AgentFrameworkBackend
-from charge.clients.agent_factory import AgentFactory
 
 
 from lc_conductor.tool_registration import (
@@ -204,29 +202,6 @@ async def websocket_endpoint(websocket: WebSocket):
         logger.info("User session websocket loop exited")
 
 
-def register_agent_backend():
-    """
-    Handles ChARGe agent factory's initial model configuration
-    """
-    orchestrator_config = resolve_orchestrator_config(
-        requested_backend=args.backend,
-        requested_model=args.model,
-        return_api_key=True,
-    )
-
-    # Set up an AgentFramework backend for tasks on this endpoint
-    AgentFactory.register_backend(
-        "agentframework",
-        AgentFrameworkBackend(
-            model=orchestrator_config["model"],
-            backend=orchestrator_config["backend"],
-            api_key=orchestrator_config["apiKey"],
-            base_url=orchestrator_config["baseUrl"],
-            use_responses_api=True,
-        ),
-    )
-
-
 if __name__ == "__main__":
     import uvicorn
 
@@ -234,7 +209,9 @@ if __name__ == "__main__":
     if host is None:
         _, host = try_get_public_hostname()
 
-    register_agent_backend()
+    # Note: the agent backend is no longer registered globally here. Each user
+    # session creates and owns its own agent backend (see ActionManager) so that
+    # per-user model/credential configuration cannot leak across sessions.
 
     uvicorn.run(
         app,

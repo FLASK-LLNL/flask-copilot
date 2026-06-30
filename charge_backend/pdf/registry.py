@@ -9,10 +9,11 @@ import shutil
 import tempfile
 from dataclasses import asdict, dataclass, replace
 from pathlib import Path
-from typing import Any
+from typing import Any, Optional
 
 from agent_framework import Content
 from charge_backend.flask_experiment import FlaskExperiment
+from charge.clients.agent import AgentBackend
 from charge.tasks.task import Task
 from loguru import logger
 
@@ -49,10 +50,12 @@ class PdfDocument:
         metadata: PdfReferenceMetadata,
         path: Path,
         document: Any,
+        agent_backend: Optional[AgentBackend],
     ):
         self.metadata = metadata
         self.path = path
         self._document = document
+        self._agent_backend = agent_backend
 
     async def consult(
         self, question: str, max_tool_calls: int = SUBAGENT_MAX_TOOL_CALLS
@@ -81,8 +84,9 @@ class PdfDocument:
         )
 
         # Deliberately use a fresh Experiment so the subagent has no
-        # orchestrator memory or task history.
-        experiment = FlaskExperiment(task=None)
+        # orchestrator memory or task history, but reuse the session's agent
+        # backend so the subagent runs on this user's configured backend.
+        experiment = FlaskExperiment(task=None, backend=self._agent_backend)
         agent = experiment.create_agent_with_experiment_state(
             task=task,
             agent_key="Scholar",
@@ -174,7 +178,12 @@ class PdfDocumentRegistry:
     PDFs.
     """
 
-    def __init__(self, cache_dir: str | Path | None = None):
+    def __init__(
+        self,
+        agent_backend: Optional[AgentBackend],
+        cache_dir: str | Path | None = None,
+    ):
+        self._agent_backend = agent_backend
         self._base_dir = Path(cache_dir) if cache_dir else Path(tempfile.mkdtemp())
         self._base_dir.mkdir(parents=True, exist_ok=True)
         self._document: PdfDocument | None = None
@@ -211,7 +220,7 @@ class PdfDocumentRegistry:
             pageCount=overview.page_count,
             createdAt=normalized["createdAt"],
         )
-        self._document = PdfDocument(metadata, path, document)
+        self._document = PdfDocument(metadata, path, document, self._agent_backend)
         return metadata
 
     def clear(self) -> None:

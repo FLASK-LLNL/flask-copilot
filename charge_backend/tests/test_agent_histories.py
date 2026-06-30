@@ -1,8 +1,9 @@
+import argparse
 import asyncio
 from types import SimpleNamespace
 from typing import Any
 
-from charge.clients.agent_factory import Agent, AgentRuntimeConfig
+from charge.clients.agent import Agent, AgentRuntimeConfig
 from charge.experiments.experiment import AgentRegistryEntry
 from charge.tasks.task import Task
 
@@ -47,7 +48,7 @@ def make_manager():
     websocket = FakeWebSocket()
     manager = FlaskActionManager(
         websocket=websocket,
-        args=SimpleNamespace(),
+        args=argparse.Namespace(backend="openai", model="gpt-4o-mini"),
         username="test-user",
     )
     return manager
