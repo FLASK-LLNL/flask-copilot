@@ -629,7 +629,7 @@ const ChemistryTool: React.FC = () => {
       backend: coreSettings.backend || 'vllm',
       model: coreSettings.model || 'gpt-oss',
       useCustomUrl: coreSettings.useCustomUrl ?? false,
-      customUrl: coreSettings.baseUrl || 'http://localhost:8000/v1',
+      customUrl: coreSettings.customUrl || 'http://localhost:8000/v1',
       apiKey: coreSettings.apiKey || '',
 
       // FLASK-specific fields with defaults
