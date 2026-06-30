@@ -1523,6 +1523,19 @@ const ChemistryTool: React.FC = () => {
     setSaveDropdownOpen(false);
   };
 
+  const saveLocalStorage = (): void => {
+    const blob = new Blob([JSON.stringify(Object.assign({}, localStorage))], {
+      type: 'application/json',
+    });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `localStorage-${Date.now()}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+    setSaveDropdownOpen(false);
+  };
+
   const requestSaveContext = (): void => {
     // We need to request the up-to-date Project object from the server before saving
     const currentContext = syncAndGetContext();
@@ -2204,8 +2217,11 @@ const ChemistryTool: React.FC = () => {
                     <button onClick={saveTree} className="dropdown-item">
                       Save Tree Only
                     </button>
-                    <button onClick={requestSaveContext} className="dropdown-item dropdown-divider">
+                    <button onClick={requestSaveContext} className="dropdown-item">
                       Save Full Context
+                    </button>
+                    <button onClick={saveLocalStorage} className="dropdown-item">
+                      Save Local Storage
                     </button>
                   </div>
                 )}
