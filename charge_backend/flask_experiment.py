@@ -254,7 +254,7 @@ class GraphContext(BaseModel):
 
         # NOTE (trb): The previous implemention did not account for
         # nodes in various states (e.g., it would KeyError out if one
-        # added a node and then immediately deleted it). Id didn't
+        # added a node and then immediately deleted it). I didn't
         # consider that the node might not be a leaf and provided no
         # means to "stitch" the graph back together. And even if the
         # graph break is fine, it didn't clean up the 'parentId' in
