@@ -68,6 +68,7 @@ import {
   BACKEND_OPTIONS,
   deserializeAgentChatHistory,
   handleLocalMcpProxyRequest,
+  extractInitialSettings,
 } from 'lc-conductor';
 import type { AgentAttachment, AgentChatHistory } from 'lc-conductor';
 
@@ -89,7 +90,6 @@ declare global {
       ORCHESTRATOR?: {
         backend?: string;
         model?: string;
-        apiKey?: string;
         baseUrl?: string;
       };
     };
@@ -608,37 +608,37 @@ const ChemistryTool: React.FC = () => {
   // Load initial settings from localStorage
   const getInitialSettings = (): FlaskOrchestratorSettings => {
     const saved = localStorage.getItem('orchestratorSettings');
-    if (saved) {
-      try {
-        const parsed = JSON.parse(saved);
-        return {
-          backend: parsed.backend || 'vllm',
-          useCustomUrl: parsed.useCustomUrl || false,
-          customUrl: parsed.customUrl || 'http://localhost:8000/v1',
-          model: parsed.model || 'gpt-oss',
-          reasoningEffort: (parsed.reasoningEffort ||
-            'medium') as FlaskOrchestratorSettings['reasoningEffort'],
-          apiKey: parsed.apiKey || '',
-          backendLabel: parsed.backendLabel || 'vLLM',
-          useCustomModel: parsed.useCustomModel,
-          toolServers: Array.isArray(parsed.toolServers) ? parsed.toolServers : [],
-          moleculeName: parsed.moleculeName,
-        };
-      } catch (e) {
-        console.error('Error parsing settings:', e);
-      }
-    }
-    // Use environment variables from window.APP_CONFIG if available
-    const envConfig = window.APP_CONFIG?.ORCHESTRATOR;
+    const userSettings = saved
+      ? (() => {
+          try {
+            return JSON.parse(saved);
+          } catch (e) {
+            console.error('Error parsing settings:', e);
+            return {};
+          }
+        })()
+      : {};
+
+    // Use extractInitialSettings for canonical merge of core settings
+    // Priority: localStorage (userSettings) > APP_CONFIG > undefined
+    const coreSettings = extractInitialSettings(userSettings, window.APP_CONFIG);
+
+    // Build complete FlaskOrchestratorSettings with FLASK-specific fields and defaults
     return {
-      backend: envConfig?.backend || 'vllm',
-      useCustomUrl: Boolean(envConfig?.baseUrl),
-      customUrl: envConfig?.baseUrl || 'http://localhost:8000/v1',
-      model: envConfig?.model || 'gpt-oss',
-      reasoningEffort: 'medium' as FlaskOrchestratorSettings['reasoningEffort'],
-      apiKey: envConfig?.apiKey || '',
-      backendLabel: envConfig?.backendLabel || 'vLLM',
-      toolServers: [],
+      // Core settings from extractInitialSettings with FLASK defaults
+      backend: coreSettings.backend || 'vllm',
+      model: coreSettings.model || 'gpt-oss',
+      useCustomUrl: coreSettings.useCustomUrl ?? false,
+      customUrl: coreSettings.customUrl || 'http://localhost:8000/v1',
+      apiKey: coreSettings.apiKey || '',
+
+      // FLASK-specific fields with defaults
+      reasoningEffort: (userSettings.reasoningEffort ||
+        'medium') as FlaskOrchestratorSettings['reasoningEffort'],
+      backendLabel: userSettings.backendLabel || 'vLLM',
+      useCustomModel: userSettings.useCustomModel,
+      toolServers: Array.isArray(userSettings.toolServers) ? userSettings.toolServers : [],
+      moleculeName: userSettings.moleculeName,
     };
   };
   const [orchestratorSettings, setOrchestratorSettings] =
@@ -667,6 +667,7 @@ const ChemistryTool: React.FC = () => {
         return;
       }
 
+      // Send API key (empty string will trigger backend environment fallback)
       wsRef.current.send(
         JSON.stringify({
           action: 'ui-update-orchestrator-settings',
@@ -675,7 +676,7 @@ const ChemistryTool: React.FC = () => {
           customUrl: settings.useCustomUrl ? settings.customUrl : '',
           model: settings.model,
           reasoningEffort: settings.reasoningEffort,
-          apiKey: settings.apiKey,
+          apiKey: settings.apiKey || '',
           toolServers: settings.toolServers || [],
         })
       );
@@ -1069,13 +1070,24 @@ const ChemistryTool: React.FC = () => {
       setWsConnected(true);
       setWsReconnecting(false);
       setWsError('');
+
+      // IMPORTANT: Send orchestrator settings as the first message to reconcile browser
+      // state with server state. The API key travels in WebSocket
+      // data (not query params or headers), so it won't be logged in HTTP access logs.
+      // orchestratorSettingsRef is always fully populated by getInitialSettings(), which
+      // merges APP_CONFIG defaults, so backend/model/customUrl are never undefined.
+      sendOrchestratorSettingsToBackend(orchestratorSettingsRef.current);
+
+      // Now send other messages after the initial settings handshake
       reset(); // Server state must match UI state
 
       loadStateFromCurrentExperiment();
 
-      if (hasSavedOrchestratorSettingsRef.current) {
-        sendOrchestratorSettingsToBackend(orchestratorSettingsRef.current);
-      }
+      // NOTE: We don't send orchestrator settings again here because:
+      // 1. The handshake above already sent full settings (backend, model, API key, customUrl)
+      // 2. Backend will validate and respond with server-update-orchestrator-settings
+      // 3. Sending again here would overwrite backend's validated settings
+
       socket.send(JSON.stringify({ action: 'list-tools' }));
       socket.send(JSON.stringify({ action: 'get-username' }));
     };
@@ -1201,54 +1213,54 @@ const ChemistryTool: React.FC = () => {
             break;
           }
           case 'server-update-orchestrator-settings': {
-            // If we have saved settings, check if we should still update customUrl
-            if (hasSavedOrchestratorSettingsRef.current) {
-              const currentUrl = orchestratorSettingsRef.current.customUrl;
-              const serverUrl = data.orchestratorSettings!.customUrl;
+            // Update settings from server, but preserve user's API key
+            const currentSettings = orchestratorSettingsRef.current;
+            const serverSettings = data.orchestratorSettings!;
 
-              // Override saved customUrl if it's a default value and server provides a real URL
+            // Determine customUrl: prefer server value if current is default, otherwise keep current
+            let customUrl = currentSettings.customUrl;
+            let useCustomUrl = currentSettings.useCustomUrl;
+
+            if (hasSavedOrchestratorSettingsRef.current) {
               const isDefaultUrl =
-                currentUrl === 'http://localhost:8000/v1' || currentUrl === 'http://localhost:8000';
+                customUrl === 'http://localhost:8000/v1' || customUrl === 'http://localhost:8000';
               const hasRealServerUrl =
-                serverUrl &&
-                !['http://localhost:8000/v1', 'http://localhost:8000'].includes(serverUrl);
+                serverSettings.customUrl &&
+                !['http://localhost:8000/v1', 'http://localhost:8000'].includes(
+                  serverSettings.customUrl
+                );
 
               if (isDefaultUrl && hasRealServerUrl) {
                 console.log(
-                  `Updating customUrl from default ${currentUrl} to server value ${serverUrl}`
+                  `Updating customUrl from default ${customUrl} to server value ${serverSettings.customUrl}`
                 );
-                const updatedSettings = {
-                  ...orchestratorSettingsRef.current,
-                  customUrl: serverUrl,
-                  useCustomUrl: data.orchestratorSettings!.useCustomUrl,
-                };
-                setOrchestratorSettings(updatedSettings);
-                orchestratorSettingsRef.current = updatedSettings;
-                localStorage.setItem('orchestratorSettings', JSON.stringify(updatedSettings));
-              } else {
-                console.log(
-                  'Ignoring server orchestrator settings because local settings are already loaded',
-                  data.orchestratorSettings
-                );
+                customUrl = serverSettings.customUrl;
+                useCustomUrl = serverSettings.useCustomUrl;
               }
-              break;
+            } else {
+              // First time - use server values
+              customUrl = serverSettings.customUrl;
+              useCustomUrl = serverSettings.useCustomUrl;
             }
 
+            // Build updated settings: use server values for validated fields, preserve user's API key
             const newSettings: FlaskOrchestratorSettings = {
-              backend: data.orchestratorSettings!.backend,
-              useCustomUrl: data.orchestratorSettings!.useCustomUrl,
-              customUrl: data.orchestratorSettings!.customUrl,
-              model: data.orchestratorSettings!.model,
-              reasoningEffort: data.orchestratorSettings!.reasoningEffort,
-              apiKey: orchestratorSettingsRef.current?.apiKey || '', // Preserve current API key
-              backendLabel: data.orchestratorSettings!.backendLabel,
-              toolServers: data.orchestratorSettings!.toolServers || [],
-              moleculeName: data.orchestratorSettings!.moleculeName,
+              backend: serverSettings.backend,
+              model: serverSettings.model, // IMPORTANT: Use backend's validated model
+              reasoningEffort: serverSettings.reasoningEffort,
+              backendLabel: serverSettings.backendLabel,
+              useCustomUrl: useCustomUrl,
+              customUrl: customUrl,
+              useCustomModel: serverSettings.useCustomModel,
+              apiKey: currentSettings?.apiKey || '', // Preserve user's API key
+              toolServers: serverSettings.toolServers || [],
+              moleculeName: serverSettings.moleculeName,
             };
+
             setOrchestratorSettings(newSettings);
             orchestratorSettingsRef.current = newSettings;
             hasSavedOrchestratorSettingsRef.current = true;
-            console.log('Updating the orchestrator settings ', newSettings);
+            console.log('Updated orchestrator settings from server:', newSettings);
             localStorage.setItem('orchestratorSettings', JSON.stringify(newSettings));
             break;
           }

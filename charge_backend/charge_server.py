@@ -35,7 +35,11 @@ from lc_conductor.tool_registration import (
     delete_mcp_server_endpoint,
     get_registered_servers,
 )
-from lc_conductor import discover_models_endpoint, validate_initial_model
+from lc_conductor import (
+    discover_models_endpoint,
+    validate_initial_model,
+    resolve_orchestrator_config,
+)
 
 parser = argparse.ArgumentParser()
 
@@ -141,13 +145,11 @@ if os.path.exists(ASSETS_PATH):
         with open(os.path.join(DIST_PATH, "index.html"), "r") as fp:
             html = fp.read()
 
-        # Read orchestrator config from environment
-        orchestrator_config = {
-            "backend": os.getenv("FLASK_ORCHESTRATOR_BACKEND", args.backend),
-            "model": os.getenv("FLASK_ORCHESTRATOR_MODEL", args.model),
-            "apiKey": os.getenv("FLASK_ORCHESTRATOR_API_KEY", ""),
-            "baseUrl": os.getenv("FLASK_ORCHESTRATOR_URL", ""),
-        }
+        # Use centralized config resolution - Note that the browser state is not available here
+        orchestrator_config = resolve_orchestrator_config(
+            requested_backend=args.backend,
+            requested_model=args.model,
+        )
 
         html = html.replace(
             "<!-- APP CONFIG -->",
@@ -207,33 +209,20 @@ def register_agent_backend():
     """
     Handles ChARGe agent factory's initial model configuration
     """
-    API_KEY = os.getenv("FLASK_ORCHESTRATOR_API_KEY", None)
-    model = os.getenv("FLASK_ORCHESTRATOR_MODEL", None)
-    backend = os.getenv("FLASK_ORCHESTRATOR_BACKEND", None)
-    BASE_URL = os.getenv("FLASK_ORCHESTRATOR_URL", None)
-
-    if not model:
-        model = args.model
-    if not backend:
-        backend = args.backend
-
-    # Validate and potentially correct the initial model
-    model = validate_initial_model(
-        backend=backend,
-        model=model,
-        base_url=BASE_URL,
-        api_key=API_KEY,
-        timeout=5,
+    orchestrator_config = resolve_orchestrator_config(
+        requested_backend=args.backend,
+        requested_model=args.model,
+        return_api_key=True,
     )
 
-    # set up an AgentFramework backend for tasks on this endpoint
+    # Set up an AgentFramework backend for tasks on this endpoint
     AgentFactory.register_backend(
         "agentframework",
         AgentFrameworkBackend(
-            model=model,
-            backend=backend,
-            api_key=API_KEY,
-            base_url=BASE_URL,
+            model=orchestrator_config["model"],
+            backend=orchestrator_config["backend"],
+            api_key=orchestrator_config["apiKey"],
+            base_url=orchestrator_config["baseUrl"],
             use_responses_api=True,
         ),
     )
