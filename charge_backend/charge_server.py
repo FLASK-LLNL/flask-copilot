@@ -131,8 +131,12 @@ if manual_mcp_servers_env:
 
 # Default data-classification map used when FLASK_DATA_CLASSIFICATION is unset
 # or invalid. Deployments should override this via the environment. The frontend
-# DataClassificationBanner renders "Flask Copilot is approved for all levels of
-# <level>" using the first rule that matches the selected backend + URL.
+# DataClassificationBanner renders "<prefix><level>" using the first rule that
+# matches the selected backend + URL. Supported keys:
+#   - "rules": list of {backend, urlContains?, level} matched top-to-bottom
+#   - "fallbackLevel": level text used when no rule matches
+#   - "prefix" (optional): sentence prefix; when omitted the frontend uses its
+#     default, "Flask Copilot is approved for all levels of "
 DEFAULT_DATA_CLASSIFICATION = {
     "fallbackLevel": "an UNKNOWN classification — verify before sending data",
     "rules": [],

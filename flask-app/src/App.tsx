@@ -2096,6 +2096,12 @@ const ChemistryTool: React.FC = () => {
 
   return (
     <div className="app-background">
+      <DataClassificationBanner
+        position="top"
+        backend={orchestratorSettings.backend}
+        url={getDisplayUrl()}
+        classification={getConfig().DATA_CLASSIFICATION}
+      />
       <div className="main-container">
         <ProjectSidebar
           projectData={projectData}
@@ -2109,12 +2115,6 @@ const ChemistryTool: React.FC = () => {
           isComputing={isComputing}
         />
         <div className="content-wrapper">
-          <DataClassificationBanner
-            position="top"
-            backend={orchestratorSettings.backend}
-            url={getDisplayUrl()}
-            classification={getConfig().DATA_CLASSIFICATION}
-          />
           <div className="w-full">
             <div className="content-header">
               {/* Left logos */}
@@ -2804,12 +2804,6 @@ const ChemistryTool: React.FC = () => {
               {VERSION && <p>Server version: {VERSION}</p>}
             </div>
           </div>
-          <DataClassificationBanner
-            position="bottom"
-            backend={orchestratorSettings.backend}
-            url={getDisplayUrl()}
-            classification={getConfig().DATA_CLASSIFICATION}
-          />
         </div>
 
         <ReasoningSidebar
@@ -2821,6 +2815,12 @@ const ChemistryTool: React.FC = () => {
           resolveImageDataUrl={resolveImageDataUrl}
         />
       </div>
+      <DataClassificationBanner
+        position="bottom"
+        backend={orchestratorSettings.backend}
+        url={getDisplayUrl()}
+        classification={getConfig().DATA_CLASSIFICATION}
+      />
 
       {contextMenu && contextMenu.node && (
         <div
