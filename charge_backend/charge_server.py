@@ -133,12 +133,16 @@ if manual_mcp_servers_env:
 # or invalid. Deployments should override this via the environment. The frontend
 # DataClassificationBanner renders "<prefix><level>" using the first rule that
 # matches the selected backend + URL. Supported keys:
-#   - "rules": list of {backend, urlContains?, level} matched top-to-bottom
+#   - "rules": list of {backend, urlContains?, level, color?} matched top-to-bottom
 #   - "fallbackLevel": level text used when no rule matches
 #   - "prefix" (optional): sentence prefix; when omitted the frontend uses its
-#     default, "Flask Copilot is approved for all levels of "
+#     default, "Using this orchestrator endpoint Flask Copilot can process data
+#     that is approved for "
+#   - "fallbackColor" (optional): banner color when no rule matches
+#   - per-rule "color" (optional): banner color for that classification; one of
+#     "green", "yellow", "red", "orange" (invalid values fall back to defaults)
 DEFAULT_DATA_CLASSIFICATION = {
-    "fallbackLevel": "an UNKNOWN classification — verify before sending data",
+    "fallbackLevel": "PUBLIC RELEASE (UUR - Unclassified Unlimited Release)",
     "rules": [],
 }
 
