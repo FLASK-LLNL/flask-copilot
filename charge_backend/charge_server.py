@@ -131,13 +131,14 @@ if manual_mcp_servers_env:
 
 # Default data-classification map used when FLASK_DATA_CLASSIFICATION is unset
 # or invalid. Deployments should override this via the environment. The frontend
-# DataClassificationBanner renders "<prefix><level>" using the first rule that
+# DataClassificationBanner renders a fixed lead-in "Using this orchestrator
+# endpoint [<label>] " followed by "<prefix><level>", using the first rule that
 # matches the selected backend + URL. Supported keys:
 #   - "rules": list of {backend, urlContains?, level, color?} matched top-to-bottom
 #   - "fallbackLevel": level text used when no rule matches
-#   - "prefix" (optional): sentence prefix; when omitted the frontend uses its
-#     default, "Using this orchestrator endpoint Flask Copilot can process data
-#     that is approved for "
+#   - "prefix" (optional): user-configurable message shown after the lead-in;
+#     when omitted the frontend uses its default, "Flask Copilot can process
+#     data that is approved for "
 #   - "fallbackColor" (optional): banner color when no rule matches
 #   - per-rule "color" (optional): banner color for that classification; one of
 #     "green", "yellow", "red", "orange" (invalid values fall back to defaults)

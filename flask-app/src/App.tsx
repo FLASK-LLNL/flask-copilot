@@ -2099,6 +2099,7 @@ const ChemistryTool: React.FC = () => {
       <DataClassificationBanner
         position="top"
         backend={orchestratorSettings.backend}
+        backendLabel={orchestratorSettings.backendLabel}
         url={getDisplayUrl()}
         classification={getConfig().DATA_CLASSIFICATION}
       />
@@ -2818,6 +2819,7 @@ const ChemistryTool: React.FC = () => {
       <DataClassificationBanner
         position="bottom"
         backend={orchestratorSettings.backend}
+        backendLabel={orchestratorSettings.backendLabel}
         url={getDisplayUrl()}
         classification={getConfig().DATA_CLASSIFICATION}
       />
