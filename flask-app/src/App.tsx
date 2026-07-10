@@ -2425,7 +2425,7 @@ const ChemistryTool: React.FC = () => {
                     value={smiles}
                     onChange={(e) => setSmiles(e.target.value)}
                     disabled={isComputing}
-                    placeholder="Enter SMILES, or a reaction SMILES (A.B>>C)"
+                    placeholder="Enter SMILES or reaction SMILES"
                     className="form-input text-lg"
                   />
                 </div>
