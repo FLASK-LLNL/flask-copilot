@@ -131,3 +131,16 @@ def is_purchasable(
             result.append("ZINC Stock")
 
     return result
+
+
+def purchasable_summary(mol_sources: list[str]) -> str:
+    """
+    Format the result of :func:`is_purchasable` as a human-readable string
+    for hover info and display.
+
+    :param mol_sources: List of purchase sources (as returned by is_purchasable).
+    :return: ``"Yes (via <sources>)"`` if any sources, otherwise ``"No"``.
+    """
+    if mol_sources:
+        return f"Yes (via {', '.join(mol_sources)})"
+    return "No"

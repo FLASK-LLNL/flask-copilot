@@ -18,15 +18,12 @@ from charge_backend.backend_helper_funcs import (
 )
 from charge_backend.flask_experiment import GraphContext
 from charge_backend.moleculedb.molecule_naming import smiles_to_html
-from charge_backend.moleculedb.purchasable import is_purchasable
+from charge_backend.moleculedb.purchasable import (
+    is_purchasable,
+    purchasable_summary,
+)
 from charge_backend.retrosynthesis.mapping import build_mapped_reaction_dict_or_none
 from charge_backend.rdkit_mol_differ import parse_reaction_smiles
-
-
-def _purchasable_str(mol_sources: list[str]) -> str:
-    if mol_sources:
-        return f"Yes (via {', '.join(mol_sources)})"
-    return "No"
 
 
 def _select_root_product(products: list[Chem.Mol]) -> Chem.Mol:
@@ -91,7 +88,7 @@ async def reaction_smiles_retrosynthesis(
         hoverInfo=f"""# Root molecule
 **SMILES:** {product_smiles}
 
-**Purchasable**? {_purchasable_str(mol_sources)}""",
+**Purchasable**? {purchasable_summary(mol_sources)}""",
         level=0,
         parentId=None,
         purchasable=(len(mol_sources) > 0),
@@ -110,7 +107,7 @@ async def reaction_smiles_retrosynthesis(
             label=smiles_to_html(smiles, run_settings.molecule_name_format),
             hoverInfo=f"""# Reactant
   * SMILES: {smiles}
-  * Purchasable? {_purchasable_str(child_sources)}
+  * Purchasable? {purchasable_summary(child_sources)}
 """,
             level=1,
             parentId=root.id,
