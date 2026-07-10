@@ -28,20 +28,20 @@ class ReactionAtomChanges:
 def parse_reaction_smiles(
     reaction_smiles: str,
     *,
-    include_agents: bool = False,
+    include_reagents: bool = False,
 ):
     """Parse reaction SMILES using RDKit's reaction parser.
 
-    Supports both "reactants>>products" and "reactants>agents>products".
+    Supports both "reactants>>products" and "reactants>reagents>products".
 
-    :param include_agents: If False (default), returns ``(reactants, products)``
-        and agents are ignored. If True, returns ``(reactants, agents,
+    :param include_reagents: If False (default), returns ``(reactants, products)``
+        and reagents are ignored. If True, returns ``(reactants, reagents,
         products)``.
     """
 
     s = (reaction_smiles or "").strip()
     if not s:
-        return ([], [], []) if include_agents else ([], [])
+        return ([], [], []) if include_reagents else ([], [])
 
     try:
         rxn = ReactionFromSmarts(str(s), useSmiles=True)
@@ -72,9 +72,11 @@ def parse_reaction_smiles(
         rxn.GetNumProductTemplates(), rxn.GetProductTemplate, "product"
     )
 
-    if include_agents:
-        agents = _templates(rxn.GetNumAgentTemplates(), rxn.GetAgentTemplate, "agent")
-        return reactants, agents, products
+    if include_reagents:
+        reagents = _templates(
+            rxn.GetNumAgentTemplates(), rxn.GetAgentTemplate, "reagent"
+        )
+        return reactants, reagents, products
 
     return reactants, products
 

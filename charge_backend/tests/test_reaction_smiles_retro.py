@@ -72,13 +72,13 @@ def test_multi_product_roots_on_largest():
     assert len(g.node_ids) == 3
 
 
-def test_agents_appear_as_labeled_children():
-    # reactants>agent>product form: the Pd agent becomes a child labeled "(Agent)".
+def test_reagents_appear_as_labeled_children():
+    # reactants>reagent>product form: the Pd reagent becomes a child labeled "(Reagent)".
     g, _ = _run("BrC1=CC=NC=C1.C=CB(O)O>[Pd]>C=Cc2ccncc2")
     root = g.node_ids["node_0"]
     assert root.smiles == _canon("C=Cc2ccncc2")
     children = [n for nid, n in g.node_ids.items() if g.parents.get(nid) == "node_0"]
-    # Two reactants + one agent
+    # Two reactants + one reagent
     assert len(children) == 3
     child_smiles = {c.smiles for c in children}
     assert child_smiles == {
@@ -86,10 +86,10 @@ def test_agents_appear_as_labeled_children():
         _canon("C=CB(O)O"),
         _canon("[Pd]"),
     }
-    # The agent child carries a "(Agent)" role in its label.
-    agent_child = next(c for c in children if c.smiles == _canon("[Pd]"))
-    assert "(Agent)" in agent_child.label
-    assert "# Agent" in agent_child.hoverInfo
+    # The reagent child carries a "(Reagent)" role in its label.
+    reagent_child = next(c for c in children if c.smiles == _canon("[Pd]"))
+    assert "(Reagent)" in reagent_child.label
+    assert "# Reagent" in reagent_child.hoverInfo
 
 
 def test_invalid_reaction_smiles_does_not_crash():
@@ -98,11 +98,11 @@ def test_invalid_reaction_smiles_does_not_crash():
     assert ws.messages[-1] == {"type": "complete"}
 
 
-# --- Daylight reaction SMILES spec examples (reactant '>' agent '>' product) ---
+# --- Daylight reaction SMILES spec examples (reactant '>' reagent '>' product) ---
 
 
-def test_spec_example_no_agent():
-    # "C=CCBr>>C=CCI" -- allyl bromide to allyl iodide, no agent.
+def test_spec_example_no_reagent():
+    # "C=CCBr>>C=CCI" -- allyl bromide to allyl iodide, no reagent.
     g, ws = _run("C=CCBr>>C=CCI")
 
     assert len(g.node_ids) == 2
@@ -130,16 +130,16 @@ def test_spec_example_canonicalized_with_ions():
     assert child_smiles == {_canon("[I-]"), _canon("[Na+]"), _canon("C=CCBr")}
 
 
-def test_spec_example_with_agent():
-    # "C=CCBr.[Na+].[I-]>CC(=O)C>C=CCI.[Na+].[Br-]" -- acetone is an agent
-    # (solvent). It is surfaced as a child node labeled "(Agent)".
+def test_spec_example_with_reagent():
+    # "C=CCBr.[Na+].[I-]>CC(=O)C>C=CCI.[Na+].[Br-]" -- acetone is a reagent
+    # (solvent). It is surfaced as a child node labeled "(Reagent)".
     g, _ = _run("C=CCBr.[Na+].[I-]>CC(=O)C>C=CCI.[Na+].[Br-]")
 
     root = g.node_ids["node_0"]
     assert root.smiles == _canon("C=CCI")
 
     children = [n for nid, n in g.node_ids.items() if g.parents.get(nid) == "node_0"]
-    # Three reactants + the acetone agent.
+    # Three reactants + the acetone reagent.
     assert len(children) == 4
     child_smiles = {c.smiles for c in children}
     assert child_smiles == {
@@ -148,6 +148,6 @@ def test_spec_example_with_agent():
         _canon("[I-]"),
         _canon("CC(=O)C"),
     }
-    # The acetone agent appears with a "(Agent)" role label.
-    agent_child = next(c for c in children if c.smiles == _canon("CC(=O)C"))
-    assert "(Agent)" in agent_child.label
+    # The acetone reagent appears with a "(Reagent)" role label.
+    reagent_child = next(c for c in children if c.smiles == _canon("CC(=O)C"))
+    assert "(Reagent)" in reagent_child.label
