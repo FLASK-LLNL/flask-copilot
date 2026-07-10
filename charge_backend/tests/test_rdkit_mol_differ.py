@@ -1,6 +1,6 @@
 from rdkit import Chem
 
-import rdkit_mol_differ as md
+import charge_backend.rdkit_mol_differ as md
 
 
 def test_sn2_like_ether_formation_highlights_leaving_group_and_new_bond_site():

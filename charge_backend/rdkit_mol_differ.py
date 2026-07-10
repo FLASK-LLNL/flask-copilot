@@ -27,16 +27,21 @@ class ReactionAtomChanges:
 
 def parse_reaction_smiles(
     reaction_smiles: str,
-) -> Tuple[List[Chem.Mol], List[Chem.Mol]]:
+    *,
+    include_agents: bool = False,
+):
     """Parse reaction SMILES using RDKit's reaction parser.
 
     Supports both "reactants>>products" and "reactants>agents>products".
-    Agents are ignored.
+
+    :param include_agents: If False (default), returns ``(reactants, products)``
+        and agents are ignored. If True, returns ``(reactants, agents,
+        products)``.
     """
 
     s = (reaction_smiles or "").strip()
     if not s:
-        return [], []
+        return ([], [], []) if include_agents else ([], [])
 
     try:
         rxn = ReactionFromSmarts(str(s), useSmiles=True)
@@ -46,27 +51,30 @@ def parse_reaction_smiles(
     if rxn is None:
         raise ValueError(f"Invalid reaction SMILES: {s}")
 
-    reactants: List[Chem.Mol] = []
-    products: List[Chem.Mol] = []
+    def _templates(count: int, get, kind: str) -> List[Chem.Mol]:
+        mols: List[Chem.Mol] = []
+        for i in range(int(count)):
+            m0 = get(int(i))
+            if m0 is None:
+                raise ValueError(f"Invalid {kind} in reaction SMILES: {s}")
+            # Copy the template mol: RDKit reaction objects can own the
+            # underlying template storage; returning a view can lead to invalid
+            # mols once the reaction goes out of scope.
+            m = Chem.Mol(m0)
+            Chem.SanitizeMol(m)
+            mols.append(m)
+        return mols
 
-    for i in range(int(rxn.GetNumReactantTemplates())):
-        m0 = rxn.GetReactantTemplate(int(i))
-        if m0 is None:
-            raise ValueError(f"Invalid reactant in reaction SMILES: {s}")
-        # Copy the template mol: RDKit reaction objects can own the underlying
-        # template storage; returning a view can lead to invalid mols once the
-        # reaction goes out of scope.
-        m = Chem.Mol(m0)
-        Chem.SanitizeMol(m)
-        reactants.append(m)
+    reactants = _templates(
+        rxn.GetNumReactantTemplates(), rxn.GetReactantTemplate, "reactant"
+    )
+    products = _templates(
+        rxn.GetNumProductTemplates(), rxn.GetProductTemplate, "product"
+    )
 
-    for i in range(int(rxn.GetNumProductTemplates())):
-        m0 = rxn.GetProductTemplate(int(i))
-        if m0 is None:
-            raise ValueError(f"Invalid product in reaction SMILES: {s}")
-        m = Chem.Mol(m0)
-        Chem.SanitizeMol(m)
-        products.append(m)
+    if include_agents:
+        agents = _templates(rxn.GetNumAgentTemplates(), rxn.GetAgentTemplate, "agent")
+        return reactants, agents, products
 
     return reactants, products
 

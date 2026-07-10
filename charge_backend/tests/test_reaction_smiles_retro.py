@@ -72,13 +72,24 @@ def test_multi_product_roots_on_largest():
     assert len(g.node_ids) == 3
 
 
-def test_agents_are_ignored():
-    # reactants>agent>product form
+def test_agents_appear_as_labeled_children():
+    # reactants>agent>product form: the Pd agent becomes a child labeled "(Agent)".
     g, _ = _run("BrC1=CC=NC=C1.C=CB(O)O>[Pd]>C=Cc2ccncc2")
     root = g.node_ids["node_0"]
     assert root.smiles == _canon("C=Cc2ccncc2")
     children = [n for nid, n in g.node_ids.items() if g.parents.get(nid) == "node_0"]
-    assert len(children) == 2
+    # Two reactants + one agent
+    assert len(children) == 3
+    child_smiles = {c.smiles for c in children}
+    assert child_smiles == {
+        _canon("BrC1=CC=NC=C1"),
+        _canon("C=CB(O)O"),
+        _canon("[Pd]"),
+    }
+    # The agent child carries a "(Agent)" role in its label.
+    agent_child = next(c for c in children if c.smiles == _canon("[Pd]"))
+    assert "(Agent)" in agent_child.label
+    assert "# Agent" in agent_child.hoverInfo
 
 
 def test_invalid_reaction_smiles_does_not_crash():
@@ -121,15 +132,22 @@ def test_spec_example_canonicalized_with_ions():
 
 def test_spec_example_with_agent():
     # "C=CCBr.[Na+].[I-]>CC(=O)C>C=CCI.[Na+].[Br-]" -- acetone is an agent
-    # (solvent) and must be ignored; it is neither root nor a child.
+    # (solvent). It is surfaced as a child node labeled "(Agent)".
     g, _ = _run("C=CCBr.[Na+].[I-]>CC(=O)C>C=CCI.[Na+].[Br-]")
 
     root = g.node_ids["node_0"]
     assert root.smiles == _canon("C=CCI")
 
     children = [n for nid, n in g.node_ids.items() if g.parents.get(nid) == "node_0"]
-    assert len(children) == 3
+    # Three reactants + the acetone agent.
+    assert len(children) == 4
     child_smiles = {c.smiles for c in children}
-    assert child_smiles == {_canon("C=CCBr"), _canon("[Na+]"), _canon("[I-]")}
-    # The acetone agent must not appear anywhere in the graph.
-    assert _canon("CC(=O)C") not in {n.smiles for n in g.node_ids.values()}
+    assert child_smiles == {
+        _canon("C=CCBr"),
+        _canon("[Na+]"),
+        _canon("[I-]"),
+        _canon("CC(=O)C"),
+    }
+    # The acetone agent appears with a "(Agent)" role label.
+    agent_child = next(c for c in children if c.smiles == _canon("CC(=O)C"))
+    assert "(Agent)" in agent_child.label

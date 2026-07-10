@@ -52,9 +52,13 @@ async def reaction_smiles_retrosynthesis(
 
     context.reset()
 
-    # Parse the reaction SMILES (agents: e.g. solvent, catalyst, if any, are ignored).
+    # Parse the reaction SMILES. Agents (e.g. solvent, catalyst) are surfaced as
+    # child nodes labeled "(Agent)", mirroring the exact-reaction database path
+    # which appends each component's role to its label.
     try:
-        reactant_mols, product_mols = parse_reaction_smiles(reaction_smiles)
+        reactant_mols, agent_mols, product_mols = parse_reaction_smiles(
+            reaction_smiles, include_agents=True
+        )
     except ValueError as e:
         await clogger.error(f"Could not parse reaction SMILES: {e}")
         await websocket.send_json({"type": "complete"})
@@ -72,6 +76,7 @@ async def reaction_smiles_retrosynthesis(
     product_smiles = Chem.MolToSmiles(product_mol)
     all_product_smiles = [Chem.MolToSmiles(m) for m in product_mols]
     reactant_smiles = [Chem.MolToSmiles(m) for m in reactant_mols]
+    agent_smiles = [Chem.MolToSmiles(m) for m in agent_mols]
 
     if len(product_mols) > 1:
         await clogger.info(
@@ -98,14 +103,17 @@ async def reaction_smiles_retrosynthesis(
     )
     await context.add_node(root, websocket=websocket)
 
-    # Child nodes = reactants.
-    for smiles in reactant_smiles:
+    # Child nodes = reactants, then agents (labeled with their role).
+    async def _add_child(smiles: str, role: str) -> None:
         child_sources = is_purchasable(smiles)
+        label = smiles_to_html(smiles, run_settings.molecule_name_format)
+        if role != "Reactant":
+            label = f"{label} ({role})"
         node = Node(
             id=context.new_node_id(),
             smiles=smiles,
-            label=smiles_to_html(smiles, run_settings.molecule_name_format),
-            hoverInfo=f"""# Reactant
+            label=label,
+            hoverInfo=f"""# {role}
   * SMILES: {smiles}
   * Purchasable? {purchasable_summary(child_sources)}
 """,
@@ -114,6 +122,11 @@ async def reaction_smiles_retrosynthesis(
             purchasable=(len(child_sources) > 0),
         )
         await context.add_node(node, websocket)
+
+    for smiles in reactant_smiles:
+        await _add_child(smiles, "Reactant")
+    for smiles in agent_smiles:
+        await _add_child(smiles, "Agent")
 
     # Attach the user-supplied reaction to the root, with a mapped reaction so
     # hover-highlighting works. templatesSearched=False so the user can still
@@ -126,7 +139,7 @@ async def reaction_smiles_retrosynthesis(
         templatesSearched=False,
     )
     root.reaction.mappedReaction = build_mapped_reaction_dict_or_none(
-        reactants=reactant_smiles,
+        reactants=reactant_smiles + agent_smiles,
         products=[product_smiles],
         log_msg="Failed to build rdkitjs mapped reaction for user reaction root_id={node_id} smiles={smiles}",
         node_id=root.id,
