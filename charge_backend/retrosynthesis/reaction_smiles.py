@@ -1,3 +1,10 @@
+################################################################################
+## Copyright 2025-2026 Lawrence Livermore National Security, LLC..
+## See the top-level LICENSE file for details.
+##
+## SPDX-License-Identifier: Apache-2.0
+################################################################################
+
 from fastapi import WebSocket
 
 from rdkit import Chem
@@ -48,7 +55,7 @@ async def reaction_smiles_retrosynthesis(
 
     context.reset()
 
-    # Parse the reaction SMILES (agents, if any, are ignored).
+    # Parse the reaction SMILES (agents: e.g. solvent, catalyst, if any, are ignored).
     try:
         reactant_mols, product_mols = parse_reaction_smiles(reaction_smiles)
     except ValueError as e:
@@ -117,7 +124,7 @@ async def reaction_smiles_retrosynthesis(
         "user_rxn",
         f"User-provided reaction\n\n**Reaction SMILES:** `{reaction_smiles}`",
         highlight="yellow",
-        label="User reaction",
+        label="User",
         templatesSearched=False,
     )
     root.reaction.mappedReaction = build_mapped_reaction_dict_or_none(

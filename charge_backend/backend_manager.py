@@ -1,3 +1,10 @@
+################################################################################
+## Copyright 2025-2026 Lawrence Livermore National Security, LLC..
+## See the top-level LICENSE file for details.
+##
+## SPDX-License-Identifier: Apache-2.0
+################################################################################
+
 import argparse
 from typing import Any, Optional
 from fastapi import WebSocket
@@ -329,9 +336,12 @@ class FlaskActionManager(ActionManager):
 
     async def _handle_retrosynthesis(self, data: dict) -> None:
         """Handle retrosynthesis problem type."""
-        # A reaction SMILES ("reactants>>products") is rendered directly as a
-        # one-step partial graph rather than searched with AiZynthFinder.
-        if ">>" in data["smiles"]:
+        # A reaction SMILES (reactant '>' agent '>' product or
+        # reactants '>>' products) is rendered directly as a one-step
+        # partial graph rather than searched with
+        # template_based_retrosynthesis which includes both exact
+        # matches in local databases and template-based methods.
+        if ">" in data["smiles"]:
             run_func = partial(
                 reaction_smiles_retrosynthesis,
                 data["smiles"],
