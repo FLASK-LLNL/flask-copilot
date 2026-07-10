@@ -7,6 +7,9 @@ from lc_conductor import (
     BuiltinToolDefinition,
     ToolRuntime,
     resolve_builtin_tool_descriptors,
+    resolve_allowed_backends,
+    is_backend_allowed,
+    is_custom_url_allowed,
 )
 from loguru import logger
 from charge.tasks.task import Task
@@ -579,6 +582,40 @@ class FlaskActionManager(ActionManager):
     async def handle_orchestrator_settings_update(self, data: dict) -> None:
         if "moleculeName" in data:
             self.run_settings.molecule_name_format = data["moleculeName"]
+
+        # Enforce the deployment backend allow-list server-side so a crafted
+        # WebSocket message cannot bypass the UI restrictions.
+        allowed = resolve_allowed_backends()
+        if allowed:
+            backend = data.get("backend")
+            if not is_backend_allowed(backend, allowed):
+                logger.warning(
+                    f"Rejecting orchestrator update: backend '{backend}' is not "
+                    f"in the allowed list {[e['backend'] for e in allowed]}"
+                )
+                await self.websocket.send_json(
+                    {
+                        "type": "response",
+                        "message": {
+                            "source": "System",
+                            "message": (
+                                f"Backend '{backend}' is not permitted by this "
+                                "deployment. Settings were not applied."
+                            ),
+                        },
+                    }
+                )
+                return
+
+            # Drop a custom URL when this backend is locked to its preconfigured
+            # endpoint, so the base handler resolves the default URL instead.
+            if data.get("useCustomUrl") and not is_custom_url_allowed(backend, allowed):
+                logger.warning(
+                    f"Ignoring custom URL for backend '{backend}': custom URLs "
+                    "are not permitted for this backend"
+                )
+                data["useCustomUrl"] = False
+
         await super().handle_orchestrator_settings_update(data)
 
     @handles("query-molecule")

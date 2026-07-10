@@ -1218,28 +1218,27 @@ const ChemistryTool: React.FC = () => {
             const currentSettings = orchestratorSettingsRef.current;
             const serverSettings = data.orchestratorSettings!;
 
-            // Determine customUrl: prefer server value if current is default, otherwise keep current
+            // The server resolves the authoritative base URL for the active
+            // backend (from backend-specific env vars) and echoes back any
+            // user-supplied custom URL it was given. Trust it whenever it sends
+            // a non-empty value; only keep the current value when the server
+            // reports no URL for this backend.
             let customUrl = currentSettings.customUrl;
             let useCustomUrl = currentSettings.useCustomUrl;
 
-            if (hasSavedOrchestratorSettingsRef.current) {
-              const isDefaultUrl =
-                customUrl === 'http://localhost:8000/v1' || customUrl === 'http://localhost:8000';
-              const hasRealServerUrl =
-                serverSettings.customUrl &&
-                !['http://localhost:8000/v1', 'http://localhost:8000'].includes(
-                  serverSettings.customUrl
-                );
-
-              if (isDefaultUrl && hasRealServerUrl) {
+            if (serverSettings.customUrl) {
+              if (serverSettings.customUrl !== customUrl) {
                 console.log(
-                  `Updating customUrl from default ${customUrl} to server value ${serverSettings.customUrl}`
+                  `Updating customUrl from ${customUrl || '(empty)'} to server value ${
+                    serverSettings.customUrl
+                  }`
                 );
-                customUrl = serverSettings.customUrl;
-                useCustomUrl = serverSettings.useCustomUrl;
               }
-            } else {
-              // First time - use server values
+              customUrl = serverSettings.customUrl;
+              useCustomUrl = serverSettings.useCustomUrl;
+            } else if (!hasSavedOrchestratorSettingsRef.current) {
+              // First load with no saved settings and no server URL: adopt
+              // whatever the server reported (may be empty/false).
               customUrl = serverSettings.customUrl;
               useCustomUrl = serverSettings.useCustomUrl;
             }
@@ -2273,6 +2272,7 @@ const ChemistryTool: React.FC = () => {
                 onServerRemoved={refreshToolsList}
                 username={username}
                 httpServerUrl={HTTP_SERVER}
+                allowedBackends={getConfig().ALLOWED_BACKENDS}
               />
 
               {/* WebSocket Status Indicator */}
