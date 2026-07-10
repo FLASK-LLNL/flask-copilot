@@ -85,3 +85,51 @@ def test_invalid_reaction_smiles_does_not_crash():
     g, ws = _run("this is not a reaction")
     assert len(g.node_ids) == 0
     assert ws.messages[-1] == {"type": "complete"}
+
+
+# --- Daylight reaction SMILES spec examples (reactant '>' agent '>' product) ---
+
+
+def test_spec_example_no_agent():
+    # "C=CCBr>>C=CCI" -- allyl bromide to allyl iodide, no agent.
+    g, ws = _run("C=CCBr>>C=CCI")
+
+    assert len(g.node_ids) == 2
+    root = g.node_ids["node_0"]
+    assert root.smiles == _canon("C=CCI")
+
+    children = [n for nid, n in g.node_ids.items() if g.parents.get(nid) == "node_0"]
+    assert len(children) == 1
+    assert children[0].smiles == _canon("C=CCBr")
+    assert ws.messages[-1] == {"type": "complete"}
+
+
+def test_spec_example_canonicalized_with_ions():
+    # "[I-].[Na+].C=CCBr>>[Na+].[Br-].C=CCI" -- same reaction, fully specified.
+    # The organic product (most heavy atoms) is the root; the Na+/Br- salt
+    # byproducts are dropped. All three reactants become children.
+    g, _ = _run("[I-].[Na+].C=CCBr>>[Na+].[Br-].C=CCI")
+
+    root = g.node_ids["node_0"]
+    assert root.smiles == _canon("C=CCI")
+
+    children = [n for nid, n in g.node_ids.items() if g.parents.get(nid) == "node_0"]
+    assert len(children) == 3
+    child_smiles = {c.smiles for c in children}
+    assert child_smiles == {_canon("[I-]"), _canon("[Na+]"), _canon("C=CCBr")}
+
+
+def test_spec_example_with_agent():
+    # "C=CCBr.[Na+].[I-]>CC(=O)C>C=CCI.[Na+].[Br-]" -- acetone is an agent
+    # (solvent) and must be ignored; it is neither root nor a child.
+    g, _ = _run("C=CCBr.[Na+].[I-]>CC(=O)C>C=CCI.[Na+].[Br-]")
+
+    root = g.node_ids["node_0"]
+    assert root.smiles == _canon("C=CCI")
+
+    children = [n for nid, n in g.node_ids.items() if g.parents.get(nid) == "node_0"]
+    assert len(children) == 3
+    child_smiles = {c.smiles for c in children}
+    assert child_smiles == {_canon("C=CCBr"), _canon("[Na+]"), _canon("[I-]")}
+    # The acetone agent must not appear anywhere in the graph.
+    assert _canon("CC(=O)C") not in {n.smiles for n in g.node_ids.values()}

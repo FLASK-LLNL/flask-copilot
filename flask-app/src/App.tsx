@@ -950,7 +950,7 @@ const ChemistryTool: React.FC = () => {
         propertyType === 'custom' ? customPropertyName : PROPERTY_NAMES[propertyType];
       experimentName = `Optimizing ${propertyName} for ${smiles}`;
     } else if (problemType === 'retrosynthesis') {
-      const target = smiles.includes('>>') ? smiles.split('>>').pop()?.trim() || smiles : smiles;
+      const target = smiles.includes('>') ? smiles.split('>').pop()?.trim() || smiles : smiles;
       experimentName = `Synthesizing ${target}`;
     }
 

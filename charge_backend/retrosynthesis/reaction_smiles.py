@@ -73,11 +73,12 @@ async def reaction_smiles_retrosynthesis(
 
     product_mol = _select_root_product(product_mols)
     product_smiles = Chem.MolToSmiles(product_mol)
+    all_product_smiles = [Chem.MolToSmiles(m) for m in product_mols]
     reactant_smiles = [Chem.MolToSmiles(m) for m in reactant_mols]
 
     if len(product_mols) > 1:
         await clogger.info(
-            f"Multiple products found; using `{product_smiles}` as the target "
+            f"Multiple products found in {all_product_smiles}; using `{product_smiles}` as the target "
             "and treating the rest as byproducts."
         )
 
