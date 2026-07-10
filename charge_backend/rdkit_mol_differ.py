@@ -25,7 +25,7 @@ class ReactionAtomChanges:
     reactant_mcs_smarts: List[Optional[str]]
 
 
-def _parse_reaction_smiles(
+def parse_reaction_smiles(
     reaction_smiles: str,
 ) -> Tuple[List[Chem.Mol], List[Chem.Mol]]:
     """Parse reaction SMILES using RDKit's reaction parser.
@@ -69,10 +69,6 @@ def _parse_reaction_smiles(
         products.append(m)
 
     return reactants, products
-
-
-# Public alias: other modules build partial graphs from reaction SMILES.
-parse_reaction_smiles = _parse_reaction_smiles
 
 
 def _ensure_mols(items: Sequence[object], *, label: str) -> List[Chem.Mol]:
@@ -851,7 +847,7 @@ def reaction_atom_changes(
 ) -> ReactionAtomChanges:
     """Identify changed atoms for reaction SMILES: reactants>>products."""
 
-    reactants, products = _parse_reaction_smiles(reaction_smiles)
+    reactants, products = parse_reaction_smiles(reaction_smiles)
     return _reaction_atom_changes_mols(
         reactants, products, mcs_timeout_s=int(mcs_timeout_s)
     )
