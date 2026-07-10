@@ -71,6 +71,10 @@ def _parse_reaction_smiles(
     return reactants, products
 
 
+# Public alias: other modules build partial graphs from reaction SMILES.
+parse_reaction_smiles = _parse_reaction_smiles
+
+
 def _ensure_mols(items: Sequence[object], *, label: str) -> List[Chem.Mol]:
     """Convert a list of SMILES strings / RDKit mols into RDKit mols."""
 

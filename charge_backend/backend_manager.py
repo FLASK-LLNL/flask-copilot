@@ -27,6 +27,9 @@ from charge_backend.retrosynthesis.ai import (
     ai_based_retrosynthesis,
     db_then_ai_retrosynthesis,
 )
+from charge_backend.retrosynthesis.reaction_smiles import (
+    reaction_smiles_retrosynthesis,
+)
 from charge_backend.retrosynthesis.alternatives import set_reaction_alternative
 from charge_backend.prompt_debugger import debug_prompt
 from charge_backend.backend_helper_funcs import Node
@@ -326,14 +329,25 @@ class FlaskActionManager(ActionManager):
 
     async def _handle_retrosynthesis(self, data: dict) -> None:
         """Handle retrosynthesis problem type."""
-        run_func = partial(
-            template_based_retrosynthesis,
-            data["smiles"],
-            self.args.config_file,
-            self.get_retro_synth_context(),
-            self.task_manager.websocket,
-            self.run_settings,
-        )
+        # A reaction SMILES ("reactants>>products") is rendered directly as a
+        # one-step partial graph rather than searched with AiZynthFinder.
+        if ">>" in data["smiles"]:
+            run_func = partial(
+                reaction_smiles_retrosynthesis,
+                data["smiles"],
+                self.get_retro_synth_context(),
+                self.task_manager.websocket,
+                self.run_settings,
+            )
+        else:
+            run_func = partial(
+                template_based_retrosynthesis,
+                data["smiles"],
+                self.args.config_file,
+                self.get_retro_synth_context(),
+                self.task_manager.websocket,
+                self.run_settings,
+            )
 
         await self.task_manager.run_task(run_func())
 

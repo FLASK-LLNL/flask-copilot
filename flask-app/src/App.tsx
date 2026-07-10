@@ -950,7 +950,8 @@ const ChemistryTool: React.FC = () => {
         propertyType === 'custom' ? customPropertyName : PROPERTY_NAMES[propertyType];
       experimentName = `Optimizing ${propertyName} for ${smiles}`;
     } else if (problemType === 'retrosynthesis') {
-      experimentName = `Synthesizing ${smiles}`;
+      const target = smiles.includes('>>') ? smiles.split('>>').pop()?.trim() || smiles : smiles;
+      experimentName = `Synthesizing ${target}`;
     }
 
     // Check if we need to create project and/or experiment
@@ -2424,7 +2425,7 @@ const ChemistryTool: React.FC = () => {
                     value={smiles}
                     onChange={(e) => setSmiles(e.target.value)}
                     disabled={isComputing}
-                    placeholder="Enter SMILES notation"
+                    placeholder="Enter SMILES, or a reaction SMILES (A.B>>C)"
                     className="form-input text-lg"
                   />
                 </div>
