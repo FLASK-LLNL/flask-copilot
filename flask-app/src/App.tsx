@@ -2419,13 +2419,21 @@ const ChemistryTool: React.FC = () => {
             <div className="card card-padding mb-6">
               <div className="input-row">
                 <div className="flex-1">
-                  <label className="form-label">Starting Molecule (SMILES)</label>
+                  <label className="form-label">
+                    {problemType === 'optimization'
+                      ? 'Starting Molecule (SMILES)'
+                      : 'Starting Molecule (SMILES) or Reaction (reaction SMILES)'}
+                  </label>
                   <input
                     type="text"
                     value={smiles}
                     onChange={(e) => setSmiles(e.target.value)}
                     disabled={isComputing}
-                    placeholder="Enter SMILES or reaction SMILES"
+                    placeholder={
+                      problemType === 'optimization'
+                        ? 'Enter SMILES notation'
+                        : 'Enter SMILES or reaction SMILES'
+                    }
                     className="form-input text-lg"
                   />
                 </div>
