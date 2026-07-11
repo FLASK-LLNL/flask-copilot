@@ -379,12 +379,21 @@ class FlaskExperiment(Experiment):
 
         super().load_state(state)
 
-        # If we have an "old-style" serialization, we won't get the
-        # "graphContext", likely just "nodes" and "edges".
+        # Repopulate the EXISTING graph_context in place rather than replacing
+        # the object. Callers (e.g. get_retro_synth_context) hand out a
+        # reference to graph_context and then mutate it; swapping the object
+        # here would orphan those references and cause nodes to be written to a
+        # stale graph (observed as duplicated molecules in the custom flow).
         if "graphContext" in state:
-            # Preferring symmetry with GraphContext.save_state's impl
-            self.graph_context = GraphContext.model_validate(state.get("graphContext"))
+            loaded = GraphContext.model_validate(state.get("graphContext"))
+            self.graph_context.reset()
+            self.graph_context.node_ids.update(loaded.node_ids)
+            self.graph_context.parents.update(loaded.parents)
+            self.graph_context.edges.update(loaded.edges)
+            self.graph_context.nodes_per_level.update(loaded.nodes_per_level)
         else:
+            # Old-style serialization ("nodes"/"edges"); GraphContext.load_state
+            # already repopulates in place.
             self.graph_context.load_state(state)
 
     def reset(self):

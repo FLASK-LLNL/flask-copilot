@@ -373,20 +373,35 @@ class FlaskActionManager(ActionManager):
             images=image_refs(attachments) if attachments else None,
         )
 
-        run_func = partial(
-            run_custom_problem,
-            data["smiles"],
-            self._with_document_reference_context(data["systemPrompt"]),
-            data["userPrompt"],
-            self.experiment,
-            tool_runtime,
-            self.task_manager.websocket,
-            self.run_settings,
-            attachments,
-            self._agent_update_callback("custom:main", data),
-        )
+        # A reaction SMILES ("reactants>>products" or "reactants>reagents>
+        # products") is rendered directly as a one-step partial graph before the
+        # agent runs. The agent still receives the full reaction SMILES for
+        # context, but must not rebuild node_0 from its response.
+        is_reaction = ">" in data["smiles"]
 
-        await self.task_manager.run_task(run_func())
+        async def run_custom() -> None:
+            if is_reaction:
+                await reaction_smiles_retrosynthesis(
+                    data["smiles"],
+                    self.get_retro_synth_context(),
+                    self.task_manager.websocket,
+                    self.run_settings,
+                    send_complete=False,
+                )
+            await run_custom_problem(
+                data["smiles"],
+                self._with_document_reference_context(data["systemPrompt"]),
+                data["userPrompt"],
+                self.experiment,
+                tool_runtime,
+                self.task_manager.websocket,
+                self.run_settings,
+                attachments,
+                self._agent_update_callback("custom:main", data),
+                build_nodes_from_response=not is_reaction,
+            )
+
+        await self.task_manager.run_task(run_custom())
 
     @handles("compute-reaction-from")
     async def handle_compute_reaction_from(self, data: dict) -> None:

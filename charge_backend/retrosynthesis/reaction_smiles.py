@@ -39,6 +39,7 @@ async def reaction_smiles_retrosynthesis(
     context: GraphContext,
     websocket: WebSocket,
     run_settings: FlaskRunSettings,
+    send_complete: bool = True,
 ) -> None:
     """Build a one-step partial retrosynthesis graph from a reaction SMILES.
 
@@ -46,6 +47,10 @@ async def reaction_smiles_retrosynthesis(
     each reactant becomes a level-1 child, as if the user had performed a single
     retrosynthesis step. No route search is performed -- the user supplies the
     reaction.
+
+    :param send_complete: If True (default), send a ``{"type": "complete"}``
+        message when finished. Set False when a caller (e.g. the custom-problem
+        flow) will run further work and send ``complete`` itself.
     """
     clogger = CallbackLogger(websocket, source="reaction_smiles_retrosynthesis")
     await clogger.info(f"Building partial graph from reaction: `{reaction_smiles}`.")
@@ -61,7 +66,8 @@ async def reaction_smiles_retrosynthesis(
         )
     except ValueError as e:
         await clogger.error(f"Could not parse reaction SMILES: {e}")
-        await websocket.send_json({"type": "complete"})
+        if send_complete:
+            await websocket.send_json({"type": "complete"})
         return
 
     if not reactant_mols or not product_mols:
@@ -69,7 +75,8 @@ async def reaction_smiles_retrosynthesis(
             "Reaction SMILES must contain at least one reactant and one product "
             "(format: `reactant1.reactant2>>product`)."
         )
-        await websocket.send_json({"type": "complete"})
+        if send_complete:
+            await websocket.send_json({"type": "complete"})
         return
 
     product_mol = _select_root_product(product_mols)
@@ -146,4 +153,5 @@ async def reaction_smiles_retrosynthesis(
         smiles=root.smiles,
     )
     await context.update_node(root, websocket)
-    await websocket.send_json({"type": "complete"})
+    if send_complete:
+        await websocket.send_json({"type": "complete"})

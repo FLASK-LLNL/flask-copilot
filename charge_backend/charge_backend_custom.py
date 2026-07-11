@@ -20,6 +20,7 @@ async def run_custom_problem(
     run_settings: FlaskRunSettings,
     attachments: Optional[list[dict[str, object]]] = None,
     history_callback: Optional[Callable[[], Awaitable[None]]] = None,
+    build_nodes_from_response: bool = True,
 ):
     task = Task(
         system_prompt=system_prompt,
@@ -51,20 +52,23 @@ async def run_custom_problem(
         }
     )
 
-    # Find all SMILES values
-    matches = re.findall(r'"smiles":\s*"([^"]+)"', result)
+    # Find all SMILES values and build nodes from them, unless the caller has
+    # already populated the graph (e.g. a reaction-SMILES partial graph, whose
+    # node_0 would collide with the nodes created here).
+    if build_nodes_from_response:
+        matches = re.findall(r'"smiles":\s*"([^"]+)"', result)
 
-    if matches:
-        for i, smiles in enumerate(matches):
-            node = Node(
-                id=f"node_{i}",
-                smiles=smiles,
-                label=smiles_to_html(smiles, run_settings.molecule_name_format),
-                hoverInfo=result,
-                level=0,
-                x=50,
-                y=100 + i * 150,
-            )
-            await experiment.graph_context.add_node(node, websocket)
+        if matches:
+            for i, smiles in enumerate(matches):
+                node = Node(
+                    id=f"node_{i}",
+                    smiles=smiles,
+                    label=smiles_to_html(smiles, run_settings.molecule_name_format),
+                    hoverInfo=result,
+                    level=0,
+                    x=50,
+                    y=100 + i * 150,
+                )
+                await experiment.graph_context.add_node(node, websocket)
 
     await websocket.send_json({"type": "complete"})
