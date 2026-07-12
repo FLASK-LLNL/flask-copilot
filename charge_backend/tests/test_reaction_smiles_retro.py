@@ -140,3 +140,50 @@ def test_spec_example_with_reagent():
     # The acetone reagent appears with a "(Reagent)" role label.
     reagent_child = next(c for c in children if c.smiles == "CC(=O)C")
     assert "(Reagent)" in reagent_child.label
+
+
+# --- Multiple reaction SMILES (multi-step chain, one per line) ---
+
+
+def _children_of(g, node_id):
+    return [n for nid, n in g.node_ids.items() if g.parents.get(nid) == node_id]
+
+
+def test_two_step_chain_expands_matching_leaf():
+    # Line 1: build C <- A + B. Line 2: expand A (a leaf) into D + E.
+    g, ws = _run("BrC1=CC=NC=C1.C=CB(O)O>>C=Cc2ccncc2\n" "BrBr.c1ccncc1>>BrC1=CC=NC=C1")
+
+    assert len(g.node_ids) == 5
+    root = g.node_ids["node_0"]
+    assert root.smiles == _canon("C=Cc2ccncc2")
+
+    # The pyridyl bromide leaf was matched and expanded one level deeper.
+    matched = next(
+        c for c in _children_of(g, "node_0") if c.smiles == _canon("BrC1=CC=NC=C1")
+    )
+    grandchildren = _children_of(g, matched.id)
+    assert len(grandchildren) == 2
+    assert all(gc.level == 2 for gc in grandchildren)
+    assert {gc.smiles for gc in grandchildren} == {_canon("BrBr"), _canon("c1ccncc1")}
+
+    # The expanded (formerly leaf) node now carries a reaction.
+    assert matched.reaction is not None
+    assert ws.messages[-1] == {"type": "complete"}
+
+
+def test_tab_separated_reactions():
+    g, _ = _run("BrC1=CC=NC=C1.C=CB(O)O>>C=Cc2ccncc2\tBrBr.c1ccncc1>>BrC1=CC=NC=C1")
+    assert len(g.node_ids) == 5
+
+
+def test_unmatched_later_line_is_skipped():
+    # Second reaction's product matches no leaf; it is skipped, first intact.
+    g, ws = _run("BrC1=CC=NC=C1.C=CB(O)O>>C=Cc2ccncc2\n" "CCO.CCN>>CCCCCCCCCC")
+    assert len(g.node_ids) == 3  # only the first reaction's graph
+    assert ws.messages[-1] == {"type": "complete"}
+
+
+def test_bad_first_line_produces_no_graph():
+    g, ws = _run("this is not a reaction\nA>>B")
+    assert len(g.node_ids) == 0
+    assert ws.messages[-1] == {"type": "complete"}
