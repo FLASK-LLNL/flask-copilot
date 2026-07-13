@@ -23,15 +23,45 @@ from charge_backend.moleculedb.purchasable import (
     purchasable_summary,
 )
 from charge_backend.retrosynthesis.mapping import build_mapped_reaction_dict_or_none
-from charge_backend.rdkit_mol_differ import parse_reaction_smiles
 
 
-def _select_root_product(products: list[Chem.Mol]) -> Chem.Mol:
-    """Pick the product with the most heavy atoms as the target molecule.
+def _split_reaction_smiles(
+    reaction_smiles: str,
+) -> tuple[list[str], list[str], list[str]]:
+    """Split a reaction SMILES into (reactants, reagents, products).
 
-    Additional products are treated as byproducts and ignored.
+    A reaction SMILES has exactly two '>' separators
+    (``reactants>reagents>products``); the reagents field may be empty. Each
+    field is a '.'-separated list of molecule SMILES; empty components are
+    dropped.
     """
-    return max(products, key=lambda m: m.GetNumHeavyAtoms())
+    parts = reaction_smiles.split(">")
+    if len(parts) != 3:
+        raise ValueError(
+            "Invalid reaction SMILES (expected reactants>reagents>products): "
+            f"{reaction_smiles!r}"
+        )
+    reactants = [s for s in parts[0].split(".") if s]
+    reagents = [s for s in parts[1].split(".") if s]
+    products = [s for s in parts[2].split(".") if s]
+    return reactants, reagents, products
+
+
+def _select_root_product(product_smiles: list[str]) -> int:
+    """Return the index of the product with the most heavy atoms.
+
+    Additional products are treated as byproducts and ignored. Products that
+    fail to parse count as zero heavy atoms.
+    """
+
+    def heavy_atom_count(smiles: str) -> int:
+        mol = Chem.MolFromSmiles(smiles)
+        return mol.GetNumHeavyAtoms() if mol is not None else 0
+
+    return max(
+        range(len(product_smiles)),
+        key=lambda i: heavy_atom_count(product_smiles[i]),
+    )
 
 
 async def reaction_smiles_retrosynthesis(
@@ -61,8 +91,8 @@ async def reaction_smiles_retrosynthesis(
     # child nodes labeled "(Reagent)", mirroring the exact-reaction database path
     # which appends each component's role to its label.
     try:
-        reactant_mols, reagent_mols, product_mols = parse_reaction_smiles(
-            reaction_smiles, include_reagents=True
+        reactant_smiles, reagent_smiles, product_smiles = _split_reaction_smiles(
+            reaction_smiles
         )
     except ValueError as e:
         await clogger.error(f"Could not parse reaction SMILES: {e}")
@@ -70,7 +100,7 @@ async def reaction_smiles_retrosynthesis(
             await websocket.send_json({"type": "complete"})
         return
 
-    if not reactant_mols or not product_mols:
+    if not reactant_smiles or not product_smiles:
         await clogger.error(
             "Reaction SMILES must contain at least one reactant and one product "
             "(format: `reactant1.reactant2>>product`)."
@@ -79,26 +109,23 @@ async def reaction_smiles_retrosynthesis(
             await websocket.send_json({"type": "complete"})
         return
 
-    product_mol = _select_root_product(product_mols)
-    product_smiles = Chem.MolToSmiles(product_mol)
-    reactant_smiles = [Chem.MolToSmiles(m) for m in reactant_mols]
-    reagent_smiles = [Chem.MolToSmiles(m) for m in reagent_mols]
+    root_index = _select_root_product(product_smiles)
+    product = product_smiles[root_index]
 
-    if len(product_mols) > 1:
-        products_smiles = reaction_smiles.split(">").pop().split(".")
+    if len(product_smiles) > 1:
         await clogger.info(
-            f"Multiple products found in {products_smiles}; using `{product_smiles}` as the target "
-            "and treating the rest as byproducts."
+            f"Multiple products found in {product_smiles}; using `{product}` as the "
+            "target and treating the rest as byproducts."
         )
 
     # Root node = product.
-    mol_sources = is_purchasable(product_smiles)
+    mol_sources = is_purchasable(product)
     root = Node(
         id="node_0",
-        smiles=product_smiles,
-        label=smiles_to_html(product_smiles, run_settings.molecule_name_format),
+        smiles=product,
+        label=smiles_to_html(product, run_settings.molecule_name_format),
         hoverInfo=f"""# Root molecule
-**SMILES:** {product_smiles}
+**SMILES:** {product}
 
 **Purchasable**? {purchasable_summary(mol_sources)}""",
         level=0,
@@ -147,7 +174,7 @@ async def reaction_smiles_retrosynthesis(
     )
     root.reaction.mappedReaction = build_mapped_reaction_dict_or_none(
         reactants=reactant_smiles + reagent_smiles,
-        products=[product_smiles],
+        products=[product],
         log_msg="Failed to build rdkitjs mapped reaction for user reaction root_id={node_id} smiles={smiles}",
         node_id=root.id,
         smiles=root.smiles,

@@ -7,8 +7,6 @@
 
 import asyncio
 
-from rdkit import Chem
-
 from charge_backend.flask_experiment import GraphContext
 from charge_backend.backend_helper_funcs import FlaskRunSettings
 from charge_backend.retrosynthesis.reaction_smiles import (
@@ -35,8 +33,8 @@ def _run(reaction_smiles: str):
     return g, ws
 
 
-def _canon(smiles: str) -> str:
-    return Chem.MolToSmiles(Chem.MolFromSmiles(smiles))
+# Node SMILES are the raw components from the input reaction SMILES (split on
+# '>' and '.'), so tests compare against the exact strings supplied.
 
 
 def test_single_product_builds_partial_graph():
@@ -47,13 +45,13 @@ def test_single_product_builds_partial_graph():
     root = g.node_ids["node_0"]
     assert root.level == 0
     assert root.parentId is None
-    assert root.smiles == _canon("C=Cc2ccncc2")
+    assert root.smiles == "C=Cc2ccncc2"
 
     children = [n for nid, n in g.node_ids.items() if g.parents.get(nid) == "node_0"]
     assert len(children) == 2
     assert all(c.level == 1 for c in children)
     child_smiles = {c.smiles for c in children}
-    assert child_smiles == {_canon("BrC1=CC=NC=C1"), _canon("C=CB(O)O")}
+    assert child_smiles == {"BrC1=CC=NC=C1", "C=CB(O)O"}
 
     # Root has a reaction with a mapped reaction for hover-highlighting
     assert root.reaction is not None
@@ -67,7 +65,7 @@ def test_multi_product_roots_on_largest():
     # Larger product is the pyridine ring system, not the methane byproduct.
     g, _ = _run("BrC1=CC=NC=C1.C=CB(O)O>>C=Cc2ccncc2.C")
     root = g.node_ids["node_0"]
-    assert root.smiles == _canon("C=Cc2ccncc2")
+    assert root.smiles == "C=Cc2ccncc2"
     # Byproduct "C" is dropped; only the two reactants are children.
     assert len(g.node_ids) == 3
 
@@ -76,18 +74,14 @@ def test_reagents_appear_as_labeled_children():
     # reactants>reagent>product form: the Pd reagent becomes a child labeled "(Reagent)".
     g, _ = _run("BrC1=CC=NC=C1.C=CB(O)O>[Pd]>C=Cc2ccncc2")
     root = g.node_ids["node_0"]
-    assert root.smiles == _canon("C=Cc2ccncc2")
+    assert root.smiles == "C=Cc2ccncc2"
     children = [n for nid, n in g.node_ids.items() if g.parents.get(nid) == "node_0"]
     # Two reactants + one reagent
     assert len(children) == 3
     child_smiles = {c.smiles for c in children}
-    assert child_smiles == {
-        _canon("BrC1=CC=NC=C1"),
-        _canon("C=CB(O)O"),
-        _canon("[Pd]"),
-    }
+    assert child_smiles == {"BrC1=CC=NC=C1", "C=CB(O)O", "[Pd]"}
     # The reagent child carries a "(Reagent)" role in its label.
-    reagent_child = next(c for c in children if c.smiles == _canon("[Pd]"))
+    reagent_child = next(c for c in children if c.smiles == "[Pd]")
     assert "(Reagent)" in reagent_child.label
     assert "# Reagent" in reagent_child.hoverInfo
 
@@ -107,27 +101,27 @@ def test_spec_example_no_reagent():
 
     assert len(g.node_ids) == 2
     root = g.node_ids["node_0"]
-    assert root.smiles == _canon("C=CCI")
+    assert root.smiles == "C=CCI"
 
     children = [n for nid, n in g.node_ids.items() if g.parents.get(nid) == "node_0"]
     assert len(children) == 1
-    assert children[0].smiles == _canon("C=CCBr")
+    assert children[0].smiles == "C=CCBr"
     assert ws.messages[-1] == {"type": "complete"}
 
 
-def test_spec_example_canonicalized_with_ions():
+def test_spec_example_with_ions():
     # "[I-].[Na+].C=CCBr>>[Na+].[Br-].C=CCI" -- same reaction, fully specified.
     # The organic product (most heavy atoms) is the root; the Na+/Br- salt
     # byproducts are dropped. All three reactants become children.
     g, _ = _run("[I-].[Na+].C=CCBr>>[Na+].[Br-].C=CCI")
 
     root = g.node_ids["node_0"]
-    assert root.smiles == _canon("C=CCI")
+    assert root.smiles == "C=CCI"
 
     children = [n for nid, n in g.node_ids.items() if g.parents.get(nid) == "node_0"]
     assert len(children) == 3
     child_smiles = {c.smiles for c in children}
-    assert child_smiles == {_canon("[I-]"), _canon("[Na+]"), _canon("C=CCBr")}
+    assert child_smiles == {"[I-]", "[Na+]", "C=CCBr"}
 
 
 def test_spec_example_with_reagent():
@@ -136,18 +130,13 @@ def test_spec_example_with_reagent():
     g, _ = _run("C=CCBr.[Na+].[I-]>CC(=O)C>C=CCI.[Na+].[Br-]")
 
     root = g.node_ids["node_0"]
-    assert root.smiles == _canon("C=CCI")
+    assert root.smiles == "C=CCI"
 
     children = [n for nid, n in g.node_ids.items() if g.parents.get(nid) == "node_0"]
     # Three reactants + the acetone reagent.
     assert len(children) == 4
     child_smiles = {c.smiles for c in children}
-    assert child_smiles == {
-        _canon("C=CCBr"),
-        _canon("[Na+]"),
-        _canon("[I-]"),
-        _canon("CC(=O)C"),
-    }
+    assert child_smiles == {"C=CCBr", "[Na+]", "[I-]", "CC(=O)C"}
     # The acetone reagent appears with a "(Reagent)" role label.
-    reagent_child = next(c for c in children if c.smiles == _canon("CC(=O)C"))
+    reagent_child = next(c for c in children if c.smiles == "CC(=O)C")
     assert "(Reagent)" in reagent_child.label
