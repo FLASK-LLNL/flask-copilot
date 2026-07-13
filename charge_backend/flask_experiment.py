@@ -274,7 +274,16 @@ class GraphContext(BaseModel):
 
         return self.model_dump(mode="json")
 
-    def load_state(self, data: dict[str, Any]) -> None:
+    def _load_state_graph_context(self, data: dict[str, Any]) -> None:
+        """Restore context in-place."""
+        loaded = GraphContext.model_validate(data)
+        self.reset()
+        self.node_ids.update(loaded.node_ids)
+        self.parents.update(loaded.parents)
+        self.edges.update(loaded.edges)
+        self.nodes_per_level.update(loaded.nodes_per_level)
+
+    def _load_state_classic(self, data: dict[str, Any]) -> None:
         """Restore a context from a dictionary serialization.
         Existing state is clobbered, even if the dictionary
         serialization is empty or "node"-less.
@@ -345,6 +354,19 @@ class GraphContext(BaseModel):
 
             self._add_node(node, edge)
 
+    # Repopulate the EXISTING graph_context in place rather than replacing
+    # the object. Callers (e.g. get_retro_synth_context) hand out a
+    # reference to graph_context and then mutate it; swapping the object
+    # here would orphan those references and cause nodes to be written to a
+    # stale graph (observed as duplicated molecules in the custom flow).
+    def load_state(self, state: dict[str, Any]) -> None:
+        if "graphContext" in state:
+            self._load_state_graph_context(state.get("graphContext"))
+        else:
+            # Old-style serialization ("nodes"/"edges"); GraphContext.load_state
+            # already repopulates in place.
+            self._load_state_classic(state)
+
     def is_empty(self) -> bool:
         return len(self.node_ids) == 0
 
@@ -379,22 +401,7 @@ class FlaskExperiment(Experiment):
 
         super().load_state(state)
 
-        # Repopulate the EXISTING graph_context in place rather than replacing
-        # the object. Callers (e.g. get_retro_synth_context) hand out a
-        # reference to graph_context and then mutate it; swapping the object
-        # here would orphan those references and cause nodes to be written to a
-        # stale graph (observed as duplicated molecules in the custom flow).
-        if "graphContext" in state:
-            loaded = GraphContext.model_validate(state.get("graphContext"))
-            self.graph_context.reset()
-            self.graph_context.node_ids.update(loaded.node_ids)
-            self.graph_context.parents.update(loaded.parents)
-            self.graph_context.edges.update(loaded.edges)
-            self.graph_context.nodes_per_level.update(loaded.nodes_per_level)
-        else:
-            # Old-style serialization ("nodes"/"edges"); GraphContext.load_state
-            # already repopulates in place.
-            self.graph_context.load_state(state)
+        self.graph_context.load_state(state)
 
     def reset(self):
         super().reset()
