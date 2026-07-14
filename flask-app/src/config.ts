@@ -1,4 +1,4 @@
-import type { DataClassificationConfig } from 'lc-conductor';
+import type { AllowedBackend, DataClassificationConfig } from 'lc-conductor';
 
 export interface AppConfig {
   // WebSocket
@@ -7,6 +7,9 @@ export interface AppConfig {
   // Optional data-classification map injected by the server; consumed by the
   // DataClassificationBanner to resolve the approved data level per backend + URL.
   DATA_CLASSIFICATION?: DataClassificationConfig;
+  // Optional deployment allow-list injected by the server; when non-empty the
+  // SettingsButton limits backend selection and per-backend custom URL usage.
+  ALLOWED_BACKENDS?: AllowedBackend[];
 }
 
 declare global {

@@ -36,6 +36,8 @@ from lc_conductor import (
     discover_models_endpoint,
     validate_initial_model,
     resolve_orchestrator_config,
+    resolve_allowed_backends,
+    allowed_backend_values,
 )
 
 parser = argparse.ArgumentParser()
@@ -181,10 +183,24 @@ if os.path.exists(ASSETS_PATH):
         with open(os.path.join(DIST_PATH, "index.html"), "r") as fp:
             html = fp.read()
 
+        # Resolve the deployment backend allow-list (empty => no restriction).
+        allowed_backends = resolve_allowed_backends()
+        allowed_values = allowed_backend_values(allowed_backends)
+
+        # Honor the allow-list when choosing the initial backend: if the CLI
+        # backend is disallowed, fall back to the first allowed one.
+        requested_backend = args.backend
+        default_backend = "livai"
+        if allowed_values:
+            default_backend = allowed_values[0]
+            if requested_backend not in allowed_values:
+                requested_backend = None
+
         # Use centralized config resolution - Note that the browser state is not available here
         orchestrator_config = resolve_orchestrator_config(
-            requested_backend=args.backend,
+            requested_backend=requested_backend,
             requested_model=args.model,
+            default_backend=default_backend,
         )
 
         html = html.replace(
@@ -195,7 +211,8 @@ if os.path.exists(ASSETS_PATH):
                WS_SERVER: '{os.getenv("WS_SERVER", "ws://localhost:8001/ws")}',
                VERSION: '{os.getenv("SERVER_VERSION", "")}',
                ORCHESTRATOR: {json.dumps(orchestrator_config)},
-               DATA_CLASSIFICATION: {json.dumps(resolve_data_classification())}
+               DATA_CLASSIFICATION: {json.dumps(resolve_data_classification())},
+               ALLOWED_BACKENDS: {json.dumps(allowed_backends)}
            }};
            </script>""",
         )
