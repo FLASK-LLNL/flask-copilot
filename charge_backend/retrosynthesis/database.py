@@ -15,7 +15,10 @@ from charge_backend.backend_helper_funcs import (
 from charge_backend.moleculedb.molecule_naming import (
     smiles_to_html,
 )
-from charge_backend.moleculedb.purchasable import is_purchasable
+from charge_backend.moleculedb.purchasable import (
+    is_purchasable,
+    purchasable_summary,
+)
 from charge_backend.moleculedb.dynamic_import import import_from_path
 from charge_backend.moleculedb.reactiondb_query import ReactionDatabaseReader
 
@@ -290,10 +293,7 @@ async def find_exact_reactions(
                 reactant_smiles, reactant_labels, reactant_roles
             ):
                 mol_sources = is_purchasable(smiles)
-                if mol_sources:
-                    purchasable_str = f"Yes (via {', '.join(mol_sources)})"
-                else:
-                    purchasable_str = "No"
+                purchasable_str = purchasable_summary(mol_sources)
                 node = Node(
                     id=context.new_node_id(),
                     smiles=smiles,

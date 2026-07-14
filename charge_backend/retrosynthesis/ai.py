@@ -22,7 +22,10 @@ from charge_backend.retrosynthesis.template import (
     generate_nodes_for_molecular_graph,
     run_retro_planner,
 )
-from charge_backend.moleculedb.purchasable import is_purchasable
+from charge_backend.moleculedb.purchasable import (
+    is_purchasable,
+    purchasable_summary,
+)
 from charge_backend.retrosynthesis.mapping import build_mapped_reaction_dict_or_none
 from charge_backend.retrosynthesis.database import find_exact_reactions
 
@@ -229,10 +232,7 @@ async def ai_based_retrosynthesis(
     for smiles in result.reactants_smiles_list:
         node_id_str = context.new_node_id()
         mol_sources = is_purchasable(smiles)
-        if mol_sources:
-            purchasable_str = f"Yes (via {', '.join(mol_sources)})"
-        else:
-            purchasable_str = "No"
+        purchasable_str = purchasable_summary(mol_sources)
         node = Node(
             node_id_str,
             smiles,

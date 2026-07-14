@@ -1,3 +1,10 @@
+################################################################################
+## Copyright 2025-2026 Lawrence Livermore National Security, LLC..
+## See the top-level LICENSE file for details.
+##
+## SPDX-License-Identifier: Apache-2.0
+################################################################################
+
 import argparse
 from typing import Any, Optional
 from fastapi import WebSocket
@@ -29,6 +36,9 @@ from charge_backend.retrosynthesis.template import (
 from charge_backend.retrosynthesis.ai import (
     ai_based_retrosynthesis,
     db_then_ai_retrosynthesis,
+)
+from charge_backend.retrosynthesis.reaction_smiles import (
+    reaction_smiles_retrosynthesis,
 )
 from charge_backend.retrosynthesis.alternatives import set_reaction_alternative
 from charge_backend.prompt_debugger import debug_prompt
@@ -329,14 +339,28 @@ class FlaskActionManager(ActionManager):
 
     async def _handle_retrosynthesis(self, data: dict) -> None:
         """Handle retrosynthesis problem type."""
-        run_func = partial(
-            template_based_retrosynthesis,
-            data["smiles"],
-            self.args.config_file,
-            self.get_retro_synth_context(),
-            self.task_manager.websocket,
-            self.run_settings,
-        )
+        # A reaction SMILES (reactant '>' agent '>' product or
+        # reactants '>>' products) is rendered directly as a one-step
+        # partial graph rather than searched with
+        # template_based_retrosynthesis which includes both exact
+        # matches in local databases and template-based methods.
+        if ">" in data["smiles"]:
+            run_func = partial(
+                reaction_smiles_retrosynthesis,
+                data["smiles"],
+                self.get_retro_synth_context(),
+                self.task_manager.websocket,
+                self.run_settings,
+            )
+        else:
+            run_func = partial(
+                template_based_retrosynthesis,
+                data["smiles"],
+                self.args.config_file,
+                self.get_retro_synth_context(),
+                self.task_manager.websocket,
+                self.run_settings,
+            )
 
         await self.task_manager.run_task(run_func())
 
@@ -352,20 +376,35 @@ class FlaskActionManager(ActionManager):
             images=image_refs(attachments) if attachments else None,
         )
 
-        run_func = partial(
-            run_custom_problem,
-            data["smiles"],
-            self._with_document_reference_context(data["systemPrompt"]),
-            data["userPrompt"],
-            self.experiment,
-            tool_runtime,
-            self.task_manager.websocket,
-            self.run_settings,
-            attachments,
-            self._agent_update_callback("custom:main", data),
-        )
+        # A reaction SMILES ("reactants>>products" or "reactants>reagents>
+        # products") is rendered directly as a one-step partial graph before the
+        # agent runs. The agent still receives the full reaction SMILES for
+        # context, but must not rebuild node_0 from its response.
+        is_reaction = ">" in data["smiles"]
 
-        await self.task_manager.run_task(run_func())
+        async def run_custom() -> None:
+            if is_reaction:
+                await reaction_smiles_retrosynthesis(
+                    data["smiles"],
+                    self.get_retro_synth_context(),
+                    self.task_manager.websocket,
+                    self.run_settings,
+                    send_complete=False,
+                )
+            await run_custom_problem(
+                data["smiles"],
+                self._with_document_reference_context(data["systemPrompt"]),
+                data["userPrompt"],
+                self.experiment,
+                tool_runtime,
+                self.task_manager.websocket,
+                self.run_settings,
+                attachments,
+                self._agent_update_callback("custom:main", data),
+                build_nodes_from_response=not is_reaction,
+            )
+
+        await self.task_manager.run_task(run_custom())
 
     @handles("compute-reaction-from")
     async def handle_compute_reaction_from(self, data: dict) -> None:

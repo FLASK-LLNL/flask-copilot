@@ -351,3 +351,24 @@ def test_graph_context_in_flask_experiment_load_state():
     assert not e.graph_context.is_empty()
     assert "f" not in e.graph_context.node_ids
     assert e.graph_context == g
+
+
+def test_flask_experiment_load_state_preserves_graph_context_identity():
+    # load_state must repopulate the EXISTING graph_context in place, not
+    # replace the object. Callers hand out a reference (get_retro_synth_context)
+    # and then mutate it; swapping the object would orphan those references and
+    # cause nodes to be written to a stale graph (seen as duplicated molecules).
+    e = FlaskExperiment(task=None)
+    handed_out = e.graph_context
+
+    g = GraphContext()
+    asyncio.run(g.add_node(make_node("a", 0)))
+    e.load_state({"graphContext": g.save_state()})
+
+    assert e.graph_context is handed_out
+    assert "a" in handed_out.node_ids
+
+    # The reset() path (old-style / empty) must also preserve identity.
+    e.load_state({"graphContext": GraphContext().save_state()})
+    assert e.graph_context is handed_out
+    assert handed_out.is_empty()
