@@ -129,6 +129,45 @@ if manual_mcp_servers_env:
         logger.info(f"{status}")
         count += 1
 
+# Default data-classification map used when FLASK_DATA_CLASSIFICATION is unset
+# or invalid. Deployments should override this via the environment. The frontend
+# DataClassificationBanner renders a fixed lead-in "Using this orchestrator
+# endpoint [<label>] " followed by "<prefix><level>", using the first rule that
+# matches the selected backend + URL. Supported keys:
+#   - "rules": list of {backend, urlContains?, level, color?} matched top-to-bottom
+#   - "fallbackLevel": level text used when no rule matches
+#   - "prefix" (optional): user-configurable message shown after the lead-in;
+#     when omitted the frontend uses its default, "Flask Copilot can process
+#     data that is approved for "
+#   - "fallbackColor" (optional): banner color when no rule matches
+#   - per-rule "color" (optional): banner color for that classification; one of
+#     "green", "yellow", "red", "orange" (invalid values fall back to defaults)
+DEFAULT_DATA_CLASSIFICATION = {
+    "fallbackLevel": "PUBLIC RELEASE (UUR - Unclassified Unlimited Release)",
+    "rules": [],
+}
+
+
+def resolve_data_classification() -> dict:
+    """Resolve the data-classification map from the environment.
+
+    Reads FLASK_DATA_CLASSIFICATION (a JSON string). Falls back to
+    DEFAULT_DATA_CLASSIFICATION if unset or unparseable.
+    """
+    raw = os.getenv("FLASK_DATA_CLASSIFICATION", "")
+    if not raw:
+        return DEFAULT_DATA_CLASSIFICATION
+    try:
+        parsed = json.loads(raw)
+    except json.JSONDecodeError as exc:
+        logger.warning(f"Invalid FLASK_DATA_CLASSIFICATION JSON, using default: {exc}")
+        return DEFAULT_DATA_CLASSIFICATION
+    if not isinstance(parsed, dict):
+        logger.warning("FLASK_DATA_CLASSIFICATION is not a JSON object, using default")
+        return DEFAULT_DATA_CLASSIFICATION
+    return parsed
+
+
 if os.path.exists(ASSETS_PATH):
     # Serve the frontend
     app.mount("/assets", StaticFiles(directory=ASSETS_PATH), name="assets")
@@ -155,7 +194,8 @@ if os.path.exists(ASSETS_PATH):
            window.APP_CONFIG = {{
                WS_SERVER: '{os.getenv("WS_SERVER", "ws://localhost:8001/ws")}',
                VERSION: '{os.getenv("SERVER_VERSION", "")}',
-               ORCHESTRATOR: {json.dumps(orchestrator_config)}
+               ORCHESTRATOR: {json.dumps(orchestrator_config)},
+               DATA_CLASSIFICATION: {json.dumps(resolve_data_classification())}
            }};
            </script>""",
         )

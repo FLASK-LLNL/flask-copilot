@@ -31,7 +31,7 @@ import 'remark-gfm';
 import 'react-syntax-highlighter';
 import 'react-syntax-highlighter/dist/esm/styles/prism';
 
-import { WS_SERVER, VERSION, HTTP_SERVER } from './config';
+import { WS_SERVER, VERSION, HTTP_SERVER, getConfig } from './config';
 import { DEFAULT_CUSTOM_SYSTEM_PROMPT, PROPERTY_NAMES } from './constants';
 import {
   TreeNode,
@@ -69,6 +69,7 @@ import {
   deserializeAgentChatHistory,
   handleLocalMcpProxyRequest,
   extractInitialSettings,
+  DataClassificationBanner,
 } from 'lc-conductor';
 import type { AgentAttachment, AgentChatHistory } from 'lc-conductor';
 
@@ -2095,6 +2096,13 @@ const ChemistryTool: React.FC = () => {
 
   return (
     <div className="app-background">
+      <DataClassificationBanner
+        position="top"
+        backend={orchestratorSettings.backend}
+        backendLabel={orchestratorSettings.backendLabel}
+        url={getDisplayUrl()}
+        classification={getConfig().DATA_CLASSIFICATION}
+      />
       <div className="main-container">
         <ProjectSidebar
           projectData={projectData}
@@ -2808,6 +2816,13 @@ const ChemistryTool: React.FC = () => {
           resolveImageDataUrl={resolveImageDataUrl}
         />
       </div>
+      <DataClassificationBanner
+        position="bottom"
+        backend={orchestratorSettings.backend}
+        backendLabel={orchestratorSettings.backendLabel}
+        url={getDisplayUrl()}
+        classification={getConfig().DATA_CLASSIFICATION}
+      />
 
       {contextMenu && contextMenu.node && (
         <div

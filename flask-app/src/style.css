@@ -77,14 +77,17 @@
 
 .app-background {
   min-height: 100vh;
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
   background: linear-gradient(to bottom right, #0f172a, #581c87, #0f172a);
 }
 
 .main-container {
   display: flex;
-  min-height: 100vh;
+  flex: 1;
+  min-height: 0;
   width: 100%;
-  height: 100vh;
   overflow: hidden;
   position: relative;
   transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
@@ -103,7 +106,7 @@
   padding: 2rem;
   overflow-y: auto;
   overflow-x: hidden;
-  height: 100vh;
+  height: 100%;
   position: relative;
   transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
@@ -595,7 +598,7 @@
   flex-direction: column;
   position: relative;
   flex-shrink: 0;
-  height: 100vh;
+  height: 100%;
   overflow: hidden;
   transition:
     width 0.3s cubic-bezier(0.4, 0, 0.2, 1),
@@ -612,7 +615,7 @@
   padding: 1rem 0;
   align-items: center;
   min-width: 3rem;
-  height: 100vh;
+  height: 100%;
 }
 
 .sidebar-right {
@@ -816,7 +819,7 @@
   box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
   flex-shrink: 0;
   position: relative;
-  height: 100vh;
+  height: 100%;
   overflow: hidden;
   display: flex;
   flex-direction: column;

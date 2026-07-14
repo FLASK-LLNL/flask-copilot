@@ -1,7 +1,12 @@
+import type { DataClassificationConfig } from 'lc-conductor';
+
 export interface AppConfig {
   // WebSocket
   WS_SERVER: string;
   VERSION: string;
+  // Optional data-classification map injected by the server; consumed by the
+  // DataClassificationBanner to resolve the approved data level per backend + URL.
+  DATA_CLASSIFICATION?: DataClassificationConfig;
 }
 
 declare global {
