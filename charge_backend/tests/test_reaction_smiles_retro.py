@@ -227,3 +227,15 @@ def test_chain_matches_leaf_across_noncanonical_smiles():
     assert grandchildren[0].level == 2
     assert canonicalize_smiles(grandchildren[0].smiles) == canonicalize_smiles("BrBr")
     assert ws.messages[-1] == {"type": "complete"}
+
+
+def test_uncanonicalizable_component_stored_raw():
+    # A component RDKit cannot parse is stored with its raw SMILES rather than
+    # the "Invalid SMILES" sentinel.
+    g, _ = _run("not_a_smiles>>C=CCI")
+
+    root = g.node_ids["node_0"]
+    assert root.smiles == "C=CCI"
+    children = [n for nid, n in g.node_ids.items() if g.parents.get(nid) == "node_0"]
+    assert len(children) == 1
+    assert children[0].smiles == "not_a_smiles"

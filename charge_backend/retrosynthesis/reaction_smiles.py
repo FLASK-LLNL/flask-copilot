@@ -28,6 +28,16 @@ from charge_backend.retrosynthesis.mapping import build_mapped_reaction_dict_or_
 from flask_tools.chemistry.smiles_utils import canonicalize_smiles
 
 
+def _canonicalize_or_raw(smiles: str) -> str:
+    """Canonicalize ``smiles``, falling back to the raw string if RDKit cannot
+    parse it. ``canonicalize_smiles`` returns the sentinel ``"Invalid SMILES"``
+    on failure; we prefer to keep the user's original string in that case."""
+    canonical = canonicalize_smiles(smiles)
+    if canonical == "Invalid SMILES":
+        return smiles
+    return canonical
+
+
 def _split_reaction_smiles(
     reaction_smiles: str,
 ) -> tuple[list[str], list[str], list[str]]:
@@ -88,8 +98,8 @@ async def _expand_node(
 
     # Graph nodes always store canonical SMILES so later leaf lookups match
     # regardless of how the user wrote each molecule.
-    canonical_reactants = [canonicalize_smiles(s) for s in reactant_smiles]
-    canonical_reagents = [canonicalize_smiles(s) for s in reagent_smiles]
+    canonical_reactants = [_canonicalize_or_raw(s) for s in reactant_smiles]
+    canonical_reagents = [_canonicalize_or_raw(s) for s in reagent_smiles]
 
     async def _add_child(smiles: str, role: str) -> None:
         child_sources = is_purchasable(smiles)
@@ -144,7 +154,7 @@ def _leaf_nodes_by_smiles(context: GraphContext) -> dict[str, Node]:
     for nid, node in context.node_ids.items():
         if nid in parents:
             continue
-        leaves[canonicalize_smiles(node.smiles)] = node
+        leaves[_canonicalize_or_raw(node.smiles)] = node
     return leaves
 
 
@@ -221,7 +231,7 @@ async def reaction_smiles_retrosynthesis(
 
     # Root node = product. Store canonical SMILES in the graph so later leaf
     # lookups match regardless of how the user wrote the molecule.
-    canonical_product = canonicalize_smiles(product)
+    canonical_product = _canonicalize_or_raw(product)
     mol_sources = is_purchasable(canonical_product)
     root = Node(
         id="node_0",
@@ -267,7 +277,7 @@ async def reaction_smiles_retrosynthesis(
         # Both sides are canonicalized so equivalent SMILES written different
         # ways (e.g. Kekule vs aromatic) still match.
         leaves = _leaf_nodes_by_smiles(context)
-        product_canons = [canonicalize_smiles(pc) for pc in p_smiles]
+        product_canons = [_canonicalize_or_raw(pc) for pc in p_smiles]
         target = next((leaves[pc] for pc in product_canons if pc in leaves), None)
         if target is None:
             await clogger.warning(
