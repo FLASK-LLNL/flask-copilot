@@ -40,7 +40,8 @@ def _run(reaction_smiles: str):
 def test_single_product_builds_partial_graph():
     g, ws = _run("BrC1=CC=NC=C1.C=CB(O)O>>C=Cc2ccncc2")
 
-    # One root (product) + two children (reactants)
+    # One root (product) + two children (reactants). Graph nodes store the raw
+    # input SMILES.
     assert len(g.node_ids) == 3
     root = g.node_ids["node_0"]
     assert root.level == 0
@@ -140,3 +141,77 @@ def test_spec_example_with_reagent():
     # The acetone reagent appears with a "(Reagent)" role label.
     reagent_child = next(c for c in children if c.smiles == "CC(=O)C")
     assert "(Reagent)" in reagent_child.label
+
+
+# --- Multiple reaction SMILES (multi-step chain, one per line) ---
+
+
+def _children_of(g, node_id):
+    return [n for nid, n in g.node_ids.items() if g.parents.get(nid) == node_id]
+
+
+def test_two_step_chain_expands_matching_leaf():
+    # Line 1: build C <- A + B. Line 2: expand A (a leaf) into D + E.
+    g, ws = _run("BrC1=CC=NC=C1.C=CB(O)O>>C=Cc2ccncc2\n" "BrBr.c1ccncc1>>BrC1=CC=NC=C1")
+
+    assert len(g.node_ids) == 5
+    root = g.node_ids["node_0"]
+    # Nodes store raw SMILES.
+    assert root.smiles == "C=Cc2ccncc2"
+
+    # The pyridyl bromide leaf was matched and expanded one level deeper.
+    matched = next(c for c in _children_of(g, "node_0") if c.smiles == "BrC1=CC=NC=C1")
+    grandchildren = _children_of(g, matched.id)
+    assert len(grandchildren) == 2
+    assert all(gc.level == 2 for gc in grandchildren)
+    assert {gc.smiles for gc in grandchildren} == {"BrBr", "c1ccncc1"}
+
+    # The expanded (formerly leaf) node now carries a reaction.
+    assert matched.reaction is not None
+    assert ws.messages[-1] == {"type": "complete"}
+
+
+def test_tab_separated_reactions():
+    g, _ = _run("BrC1=CC=NC=C1.C=CB(O)O>>C=Cc2ccncc2\tBrBr.c1ccncc1>>BrC1=CC=NC=C1")
+    assert len(g.node_ids) == 5
+
+
+def test_unmatched_later_line_is_skipped():
+    # Second reaction's product matches no leaf; it is skipped, first intact.
+    g, ws = _run("BrC1=CC=NC=C1.C=CB(O)O>>C=Cc2ccncc2\n" "CCO.CCN>>CCCCCCCCCC")
+    assert len(g.node_ids) == 3  # only the first reaction's graph
+    assert ws.messages[-1] == {"type": "complete"}
+
+
+def test_bad_first_line_produces_no_graph():
+    g, ws = _run("this is not a reaction\nA>>B")
+    assert len(g.node_ids) == 0
+    assert ws.messages[-1] == {"type": "complete"}
+
+
+def test_chain_matches_leaf_across_noncanonical_smiles():
+    # Line 1 writes the pyridyl reactant aromatic (c1ccncc1); line 2 writes the
+    # same molecule Kekule (C1=CC=NC=C1). Nodes keep their raw SMILES, but the
+    # leaf match canonicalizes both sides so the leaf is still found and expanded.
+    g, ws = _run("c1ccncc1.C=CB(O)O>>C=Cc2ccncc2\nBrBr>>C1=CC=NC=C1")
+
+    assert len(g.node_ids) == 4
+    # The leaf is stored with its raw line-1 SMILES ("c1ccncc1").
+    matched = next(c for c in _children_of(g, "node_0") if c.smiles == "c1ccncc1")
+    grandchildren = _children_of(g, matched.id)
+    assert len(grandchildren) == 1
+    assert grandchildren[0].level == 2
+    assert grandchildren[0].smiles == "BrBr"
+    assert ws.messages[-1] == {"type": "complete"}
+
+
+def test_uncanonicalizable_component_stored_raw():
+    # A component RDKit cannot parse is stored with its raw SMILES rather than
+    # the "Invalid SMILES" sentinel.
+    g, _ = _run("not_a_smiles>>C=CCI")
+
+    root = g.node_ids["node_0"]
+    assert root.smiles == "C=CCI"
+    children = [n for nid, n in g.node_ids.items() if g.parents.get(nid) == "node_0"]
+    assert len(children) == 1
+    assert children[0].smiles == "not_a_smiles"
