@@ -96,11 +96,8 @@ async def _expand_node(
     """
     children: list[Node] = []
 
-    # Graph nodes always store canonical SMILES so later leaf lookups match
-    # regardless of how the user wrote each molecule.
-    canonical_reactants = [_canonicalize_or_raw(s) for s in reactant_smiles]
-    canonical_reagents = [_canonicalize_or_raw(s) for s in reagent_smiles]
-
+    # Graph nodes store the user's original (raw) SMILES. Canonicalization is
+    # applied only when comparing for leaf matches (see _leaf_nodes_by_smiles).
     async def _add_child(smiles: str, role: str) -> None:
         child_sources = is_purchasable(smiles)
         label = smiles_to_html(smiles, run_settings.molecule_name_format)
@@ -121,9 +118,9 @@ async def _expand_node(
         await context.add_node(node, websocket)
         children.append(node)
 
-    for smiles in canonical_reactants:
+    for smiles in reactant_smiles:
         await _add_child(smiles, "Reactant")
-    for smiles in canonical_reagents:
+    for smiles in reagent_smiles:
         await _add_child(smiles, "Reagent")
 
     # Attach the user-supplied reaction to the parent, with a mapped reaction so
@@ -137,7 +134,7 @@ async def _expand_node(
         templatesSearched=False,
     )
     parent.reaction.mappedReaction = build_mapped_reaction_dict_or_none(
-        reactants=canonical_reactants + canonical_reagents,
+        reactants=reactant_smiles + reagent_smiles,
         products=[parent.smiles],
         log_msg="Failed to build rdkitjs mapped reaction for user reaction node_id={node_id} smiles={smiles}",
         node_id=parent.id,
@@ -148,7 +145,11 @@ async def _expand_node(
 
 
 def _leaf_nodes_by_smiles(context: GraphContext) -> dict[str, Node]:
-    """Map canonical SMILES -> leaf Node (nodes with no children)."""
+    """Map canonical SMILES -> leaf Node (nodes with no children).
+
+    Nodes store raw SMILES; keys are canonicalized here so lookups match
+    regardless of how each molecule was written.
+    """
     parents = set(context.parents.values())
     leaves: dict[str, Node] = {}
     for nid, node in context.node_ids.items():
@@ -221,7 +222,7 @@ async def reaction_smiles_retrosynthesis(
         return
 
     root_index = _select_root_product(product_smiles)
-    product = product_smiles[root_index]  # raw form, for user-facing reporting
+    product = product_smiles[root_index]
 
     if len(product_smiles) > 1:
         await clogger.info(
@@ -229,16 +230,15 @@ async def reaction_smiles_retrosynthesis(
             "target and treating the rest as byproducts."
         )
 
-    # Root node = product. Store canonical SMILES in the graph so later leaf
-    # lookups match regardless of how the user wrote the molecule.
-    canonical_product = _canonicalize_or_raw(product)
-    mol_sources = is_purchasable(canonical_product)
+    # Root node = product. Store the user's original (raw) SMILES; matching
+    # against later reactions canonicalizes at comparison time.
+    mol_sources = is_purchasable(product)
     root = Node(
         id="node_0",
-        smiles=canonical_product,
-        label=smiles_to_html(canonical_product, run_settings.molecule_name_format),
+        smiles=product,
+        label=smiles_to_html(product, run_settings.molecule_name_format),
         hoverInfo=f"""# Root molecule
-**SMILES:** {canonical_product}
+**SMILES:** {product}
 
 **Purchasable**? {purchasable_summary(mol_sources)}""",
         level=0,
