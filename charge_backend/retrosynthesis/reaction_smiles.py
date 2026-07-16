@@ -25,6 +25,7 @@ from charge_backend.moleculedb.purchasable import (
     purchasable_summary,
 )
 from charge_backend.retrosynthesis.mapping import build_mapped_reaction_dict_or_none
+from flask_tools.chemistry.smiles_utils import canonicalize_smiles
 
 
 def _split_reaction_smiles(
@@ -85,6 +86,11 @@ async def _expand_node(
     """
     children: list[Node] = []
 
+    # Graph nodes always store canonical SMILES so later leaf lookups match
+    # regardless of how the user wrote each molecule.
+    canonical_reactants = [canonicalize_smiles(s) for s in reactant_smiles]
+    canonical_reagents = [canonicalize_smiles(s) for s in reagent_smiles]
+
     async def _add_child(smiles: str, role: str) -> None:
         child_sources = is_purchasable(smiles)
         label = smiles_to_html(smiles, run_settings.molecule_name_format)
@@ -105,9 +111,9 @@ async def _expand_node(
         await context.add_node(node, websocket)
         children.append(node)
 
-    for smiles in reactant_smiles:
+    for smiles in canonical_reactants:
         await _add_child(smiles, "Reactant")
-    for smiles in reagent_smiles:
+    for smiles in canonical_reagents:
         await _add_child(smiles, "Reagent")
 
     # Attach the user-supplied reaction to the parent, with a mapped reaction so
@@ -121,7 +127,7 @@ async def _expand_node(
         templatesSearched=False,
     )
     parent.reaction.mappedReaction = build_mapped_reaction_dict_or_none(
-        reactants=reactant_smiles + reagent_smiles,
+        reactants=canonical_reactants + canonical_reagents,
         products=[parent.smiles],
         log_msg="Failed to build rdkitjs mapped reaction for user reaction node_id={node_id} smiles={smiles}",
         node_id=parent.id,
@@ -138,11 +144,7 @@ def _leaf_nodes_by_smiles(context: GraphContext) -> dict[str, Node]:
     for nid, node in context.node_ids.items():
         if nid in parents:
             continue
-        try:
-            canon = Chem.MolToSmiles(Chem.MolFromSmiles(node.smiles))
-        except Exception:
-            canon = node.smiles
-        leaves[canon] = node
+        leaves[canonicalize_smiles(node.smiles)] = node
     return leaves
 
 
@@ -209,7 +211,7 @@ async def reaction_smiles_retrosynthesis(
         return
 
     root_index = _select_root_product(product_smiles)
-    product = product_smiles[root_index]
+    product = product_smiles[root_index]  # raw form, for user-facing reporting
 
     if len(product_smiles) > 1:
         await clogger.info(
@@ -217,14 +219,16 @@ async def reaction_smiles_retrosynthesis(
             "target and treating the rest as byproducts."
         )
 
-    # Root node = product.
-    mol_sources = is_purchasable(product)
+    # Root node = product. Store canonical SMILES in the graph so later leaf
+    # lookups match regardless of how the user wrote the molecule.
+    canonical_product = canonicalize_smiles(product)
+    mol_sources = is_purchasable(canonical_product)
     root = Node(
         id="node_0",
-        smiles=product,
-        label=smiles_to_html(product, run_settings.molecule_name_format),
+        smiles=canonical_product,
+        label=smiles_to_html(canonical_product, run_settings.molecule_name_format),
         hoverInfo=f"""# Root molecule
-**SMILES:** {product}
+**SMILES:** {canonical_product}
 
 **Purchasable**? {purchasable_summary(mol_sources)}""",
         level=0,
@@ -248,11 +252,11 @@ async def reaction_smiles_retrosynthesis(
     # --- Subsequent lines: expand a matching leaf one step deeper. ---
     for line in lines[1:]:
         try:
-            r_mols, rg_mols, p_mols = parse_reaction_smiles(line, include_reagents=True)
+            r_smiles, rg_smiles, p_smiles = _split_reaction_smiles(line)
         except ValueError as e:
             await clogger.warning(f"Skipping unparseable reaction `{line}`: {e}")
             continue
-        if not r_mols or not p_mols:
+        if not r_smiles or not p_smiles:
             await clogger.warning(
                 f"Skipping reaction `{line}`: needs at least one reactant and "
                 "one product."
@@ -260,8 +264,10 @@ async def reaction_smiles_retrosynthesis(
             continue
 
         # Attach to the first leaf matched by ANY of this line's products.
+        # Both sides are canonicalized so equivalent SMILES written different
+        # ways (e.g. Kekule vs aromatic) still match.
         leaves = _leaf_nodes_by_smiles(context)
-        product_canons = [Chem.MolToSmiles(m) for m in p_mols]
+        product_canons = [canonicalize_smiles(pc) for pc in p_smiles]
         target = next((leaves[pc] for pc in product_canons if pc in leaves), None)
         if target is None:
             await clogger.warning(
@@ -272,8 +278,8 @@ async def reaction_smiles_retrosynthesis(
 
         await _expand_node(
             target,
-            [Chem.MolToSmiles(m) for m in r_mols],
-            [Chem.MolToSmiles(m) for m in rg_mols],
+            r_smiles,
+            rg_smiles,
             line,
             context,
             websocket,

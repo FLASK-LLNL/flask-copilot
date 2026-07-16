@@ -12,6 +12,7 @@ from charge_backend.backend_helper_funcs import FlaskRunSettings
 from charge_backend.retrosynthesis.reaction_smiles import (
     reaction_smiles_retrosynthesis,
 )
+from flask_tools.chemistry.smiles_utils import canonicalize_smiles
 
 
 class FakeWebSocket:
@@ -40,18 +41,22 @@ def _run(reaction_smiles: str):
 def test_single_product_builds_partial_graph():
     g, ws = _run("BrC1=CC=NC=C1.C=CB(O)O>>C=Cc2ccncc2")
 
-    # One root (product) + two children (reactants)
+    # One root (product) + two children (reactants). Graph nodes store
+    # canonical SMILES, so expected values are canonicalized too.
     assert len(g.node_ids) == 3
     root = g.node_ids["node_0"]
     assert root.level == 0
     assert root.parentId is None
-    assert root.smiles == "C=Cc2ccncc2"
+    assert root.smiles == canonicalize_smiles("C=Cc2ccncc2")
 
     children = [n for nid, n in g.node_ids.items() if g.parents.get(nid) == "node_0"]
     assert len(children) == 2
     assert all(c.level == 1 for c in children)
     child_smiles = {c.smiles for c in children}
-    assert child_smiles == {"BrC1=CC=NC=C1", "C=CB(O)O"}
+    assert child_smiles == {
+        canonicalize_smiles("BrC1=CC=NC=C1"),
+        canonicalize_smiles("C=CB(O)O"),
+    }
 
     # Root has a reaction with a mapped reaction for hover-highlighting
     assert root.reaction is not None
@@ -65,7 +70,7 @@ def test_multi_product_roots_on_largest():
     # Larger product is the pyridine ring system, not the methane byproduct.
     g, _ = _run("BrC1=CC=NC=C1.C=CB(O)O>>C=Cc2ccncc2.C")
     root = g.node_ids["node_0"]
-    assert root.smiles == "C=Cc2ccncc2"
+    assert root.smiles == canonicalize_smiles("C=Cc2ccncc2")
     # Byproduct "C" is dropped; only the two reactants are children.
     assert len(g.node_ids) == 3
 
@@ -74,12 +79,16 @@ def test_reagents_appear_as_labeled_children():
     # reactants>reagent>product form: the Pd reagent becomes a child labeled "(Reagent)".
     g, _ = _run("BrC1=CC=NC=C1.C=CB(O)O>[Pd]>C=Cc2ccncc2")
     root = g.node_ids["node_0"]
-    assert root.smiles == "C=Cc2ccncc2"
+    assert root.smiles == canonicalize_smiles("C=Cc2ccncc2")
     children = [n for nid, n in g.node_ids.items() if g.parents.get(nid) == "node_0"]
     # Two reactants + one reagent
     assert len(children) == 3
     child_smiles = {c.smiles for c in children}
-    assert child_smiles == {"BrC1=CC=NC=C1", "C=CB(O)O", "[Pd]"}
+    assert child_smiles == {
+        canonicalize_smiles("BrC1=CC=NC=C1"),
+        canonicalize_smiles("C=CB(O)O"),
+        canonicalize_smiles("[Pd]"),
+    }
     # The reagent child carries a "(Reagent)" role in its label.
     reagent_child = next(c for c in children if c.smiles == "[Pd]")
     assert "(Reagent)" in reagent_child.label
@@ -136,9 +145,16 @@ def test_spec_example_with_reagent():
     # Three reactants + the acetone reagent.
     assert len(children) == 4
     child_smiles = {c.smiles for c in children}
-    assert child_smiles == {"C=CCBr", "[Na+]", "[I-]", "CC(=O)C"}
+    assert child_smiles == {
+        canonicalize_smiles("C=CCBr"),
+        canonicalize_smiles("[Na+]"),
+        canonicalize_smiles("[I-]"),
+        canonicalize_smiles("CC(=O)C"),
+    }
     # The acetone reagent appears with a "(Reagent)" role label.
-    reagent_child = next(c for c in children if c.smiles == "CC(=O)C")
+    reagent_child = next(
+        c for c in children if c.smiles == canonicalize_smiles("CC(=O)C")
+    )
     assert "(Reagent)" in reagent_child.label
 
 
@@ -155,16 +171,21 @@ def test_two_step_chain_expands_matching_leaf():
 
     assert len(g.node_ids) == 5
     root = g.node_ids["node_0"]
-    assert root.smiles == _canon("C=Cc2ccncc2")
+    assert root.smiles == canonicalize_smiles("C=Cc2ccncc2")
 
     # The pyridyl bromide leaf was matched and expanded one level deeper.
     matched = next(
-        c for c in _children_of(g, "node_0") if c.smiles == _canon("BrC1=CC=NC=C1")
+        c
+        for c in _children_of(g, "node_0")
+        if c.smiles == canonicalize_smiles("BrC1=CC=NC=C1")
     )
     grandchildren = _children_of(g, matched.id)
     assert len(grandchildren) == 2
     assert all(gc.level == 2 for gc in grandchildren)
-    assert {gc.smiles for gc in grandchildren} == {_canon("BrBr"), _canon("c1ccncc1")}
+    assert {gc.smiles for gc in grandchildren} == {
+        canonicalize_smiles("BrBr"),
+        canonicalize_smiles("c1ccncc1"),
+    }
 
     # The expanded (formerly leaf) node now carries a reaction.
     assert matched.reaction is not None
@@ -186,4 +207,23 @@ def test_unmatched_later_line_is_skipped():
 def test_bad_first_line_produces_no_graph():
     g, ws = _run("this is not a reaction\nA>>B")
     assert len(g.node_ids) == 0
+    assert ws.messages[-1] == {"type": "complete"}
+
+
+def test_chain_matches_leaf_across_noncanonical_smiles():
+    # Line 1 writes the pyridyl reactant aromatic (c1ccncc1); line 2 writes the
+    # same molecule Kekule (C1=CC=NC=C1). Matching must canonicalize both sides
+    # so the leaf is still found and expanded.
+    g, ws = _run("c1ccncc1.C=CB(O)O>>C=Cc2ccncc2\nBrBr>>C1=CC=NC=C1")
+
+    assert len(g.node_ids) == 4
+    matched = next(
+        c
+        for c in _children_of(g, "node_0")
+        if canonicalize_smiles(c.smiles) == canonicalize_smiles("c1ccncc1")
+    )
+    grandchildren = _children_of(g, matched.id)
+    assert len(grandchildren) == 1
+    assert grandchildren[0].level == 2
+    assert canonicalize_smiles(grandchildren[0].smiles) == canonicalize_smiles("BrBr")
     assert ws.messages[-1] == {"type": "complete"}
