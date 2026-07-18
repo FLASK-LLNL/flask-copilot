@@ -5,23 +5,21 @@
 ## SPDX-License-Identifier: Apache-2.0
 ################################################################################
 
+import argparse
+import json
+import os
+
 from functools import partial
 from fastapi import FastAPI, WebSocket, Request
 from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
-import os
-import argparse
-import json
+from typing import cast
+from loguru import logger
+
 from lc_conductor import try_get_public_hostname
 from lc_conductor.session import SessionTimedOut, UserSessionManager
-from charge_backend.flask_session import FlaskUserSession
-import os
-from typing import cast
-
-from loguru import logger
 from charge.clients.client import Client
-
 
 from lc_conductor.tool_registration import (
     register_url,
@@ -39,6 +37,9 @@ from lc_conductor import (
     resolve_allowed_backends,
     allowed_backend_values,
 )
+
+from charge_backend.flask_session import FlaskUserSession
+from charge_backend.database.routes import user, project, experiment
 
 parser = argparse.ArgumentParser()
 
@@ -257,6 +258,11 @@ async def websocket_endpoint(websocket: WebSocket):
         await user_session.event_loop()
     finally:
         logger.info("User session websocket loop exited")
+
+
+app.include_router(user.router)
+app.include_router(project.router)
+app.include_router(experiment.router)
 
 
 if __name__ == "__main__":

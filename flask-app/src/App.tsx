@@ -999,7 +999,7 @@ const ChemistryTool: React.FC = () => {
       }
 
       try {
-        const experiment = projectManagement.createExperiment(projectId, experimentName);
+        const experiment = await projectManagement.createExperiment(projectId, experimentName);
         projectSidebar.setSelection({ projectId, experimentId: experiment.id });
         await new Promise((resolve) => setTimeout(resolve, 100));
       } catch (error) {
@@ -1685,7 +1685,10 @@ const ChemistryTool: React.FC = () => {
     try {
       const selectedProjectId = projectSidebar.selectionRef.current.projectId;
       if (selectedProjectId) {
-        const experiment = projectManagement.createExperiment(selectedProjectId, experimentName);
+        const experiment = await projectManagement.createExperiment(
+          selectedProjectId,
+          experimentName
+        );
         projectSidebar.setSelection({ projectId: selectedProjectId, experimentId: experiment.id });
       } else {
         const { projectId, experimentId } = await projectManagement.createProjectAndExperiment(

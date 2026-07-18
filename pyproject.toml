@@ -27,11 +27,22 @@ dependencies = [
     "websockets",
     "requests",
     "PyMuPDF>=1.24.0",
+    "sqlalchemy>=2.0",
 ]
 
 [tool.setuptools.packages.find]
 where = ["."]
 include = ["charge_backend*"]
+
+[tool.pytest.ini_options]
+# Configures pytest-asyncio to automatically discover and run async test functions
+asyncio_mode = "auto"
+
+# Some custom markers to help API testing
+markers = [
+    "num_projects(n): mark test to use n random projects",
+    "num_experiments(n): mark test to use n random experiments",
+]
 
 # This creates the console script
 [project.scripts]
@@ -46,3 +57,32 @@ aizynthfinder = ["paretoset", "rdchiral", "wrapt_timeout_decorator", "swifter", 
 pds = ["flask-copilot[aizynthfinder]"]
 
 all = ["flask-copilot[aizynthfinder]"]
+
+
+[tool.alembic]
+
+# path to migration scripts.
+# this is typically a path given in POSIX (e.g. forward slashes)
+# format, relative to the token %(here)s which refers to the location of this
+# ini file
+script_location = "%(here)s/charge_backend/alembic"
+
+# template used to generate migration file names; The default value is %%(rev)s_%%(slug)s
+# Uncomment the line below if you want the files to be prepended with date and time
+# see https://alembic.sqlalchemy.org/en/latest/tutorial.html#editing-the-ini-file
+# for all available tokens
+# file_template = "%%(year)d_%%(month).2d_%%(day).2d_%%(hour).2d%%(minute).2d-%%(rev)s_%%(slug)s"
+# Or organize into date-based subdirectories (requires recursive_version_locations = true)
+# file_template = "%%(year)d/%%(month).2d/%%(day).2d_%%(hour).2d%%(minute).2d_%%(second).2d_%%(rev)s_%%(slug)s"
+
+# additional paths to be prepended to sys.path. defaults to the current working directory.
+prepend_sys_path = [
+    "."
+]
+
+[[tool.alembic.post_write_hooks]]
+# lint with attempts to fix using "ruff" - use the module runner, against the "ruff" module
+name = "ruff"
+type = "module"
+module = "ruff"
+options = "check --fix REVISION_SCRIPT_FILENAME"
