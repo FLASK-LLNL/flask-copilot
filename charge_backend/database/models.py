@@ -9,6 +9,7 @@ from sqlalchemy.orm import (
     Session,
 )
 from pydantic import BaseModel, ConfigDict, Field
+from pydantic.alias_generators import to_camel
 from typing import Any, List, Optional
 import uuid
 
@@ -114,6 +115,12 @@ class UserCreate(UserBase):
 class UserResponse(UserBase):
     id: uuid.UUID
 
+    model_config = ConfigDict(
+        alias_generator=to_camel,
+        from_attributes=True,
+        populate_by_name=True,
+    )
+
 
 # To support the different "modes" with which the front-end does/will
 # deal with this data, we present a few forms of these models.
@@ -129,12 +136,20 @@ class ProjectCreate(ProjectBase):
     pass
 
 
+class ProjectMigrate(ProjectBase):
+    experiments: List["ExperimentUpdate"]  # A little type upcycling here.
+
+
 # This is basically "ProjectMetadata". If we just need a simple
 # reference to the Project ID or Name, this is sufficent.
 class ProjectResponse(ProjectBase, TimestampMixin):
     id: uuid.UUID
     user_id: uuid.UUID
-    model_config = ConfigDict(from_attributes=True)
+    model_config = ConfigDict(
+        alias_generator=to_camel,
+        from_attributes=True,
+        populate_by_name=True,
+    )
 
 
 # This provides a full set of fully populated experiments, with their
@@ -168,7 +183,11 @@ class ExperimentResponse(BaseModel, TimestampMixin):
     project_id: uuid.UUID
     data: dict[str, Any]  # FIXME: Is there a better type for JSON data?
 
-    model_config = ConfigDict(from_attributes=True)
+    model_config = ConfigDict(
+        alias_generator=to_camel,
+        from_attributes=True,
+        populate_by_name=True,
+    )
 
 
 # FIXME (trb): Flesh out the context.

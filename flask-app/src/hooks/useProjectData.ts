@@ -1,189 +1,148 @@
+import { Mutex } from 'async-mutex';
 import { useState, useEffect, useRef } from 'react';
 import { Project, Experiment } from '../types';
 
 import { HTTP_SERVER } from '../config';
 const STORAGE_KEY = 'flask_copilot_projects';
 
+// Types for interacting with the database
+interface ExperimentResponse {
+  id: string;
+  projectId: string;
+  name: string;
+  createdAt: string;
+  lastModified: string;
+  data: any;
+}
+
+interface ProjectResponse {
+  id: string;
+  name: string;
+  userId: string;
+  createdAt: string;
+  lastModified: string;
+  experiments: ExperimentResponse[];
+}
+
+export interface ExperimentUpdate {
+  id?: string;
+  name?: string;
+  isRunning?: boolean; // Track if experiment is currently computing
+  [key: string]: any;
+}
+
 // This interface defines the contract for data sources (local storage, database, etc.)
 interface ProjectDataSource {
-  loadProjects: () => Project[];
-  saveProjects: (projects: Project[]) => void;
-  createProject: (name: string) => Project;
-  updateProject: (project: Project) => void;
-  deleteProject: (projectId: string) => void;
-  createExperiment: (projectId: string, name: string) => Experiment;
-  updateExperiment: (projectId: string, experiment: Experiment) => void;
-  deleteExperiment: (projectId: string, experimentId: string) => void;
-  setExperimentRunning: (projectId: string, experimentId: string, isRunning: boolean) => void;
+  loadProjects: () => Promise<Project[]>;
+  createProject: (name: string) => Promise<Project | null>;
+  updateProject: (project: Project) => Promise<void>;
+  deleteProject: (projectId: string) => Promise<void>;
+  createExperiment: (projectId: string, name: string) => Promise<Experiment | null>;
+  updateExperiment: (projectId: string, experiment: ExperimentUpdate) => Promise<void>;
+  deleteExperiment: (projectId: string, experimentId: string) => Promise<void>;
+  setExperimentRunning: (
+    projectId: string,
+    experimentId: string,
+    isRunning: boolean
+  ) => Promise<void>;
 }
 
 export interface ProjectData {
   projectsRef: React.RefObject<Project[]>;
   projects: Project[];
   loading: boolean;
-  createProject: (name: string) => Project;
-  updateProject: (project: Project) => void;
-  deleteProject: (projectId: string) => void;
-  createExperiment: (projectId: string, name: string) => Experiment;
-  updateExperiment: (projectId: string, experiment: Experiment) => void;
-  deleteExperiment: (projectId: string, experimentId: string) => void;
-  setExperimentRunning: (projectId: string, experimentId: string, isRunning: boolean) => void;
-  refreshProjects: () => void;
+  createProject: (name: string) => Promise<Project | null>;
+  updateProject: (project: Project) => Promise<void>;
+  deleteProject: (projectId: string) => Promise<void>;
+  createExperiment: (projectId: string, name: string) => Promise<Experiment | null>;
+  updateExperiment: (projectId: string, experiment: Experiment) => Promise<void>;
+  deleteExperiment: (projectId: string, experimentId: string) => Promise<void>;
+  setExperimentRunning: (
+    projectId: string,
+    experimentId: string,
+    isRunning: boolean
+  ) => Promise<void>;
+  refreshProjects: () => Promise<void>;
 }
 
-// LocalStorage implementation
-class LocalStorageDataSource implements ProjectDataSource {
-  loadProjects(): Project[] {
-    const stored = localStorage.getItem(STORAGE_KEY);
-    if (!stored) return [];
-    try {
-      return JSON.parse(stored);
-    } catch (e) {
-      console.error('Error loading projects from localStorage:', e);
-      return [];
-    }
-  }
-
-  saveProjects(projects: Project[]): void {
-    try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(projects));
-    } catch (e) {
-      console.log('saveProjects error:', e);
-    }
-  }
-
-  createProject(name: string): Project {
-    const newProject: Project = {
-      id: `project_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-      name,
-      createdAt: new Date().toISOString(),
-      lastModified: new Date().toISOString(),
-      experiments: [],
-    };
-
-    const projects = this.loadProjects();
-    projects.push(newProject);
-    this.saveProjects(projects);
-
-    return newProject;
-  }
-
-  updateProject(project: Project): void {
-    const projects = this.loadProjects();
-    const index = projects.findIndex((p) => p.id === project.id);
-    if (index !== -1) {
-      projects[index] = { ...project, lastModified: new Date().toISOString() };
-      this.saveProjects(projects);
-    }
-  }
-
-  deleteProject(projectId: string): void {
-    const projects = this.loadProjects();
-    const filtered = projects.filter((p) => p.id !== projectId);
-    this.saveProjects(filtered);
-  }
-
-  createExperiment(projectId: string, name: string): Experiment {
-    const newExperiment: Experiment = {
-      id: `exp_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-      name,
-      createdAt: new Date().toISOString(),
-      lastModified: new Date().toISOString(),
-    };
-
-    const projects = this.loadProjects();
-    const project = projects.find((p) => p.id === projectId);
-    if (project) {
-      project.experiments.push(newExperiment);
-      project.lastModified = new Date().toISOString();
-      this.saveProjects(projects);
-    }
-
-    return newExperiment;
-  }
-
-  updateExperiment(projectId: string, experiment: Experiment): void {
-    const projects = this.loadProjects();
-    const project = projects.find((p) => p.id === projectId);
-    if (project) {
-      const expIndex = project.experiments.findIndex((e) => e.id === experiment.id);
-      if (expIndex !== -1) {
-        project.experiments[expIndex] = { ...experiment, lastModified: new Date().toISOString() };
-        project.lastModified = new Date().toISOString();
-        this.saveProjects(projects);
-      }
-    }
-  }
-
-  deleteExperiment(projectId: string, experimentId: string): void {
-    const projects = this.loadProjects();
-    const project = projects.find((p) => p.id === projectId);
-    if (project) {
-      project.experiments = project.experiments.filter((e) => e.id !== experimentId);
-      project.lastModified = new Date().toISOString();
-      this.saveProjects(projects);
-    }
-  }
-
-  setExperimentRunning(projectId: string, experimentId: string, isRunning: boolean): void {
-    const projects = this.loadProjects();
-    const project = projects.find((p) => p.id === projectId);
-    if (project) {
-      const experiment = project.experiments.find((e) => e.id === experimentId);
-      if (experiment) {
-        experiment.isRunning = isRunning;
-        experiment.lastModified = new Date().toISOString();
-        project.lastModified = new Date().toISOString();
-        this.saveProjects(projects);
-      }
-    }
-  }
-}
-
-// Need to map python names to camel case, need to flatten fields from 'data'.
-function flattenExperiment(serverExperiment): Experiment {
-  const { data, ...sqlFields } = serverExperiment;
-  // problem_id does NOT come along for this ride.
-  const experiment = {
-    ...data,
-    createdAt: sqlFields.created_at,
-    lastModified: sqlFields.last_modified,
-    id: sqlFields.id,
-  };
-  return experiment;
-}
-
-function flattenExperiments(serverExperiments): Experiment[] {
-  return serverExperiments.map((db_experiment) => {
-    const { data, ...sqlFields } = db_experiment;
-    // problem_id does NOT come along for this ride.
+// Just need to flatten fields from 'data'.
+function flattenExperiments(serverExperiments: ExperimentResponse[]): Experiment[] {
+  return serverExperiments.map(({ data, projectId, ...sqlFields }) => {
+    // problemId does NOT come along for this ride.
     const experiment = {
       ...data,
-      createdAt: sqlFields.created_at,
-      lastModified: sqlFields.last_modified,
-      id: sqlFields.id,
+      ...sqlFields,
     };
     return experiment;
   });
 }
 
 // Reformat from the ProjectResponseWithExperiments to the frontend Project.
-function flattenProjects(serverProjects): Project[] {
-  return serverProjects.map((db_project) => {
+function flattenProjects(serverProjects: ProjectResponse[]): Project[] {
+  return serverProjects.map(({ userId, experiments, ...rest }: ProjectResponse) => {
+    // userId does NOT come along for this ride.
     return {
-      id: db_project.id,
-      name: db_project.name,
-      createdAt: db_project.created_at,
-      lastModified: db_project.last_modified,
-      experiments: flattenExperiments(db_project.experiments),
+      ...rest,
+      experiments: flattenExperiments(experiments),
     };
   });
 }
 
 const httpServerUrl = HTTP_SERVER;
 class ServerDataSource implements ProjectDataSource {
-  async loadProjects(): Project[] {
+  migrateDone: boolean = false;
+  private readonly mutex: Mutex = new Mutex();
+
+  async migrateProjectsFromLocalStorage(): Promise<void> {
+    const stored = localStorage.getItem(STORAGE_KEY);
+    // Nothing to migrate
+    if (!stored || this.migrateDone) {
+      this.migrateDone = true;
+      return;
+    }
+
     try {
+      const ls_projects = JSON.parse(stored);
+      const send_projects = ls_projects.map(({ name, experiments }: Project) => {
+        return {
+          name: name,
+          experiments: experiments.map((exp: Experiment) => {
+            return {
+              data: exp,
+            };
+          }),
+        };
+      });
+      const response = await fetch(`${httpServerUrl}/projects/migrate`, {
+        method: 'POST',
+        headers: {
+          Accept: 'application/json',
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(send_projects),
+      });
+      if (!response.ok) {
+        throw new Error(`migrateProjects response status: ${response.status}`);
+      }
+      // Everything is ok, blow up the localStorage.
+      // FIXME (trb): UNCOMMENT THIS LINE WHEN YOU'RE READY TO GO LIVE
+      // localStorage.removeItem(STORAGE_KEY);
+      this.migrateDone = true;
+    } catch (e) {
+      console.error('Error migrating projects from localStorage:', e);
+      return;
+    }
+  }
+
+  async loadProjects(): Promise<Project[]> {
+    try {
+      // FIXME (trb): Perhaps there's a better spot to hook this is
+      // in?? It will short-circuit, but ugh.
+
+      await this.mutex.runExclusive(async () => {
+        if (!this.migrateDone) await this.migrateProjectsFromLocalStorage();
+      });
+
       const response = await fetch(`${httpServerUrl}/projects`);
       if (!response.ok) {
         throw new Error(`loadProjects response status: ${response.status}`);
@@ -197,11 +156,7 @@ class ServerDataSource implements ProjectDataSource {
     }
   }
 
-  saveProjects(projects: Project[]): void {
-    throw new Error('We should not call saveProjects anymore');
-  }
-
-  async createProject(name: string): Project {
+  async createProject(name: string): Promise<Project | null> {
     try {
       const response = await fetch(`${httpServerUrl}/projects`, {
         method: 'POST',
@@ -225,7 +180,7 @@ class ServerDataSource implements ProjectDataSource {
   }
 
   // FIXME (trb): This could be more efficiently implemented in the backend.
-  async updateProject(project: Project): void {
+  async updateProject(project: Project): Promise<void> {
     try {
       // First we update the project metadata
       const response = await fetch(`${httpServerUrl}/projects/${project.id}`, {
@@ -249,7 +204,7 @@ class ServerDataSource implements ProjectDataSource {
     }
   }
 
-  async deleteProject(projectId: string): void {
+  async deleteProject(projectId: string): Promise<void> {
     try {
       const response = await fetch(`${httpServerUrl}/projects/${projectId}`, {
         method: 'DELETE',
@@ -262,7 +217,7 @@ class ServerDataSource implements ProjectDataSource {
     }
   }
 
-  async createExperiment(projectId: string, name: string): Experiment {
+  async createExperiment(projectId: string, name: string): Promise<Experiment | null> {
     try {
       const response = await fetch(`${httpServerUrl}/projects/${projectId}/experiments`, {
         method: 'POST',
@@ -274,7 +229,6 @@ class ServerDataSource implements ProjectDataSource {
       });
       if (!response.ok) {
         throw new Error(`createExperiment response status: ${response.status}`);
-        return null;
       }
       const result = await response.json();
       return result;
@@ -284,7 +238,7 @@ class ServerDataSource implements ProjectDataSource {
     return null;
   }
 
-  async updateExperiment(projectId: string, experiment: Experiment): void {
+  async updateExperiment(projectId: string, experiment: ExperimentUpdate): Promise<void> {
     try {
       const response = await fetch(
         `${httpServerUrl}/projects/${projectId}/experiments/${experiment.id}`,
@@ -305,7 +259,7 @@ class ServerDataSource implements ProjectDataSource {
     }
   }
 
-  async deleteExperiment(projectId: string, experimentId: string): void {
+  async deleteExperiment(projectId: string, experimentId: string): Promise<void> {
     try {
       const response = await fetch(
         `${httpServerUrl}/projects/${projectId}/experiments/${experimentId}`,
@@ -321,7 +275,11 @@ class ServerDataSource implements ProjectDataSource {
     }
   }
 
-  async setExperimentRunning(projectId: string, experimentId: string, isRunning: boolean): void {
+  async setExperimentRunning(
+    projectId: string,
+    experimentId: string,
+    isRunning: boolean
+  ): Promise<void> {
     await this.updateExperiment(projectId, { id: experimentId, isRunning: isRunning });
   }
 }
@@ -365,23 +323,23 @@ export const useProjectData = () => {
     }
   };
 
-  const createProject = async (name: string): Project => {
+  const createProject = async (name: string): Promise<Project | null> => {
     const newProject = await dataSource.createProject(name);
     await loadProjects();
     return newProject;
   };
 
-  const updateProject = async (project: Project) => {
+  const updateProject = async (project: Project): Promise<void> => {
     await dataSource.updateProject(project);
     await loadProjects();
   };
 
-  const deleteProject = async (projectId: string) => {
+  const deleteProject = async (projectId: string): Promise<void> => {
     await dataSource.deleteProject(projectId);
     await loadProjects();
   };
 
-  const createExperiment = async (projectId: string, name: string): Experiment => {
+  const createExperiment = async (projectId: string, name: string): Promise<Experiment | null> => {
     const newExperiment = await dataSource.createExperiment(projectId, name);
     await loadProjects();
     return newExperiment;

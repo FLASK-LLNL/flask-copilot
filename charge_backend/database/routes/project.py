@@ -1,3 +1,4 @@
+import uuid
 from fastapi import APIRouter
 from sqlalchemy import select
 from typing import List
@@ -5,7 +6,9 @@ from typing import List
 from charge_backend.database.deps import GetSession, CurrentUser, ValidatedProject
 from charge_backend.database.models import (
     Project,
+    Experiment,
     ProjectCreate,
+    ProjectMigrate,
     ProjectResponse,
     ProjectResponseWithExperiments,
     ProjectUpdate,
@@ -26,6 +29,38 @@ async def create_project(
     await session.commit()
     await session.refresh(db_proj)
     return db_proj
+
+
+@router.post("/migrate")
+async def migrate_projects(
+    *, session: GetSession, projects: List[ProjectMigrate], user: CurrentUser
+):
+    # Generate all the project id UUIDs ourselves.
+    proj_dicts = [project.model_dump() | {"id": uuid.uuid4()} for project in projects]
+
+    db_projects = [
+        Project(
+            name=proj_dict["name"],
+            id=proj_dict["id"],
+            user_id=user.id,
+            experiments=[
+                Experiment(
+                    project_id=proj_dict["id"],
+                    **experiment_dict,
+                )
+                for experiment_dict in proj_dict["experiments"]
+            ],
+        )
+        for proj_dict in proj_dicts
+    ]
+
+    session.add_all(db_projects)
+    await session.commit()
+    # In the frontend, we call loadProjects way too much, and we will
+    # call it right after this endpoint. As such, there's no benefit
+    # to sending all that info yet another time, so we just send a
+    # simple confirmation message.
+    return {"ok": True}
 
 
 @router.get("", response_model=List[ProjectResponseWithExperiments])

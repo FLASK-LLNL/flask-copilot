@@ -16,4 +16,6 @@ async def get_session():
         try:
             yield session
         except:
-            session.close()
+            raise
+        finally:
+            await session.close()
