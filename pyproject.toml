@@ -27,22 +27,14 @@ dependencies = [
     "websockets",
     "requests",
     "PyMuPDF>=1.24.0",
-    "sqlalchemy>=2.0",
+    "sqlalchemy[asyncio]>=2.0",
+    "alembic",
+    "aiosqlite",
 ]
 
 [tool.setuptools.packages.find]
 where = ["."]
 include = ["charge_backend*"]
-
-[tool.pytest.ini_options]
-# Configures pytest-asyncio to automatically discover and run async test functions
-asyncio_mode = "auto"
-
-# Some custom markers to help API testing
-markers = [
-    "num_projects(n): mark test to use n random projects",
-    "num_experiments(n): mark test to use n random experiments",
-]
 
 # This creates the console script
 [project.scripts]
@@ -53,8 +45,20 @@ flask-copilot-install = "charge_backend.install:main"
 # pip3 install --no-deps aizynthfinder reaction-utils
 aizynthfinder = ["paretoset", "rdchiral", "wrapt_timeout_decorator", "swifter", "apted", "scipy", "onnxruntime", "dask[dataframe]>=2025.9.0", "tables", "networkx", "xxhash", "jinja2", " markupsafe"]
 
+# Packages only needed when doing local development that can be excluded in production.
+local = [
+    "aiosqlite",
+]
+
 # Define a set of optional packages for use when deploying persistent data services
 pds = ["flask-copilot[aizynthfinder]"]
+
+# Packages needed for async endpoint testing
+test = [
+    "pytest",
+    "pytest-asyncio",
+    "httpx",
+]
 
 all = ["flask-copilot[aizynthfinder]"]
 
@@ -86,3 +90,13 @@ name = "ruff"
 type = "module"
 module = "ruff"
 options = "check --fix REVISION_SCRIPT_FILENAME"
+
+[tool.pytest.ini_options]
+# Configures pytest-asyncio to automatically discover and run async test functions
+asyncio_mode = "auto"
+
+# Some custom markers to help API testing
+markers = [
+    "num_projects(n): mark test to use n random projects",
+    "num_experiments(n): mark test to use n random experiments",
+]
