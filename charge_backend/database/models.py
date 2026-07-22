@@ -119,6 +119,7 @@ class UserResponse(UserBase):
         alias_generator=to_camel,
         from_attributes=True,
         populate_by_name=True,
+        serialize_by_alias=True,
     )
 
 
@@ -137,6 +138,7 @@ class ProjectCreate(ProjectBase):
 
 
 class ProjectMigrate(ProjectBase):
+    id: uuid.UUID
     experiments: List["ExperimentUpdate"]  # A little type upcycling here.
 
 
@@ -149,6 +151,7 @@ class ProjectResponse(ProjectBase, TimestampMixin):
         alias_generator=to_camel,
         from_attributes=True,
         populate_by_name=True,
+        serialize_by_alias=True,
     )
 
 
@@ -187,6 +190,7 @@ class ExperimentResponse(BaseModel, TimestampMixin):
         alias_generator=to_camel,
         from_attributes=True,
         populate_by_name=True,
+        serialize_by_alias=True,
     )
 
 

@@ -22,7 +22,7 @@ router = APIRouter(prefix="/projects", tags=["projects"])
 async def create_project(
     *, session: GetSession, project: ProjectCreate, user: CurrentUser
 ):
-    proj_dict = project.model_dump()
+    proj_dict = project.model_dump(by_alias=False)
     proj_dict["user_id"] = user.id
     db_proj = Project(**proj_dict)
     session.add(db_proj)
@@ -31,36 +31,53 @@ async def create_project(
     return db_proj
 
 
+# This function will receive a list of projects from the backend. If a
+# project exists in the database already, it will be removed from the
+# list of migrating projects. Any new projects will be created and
+# added to the database.
 @router.post("/migrate")
 async def migrate_projects(
     *, session: GetSession, projects: List[ProjectMigrate], user: CurrentUser
 ):
-    # Generate all the project id UUIDs ourselves.
-    proj_dicts = [project.model_dump() | {"id": uuid.uuid4()} for project in projects]
+    # FIXME (trb): ADD A TEST FOR THIS
+    proj_ids = [project.id for project in projects]
+    id_query = select(Project.id).where(Project.id.in_(proj_ids))
+    id_query_results = await session.execute(id_query)
+    existing_ids = set(id_query_results.scalars().all())
 
-    db_projects = [
-        Project(
-            name=proj_dict["name"],
-            id=proj_dict["id"],
-            user_id=user.id,
-            experiments=[
-                Experiment(
-                    project_id=proj_dict["id"],
-                    **experiment_dict,
-                )
-                for experiment_dict in proj_dict["experiments"]
-            ],
-        )
-        for proj_dict in proj_dicts
-    ]
+    # Short-circuit if all ids exist
+    if len(existing_ids) != len(proj_ids):
+        # Filter to ONLY the missing projects.
+        proj_dicts = [
+            project.model_dump(by_alias=False)
+            for project in projects
+            if project.id not in existing_ids
+        ]
 
-    session.add_all(db_projects)
-    await session.commit()
+        db_projects = [
+            Project(
+                name=proj_dict["name"],
+                id=proj_dict["id"],
+                user_id=user.id,
+                experiments=[
+                    Experiment(
+                        project_id=proj_dict["id"],
+                        **experiment_dict,
+                    )
+                    for experiment_dict in proj_dict["experiments"]
+                ],
+            )
+            for proj_dict in proj_dicts
+        ]
+
+        session.add_all(db_projects)
+        await session.commit()
+
     # In the frontend, we call loadProjects way too much, and we will
     # call it right after this endpoint. As such, there's no benefit
     # to sending all that info yet another time, so we just send a
     # simple confirmation message.
-    return {"ok": True}
+    return {"ok": True, "added": len(proj_ids) - len(existing_ids)}
 
 
 @router.get("", response_model=List[ProjectResponseWithExperiments])
@@ -97,7 +114,7 @@ async def update_project(
     db_project: ValidatedProject,
     project_update: ProjectUpdate,
 ):
-    update_dict = project_update.model_dump(exclude_unset=True)
+    update_dict = project_update.model_dump(by_alias=False, exclude_unset=True)
     for key, value in update_dict.items():
         setattr(db_project, key, value)
     await session.commit()

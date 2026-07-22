@@ -1,6 +1,7 @@
 import { Mutex } from 'async-mutex';
 import { useState, useEffect, useRef } from 'react';
 import { Project, Experiment } from '../types';
+import { validate as isValidUUID, version as getUUIDVersion, v4 as uuidv4 } from 'uuid';
 
 import { HTTP_SERVER } from '../config';
 const STORAGE_KEY = 'flask_copilot_projects';
@@ -103,8 +104,17 @@ class ServerDataSource implements ProjectDataSource {
 
     try {
       const ls_projects = JSON.parse(stored);
-      const send_projects = ls_projects.map(({ name, experiments }: Project) => {
+      // Make sure everything has UUID ids but leave the rest of the data unchanged.
+      const new_id_projects = ls_projects.map(({ id, ...rest }: Project) => {
         return {
+          id: isValidUUID(id) && getUUIDVersion(id) == 4 ? id : uuidv4(),
+          ...rest,
+        };
+      });
+      // Reformat the project
+      const send_projects = new_id_projects.map(({ id, name, experiments }: Project) => {
+        return {
+          id: id,
           name: name,
           experiments: experiments.map((exp: Experiment) => {
             return {
@@ -124,9 +134,8 @@ class ServerDataSource implements ProjectDataSource {
       if (!response.ok) {
         throw new Error(`migrateProjects response status: ${response.status}`);
       }
-      // Everything is ok, blow up the localStorage.
-      // FIXME (trb): UNCOMMENT THIS LINE WHEN YOU'RE READY TO GO LIVE
-      // localStorage.removeItem(STORAGE_KEY);
+      // Everything is ok, reset the localStorage with new IDs up the localStorage.
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(new_id_projects));
       this.migrateDone = true;
     } catch (e) {
       console.error('Error migrating projects from localStorage:', e);
@@ -138,7 +147,6 @@ class ServerDataSource implements ProjectDataSource {
     try {
       // FIXME (trb): Perhaps there's a better spot to hook this is
       // in?? It will short-circuit, but ugh.
-
       await this.mutex.runExclusive(async () => {
         if (!this.migrateDone) await this.migrateProjectsFromLocalStorage();
       });
@@ -147,9 +155,7 @@ class ServerDataSource implements ProjectDataSource {
       if (!response.ok) {
         throw new Error(`loadProjects response status: ${response.status}`);
       }
-      const result = flattenProjects(await response.json());
-      console.log('TRB LOADPROJECTS:', result);
-      return result;
+      return flattenProjects(await response.json());
     } catch (e) {
       console.error('Error loading projects from server:', e);
       return [];

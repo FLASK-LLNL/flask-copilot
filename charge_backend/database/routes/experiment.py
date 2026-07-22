@@ -28,7 +28,7 @@ async def create_experiment(
 ):
 
     db_experiment = Experiment(
-        project_id=validated_project.id, data=experiment_in.model_dump()
+        project_id=validated_project.id, data=experiment_in.model_dump(by_alias=False)
     )
     session.add(db_experiment)
     await session.commit()
@@ -69,7 +69,7 @@ async def update_experiment(
     db_experiment: ValidatedExperiment,
     exp_update: ExperimentUpdate,
 ):
-    update_dict = exp_update.model_dump(exclude_unset=True)
+    update_dict = exp_update.model_dump(by_alias=False, exclude_unset=True)
 
     if "data" in update_dict:
         new_data = update_dict.pop("data")
