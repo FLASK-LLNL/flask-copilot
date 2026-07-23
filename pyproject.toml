@@ -33,6 +33,9 @@ dependencies = [
 where = ["."]
 include = ["charge_backend*"]
 
+[tool.setuptools.package-data]
+"charge_backend.lmo" = ["prompts/*.txt"]
+
 # This creates the console script
 [project.scripts]
 flask-copilot-install = "charge_backend.install:main"
